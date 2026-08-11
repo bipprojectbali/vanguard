@@ -28,7 +28,7 @@ import (
 // Izin dioper terpisah (bukan satu `canManage`) karena keduanya TIDAK identik —
 // di mode single admin boleh menyunting workspace tapi keanggotaan dinilai
 // sendiri — jadi menyatukannya akan membuat salah satu menu berbohong.
-func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canRoles bool) []ui.NavItem {
+func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canRoles bool) []ui.NavItem {
 	items := []ui.NavItem{
 		{Label: "Dashboard", Href: wsPath(slug, ""), Icon: lucide.House(html.Class("size-4"))},
 	}
@@ -48,10 +48,12 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 			Icon: lucide.Contact(html.Class("size-4")),
 		})
 	}
+	// Sales jadi GRUP bersarang (wireframe 4): Leads/Deals berbackend (enabled per
+	// izin), Quotes/Activities placeholder. Selalu tampil agar peta jalan terlihat.
+	items = append(items, workspaceSalesGroup(slug, canLeads, canDeals))
 	// Modul berwireframe tapi belum berbackend — urutan persis wireframe, disabled.
 	// Ditampilkan agar peta jalan produk terlihat utuh di sidebar sejak awal.
 	items = append(items,
-		ui.NavItem{Label: "Sales", Icon: lucide.TrendingUp(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Subscriptions", Icon: lucide.RefreshCw(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Customer Success", Icon: lucide.Heart(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Activities", Icon: lucide.Activity(html.Class("size-4")), Disabled: true},
@@ -61,6 +63,36 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 		items = append(items, *grp)
 	}
 	return items
+}
+
+// workspaceSalesGroup merakit grup Sales (wireframe 4). Berbeda dari Settings,
+// grup ini SELALU tampil (peta jalan produk terlihat): anak Leads/Deals enabled
+// mengikuti izin gerbang halamannya (sumber izin SAMA dengan canViewLeads/
+// canViewDeals — nol menu hantu), Quotes & Activities placeholder disabled.
+func workspaceSalesGroup(slug string, canLeads, canDeals bool) ui.NavItem {
+	children := make([]ui.NavItem, 0, 4)
+	// Leads → /leads (canViewLeads, objek crm:leads). Disabled bila tak berhak,
+	// tetap tampil agar posisi modul di peta jalan terlihat.
+	leads := ui.NavItem{Label: "Leads", Icon: lucide.UserPlus(html.Class("size-4"))}
+	if canLeads {
+		leads.Href = wsPath(slug, "/leads")
+	} else {
+		leads.Disabled = true
+	}
+	// Deals → /deals (canViewDeals, objek crm:deals).
+	deals := ui.NavItem{Label: "Deals", Icon: lucide.Handshake(html.Class("size-4"))}
+	if canDeals {
+		deals.Href = wsPath(slug, "/deals")
+	} else {
+		deals.Disabled = true
+	}
+	children = append(children, leads, deals,
+		ui.NavItem{Label: "Quotes", Icon: lucide.FileText(html.Class("size-4")), Disabled: true},
+		ui.NavItem{Label: "Sales Activities", Icon: lucide.Activity(html.Class("size-4")), Disabled: true},
+	)
+	return ui.NavItem{
+		Label: "Sales", Icon: lucide.TrendingUp(html.Class("size-4")), Children: children,
+	}
 }
 
 // workspaceSettingsGroup merakit grup Settings (wireframe 9). Muncul bila user

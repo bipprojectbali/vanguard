@@ -320,6 +320,32 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// query (ListContacts JOIN accounts). Alamat sibling accounts.
 		r.Get("/contacts", h.ContactsAll)
 
+		// Lead (Sales, CRM Modul 4). Gerbang di HANDLER sumbu BISNIS
+		// (CanBusiness "crm:leads") + ownership-filter F3 (lead_owner) +
+		// masking F4. Konversi = halaman review (GET) → 1 TX atomik (POST):
+		// lead → Desa + Kontak + Deal sekaligus. Navigasi aksi native POST → 303.
+		r.Get("/leads", h.LeadsList)
+		r.Get("/leads/new", h.LeadNew)
+		r.Post("/leads", h.LeadCreate)
+		r.Get("/leads/{id}", h.LeadDetail)
+		r.Get("/leads/{id}/edit", h.LeadEdit)
+		r.Post("/leads/{id}", h.LeadUpdate)
+		r.Post("/leads/{id}/delete", h.LeadDelete)
+		r.Get("/leads/{id}/convert", h.LeadConvertPage)
+		r.Post("/leads/{id}/convert", h.LeadConvert)
+
+		// Deal (Sales, CRM Modul 4). Sumbu BISNIS "crm:deals" + ownership
+		// (deal_owner) + masking ARR F4. Pipeline Kanban statis + toggle Tabel;
+		// ganti stage = aksi tersendiri (native POST), BUKAN drag-drop.
+		r.Get("/deals", h.DealsList)
+		r.Get("/deals/new", h.DealNew)
+		r.Post("/deals", h.DealCreate)
+		r.Get("/deals/{id}", h.DealDetail)
+		r.Get("/deals/{id}/edit", h.DealEdit)
+		r.Post("/deals/{id}", h.DealUpdate)
+		r.Post("/deals/{id}/stage", h.DealStage)
+		r.Post("/deals/{id}/delete", h.DealDelete)
+
 		// Peran CRM per-workspace (sumbu BISNIS, objek "crm:roles"). Gerbang di
 		// HANDLER (canManageRoles), BUKAN role tenant: satu alamat melayani semua
 		// role, izin yang membedakan. Editor matriks izin per-modul + cakupan data

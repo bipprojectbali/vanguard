@@ -82,6 +82,37 @@ func wsErrMsg(code string) string {
 		return "Peran tidak ditemukan."
 	case "notfound":
 		return "Desa tidak ditemukan atau di luar cakupan Anda."
+	// ── Sales: Leads & Deals (Modul 4) ──────────────────────────────────────
+	case "lead_name":
+		return "Nama lead wajib diisi (maks 200 karakter)."
+	case "lead_status":
+		return "Status lead tidak valid."
+	case "lead_rating":
+		return "Rating lead tidak valid."
+	case "estimated":
+		return "Nilai estimasi harus berupa angka."
+	case "date":
+		return "Tanggal tidak valid (format YYYY-MM-DD)."
+	case "probability":
+		return "Probabilitas harus berupa angka 0–100."
+	case "amount":
+		return "Nilai deal harus berupa angka."
+	case "deal_name":
+		return "Nama deal wajib diisi (maks 200 karakter)."
+	case "stage":
+		return "Tahap deal tidak valid."
+	case "deal_type":
+		return "Tipe deal tidak valid."
+	case "deal_term":
+		return "Termin langganan tidak valid."
+	case "forecast":
+		return "Kategori forecast tidak valid."
+	case "win_loss":
+		return "Alasan menang/kalah wajib diisi saat deal ditutup (Closed Won/Lost)."
+	case "account_req":
+		return "Desa (account) wajib dipilih untuk deal ini."
+	case "convert_guard":
+		return "Lead ini tak bisa dikonversi — harus berstatus Qualified dan belum pernah dikonversi."
 	case "failed":
 		return "Tindakan gagal. Coba lagi."
 	default:

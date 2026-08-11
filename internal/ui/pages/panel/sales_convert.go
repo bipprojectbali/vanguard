@@ -1,0 +1,136 @@
+package panel
+
+import (
+	"go_starter/internal/ui"
+
+	g "maragu.dev/gomponents"
+	h "maragu.dev/gomponents/html"
+)
+
+// sales_convert.go — halaman review konversi Lead → Desa + Kontak + Deal. Satu
+// form NATIVE POST → 303 (gotcha #16) yang membuat TIGA entitas sekaligus. Semua
+// nilai pra-isi dari lead (handler), semua bisa disunting sebelum submit. Reuse
+// helper formCard/field/selectField dari accounts_form.go (satu paket panel).
+//
+// Nomor telepon: bila PhoneEditable=false (bukan Sales), field dikunci &
+// menampilkan mask TANPA name → tak ikut ter-submit; handler menyalin nomor asli
+// lead server-side (F4). Sama pola dengan phoneField accounts.
+
+// ConvertFormFields = nilai pra-isi review (dari lead). Semua string agar view
+// netral terhadap tipe DB.
+type ConvertFormFields struct {
+	VillageName string
+	AccountType string
+	Province    string
+	Regency     string
+	District    string
+
+	FirstName   string
+	LastName    string
+	JobTitle    string
+	MobilePhone string
+	Whatsapp    string
+	Email       string
+
+	DealName string
+	Amount   string
+}
+
+// LeadConvertView = data halaman review. Action = URL POST konversi. BackURL =
+// kembali ke detail lead. LeadName/LeadCode untuk header konteks.
+type LeadConvertView struct {
+	Base    string
+	Action  string
+	BackURL string
+	Err     string
+
+	LeadName string
+	LeadCode string
+
+	PhoneEditable bool
+	AccountTypes  []string
+	Fields        ConvertFormFields
+}
+
+// LeadConvert merender halaman review lengkap: header konteks, banner penjelasan,
+// lalu satu form 3-kartu (Desa, Kontak Utama, Deal) + tombol konversi.
+func LeadConvert(v LeadConvertView) g.Node {
+	body := []g.Node{
+		h.Div(
+			h.H1(h.Class("text-xl font-semibold"), g.Text("Konversi Lead")),
+			h.A(h.Href(v.BackURL), h.Class("text-sm text-base-content/60"),
+				g.Text("« Kembali ke detail lead")),
+		),
+		h.Div(
+			h.Class("card bg-base-100 border border-success/40 min-w-0"),
+			h.Div(h.Class("card-body"),
+				h.P(h.Class("text-sm"),
+					g.Text("Lead "),
+					h.Span(h.Class("font-semibold"), g.Text(v.LeadName)),
+					ui.When(v.LeadCode != "", g.Group([]g.Node{
+						g.Text(" ("),
+						h.Span(h.Class("font-mono"), g.Text(v.LeadCode)),
+						g.Text(")"),
+					})),
+					g.Text(" akan menjadi Desa + Kontak utama + Deal baru. "+
+						"Periksa & sunting nilai di bawah sebelum mengonversi.")),
+			),
+		),
+	}
+	if v.Err != "" {
+		body = append(body, ui.Alert(ui.VariantDestructive, "convert-err", g.Text(v.Err)))
+	}
+
+	body = append(body, h.FormEl(
+		h.Method("post"), h.Action(v.Action),
+		h.Class("grid gap-4 min-w-0"),
+
+		formCard("Desa (Account)",
+			field("Nama Desa", "village_name", v.Fields.VillageName, true, "text"),
+			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.AccountTypes, true),
+			field("Provinsi", "province", v.Fields.Province, false, "text"),
+			field("Kabupaten/Kota", "regency", v.Fields.Regency, false, "text"),
+			field("Kecamatan", "district", v.Fields.District, false, "text"),
+		),
+		formCard("Kontak Utama",
+			field("Nama Depan", "first_name", v.Fields.FirstName, true, "text"),
+			field("Nama Belakang", "last_name", v.Fields.LastName, false, "text"),
+			field("Jabatan", "job_title", v.Fields.JobTitle, false, "text"),
+			convertPhoneField("HP", "mobile_phone", v.Fields.MobilePhone, v.PhoneEditable),
+			convertPhoneField("WhatsApp", "whatsapp_number", v.Fields.Whatsapp, v.PhoneEditable),
+			field("Email", "email", v.Fields.Email, false, "email"),
+		),
+		formCard("Deal",
+			field("Nama Deal", "deal_name", v.Fields.DealName, true, "text"),
+			field("Nilai (Rp)", "amount", v.Fields.Amount, false, "text"),
+		),
+
+		h.Div(
+			h.Class("flex flex-wrap items-center gap-2"),
+			h.Button(h.Type("submit"), h.Class("btn btn-success min-h-11"),
+				g.Text("Konversi Sekarang")),
+			h.A(h.Href(v.BackURL), h.Class("btn btn-ghost min-h-11"), g.Text("Batal")),
+		),
+	))
+
+	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// convertPhoneField = input telepon yang menghormati F4. Editable (Sales) →
+// input biasa. Terkunci (bukan Sales) → input disabled menampilkan mask, TANPA
+// name agar tak ter-submit; handler menyalin nomor asli lead server-side.
+func convertPhoneField(label, name, val string, editable bool) g.Node {
+	if editable {
+		return field(label, name, val, false, "tel")
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor(label, "f-"+name+"_ro", false),
+		ui.Input(
+			h.ID("f-"+name+"_ro"), h.Type("tel"), h.Value(val),
+			h.Disabled(), h.Class("input text-base w-full"),
+		),
+		h.P(h.Class("text-xs text-base-content/60"),
+			g.Text("Nomor disamarkan; disalin dari lead saat konversi.")),
+	)
+}
