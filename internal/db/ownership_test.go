@@ -150,8 +150,8 @@ func TestAccountsScopeFor(t *testing.T) {
 	}{
 		{"all", ScopeAll},
 		{"own", ScopeOwn},
-		{"none", ScopeNone}, // desa hanya lewat konteks tiket, bukan daftar umum
-		{"", ScopeNone},     // belum diberi peran → fail-closed
+		{"none", ScopeNone},   // desa hanya lewat konteks tiket, bukan daftar umum
+		{"", ScopeNone},       // belum diberi peran → fail-closed
 		{"galaxy", ScopeNone}, // nilai liar → aman, bukan panik
 	}
 	for _, c := range cases {
