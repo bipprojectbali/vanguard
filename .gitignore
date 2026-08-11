@@ -1,5 +1,6 @@
 # Binary output
 /app
+/go_starter
 /tmp/
 *-check
 
