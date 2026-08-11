@@ -87,6 +87,19 @@ func wsRedirect(w http.ResponseWriter, r *http.Request, sub, errCode string) {
 	http.Redirect(w, r, url, http.StatusSeeOther)
 }
 
+// wsRedirectOK mengalihkan (303) ke halaman workspace request ini dengan kode
+// SUKSES PRG (?ok=CODE) — kembaran wsRedirect untuk jalur berhasil. Dipisah agar
+// ?ok= (alert sukses) & ?err= (alert galat) tak pernah tertukar di pemanggil:
+// keduanya string bebas, dan satu argumen yang keliru tempat akan menampilkan
+// pesan sukses bervarian galat (atau sebaliknya).
+func wsRedirectOK(w http.ResponseWriter, r *http.Request, sub, okCode string) {
+	url := wsPath(slugFromRequest(r), sub)
+	if okCode != "" {
+		url += "?ok=" + okCode
+	}
+	http.Redirect(w, r, url, http.StatusSeeOther)
+}
+
 // homeFor mengembalikan tujuan "rumah" setelah login/dari landing. Role PLATFORM
 // → /dev (lintas-workspace, tak punya slug); role tenant → akar workspace aktif.
 //

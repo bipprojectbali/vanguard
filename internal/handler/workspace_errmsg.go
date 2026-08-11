@@ -36,6 +36,52 @@ func wsErrMsg(code string) string {
 		return "Nama workspace wajib diisi (maks 60 karakter)."
 	case "quota":
 		return "Kuota workspace Anda sudah penuh."
+	case "code_entity":
+		return "Entitas tidak dikenal."
+	case "code_prefix":
+		return "Prefix wajib diisi (1–16 karakter)."
+	case "code_padding":
+		return "Lebar angka harus 0–12."
+	case "village_name":
+		return "Nama desa wajib diisi (maks 200 karakter)."
+	case "account_type":
+		return "Tipe akun tidak valid."
+	case "village_status":
+		return "Status desa tidak valid."
+	case "classification":
+		return "Klasifikasi (IDM) tidak valid."
+	case "number":
+		return "Jumlah penduduk/dusun harus berupa angka bulat."
+	case "budget":
+		return "Anggaran desa harus berupa angka."
+	case "village_code_dup":
+		return "Kode desa (Kemendagri) itu sudah dipakai desa lain di workspace ini."
+	case "csm":
+		return "Orang yang dipilih bukan anggota workspace ini."
+	case "first_name":
+		return "Nama depan kontak wajib diisi (maks 200 karakter)."
+	case "contact_position":
+		return "Jabatan kontak tidak valid."
+	case "contact_role":
+		return "Peran kontak tidak valid."
+	case "contact_channel":
+		return "Kanal komunikasi pilihan tidak valid."
+	case "role_name":
+		return "Nama peran harus 2–32 karakter, huruf kecil/angka/garis bawah, diawali huruf."
+	case "role_display":
+		return "Nama tampilan peran wajib diisi (maks 60 karakter)."
+	case "role_scope":
+		return "Cakupan data peran tidak valid."
+	case "role_desc":
+		return "Deskripsi peran terlalu panjang (maks 200 karakter)."
+	case "role_exists":
+		return "Nama peran itu sudah dipakai di workspace ini."
+	case "role_system":
+		return "Peran bawaan sistem tak bisa disunting atau dihapus."
+	case "role_notfound":
+		return "Peran tidak ditemukan."
+	case "notfound":
+		return "Desa tidak ditemukan atau di luar cakupan Anda."
 	case "failed":
 		return "Tindakan gagal. Coba lagi."
 	default:

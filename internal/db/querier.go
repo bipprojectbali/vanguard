@@ -23,6 +23,14 @@ type Querier interface {
 	// read-only lewat tombol yang tampak rutin. Guard-nya di SQL, bukan cuma di
 	// handler — jalur yang tak lewat handler pun harus tertahan.
 	ArchiveTenant(ctx context.Context, id int64) error
+	// Penugasan CSM (binaan + cadangan) — jalur terpisah dari edit profil (§8.1).
+	// NULL = lepas penugasan. updated_by/at ikut agar jejaknya jelas.
+	AssignAccountCSM(ctx context.Context, arg AssignAccountCSMParams) error
+	// Lepas penanda utama dari SEMUA kontak hidup satu desa. Dipanggil SEBELUM
+	// memasang primary baru (create/update/set-primary) supaya idx_contacts_primary
+	// (maks 1 utama per desa) tak pernah dilanggar. Idempotent: nol baris bila belum
+	// ada utama.
+	ClearAccountPrimaryContact(ctx context.Context, arg ClearAccountPrimaryContactParams) error
 	// Jumlah peristiwa per KELUARGA aksi pada rentang ini (auth, workspace, member,
 	// user, invite, settings, platform) — dipakai untuk melabeli opsi filter dengan
 	// angka, sehingga operator tahu mana yang berisi sebelum mengkliknya.
@@ -31,6 +39,9 @@ type Querier interface {
 	// (auth.login, workspace.create, member.role.update), jadi keluarga bisa
 	// diturunkan tanpa tabel pemetaan yang harus dijaga selaras.
 	CountActivityByAction(ctx context.Context, arg CountActivityByActionParams) ([]CountActivityByActionRow, error)
+	// Jumlah kontak hidup satu desa — untuk badge/ringkasan di detail desa. Murah:
+	// idx_contacts_account (partial WHERE deleted_at IS NULL) melayaninya langsung.
+	CountContactsByAccount(ctx context.Context, accountID int64) (int64, error)
 	// Berapa workspace yang DIMILIKI user (role owner) — untuk cek kuota sebelum
 	// membuat workspace baru. Diundang jadi member/admin TIDAK memakan kuota.
 	//
@@ -60,8 +71,43 @@ type Querier interface {
 	// Badge sidebar — dirender di SETIAP halaman, ditopang index partial
 	// idx_notif_unread agar tak menyentuh baris yang sudah terbaca.
 	CountUnreadNotifications(ctx context.Context, userID int64) (int64, error)
+	// accounts.sql — hub Desa (Account). Isolasi WORKSPACE ditegakkan RLS (GUC
+	// app.tenant_id di WithTenant); isolasi ANTAR-DESA (F3) ditegakkan di layer query
+	// lewat flag ownership di ListAccounts — lihat internal/db/ownership.go.
+	//
+	// entity_code (DESA-001) dialokasikan di GenerateEntityCode DALAM tx create, lalu
+	// dioper ke CreateAccount; village_code (Kode Kemendagri) datang dari user & boleh
+	// kosong. Dua kode berbeda asal, keduanya disimpan di baris.
+	// Buat desa. tenant_id di-set eksplisit (RLS WITH CHECK memverifikasinya = GUC).
+	// entity_code sudah dirakit pemanggil (GenerateEntityCode) — INSERT-nya dijaga
+	// unik oleh idx_accounts_entity_code bila format diubah bertabrakan.
+	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
 	// Jejak aksi admin. metadata TANPA PII (id saja, bukan email/nama).
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
+	// Buat peran baru (atau seed default). name = subject Casbin & nilai
+	// memberships.business_role; display_name = label layar; description = keterangan
+	// satu baris (kolom Deskripsi wireframe 9.2, boleh ''). is_system hanya true untuk
+	// seed admin. created_by NULL untuk seed migrasi/boot.
+	CreateBusinessRole(ctx context.Context, arg CreateBusinessRoleParams) (CreateBusinessRoleRow, error)
+	// contacts.sql — orang di dalam sebuah desa (Contact), 1:N ke accounts. Isolasi
+	// WORKSPACE ditegakkan RLS (GUC app.tenant_id di WithTenant, tenant_id di-AND-kan
+	// otomatis). Isolasi ANTAR-DESA (F3) TIDAK punya filter sendiri di sini: kontak
+	// MEWARISI kepemilikan desa induknya (docs/crm/tasks.md §Modul 3). Maka:
+	//   - daftar per-desa (ListContactsByAccount) tak menyaring ownership sama sekali —
+	//     handler sudah menjaga bahwa desa induknya boleh dilihat aktor (loadOwnedAccount);
+	//     begitu lolos, SEMUA kontak desa itu tampil.
+	//   - daftar global (ListContacts) menyaring lewat kolom ownership DESA INDUK
+	//     (JOIN accounts), memakai flag yang SAMA dengan ListAccounts — sumber tunggal
+	//     AccountsListFilter. "Kontak siapa yang tampil" = "desa siapa yang tampil".
+	//
+	// Maks 1 kontak utama per desa dijaga idx_contacts_primary (partial UNIQUE). Set-
+	// primary WAJIB dua langkah dalam satu tx: kosongkan primary lama dulu, baru pasang
+	// yang baru — kalau tidak, INSERT/UPDATE bertabrakan dengan index (satu tx, satu
+	// tenant, jadi tak ada balapan antar-request di jalur ini).
+	// Buat kontak. account_id mengikat ke desa induk (RLS memverifikasi tenant_id =
+	// GUC lewat FK + WITH CHECK). is_primary_contact di-set pemanggil SETELAH
+	// mengosongkan primary lama (ClearAccountPrimaryContact) agar tak melanggar index.
+	CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error)
 	// Undangan bergabung ke workspace. token = rahasia URL (crypto/rand hex via
 	// oauth.NewState). email boleh milik orang yang BELUM punya akun.
 	CreateInvite(ctx context.Context, arg CreateInviteParams) (Invite, error)
@@ -89,10 +135,39 @@ type Querier interface {
 	// bisa dipakai. Mencocokkan email mencegah pemegang token menolak undangan
 	// milik orang lain.
 	DeclineInvite(ctx context.Context, arg DeclineInviteParams) error
+	// Hapus peran. Perizinannya ikut (FK CASCADE); anggota yang memegangnya di-
+	// unassign TERPISAH (UnassignBusinessRole) SEBELUM ini di handler — FK ke
+	// memberships sengaja tak ada agar penghapusan peran bukan penghapusan orang.
+	// Peran is_system ditolak di handler.
+	DeleteBusinessRole(ctx context.Context, arg DeleteBusinessRoleParams) error
+	// Kosongkan matriks satu peran sebelum menulis ulang (pola replace-all: handler
+	// hapus semua lalu sisipkan set baru dalam satu tx — lebih sederhana & bebas
+	// selisih daripada diff per-baris). CASCADE peran tak menyentuh ini; ini untuk
+	// peran yang TETAP ada tapi izinnya diganti.
+	DeleteBusinessRolePermissionsForRole(ctx context.Context, arg DeleteBusinessRolePermissionsForRoleParams) error
 	// Batalkan undangan yang belum diterima (sisi PENGUNDANG, di panel anggota).
 	DeleteInvite(ctx context.Context, arg DeleteInviteParams) error
 	// Keluarkan anggota dari workspace (atau user keluar sendiri).
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
+	// Satu desa hidup. RLS menjamin tenant_id; filter deleted_at menyembunyikan yang
+	// ter-soft-delete. Tak menerapkan ownership — pemanggil (handler) yang memutuskan
+	// apakah aktor boleh membuka baris ini (detail bisa dibuka lewat tautan langsung).
+	GetAccount(ctx context.Context, id int64) (Account, error)
+	// Satu peran (edit/validasi). tenant_id di predikat = pertahanan berlapis di atas
+	// RLS: nama peran datang dari URL, jadi cocokkan eksplisit ke workspace aktif.
+	GetBusinessRole(ctx context.Context, arg GetBusinessRoleParams) (GetBusinessRoleRow, error)
+	// Cakupan desa (F3) untuk satu business_role — dibaca per-request di
+	// RefreshIdentity, disimpan di session. Dipisah dari GetBusinessRole agar jalur
+	// panas ini tak menarik kolom yang tak dipakainya.
+	GetBusinessRoleDataScope(ctx context.Context, arg GetBusinessRoleDataScopeParams) (string, error)
+	// Format kode satu (tenant, entity). Tak ada baris = SAH: pemanggil jatuh ke
+	// codes.DefaultFormat (workspace baru berkode tanpa seed). pgx.ErrNoRows bukan
+	// kegagalan yang perlu diributkan.
+	GetCodeFormat(ctx context.Context, arg GetCodeFormatParams) (CodeFormat, error)
+	// Satu kontak hidup. RLS menjamin tenant_id; deleted_at menyembunyikan yang
+	// ter-soft-delete. Tak menerapkan ownership — pemanggil (handler) memutuskan lewat
+	// desa INDUK apakah aktor boleh membukanya (kontak mewarisi kepemilikan desa).
+	GetContact(ctx context.Context, id int64) (Contact, error)
 	// Jalur PUBLIK (/invite/{token}) — penerima belum tentu login/anggota. Validasi
 	// kedaluwarsa & sudah-dipakai dilakukan di handler agar pesannya spesifik.
 	GetInviteByToken(ctx context.Context, token string) (GetInviteByTokenRow, error)
@@ -115,10 +190,25 @@ type Querier interface {
 	GetUser(ctx context.Context, id int64) (User, error)
 	// Soft-delete gotcha: user terhapus tak boleh login.
 	GetUserByEmail(ctx context.Context, email string) (User, error)
+	// Tambah satu baris matriks (role,obj,act). Idempoten via UNIQUE. Dipakai seed
+	// dan saat matriks disunting (handler menghitung selisih, sisipkan yang baru).
+	InsertBusinessRolePermission(ctx context.Context, arg InsertBusinessRolePermissionParams) error
 	// Cek apakah email = operator platform (staff). Dipakai RefreshIdentity untuk
 	// menentukan bypass RLS (is_super) + role platform. super_admin TIDAK di sini
 	// (env-only via SUPER_ADMIN_EMAILS).
 	IsPlatformStaff(ctx context.Context, email string) (bool, error)
+	// Daftar desa, keyset (created_at DESC, id DESC) + filter ownership F3.
+	//
+	// Ownership dikodekan sebagai tiga flag boolean (bukan fragmen SQL dinamis) supaya
+	// query tetap sqlc murni & ter-scan typed. Keputusan cakupannya SATU sumber dengan
+	// AccountsOwnershipClause: keduanya diturunkan dari AccountsScopeFor lewat
+	// AccountsListFilter — diuji bersama agar tak bercabang.
+	//   scope_all → lihat semua (Admin/Manager)
+	//   is_sales  → hanya account_owner = uid
+	//   is_csm    → assigned_csm = uid ATAU backup_csm = uid
+	// Ketiganya false (Support/role kosong/liar) → OR selalu false → NOL baris
+	// (fail-closed, bukan bocor). uid tetap dioper walau scope_all (diabaikan).
+	ListAccounts(ctx context.Context, arg ListAccountsParams) ([]Account, error)
 	// Orang yang punya jejak pada rentang ini — isi dropdown "filter per-orang".
 	//
 	// Diturunkan dari DATA, bukan dari daftar user: memilih orang yang tak punya
@@ -148,7 +238,39 @@ type Querier interface {
 	// melayani semua kombinasi — dua query terpisah akan berbeda diam-diam begitu
 	// salah satunya diubah.
 	ListActivityTrail(ctx context.Context, arg ListActivityTrailParams) ([]ListActivityTrailRow, error)
+	// Query sumbu RBAC bisnis (F2/F3) yang bisa diedit per-workspace. Dua tabel:
+	// business_roles (definisi peran + data_scope) & business_role_permissions
+	// (matriks obj/act). Enforcer Casbin di-load dari permissions; data_scope dibaca
+	// per-request untuk filter kepemilikan desa (F3).
+	// STARTUP: seluruh izin SEMUA tenant, untuk membangun enforcer bisnis global
+	// (subject di-fold jadi `t<tenant_id>:<role>` di Go). WAJIB dipanggil di dalam
+	// WithSuper — di tenant-tx, RLS menyembunyikan tenant lain → enforcer deny-all
+	// senyap untuk mereka.
+	ListAllBusinessRolePermissions(ctx context.Context) ([]ListAllBusinessRolePermissionsRow, error)
 	ListAuditLogs(ctx context.Context, pageSize int32) ([]AuditLog, error)
+	// Izin SATU workspace — dipakai reload per-tenant setelah matriks diubah, dan
+	// untuk merender editor. Urut agar diff/tampilan stabil.
+	ListBusinessRolePermissionsByTenant(ctx context.Context, tenantID int64) ([]ListBusinessRolePermissionsByTenantRow, error)
+	// Daftar peran satu workspace (panel /roles + assign ke member). is_system dulu
+	// agar admin (peran terkunci) tampil di atas. member_count = jumlah anggota yang
+	// memegang peran ini (kolom "Jumlah User" di wireframe 9.2) — LEFT JOIN agar peran
+	// tanpa pemegang tetap muncul dengan 0. COALESCE ke bigint: sqlc emit int64, bukan
+	// interface{}. GROUP BY br.id (PK) sah — kolom br.* bergantung fungsional padanya.
+	ListBusinessRoles(ctx context.Context, tenantID int64) ([]ListBusinessRolesRow, error)
+	// Semua format kode workspace, untuk halaman pengaturan. Sedikit barisnya (satu
+	// per entitas), jadi tak dipaginasi. Urut per entity agar tampilannya stabil.
+	ListCodeFormats(ctx context.Context, tenantID int64) ([]CodeFormat, error)
+	// Daftar kontak LINTAS-desa, keyset + filter kepemilikan DESA INDUK (bukan filter
+	// kontak sendiri). JOIN accounts membawa kolom ownership desa; flag scope_all/
+	// is_sales/is_csm identik dengan ListAccounts (AccountsListFilter) — "kontak siapa
+	// yang tampil" diturunkan dari "desa siapa yang tampil", satu kebenaran.
+	// Ketiganya false (Support/role kosong/liar) → NOL baris (fail-closed).
+	ListContacts(ctx context.Context, arg ListContactsParams) ([]Contact, error)
+	// Kontak SATU desa, keyset (created_at DESC, id DESC). TANPA filter ownership:
+	// gerbangnya adalah desa induk (handler memvalidasi via loadOwnedAccount sebelum
+	// memanggil ini). Kontak utama diangkat ke atas agar penanda primary langsung
+	// terlihat tanpa menggeser urutan kronologis baris lainnya.
+	ListContactsByAccount(ctx context.Context, arg ListContactsByAccountParams) ([]Contact, error)
 	// Kandidat purge permanen: terhapus melewati masa tenggang. Dipanggil perintah
 	// terjadwal, TAK PERNAH di jalur request (purge = kerja berat & tak reversibel).
 	ListExpiredTenants(ctx context.Context, deletedAt pgtype.Timestamptz) ([]Tenant, error)
@@ -204,6 +326,21 @@ type Querier interface {
 	// disimpan di tabel ini (sumber kebenarannya tetap `invites`), sehingga undangan
 	// pending tetap terhitung di badge sampai benar-benar ditindak.
 	MarkNotificationsRead(ctx context.Context, userID int64) error
+	// Alokasi nomor urut BERIKUTNYA untuk (tenant, entity), ATOMIK.
+	//
+	// Kenapa satu pernyataan INSERT..ON CONFLICT dan bukan SELECT max+1 di Go: ON
+	// CONFLICT DO UPDATE mengambil ROW LOCK pada baris counter, jadi dua create
+	// bersamaan diserialkan oleh Postgres — mustahil dapat nomor sama. Menghitung di
+	// aplikasi (baca lalu tulis) justru race yang paling sering lolos sampai dua
+	// baris bertabrakan di produksi.
+	//
+	// next_val = "nomor yang akan DIPAKAI berikutnya" (mulai 1). Kita menyimpan hasil
+	// SESUDAH dinaikkan lalu pemanggil mengurangi 1 (lihat GenerateEntityCode):
+	//   • baris belum ada → INSERT next_val=2, RETURNING 2 → alokasi 2-1=1
+	//   • baris next_val=N → UPDATE jadi N+1, RETURNING N+1 → alokasi (N+1)-1=N
+	// RETURNING kolom mentah (BIGINT NOT NULL) supaya sqlc mengetiknya int64, bukan
+	// pointer nullable (ekspresi aritmetika di RETURNING akan ditebak nullable).
+	NextEntityCodeSeq(ctx context.Context, arg NextEntityCodeSeqParams) (int64, error)
 	// Tren per HARI-LOKAL untuk rentang mingguan/bulanan (line chart).
 	PresenceByDay(ctx context.Context, arg PresenceByDayParams) ([]PresenceByDayRow, error)
 	// Distribusi aktivitas per JAM-LOKAL untuk satu rentang (bar "aktivitas per jam").
@@ -245,6 +382,17 @@ type Querier interface {
 	// workspace yang dihapus saat ter-arsip pun kembali sebagai aktif — pemulihan
 	// harus meninggalkan keadaan yang bisa langsung dipakai, bukan setengah jalan.
 	RestoreTenant(ctx context.Context, id int64) error
+	// Angkat SATU kontak jadi utama. Pemanggil WAJIB memanggil ClearAccountPrimaryContact
+	// lebih dulu (satu tx) — index memblokir dua utama. account_id ikut di WHERE sebagai
+	// sabuk pengaman: kontak yang bukan milik desa itu tak bisa diangkat lewat jalurnya.
+	SetPrimaryContact(ctx context.Context, arg SetPrimaryContactParams) error
+	// Soft-delete: baris disembunyikan dari list/get tapi tetap ada (jejak & FK dari
+	// entitas lain — deal/tiket — tak putus). Idempotent: hanya baris hidup.
+	SoftDeleteAccount(ctx context.Context, arg SoftDeleteAccountParams) error
+	// Soft-delete: baris disembunyikan dari list/get tapi tetap ada (jejak & FK dari
+	// entitas lain tak putus). Idempotent: hanya baris hidup. Kontak utama yang dihapus
+	// membebaskan slot primary (index-nya partial WHERE deleted_at IS NULL).
+	SoftDeleteContact(ctx context.Context, arg SoftDeleteContactParams) error
 	// Owner ATAU platform. Masa tenggang: baris tetap ada, slug TIDAK dilepas.
 	//
 	// `NOT is_primary`: rumah aplikasi tak bisa dihapus dari dalam aplikasi itu
@@ -263,9 +411,31 @@ type Querier interface {
 	TenantSlugExists(ctx context.Context, slug string) (bool, error)
 	// OWNER. Hanya dari 'archived' — tak bisa dipakai membatalkan suspensi platform.
 	UnarchiveTenant(ctx context.Context, id int64) error
+	// Cabut satu business_role dari SEMUA anggota workspace yang memegangnya —
+	// dipanggil SEBELUM menghapus perannya, agar penghapusan peran meng-unassign
+	// orang alih-alih (lewat FK) menghapus keanggotaannya. Idempoten.
+	UnassignBusinessRole(ctx context.Context, arg UnassignBusinessRoleParams) error
 	// PLATFORM-ONLY. Membersihkan jejak suspensi agar kolomnya tak jadi sisa yang
 	// menyesatkan saat suspensi berikutnya.
 	UnsuspendTenant(ctx context.Context, id int64) error
+	// Sunting profil desa. entity_code & village_code tak diubah di sini (kode identitas
+	// yang dikutip; village_code punya jalur khusus bila kelak perlu). Penugasan
+	// (owner/CSM) juga TERPISAH (AssignAccountCSM) agar perubahan wewenang terlihat
+	// sebagai aksi tersendiri, bukan efek samping edit profil.
+	UpdateAccount(ctx context.Context, arg UpdateAccountParams) (Account, error)
+	// Sunting label, deskripsi & cakupan peran. name (subject Casbin) TAK diubah di
+	// sini — mengganti nama peran memutus assign yang sudah ada; kalau perlu, buat
+	// peran baru. is_system tak bisa disunting (dijaga di handler, bukan di query).
+	UpdateBusinessRole(ctx context.Context, arg UpdateBusinessRoleParams) error
+	// Sunting kontak. is_primary_contact di-set pemanggil setelah mengosongkan primary
+	// lama (ClearAccountPrimaryContact) bila dinaikkan jadi utama. account_id TIDAK
+	// diubah di sini — memindahkan kontak antar-desa adalah aksi lain (belum ada).
+	UpdateContact(ctx context.Context, arg UpdateContactParams) (Contact, error)
+	// Set/ganti business_role (sumbu CRM F2) satu anggota. Nilai divalidasi tenant-
+	// aware di handler (ada di business_roles workspace ini) SEBELUM query — kolom
+	// tak lagi punya CHECK sejak 00007. NULL = cabut peran CRM (mis. saat perannya
+	// dihapus) — pgtype/pointer NULL diteruskan apa adanya.
+	UpdateMemberBusinessRole(ctx context.Context, arg UpdateMemberBusinessRoleParams) error
 	UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) error
 	// Ganti NAMA tampilan workspace (owner-only, di-guard di handler). Slug SENGAJA
 	// tak diubah — immutable setelah dibuat (stabilitas URL; ganti display != ganti URL).
@@ -294,6 +464,10 @@ type Querier interface {
 	// dibedakan dari "sengaja diberi 3".
 	UpdateUserQuota(ctx context.Context, arg UpdateUserQuotaParams) error
 	UpdateUserStatus(ctx context.Context, arg UpdateUserStatusParams) error
+	// Simpan/ubah format satu entitas. UPSERT: baris mungkin belum ada (default masih
+	// dipakai) — operator hanya menyentuh baris saat ingin MENGUBAH default. created_by
+	// diisi saat pertama dibuat; updated_by/updated_at tiap kali diubah.
+	UpsertCodeFormat(ctx context.Context, arg UpsertCodeFormatParams) error
 	// Simpan pengaturan. UPSERT karena baris mungkin belum ada (deployment baru yang
 	// tak menjalankan seed): pemanggil tak perlu tahu bedanya.
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error

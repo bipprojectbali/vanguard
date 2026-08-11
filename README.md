@@ -139,6 +139,10 @@ butuh source/tooling yang tak ada di build single-binary.
 | `make build` | single binary (`./app`) — regenerate CSS + sqlc dulu |
 | `make run` | build lalu jalankan |
 | `make css` | generate `static/app.css` dari class di file `.go` |
+
+Subcommand binary (di luar Makefile): `./app migrate` (migrasi lalu exit),
+`./app doctor` (periksa lingkungan), `./app mcp` (server MCP read-only via stdio,
+untuk dev — lihat [MCP](#mcp-server-read-only-akses-runtime-untuk-agent-ai)).
 | `make migrate-new name=x` | buat file migrasi goose baru |
 
 ## Struktur
@@ -213,3 +217,31 @@ WAJIB `false`** — migrasi dikerjakan container `migrate` terpisah.
 
 **Health:** `/healthz` (liveness) & `/readyz` (cek DB) untuk probe reverse-proxy /
 uptime monitor. Image distroless tanpa shell → probe dari **luar** container.
+
+## MCP server read-only (akses runtime untuk agent AI)
+
+Server [MCP](https://modelcontextprotocol.io) **read-only** memberi agent AI
+"mata" ke runtime dev/staging/produksi — health, jejak audit, KPI presence,
+skema DB, versi migrasi, `doctor` — **tanpa akses tulis**. Berguna saat bug di
+staging/prod: agent bisa melihat keadaan nyata, bukan menebak dari lokal.
+
+**Bukan service/proses terpisah.** Ia rute `/mcp` di aplikasi `app` yang sudah
+jalan (`http.Handler`, Streamable HTTP) — image sama, container sama, di belakang
+reverse proxy yang sudah ada. Deploy tak berubah; cukup tambah **satu env**.
+
+**Aktifkan (staging/prod):** set `MCP_TOKEN` (≥32 char) di service `app` via
+Portainer. Kosong = rute **tak didaftarkan** (opt-in — fitur yang membuka runtime
+ke AI tak menyala karena lupa). Rute dijaga **Bearer token**; beda per-lingkungan
+(bocor staging tak boleh membuka prod). Endpoint hanya di jaringan internal +
+reverse proxy — **jangan expose port MCP** ke host.
+
+**Client** (`.mcp.json`, lihat [`.mcp.json.example`](.mcp.json.example)): token di
+**header** (`Authorization: Bearer ${VAR}`, bukan di URL — query string bocor ke
+access-log), nilai via env, nama env beda per-lingkungan.
+
+**Dev lokal:** `./app mcp` — stdio, tanpa server/token.
+
+**Read-only itu struktural, bukan janji:** tiap tool memanggil ulang jalur baca
+yang ada lewat `db.WithSuper` → `SET LOCAL ROLE app_rw` → **DDL ditolak database**.
+Tak ada tool SQL/shell mentah; rahasia tak pernah dialirkan (dilaporkan
+keberadaan/panjang, bukan nilai).

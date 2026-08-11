@@ -126,6 +126,15 @@ func Sentence(e Event) string {
 	case "platform.tenancy.upgrade":
 		return actor + " menaikkan aplikasi ke mode multi-workspace."
 
+	case "contact.create":
+		return actor + " menambahkan seorang kontak ke sebuah desa."
+	case "contact.update":
+		return actor + " menyunting data seorang kontak."
+	case "contact.primary":
+		return actor + " menetapkan kontak utama sebuah desa."
+	case "contact.delete":
+		return actor + " menghapus seorang kontak."
+
 	default:
 		// Kodenya ikut disebut — tanpa itu pembaca tahu ada sesuatu yang terjadi
 		// tapi tak punya apa pun untuk dicari di kode sumber.

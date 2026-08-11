@@ -1,611 +1,420 @@
 # CLAUDE.md — panduan agen untuk go_starter
 
-Panduan spesifik proyek untuk agen. Baca ini + [`STARTER.md`](STARTER.md) (spec &
-alasan arsitektur) sebelum kode. README untuk cara pakai; file ini untuk
-konvensi + **gotcha yang mahal ditemukan ulang**.
+Baca ini + [`STARTER.md`](STARTER.md) (spec & alasan arsitektur) sebelum kode.
+README = cara pakai; file ini = konvensi + **gotcha yang mahal ditemukan ulang**.
 
 ## Alur kerja wajib
 
-- **`make check` adalah gerbang** — jalankan setiap selesai perubahan; harus hijau
-  (sqlc · vet · gofmt · build · test) sebelum lapor selesai.
-- **Tiap paket test punya SCHEMA Postgres sendiri** (`internal/testdb`), jadi
-  `go test ./...` boleh paralel. Paket yang butuh DB wajib punya `TestMain` yang
-  memanggil `testdb.Pool(ctx, "<nama>")` + `testdb.Drop`; test mengambil pool
-  dari variabel paket (`pkgPool`), TIDAK membuka `pgxpool.New` sendiri — pool
-  yang dibangun dari DSN mentah menunjuk `public`, tempat tabelnya tak ada.
-  **`search_path` sengaja TANPA `public`**: goose mencari tabel versinya lewat
-  search_path, dan dengan `public` di sana ia menemukan `goose_db_version`
-  database utama, membacanya sebagai "sudah versi terakhir", lalu tak
-  menjalankan apa pun — schema baru tetap KOSONG dan gagalnya menunjuk ke
-  mana-mana kecuali penyebabnya. Migrasi `00004` memberi GRANT `app_rw` ke
-  `current_schema()` (bukan `public` harfiah, seperti `00001`) supaya RLS tetap
-  mengikat di schema mana pun.
-- Tooling (`sqlc`/`goose`/`air`) di `$(go env GOPATH)/bin`. Makefile memanggilnya
-  via **path absolut** (`$(GOBIN)/sqlc`) — GNU Make 3.81 di macOS meng-exec recipe
-  tanpa metachar lewat `execvp`, jadi `export PATH` tak terbaca. Jangan ubah balik
-  ke pemanggilan telanjang.
+- **`make check` = gerbang** (sqlc · vet · gofmt · build · test) — harus hijau
+  sebelum lapor selesai.
+- **Tiap paket test punya SCHEMA Postgres sendiri** (`internal/testdb`) → `go test
+  ./...` paralel. Paket ber-DB wajib `TestMain` yang panggil `testdb.Pool(ctx,
+  "<nama>")` + `testdb.Drop`; test ambil pool dari var paket (`pkgPool`), JANGAN
+  buka `pgxpool.New` sendiri (DSN mentah → `public`, tabel tak ada di sana).
+  `search_path` sengaja TANPA `public`: dengan `public`, goose menemukan
+  `goose_db_version` DB utama → kira "sudah versi terakhir" → schema baru tetap
+  KOSONG. Migrasi `00004` GRANT `app_rw` ke `current_schema()` (bukan `public`
+  harfiah) agar RLS mengikat di schema mana pun.
+- Tooling (`sqlc`/`goose`/`air`) di `$(go env GOPATH)/bin`; Makefile panggil via
+  path absolut (`$(GOBIN)/sqlc`) — GNU Make 3.81 macOS exec via `execvp`, `export
+  PATH` tak terbaca. Jangan ubah ke pemanggilan telanjang.
 - Ubah schema → tulis migrasi goose → jalankan lokal → `sqlc generate` → perbaiki
   ripple. Jangan edit `internal/db/*` (generated).
-- **Skema hidup di SATU migrasi** (`00001_schema.sql`) — 11 migrasi bertahap
-  disatukan saat belum ada deployment (0007). Perubahan berikutnya **inkremental
-  seperti biasa** (`00002_...`); jangan menyunting `00001` setelah orang lain
-  meng-clone repo ini, dan jangan menyatukan ulang setelah ada produksi.
-- Fitur baru wajib disertai test dalam pekerjaan yang sama. Test butuh DB pakai
-  `TEST_DATABASE_URL` (Postgres, jangan tukar engine), di-`skip` bila kosong.
+- **Skema hidup di SATU migrasi** (`00001_schema.sql`, 11 migrasi disatukan saat
+  belum ada deployment). Perubahan berikutnya inkremental (`00002_...`); jangan
+  sunting `00001` setelah repo di-clone orang, jangan satukan ulang setelah produksi.
+- Fitur baru wajib disertai test dalam pekerjaan yang sama. Test pakai
+  `TEST_DATABASE_URL` (Postgres, jangan tukar engine), `skip` bila kosong.
 
 ## Arsitektur & konvensi
 
 - **`routes.go` = single source of truth** semua route. Middleware terproteksi:
-  `RequireAuth` → `Scope` → `RefreshIdentity` → `TrackPresence` → `RequireEnforce(obj, act)`.
-  `Scope` (multi-tenancy) buka tx ber-tenant SEBELUM `RefreshIdentity`/`TrackPresence`
-  (keduanya pakai `h.q(ctx)`). Lihat § Multi-tenancy.
-- **Ini TEMPLATE yang di-clone.** Nama project & nama aplikasi tak boleh
-  di-hardcode di mana pun: module path diganti `make rename name=X`, dan nama
-  yang tampil di layar datang dari `APP_NAME` lewat `handler.SetAppName`
-  (`devBrand()` untuk sidebar `/dev`, `LayoutData.Brand` untuk header). Test
-  brand memakai `devBrand()`, BUKAN string harfiah — menuliskannya akan mengunci
-  test ke nama template. Target `dev`/`css` bergantung `tailwind` supaya clone
-  baru langsung jalan: binary-nya 76MB & gitignored, dan tanpa itu `make dev`
-  gagal dengan pesan yang tak menyebut `make setup`.
-- **Query yang menyaring `table_schema` WAJIB pakai `current_schema()`**, bukan
-  `'public'` harfiah — sama seperti GRANT di migrasi 00004. Pernah terjadi di
-  `internal/erd`: ERD tampil KOSONG di schema non-public, dan halamannya termuat
-  rapi sehingga terbaca seperti database kosong alih-alih filter yang keliru.
+  `RequireAuth` → `Scope` → `RefreshIdentity` → `TrackPresence` →
+  `RequireEnforce(obj, act)`. `Scope` buka tx ber-tenant SEBELUM
+  `RefreshIdentity`/`TrackPresence` (keduanya pakai `h.q(ctx)`).
+- **Ini TEMPLATE yang di-clone.** Nama project/app tak boleh di-hardcode: module
+  path via `make rename name=X`, nama tampil dari `APP_NAME` via
+  `handler.SetAppName` (`devBrand()` sidebar `/dev`, `LayoutData.Brand` header).
+  Test brand pakai `devBrand()`, BUKAN string harfiah. Target `dev`/`css`
+  bergantung `tailwind` (binary 76MB, gitignored) agar clone baru langsung jalan.
+- **Query yang saring `table_schema` WAJIB `current_schema()`**, bukan `'public'`
+  harfiah (sama seperti GRANT migrasi 00004). Pernah bikin ERD kosong di schema
+  non-public.
 - **Config dibaca HANYA di `internal/config`** — jangan `os.Getenv` tersebar.
-- **Handler tak menyimpan config**; nilai di-inject via setter global saat startup
-  (pola `SetCSSPath`, `SetDevMode`, `SetGoogleOAuth`, `SetSuperAdminChecker`,
-  `SetAppTimezone`, `session.Init`, `authz.Init`). Ikuti pola ini, jangan bikin jalur baru.
-- **Atribut Datastar via helper bertipe** (`internal/ui/dsx.go`): pakai `ClassOn`
-  (class-toggle, auto-quote), `FormPostSelect` (@post form-valued + `<form>`),
-  `PostAction`/`DeleteAction` (ekspresi aksi). Ini menutup gotcha #5 & #6 secara
-  STRUKTURAL — jangan tulis `data.Class`/`@post` mentah di view (footgun senyap).
-- **View murni-data**: fungsi gomponents menerima data siap-render; jangan panggil
+- **Handler tak simpan config**; inject via setter global saat startup
+  (`SetCSSPath`, `SetDevMode`, `SetGoogleOAuth`, `SetSuperAdminChecker`,
+  `SetAppTimezone`, `session.Init`, `authz.Init`). Ikuti pola ini.
+- **Atribut Datastar via helper bertipe** (`internal/ui/dsx.go`): `ClassOn`
+  (class-toggle auto-quote), `FormPostSelect` (@post form-valued + `<form>`),
+  `PostAction`/`DeleteAction`. Menutup gotcha #5 & #6 struktural — jangan tulis
+  `data.Class`/`@post` mentah di view.
+- **View murni-data**: gomponents terima data siap-render; jangan panggil
   `authz.Can`/session dari dalamnya. Precompute flag di handler, oper ke view
-  (lihat `ui.When`, `quickLinksFor`).
+  (`ui.When`, `quickLinksFor`).
 - **Dua jalur render**: `renderPage` (Layout landing/app) vs `renderShell`
-  (AppShell panel dgn sidebar). `headNodes()` dibagi keduanya (DRY).
+  (AppShell + sidebar). `headNodes()` dibagi keduanya.
 
-## Desain mobile-first (WAJIB — template ini di-clone)
+## Desain mobile-first (WAJIB — template di-clone, kelalaian menular ke turunan)
 
-Setiap UI **wajib** enak dipakai di mobile, tablet, DAN desktop. Ini base template;
-kelalaian di sini menular ke tiap project turunan. Aturan yang bisa dicek (bukan
-"pokoknya responsif"):
-
-- **Arah mobile-first**: kelas dasar (TANPA prefix) = tampilan MOBILE; naikkan ke
-  atas dengan `sm:`/`md:`/`lg:`. Tailwind/daisyUI memang mobile-first (unprefixed =
-  semua lebar, prefix = min-width ke atas). JANGAN desain desktop-dulu lalu tambal
-  `max-md:` — itu melawan arah framework & rapuh. ✅ `grid-cols-1 md:grid-cols-2`
-  ❌ `grid-cols-2 max-md:grid-cols-1`.
-- **Breakpoint standar** Tailwind: `sm` 640 · `md` 768 · `lg` 1024. Sidebar =
-  drawer di `<md`, tetap di `md:` ke atas — **AppShell (`internal/ui/appshell.go`)
-  adalah pola acuan** (`-translate-x-full` + `md:translate-x-0`, toggle via signal).
-  Ikuti pola itu, jangan bikin mekanisme responsif baru.
-- **Nol overflow horizontal** di 320–375px. Grid/flex turun ke 1 kolom di mobile.
-  Konten lebar (angka panjang, URL) pakai `truncate`/`break-words`.
-- **Tabel = titik gagal #1 di mobile → pakai `ui.TableScroll`.** Bungkus SETIAP
-  `<table>` dengan helper itu; ada test regresi (`internal/ui/tablescroll_test.go`)
-  yang menolak `h.Table(` tanpa pembungkus. Dua hal WAJIB bersamaan & mudah lupa:
-  (a) `overflow-x-auto` di pembungkus **langsung** tabel — dipasang di `.card-body`
-  TIDAK menahan (flex-col; min-content tabel tetap menular ke atas), dan (b)
-  `min-w-0` — card/flex-item default `min-width:auto` sehingga MENOLAK menyusut,
-  bikin overflow mubazir. Terukur: satu tabel telanjang membuat halaman anggota
-  meluber 439px di viewport 375px (H1 pun ikut melar — gejalanya menyesatkan,
-  tampak seperti bug teks).
-- **Baris tombol horizontal wajib `flex-wrap`.** Prev/next + angka halaman tak muat
-  di 375px; tanpa wrap ia mendorong halaman (kejadian di `/dev/health` — `flex-wrap`
-  di wrapper luar TIDAK menurun ke baris dalam).
-- **Cara mendiagnosis overflow** (jangan menebak elemen mana): ukur di browser —
-  `document.documentElement.scrollWidth` vs `clientWidth`, lalu daftar elemen dengan
-  `getBoundingClientRect().right > vw` yang **tak** punya `closest('.overflow-x-auto')`.
-  Yang di dalam kontainer scroll BUKAN pelanggaran; yang di luar itulah pelakunya.
-- **Tap target ≥ 44px** (tombol/link aksi) — daisyUI `.btn` sudah cukup; hati-hati
-  ikon-only kecil. **Input `text-base`** (≥16px) agar iOS tak auto-zoom saat fokus.
-- **VERIFIKASI 3 LEBAR WAJIB** sebelum lapor selesai untuk perubahan UI apa pun:
-  skill **ego-browser**, set lebar ke **375** (mobile), **768** (tablet), **1280**
-  (desktop) + screenshot tiap lebar. Bukti visual, bukan klaim "sudah responsif".
-  Tak ada helper `set_viewport` — pakai CDP langsung, lalu reset setelah selesai:
-  `await cdp('Emulation.setDeviceMetricsOverride', {width: 375, height: 812,
-  deviceScaleFactor: 2, mobile: true})` … `await cdp('Emulation.clearDeviceMetricsOverride', {})`.
+- **Mobile-first**: kelas dasar (tanpa prefix) = MOBILE; naikkan `sm:`/`md:`/`lg:`.
+  ✅ `grid-cols-1 md:grid-cols-2` ❌ `grid-cols-2 max-md:grid-cols-1`.
+- **Breakpoint** Tailwind: `sm` 640 · `md` 768 · `lg` 1024. Sidebar = drawer di
+  `<md`, tetap di `md:`+. **AppShell (`internal/ui/appshell.go`) = pola acuan**
+  (`-translate-x-full` + `md:translate-x-0`). Jangan bikin mekanisme baru.
+- **Nol overflow horizontal** di 320–375px. Grid/flex → 1 kolom di mobile. Konten
+  lebar pakai `truncate`/`break-words`.
+- **SETIAP `<table>` bungkus `ui.TableScroll`** (ada test regresi
+  `tablescroll_test.go`). Dua hal WAJIB bersama: (a) `overflow-x-auto` di
+  pembungkus LANGSUNG tabel (di `.card-body` tak menahan), (b) `min-w-0`
+  (card/flex-item default `min-width:auto` menolak menyusut). Tanpa ini satu
+  tabel telanjang meluber 439px di viewport 375px.
+- **Baris tombol horizontal wajib `flex-wrap`** (pagination dorong halaman di
+  375px; `flex-wrap` di wrapper luar tak menurun ke baris dalam).
+- **Diagnosis overflow**: ukur `documentElement.scrollWidth` vs `clientWidth`,
+  daftar elemen `getBoundingClientRect().right > vw` yang TANPA
+  `closest('.overflow-x-auto')` — itu pelakunya.
+- **Tap target ≥ 44px**; input `text-base` (≥16px) agar iOS tak auto-zoom.
+- **VERIFIKASI 3 LEBAR WAJIB** sebelum lapor selesai untuk perubahan UI: skill
+  **ego-browser**, set 375/768/1280 + screenshot tiap lebar. Tak ada
+  `set_viewport` — pakai CDP `Emulation.setDeviceMetricsOverride` lalu
+  `clearDeviceMetricsOverride`.
 
 ## Identitas panel (/w/{slug} · /dev)
 
-Semua halaman memakai AppShell yang SAMA. Tanpa penanda, user tak tahu sedang di
-shell mana — dan itu bukan cuma kosmetik: **`/dev` menampilkan data LINTAS-workspace**
-(`ListUsers` melihat semua tenant), jadi salah mengira sedang di ruang kerja =
-salah membaca cakupan data.
+Semua halaman pakai AppShell SAMA. **`/dev` menampilkan data LINTAS-workspace**
+(`ListUsers` lihat semua tenant) → salah kira panel = salah baca cakupan data.
 
-- **Sumbernya `internal/ui/panelkind.go`** (`Panel` bertipe + `panelStyles` array
-  berindeks enum → menambah panel tanpa gaya = compile error). Handler tak perlu
-  mengoper apa-apa: `panelOf(ctx, currentPath)` menurunkannya.
-- **Hanya `/dev` ditentukan PATH.** Sejak 0004 satu alamat `/w/{slug}` melayani
-  semua role, jadi chip-nya diturunkan dari ROLE (`panelForRole`) — sumber yang
-  sama dengan `navFor`, supaya chip tak pernah bertentangan dengan menu yang
-  tampil. Di ruang kerja, chip justru MENJADI penanda otoritas: owner/admin
-  melihat `ADMIN`, member melihat `RUANG KERJA`, di halaman yang identik.
-- **DUA penanda, sengaja**: chip TEKS (`RUANG KERJA`/`ADMIN`/`PLATFORM`) + aksen
-  warna di tepi atas sidebar. Teks saja kurang menonjol; warna saja gagal untuk
-  yang buta warna. Keduanya juga saling menutupi keadaan: saat sidebar collapse
-  jadi rail 4rem, `.app-brand` disembunyikan penuh oleh `input.css` (chip ikut
-  hilang) — **aksen tepi yang bertahan**. Jangan hapus salah satunya.
+- **Sumber `internal/ui/panelkind.go`** (`Panel` bertipe + `panelStyles` array
+  berindeks enum → tambah panel tanpa gaya = compile error). `panelOf(ctx,
+  currentPath)` menurunkannya.
+- **Hanya `/dev` ditentukan PATH.** `/w/{slug}` melayani semua role → chip
+  diturunkan dari ROLE (`panelForRole`, sumber sama dengan `navFor`). Owner/admin
+  → `ADMIN`, member → `RUANG KERJA`.
+- **DUA penanda sengaja**: chip TEKS + aksen warna tepi atas sidebar. Saat sidebar
+  collapse jadi rail 4rem, `.app-brand` disembunyikan (chip hilang) → aksen tepi
+  bertahan. Jangan hapus salah satu.
 - **Warna WAJIB token semantik daisyUI** (`primary`/`secondary`/`warning`), bukan
-  absolut (`bg-red-500`) — token didefinisikan ulang tiap tema (gotcha #11).
-  `/dev` memakai `warning` bukan sebagai warna ketiga, tapi sebagai peringatan.
-  Terverifikasi terbaca di ke-6 tema (selisih luminance 0.41–0.69).
-- Chip **menggantikan** sub-label panel, tidak menumpuk — dua penanda konteks di
-  satu tempat justru bising. Brand utama = NAMA WORKSPACE (role tenant) atau
-  `go_starter /dev` (platform).
+  absolut. `/dev` pakai `warning` sebagai peringatan.
+- Chip MENGGANTIKAN sub-label panel, tak menumpuk. Brand = NAMA WORKSPACE atau
+  `go_starter /dev`.
 
 ## Gotcha (mahal — jangan temukan ulang)
 
-1. **CSP wajib `unsafe-eval`.** Datastar mengevaluasi ekspresi `data-*` via
-   `new Function()`. Tanpa `script-src 'self' 'unsafe-eval'`, SELURUH Datastar
-   mati senyap (@post/signals/patch tak jalan). Ada test regresi di `mw`.
-2. **scs + Datastar SSE cookie.** `NewSSE` flush header lebih dulu & bypass
-   pembungkus scs → `Set-Cookie` tak terkirim. Panggil `session.WriteCookie`
-   **sebelum** `NewSSE` di handler yang memulai session.
-3. **SameSite=Lax, bukan Strict.** Callback OAuth = navigasi top-level dari
-   accounts.google.com (cross-site); Strict menahan cookie → "state tidak valid".
-4. **CSS: daisyUI = plugin Tailwind (satu pipeline, satu preflight).** `input.css`
-   `@import "tailwindcss"` + `@plugin "./daisyui.js"` → `make css` menghasilkan
-   `app.css`. Semua class komponen (`btn btn-primary`, `card`+`card-body`, `alert
-   alert-error`, `badge badge-neutral`, `select`, `input`) & token tema
-   (`bg-base-100/200/300`, `text-base-content`, `--color-error`) datang dari daisyUI
-   — TANPA expose manual ke `@theme`. **Tapi tetap tree-shaken**: class yang tak
-   dipakai di markup `.go` = tak digenerate; pakai di markup dulu. daisyUI TAK punya
-   token `bg-sidebar`/`text-muted-foreground`/`--color-destructive` (itu Basecoat
-   lama) — pakai padanan base: sidebar=`bg-base-200`, muted=`text-base-content/70`,
-   destructive=`error`. `daisyui.js` WAJIB ada saat build (di-commit, di-`@plugin`).
-5. **`data.Class` key ber-hyphen wajib di-quote** (`{translate-x-0: ...}` = JS
-   invalid, Datastar crash). **Ditutup oleh `ui.ClassOn(class, expr)`** — helper
-   mengutip otomatis, class ber-hyphen mustahil salah. Pakai helper, bukan
-   `data.Class` mentah.
-6. **`@post {contentType:'form'}` butuh `<form>` terdekat** (select tanpa `<form>`
-   = tak ada value terkirim). **Ditutup oleh `ui.FormPostSelect(url, name, opts...)`**
-   — merender `<form>`+`<select>` sebagai satu node, post form-valued tanpa `<form>`
-   mustahil. Pakai helper, bukan `h.FormEl`+`@post` mentah.
-7. **Toast/notifikasi wajib `pointer-events:none`** — `opacity:0` pun tetap
-   menangkap klik & memblokir elemen di bawahnya.
+1. **CSP wajib `unsafe-eval`.** Datastar eval ekspresi `data-*` via `new
+   Function()`. Tanpa `script-src 'self' 'unsafe-eval'`, SELURUH Datastar mati
+   senyap. Ada test regresi di `mw`.
+2. **scs + Datastar SSE cookie.** `NewSSE` flush header lebih dulu, bypass scs →
+   `Set-Cookie` tak terkirim. Panggil `session.WriteCookie` SEBELUM `NewSSE`.
+3. **SameSite=Lax, bukan Strict.** Callback OAuth = navigasi top-level cross-site;
+   Strict menahan cookie → "state tidak valid".
+4. **daisyUI = plugin Tailwind** (satu pipeline). `input.css` `@import
+   "tailwindcss"` + `@plugin "./daisyui.js"` → `make css` → `app.css`. Semua class
+   komponen & token tema dari daisyUI, TAPI tree-shaken (pakai di markup `.go`
+   dulu). daisyUI TAK punya `bg-sidebar`/`text-muted-foreground`/
+   `--color-destructive` (Basecoat lama) → padanan: sidebar=`bg-base-200`,
+   muted=`text-base-content/70`, destructive=`error`. `daisyui.js` wajib ada saat build.
+5. **`data.Class` key ber-hyphen wajib di-quote** — **ditutup `ui.ClassOn`**. Pakai
+   helper, bukan `data.Class` mentah.
+6. **`@post {contentType:'form'}` butuh `<form>` terdekat** — **ditutup
+   `ui.FormPostSelect`**. Pakai helper, bukan `h.FormEl`+`@post` mentah.
+7. **Toast wajib `pointer-events:none`** — `opacity:0` pun tetap tangkap klik.
 8. **Super-admin env-override**: email di `SUPER_ADMIN_EMAILS` = super_admin
-   efektif walau kolom `role` di DB = `user`. Reconcile boot mempromosikan mereka
-   (promote-only, tak pernah demote). `RefreshIdentity` me-load role/status segar
-   dari DB per-request (jangan cache di session — perubahan harus real-time).
+   efektif walau `role` DB = `user`. Reconcile boot promote-only.
+   `RefreshIdentity` load role/status segar per-request (jangan cache di session).
 9. **Panel dev-only** (`/dev/health`, `/dev/erd`) gated `devMode` di DUA tempat:
-   route (`if devMode`) DAN menu (`devNav()`). Source/tooling tak ada di
-   single-binary produksi.
-10. **Tema: daftar HARUS selaras di 2 tempat.** `themeList` di
-    `internal/ui/theme.go` (opsi dropdown) & blok `themes:` di `static/input.css`
-    (yang di-generate daisyUI). Tema yang di-list Go tapi tak di input.css = CSS-nya
-    tak ada → pilihan tak berefek. Tambah tema = edit KEDUANYA lalu `make css`.
-11. **Hierarki permukaan warna (light & dark).** Latar halaman = `bg-base-200`,
-    permukaan (card/sidebar) = `bg-base-100`. Token daisyUI RELATIF: kalau latar &
-    card sama-sama `base-100`, kartu menyatu dengan latar di SEMUA tema. Ikuti
-    hierarki ini; active-state menonjol pakai `bg-primary text-primary-content`
-    (bukan `base-300` yang samar di sebagian tema). Jangan pakai warna absolut
-    (`bg-white`, `text-black`, `bg-gray-*`) — tak adaptif antar-tema.
-12. **Chart = ECharts vendored + init eksternal (BUKAN go-echarts).** go-echarts
-    me-render lewat `<script>` inline → diblokir CSP (`script-src` tanpa
-    `unsafe-inline`). Pola benar (sama ERD/mermaid): `echarts.min.js` vendored +
-    `charts.js` eksternal; option chart dirakit di Go (`internal/activity/charts.go`),
-    ditanam via `<script type="application/json">` (JSON tak dieksekusi → CSP-safe),
-    `charts.js` `JSON.parse`+`setOption`. ECharts TAK butuh `unsafe-eval`.
-13. **Presence tracking (Rule 13 — no write-storm).** `TrackPresence` merekam tiap
-    request terautentikasi ke `activity_presence` via UPSERT bucket 15-menit
-    (`hits+1`) — agregasi di level baris, bukan insert-per-request — + throttle
-    in-process 60 dtk/user. WAJIB fail-soft (error rekam tak menggagalkan request).
-    Pasang SETELAH `RefreshIdentity` (butuh uid).
-    **Presence & audit menjawab pertanyaan BERBEDA — jangan digabung.** Presence =
-    "kapan orang ada" (agregat, murah, tanpa detail); `audit_logs` = "siapa
-    melakukan apa" (bukti, per-peristiwa). Keduanya tampil sebagai dua tabel
-    terpisah di `/dev/logs`. Godaan "biar detail" yang berakhir mencatat tiap
-    request melanggar Rule 13 — dan itu justru alasan bucket 15-menit ini ada.
-    **Retensi audit ada di `internal/maintenance`**, bukan lagi task terbuka.
-    `audit_logs` dibersihkan harian sesuai `settings.KeyAuditRetentionDays`
-    (default 365 hari, minimal 30 — sama dengan tenggang workspace terhapus,
-    agar jejak penghapusan tak hilang sebelum workspace-nya sendiri dibuang).
-    Batasnya di DB supaya operator bisa MENAIKKANNYA sebelum sesuatu telanjur
-    hilang; menurunkannya ter-audit, sebab mempersingkat retensi adalah cara
-    paling rapi menghapus jejak. Dua perlakuan berbeda yang SENGAJA: angka di
-    luar batas → tolak & jangan hapus apa pun (niat yang keliru, tak bisa
-    dibatalkan); nilai tak terparse → jatuh ke default & tetap jalan (ketiadaan
-    nilai; menghentikan pemeliharaan karena satu baris rusak membuat tabel
-    tumbuh diam-diam berbulan-bulan).
-    **`target_type` menentukan tabel yang di-JOIN saat jejak dibaca**
-    (`user`/`session`→users, `workspace`→tenants, `platform`→tak di-JOIN), jadi
-    salah menyebutnya bukan label keliru melainkan NAMA ORANG yang keliru: id
-    workspace akan mencocoki baris users yang id-nya kebetulan sama. Pakai
-    `h.audit` (sasaran user) · `h.auditWorkspace` · `h.auditPlatform` — jangan
-    `auditLog` telanjang. Pernah terjadi: `h.audit` meng-hardcode `"user"` untuk
-    SEMUA aksi, dan tujuh aksi mengirim `tenants.id` (diperbaiki migrasi 00003).
-    **Kalimat peristiwa di `internal/activity/trail.go`** (pure, tanpa DB) —
-    action tak dikenal WAJIB jatuh ke kalimat netral + kodenya, jangan string
-    kosong: jejak dibaca justru saat ada yang aneh, dan baris yang menghilang
-    karena kodenya belum dikenal adalah kegagalan terburuk halaman ini. Nama
-    di-JOIN saat BACA, tak pernah disalin ke `metadata` (kolom itu bebas PII;
-    salinan nama di sana tak ikut terhapus bersama usernya).
-14. **Timezone: simpan UTC, agregasi `AT TIME ZONE`.** Semua `created_at`/`bucket_at`
-    TIMESTAMPTZ (UTC). "Jam berapa user aktif" dikonversi ke lokal via `AT TIME ZONE
-    $tz` di SQL; `APP_TIMEZONE` (default Asia/Jakarta) dibaca di config, di-inject
-    `handler.SetAppTimezone`. **`import _ "time/tzdata"` di `main.go` WAJIB** —
-    `CGO_ENABLED=0` single-binary tak punya tzdata OS, `LoadLocation` gagal di prod
-    tanpanya. sqlc agregasi: `SUM/COUNT` bungkus `COALESCE(...)::bigint` (bukan
-    `pgtype.Numeric`); hindari `AT TIME ZONE` di SELECT list (sqlc emit `interface{}`)
-    — kembalikan timestamptz mentah, format di Go.
-15. **Response `content-type: text/javascript` = eksekusi JS di browser** (fitur
-    Datastar, docs resmi — melengkapi #1). Body response dgn content-type itu
-    dieksekusi sbg JavaScript; `PatchElements` yang menyisipkan `<script>` juga
-    tereksekusi. Kita BERSIH (0 handler set content-type itu — jalur SSE cuma
-    patch fragment ter-escape). Jangan set content-type itu, dan jangan patch
-    `<script>` berisi data user, kecuali sengaja & sadar konsekuensinya. Aturan
-    Datastar terkait (sudah dipatuhi): (a) escape SEMUA input user di view
-    (`g.Text`, bukan `g.Raw`) — satu-satunya `g.Raw` = chart JSON dari
-    `json.Marshal` (bukan user); (b) signal = user-modifiable → WAJIB validasi di
-    backend (mis. `ValidRoleName`, `TrimSpace`+empty-check `$title`); (c) jangan
-    taruh data sensitif di signal (terlihat plaintext di source).
-16. **`sse.Redirect` (datastar-go) DIBLOKIR CSP — pakai HTTP 303 untuk NAVIGASI.**
-    Konsekuensi langsung #1/#15, terverifikasi wire+CSP-event. `sse.Redirect`/
-    `ExecuteScript`/`ReplaceURL` di datastar-go v1.2.2 mengirim `datastar-patch-
-    elements` yang menyuntik `<script>setTimeout(...location.href)</script>` ke
-    body. CSP kita (`script-src 'self' 'unsafe-eval'`, TANPA `unsafe-inline`)
-    **memblokir** script inline itu (`script-src-elem blocked:inline`) → redirect
-    MATI (aksi server sukses, tapi halaman tak pindah). Terjadi di logout/login/
-    register. **Aturan**: aksi = NAVIGASI penuh (logout, login-sukses, register-
-    sukses) → **native form POST → `http.Redirect(w,r,url,303)`**, BUKAN `sse.Redirect`.
-    Native redirect juga commit cookie via scs `LoadAndSave` normal → tak perlu
-    ritual `WriteCookie`+`NewSSE` (#2). Gagal validasi → PRG `?err=CODE`
-    (`authErrMsg` map kode→pesan). SSE tetap untuk update FRAGMENT parsial (flash,
-    row) yang di-escape — hanya redirect yang pindah ke HTTP. Asimetri kunci:
-    `unsafe-eval` mengizinkan `new Function` (ekspresi `data-*` jalan), tapi
-    `<script>` inline tetap diblokir — jadi menambah `unsafe-inline` BUKAN solusi
-    (melemahkan CSP; lihat § Batasan).
+   route (`if devMode`) DAN menu (`devNav()`).
+10. **Tema: daftar selaras 2 tempat** — `themeList` (`ui/theme.go`) & blok
+    `themes:` (`static/input.css`). Tambah tema = edit KEDUANYA lalu `make css`.
+11. **Hierarki permukaan warna**: latar halaman `bg-base-200`, permukaan
+    (card/sidebar) `bg-base-100`. Token daisyUI RELATIF — kalau sama, kartu
+    menyatu. Active-state pakai `bg-primary text-primary-content`. Jangan warna
+    absolut (`bg-white`, `bg-gray-*`).
+12. **Chart = ECharts vendored + init eksternal** (BUKAN go-echarts — render
+    `<script>` inline, diblokir CSP). Pola: `echarts.min.js` vendored + `charts.js`
+    eksternal; option dirakit di Go (`internal/activity/charts.go`), ditanam via
+    `<script type="application/json">` (CSP-safe), JS `JSON.parse`+`setOption`.
+13. **Presence tracking (no write-storm).** `TrackPresence` UPSERT bucket 15-menit
+    ke `activity_presence` (`hits+1`) + throttle 60 dtk/user, fail-soft, dipasang
+    SETELAH `RefreshIdentity`. **Presence ("kapan orang ada", agregat) ≠ audit
+    ("siapa melakukan apa", per-peristiwa) — jangan digabung**; dua tabel terpisah
+    di `/dev/logs`. Retensi audit di `internal/maintenance` (harian,
+    `settings.KeyAuditRetentionDays`, default 365 min 30). Angka di luar batas →
+    tolak & tak hapus apa pun; nilai tak terparse → default & tetap jalan.
+    **`target_type` menentukan tabel di-JOIN** saat baca
+    (`user`/`session`→users, `workspace`→tenants, `platform`→tak JOIN) → salah =
+    NAMA ORANG keliru. Pakai `h.audit`/`h.auditWorkspace`/`h.auditPlatform`, bukan
+    `auditLog` telanjang. Kalimat peristiwa di `internal/activity/trail.go` (pure);
+    action tak dikenal → kalimat netral + kode, jangan string kosong. Nama di-JOIN
+    saat BACA, tak pernah disalin ke `metadata` (bebas PII).
+14. **Timezone: simpan UTC, agregasi `AT TIME ZONE`.** Semua `created_at`/
+    `bucket_at` TIMESTAMPTZ. Konversi lokal via `AT TIME ZONE $tz` di SQL;
+    `APP_TIMEZONE` (default Asia/Jakarta) via `handler.SetAppTimezone`. **`import _
+    "time/tzdata"` di `main.go` WAJIB** (`CGO_ENABLED=0` tak punya tzdata OS). sqlc
+    agregasi: `SUM/COUNT` bungkus `COALESCE(...)::bigint`; hindari `AT TIME ZONE`
+    di SELECT list (sqlc emit `interface{}`) — kembalikan timestamptz mentah,
+    format di Go.
+15. **Response `content-type: text/javascript` = eksekusi JS** (fitur Datastar).
+    Kita BERSIH (0 handler set itu). Jangan set content-type itu, jangan patch
+    `<script>` berisi data user. Aturan Datastar dipatuhi: (a) escape SEMUA input
+    user (`g.Text`, bukan `g.Raw`; satu-satunya `g.Raw` = chart JSON dari
+    `json.Marshal`); (b) signal user-modifiable → validasi backend
+    (`ValidRoleName`, `TrimSpace`+empty-check); (c) jangan taruh data sensitif di signal.
+16. **`sse.Redirect` DIBLOKIR CSP — pakai HTTP 303 untuk NAVIGASI.** `sse.Redirect`/
+    `ExecuteScript`/`ReplaceURL` (datastar-go v1.2.2) menyuntik `<script>` inline →
+    diblokir (`script-src` tanpa `unsafe-inline`) → redirect MATI. **Aturan**: aksi
+    NAVIGASI (logout, login/register-sukses) → native form POST →
+    `http.Redirect(w,r,url,303)`. Native redirect commit cookie via scs
+    `LoadAndSave` (tak perlu ritual #2). Gagal validasi → PRG `?err=CODE`
+    (`authErrMsg`). SSE tetap untuk update FRAGMENT parsial ter-escape. `unsafe-eval`
+    izinkan `new Function` TAPI `<script>` inline tetap diblokir → `unsafe-inline`
+    BUKAN solusi.
 
 ## Mode tenancy: single → multi (ratchet) — keputusan 0006 & 0007
 
-Template melayani DUA bentuk, tapi **bukan dua jalur kode**. Setiap aplikasi
-lahir sebagai **single** dan boleh **dinaikkan** ke multi; turun **tak pernah**.
+Template melayani DUA bentuk, **bukan dua jalur kode**. Lahir **single**, boleh
+**naik** ke multi; turun **tak pernah**.
 
-- **Single = multi-tenant dengan N=1.** Di dalam tetap ada TEPAT SATU tenant;
-  RLS/memberships/audit jalan apa adanya. Yang hilang cuma chrome-nya. Jangan
-  tergoda membuang `tenant_id` "karena toh cuma satu" — itu melahirkan aplikasi
-  kedua dalam satu repo, dan jalur yang jarang dipakai pasti membusuk.
-- **SATU bentuk URL untuk kedua mode** (`/w/{slug}`); aplikasi tunggal ada di
-  **`/w/app`**. `SingleAppPrefix` sudah DIHAPUS. Dulu mode single memakai
-  `/app/...`, sehingga menaikkan mode mengubah SETIAP alamat yang sudah tersebar.
-  Sekarang `wsPath` & `slugFromRequest` tak punya cabang mode sama sekali.
-- **Mode hidup di DATABASE** (`platform_settings.tenancy_mode`), bukan env.
-  Nol baris = single. `APP_MODE` **sudah dihapus** — jangan hidupkan kembali.
-  Penurunan ditolak DUA trigger: `BEFORE UPDATE` (multi→lain) dan `BEFORE DELETE`
-  (baris absen dibaca sebagai single, jadi menghapusnya adalah penurunan yang
-  menyamar — ini pernah lolos saat dirancang dengan satu trigger).
-- **Route SELALU didaftarkan**, tak lagi bersyarat mode (mengubah 0006 §9). Yang
-  menahan zona bahaya adalah `tenants.is_primary` — dijaga di handler DAN di SQL
-  (`AND NOT is_primary`). Route bersyarat telanjur salah begitu mode bisa naik
-  saat aplikasi berjalan.
-- **Workspace PRIMER = rumah aplikasi.** Kolom `is_primary` + unique partial index
-  (tepat satu). **Tak bisa diarsipkan/dihapus** (mengarsipkannya = seluruh aplikasi
-  read-only lewat tombol yang tampak rutin) dan **tak memakan kuota** (kuota
-  membatasi yang DIBUAT; rumah aplikasi tak dibuat siapa pun). Pengecualian kuota
-  WAJIB sama di sidebar & penegakan — beda sedikit = tombol yang lalu ditolak.
-- **super_admin = OWNER workspace primer**, dipasang saat LOGIN
-  (`ensurePrimaryOwner`, idempotent & promote-only) — bukan saat boot, sebab di
-  sana belum ada satu pun baris `users`. Tanpa ini rumah aplikasi tak punya owner,
-  dan setelah naik ke multi ia jadi satu-satunya workspace yang mustahil dikelola
-  seperti yang lain. **Jangan pernah menentukan jalur RLS dari keanggotaan** —
-  keputusan bypass tetap dari ROLE, tak pernah dari data.
-  Konsekuensi disengaja: mencabut email dari `SUPER_ADMIN_EMAILS` menurunkannya
-  jadi **owner biasa**, bukan user biasa.
-- **Pendaftar di mode single = `member`, BUKAN owner** (`placeNewUser`). Tanpa
-  ini setiap orang yang mendaftar jadi pemilik aplikasi.
-- **Wewenang single**: super_admin (env) → fundamental; admin → operasional
-  (termasuk nama app); member → pakai. `canEditWorkspace` melonggar untuk admin
-  di mode single — tapi **alasannya bukan lagi "tak ada owner"** (sejak 0007 ada):
-  admin adalah pembantu operasional, dan mengganti nama aplikasi tak boleh
-  menuntut orang menyunting `.env` lalu restart.
-- **`GuardSetRole` memakai `>=`**, bukan `>`: tanpa itu admin bisa mengangkat
-  sesama admin — memperbanyak dirinya sendiri.
-- **Boot** (`BootstrapPrimary`): workspace primer dibuat bila belum ada, mode
-  dibaca dari DB. Pemeriksaan lama ">1 workspace tapi single → tolak start"
-  **dihapus, bukan dipindah** — keadaan itu tak bisa terjadi lagi.
-- **Test WAJIB di kedua mode** untuk jalur yang bergantung mode (`withMode` +
-  `t.Cleanup` di `appmode_test.go`) — mode adalah state paket, dan yang lupa
-  dipulihkan meracuni test lain dengan gejala di tempat tak berhubungan.
-  `setupTest` menyetel MULTI secara eksplisit (seed-nya workspace biasa, bukan
-  primer); default paket adalah Single.
-- **Menaikkan mode ada di `/dev/settings`** (kartu Mode Tenancy), di-gate
-  `platform:settings` yang sama seperti kuota — ini keputusan paling fundamental
-  di halaman itu, jadi tak boleh lebih longgar. Konfirmasi = MENGETIK nama
-  aplikasi, bukan checkbox (checkbox bisa dicentang tanpa dibaca; menyalin nama
-  menuntut orangnya melihat objek yang terlibat). Setelah naik, formnya HILANG
-  diganti keterangan keadaan — tombol tanpa efek lebih buruk daripada tombol yang
-  tak ada. Wajib ter-audit: perubahan bentuk aplikasi yang tak bisa dibatalkan
-  harus punya jawaban untuk "siapa & kapan".
+- **Single = multi-tenant N=1.** Tetap ada TEPAT SATU tenant; RLS/memberships/audit
+  jalan. Yang hilang cuma chrome. Jangan buang `tenant_id`.
+- **SATU bentuk URL** (`/w/{slug}`); aplikasi tunggal di **`/w/app`**.
+  `SingleAppPrefix` DIHAPUS. `wsPath`/`slugFromRequest` tanpa cabang mode.
+- **Mode di DATABASE** (`platform_settings.tenancy_mode`), bukan env. Nol baris =
+  single. `APP_MODE` DIHAPUS. Penurunan ditolak DUA trigger: `BEFORE UPDATE`
+  (multi→lain) & `BEFORE DELETE` (baris absen = single, hapus = penurunan menyamar).
+- **Route SELALU didaftarkan** (bukan bersyarat mode). Zona bahaya dijaga
+  `tenants.is_primary` di handler DAN SQL (`AND NOT is_primary`).
+- **Workspace PRIMER = rumah aplikasi** (`is_primary` + unique partial index). Tak
+  bisa diarsip/dihapus, tak makan kuota (kuota batasi yang DIBUAT). Pengecualian
+  kuota wajib SAMA di sidebar & penegakan.
+- **super_admin = OWNER workspace primer**, dipasang saat LOGIN (`ensurePrimaryOwner`,
+  idempotent promote-only) — bukan boot (belum ada baris `users`). Jalur RLS dari
+  ROLE, tak pernah dari keanggotaan. Cabut email dari `SUPER_ADMIN_EMAILS` →
+  turun jadi owner biasa, bukan user biasa.
+- **Pendaftar mode single = `member`** (`placeNewUser`), bukan owner.
+- **Wewenang single**: super_admin(env)→fundamental; admin→operasional (termasuk
+  nama app); member→pakai. `canEditWorkspace` longgar untuk admin di single (admin
+  = pembantu operasional; ganti nama app tak boleh menuntut sunting `.env`+restart).
+- **`GuardSetRole` pakai `>=`** (bukan `>`) — cegah admin angkat sesama admin.
+- **Boot** (`BootstrapPrimary`): workspace primer dibuat bila belum ada, mode dari
+  DB. Cek lama ">1 workspace tapi single → tolak" DIHAPUS (keadaan itu mustahil).
+- **Test WAJIB kedua mode** untuk jalur bergantung-mode (`withMode` + `t.Cleanup`
+  di `appmode_test.go`). `setupTest` set MULTI eksplisit; default paket Single.
+- **Naikkan mode di `/dev/settings`** (gate `platform:settings`). Konfirmasi =
+  MENGETIK nama app (bukan checkbox). Setelah naik form HILANG diganti keterangan.
+  Wajib ter-audit.
 
 ## Multi-tenancy (RLS + membership + role 2-bidang) — keputusan 0002, 0003 & 0004
 
-Isolasi tenant ditegakkan **Postgres RLS**, bukan cuma `WHERE tenant_id` di app.
-Keanggotaan = model **membership** (satu user boleh di banyak workspace dgn role
-berbeda) — `docs/decisions/0003` men-supersede "1 user = 1 tenant" di 0002.
-Workspace aktif hidup di **PATH** (`/w/{slug}`), bukan session — `0004`
-men-supersede pemilihan-via-session di 0003 #4. Gotcha yang mahal ditemukan ulang:
+Isolasi tenant = **Postgres RLS**, bukan cuma `WHERE tenant_id`. Keanggotaan =
+**membership** (1 user ↔ banyak workspace, role beda). Workspace aktif di **PATH**
+(`/w/{slug}`), bukan session.
 
 - **URL workspace HANYA lewat `wsPath`/`wsRedirect`** (`internal/handler/wspath.go`)
-  — satu-satunya tempat literal `/w/` boleh muncul (Rule 15). Slug kosong →
-  `/workspace/new`, bukan `/w//x` yang rusak senyap.
-- **`/admin` & `/user` TIDAK ADA lagi** — dilebur jadi `/w/{slug}`. Keduanya
-  membedakan ROLE, bukan RESOURCE: satu orang bisa owner di A & member di B, jadi
-  alamat per-role membuat halaman yang sama berpindah alamat saat ganti workspace.
-  Aturannya: **beda role = beda AKSI di halaman yang sama, BUKAN beda ALAMAT.**
-  Pembatasan di handler (`canEditWorkspace`/`canManageMembers`), bukan di route.
-- **Slug asing/tak dikenal → `http.NotFound`**, jangan 403 (mengonfirmasi
-  workspace itu ada) dan jangan redirect (menampilkan data workspace lain secara
-  senyap — persis penyakit yang diobati 0004).
-- **Role PLATFORM pun wajib mengikuti slug** — cabang platform di `Scope` bypass
-  RLS tapi TETAP memanggil `adoptTenantBySlug`; tanpa itu super_admin membuka
-  `/w/acme/members` melihat anggota workspace lain di bawah URL yang menjanjikan
-  `acme`. Keputusan bypass diambil dari ROLE, tak pernah dari data DB.
+  — satu-satunya tempat literal `/w/` boleh muncul. Slug kosong → `/workspace/new`.
+- **`/admin` & `/user` TIDAK ADA** — dilebur `/w/{slug}`. Beda role = beda AKSI di
+  halaman sama, BUKAN beda ALAMAT. Pembatasan di handler
+  (`canEditWorkspace`/`canManageMembers`), bukan route.
+- **Slug asing → `http.NotFound`**, jangan 403 (konfirmasi ada) / redirect (bocor
+  data workspace lain).
+- **Role PLATFORM pun wajib ikut slug** — cabang platform di `Scope` bypass RLS
+  tapi TETAP panggil `adoptTenantBySlug`. Keputusan bypass dari ROLE, tak dari data.
 - **`/dev`, `/notifications`, `/invite/{token}`, `/workspace/new` SENGAJA tanpa
-  slug** — cakupan datanya bukan satu tenant. Path mengikuti cakupan data.
-- **DUA pintu mengubah role, kabarnya harus SAMA.** `/w/{slug}/members` (pengelola
-  workspace) & `/dev/users` (operator platform) memanggil `UpdateMemberRole` dan
-  `authz.GuardSetRole` yang sama; keduanya WAJIB `h.notify(...,
-  "member.role.changed")`. Efeknya di sisi penerima identik — yang tak boleh
-  terjadi adalah ia mengetahui perubahan wewenangnya atau tidak, tergantung pintu
-  mana yang kebetulan dipakai. Di `/dev` tenant notifikasi = workspace **TARGET**
-  (dari form), BUKAN workspace aktor: panel itu lintas-workspace, jadi keduanya
-  sering berbeda. Sebaliknya **status & soft-delete SENGAJA tanpa notifikasi** —
-  keduanya menutup pintu login, jadi kabar in-app tak akan pernah terbaca; ia
-  hanya menumpuk untuk saat statusnya dipulihkan, ketika sudah basi.
-- **Daftar panjang wajib punya JALAN ke halaman berikutnya, bukan cuma `LIMIT`.**
-  Query keyset yang selalu diminta dari halaman pertama = baris ke-21 dst
-  mustahil dijangkau, dan gagalnya SENYAP (halaman tampil rapi, isinya saja tak
-  lengkap). Pola: ambil `pageSize+1` → `splitPage` (baris lebih hanya penanda
-  "masih ada", tak dirender — menghindari `COUNT` yang memindai seluruh tabel) →
-  cursor lewat `?after=` (`internal/handler/pagecursor.go`). **Keyset, bukan
-  OFFSET**: daftar diurut `created_at DESC` dan baris baru masuk di atas, jadi
-  OFFSET menggeser isi halaman di antara dua klik. Cursor rusak → halaman
-  pertama, JANGAN halaman kosong (terbaca sebagai "tak ada data"). Ujung daftar
-  dikatakan eksplisit; navigasinya link biasa (`<a>`), bukan Datastar — pindah
-  halaman itu NAVIGASI, harus bisa di-bookmark & dimuat ulang (sekaligus lolos
-  gotcha #16 tanpa menyentuhnya).
-- **Daftar anggota HANYA untuk pengelola** (owner/admin/platform), di kedua mode
-  — 0008 men-supersede 0004 §3 untuk baris ini. Ia DIREKTORI ORANG (nama, wajah,
-  keanggotaan dalam satu halaman yang bisa disalin sekaligus), dan member tak
-  bisa berbuat apa pun dengannya: nol manfaat, biaya PII tetap. Gerbang di
-  HANDLER (`canManageMembers` di baris pertama `MembersPage`, sebelum query
-  dijalankan) — bukan route, sebab 0004 tetap berlaku: satu alamat, aksi
-  mengikuti role. Ditolak **403 + penjelasan**, BUKAN 404: penerimanya sudah
-  terbukti anggota (Scope memvalidasinya), jadi menyangkal keberadaan halaman
-  hanya membuat orang mengira ada yang rusak. Menu `Anggota` WAJIB memakai izin
-  yang SAMA — `workspaceNav` menerima dua izin terpisah (`canMembers`,
-  `canSettings`) karena keduanya tak identik di mode single.
-- **PII disamarkan di HANDLER, bukan di view.** Kalau view yang menyamarkan,
-  alamat ASLI tetap harus dioper ke sana — dan satu pemakaian yang lupa akan
-  mengirimnya ke browser, tempat ia terbaca di view-source meski tak tampak di
-  layar. `maskEmail` kini nyaris tak tereksekusi (semua penglihat = pengelola)
-  tapi SENGAJA dipertahankan (0008 §5): aturan tampilan & aturan akses adalah dua
-  hal berbeda, dan yang satu tak boleh diam-diam bergantung pada yang lain.
-  Domain DIPERTAHANKAN (itu yang membedakan rekan satu organisasi dari orang
-  luar); panjang bagian lokal TIDAK dibocorkan; email sendiri selalu utuh.
-- **Penanda orang = NAMA (`users.name`), email cadangan.** Claim `name` Google
-  dulu dibaca lalu dibuang — `maskEmail` lahir sebagai kompensasi. Nama
-  di-refresh tiap login (`UpdateUserProfile`, COALESCE: argumen NULL =
-  "provider diam", BUKAN "hapus"). Nilainya USER-CONTROLLED → dibersihkan
-  `oauth.NormalizeDisplayName` (kontrol/newline dibuang, spasi diciutkan,
-  dipotong pada batas RUNE bukan byte) dan TAK PERNAH dipakai sebagai penanda
-  unik maupun untuk otorisasi — `id` yang dipakai. **Catatan untuk kelak**: fitur
-  "edit profil" akan tertimpa refresh tiap login; saat itu tiba, nama pilihan
-  sendiri harus jadi kolom terpisah yang diutamakan, bukan mematikan refresh
-  (avatar tetap perlu ikut berubah).
-- **View TAK BOLEH merakit path workspace sendiri** — oper `base` dari handler
-  (`panel.Members`, `panel.WorkspaceView.Base`). Pelanggarannya senyap: form
-  tetap ter-render rapi, baru ketahuan saat di-SUBMIT (pernah terjadi — semua
-  aksi anggota menunjuk `/admin/*` yang sudah 404). **Verifikasi UI harus
-  mencakup submit, bukan cuma render.**
+  slug** — cakupan data bukan satu tenant.
+- **DUA pintu ubah role harus SAMA.** `/w/{slug}/members` & `/dev/users` panggil
+  `UpdateMemberRole` + `authz.GuardSetRole` sama; keduanya WAJIB `h.notify(...,
+  "member.role.changed")`. Di `/dev` tenant notifikasi = workspace TARGET (form),
+  bukan aktor. **Status & soft-delete SENGAJA tanpa notifikasi** (menutup pintu
+  login → kabar in-app tak terbaca).
+- **Daftar panjang wajib punya JALAN ke halaman berikutnya**, bukan cuma `LIMIT`.
+  Pola: ambil `pageSize+1` → `splitPage` → cursor `?after=`
+  (`internal/handler/pagecursor.go`). **Keyset, bukan OFFSET** (`created_at DESC`,
+  baris baru di atas → OFFSET menggeser). Cursor rusak → halaman pertama, JANGAN
+  kosong. Navigasi = link `<a>` biasa (bisa bookmark/reload, lolos #16).
+- **Daftar anggota HANYA untuk pengelola** (owner/admin/platform), kedua mode
+  (0008 supersede 0004 §3). Gerbang di HANDLER (`canManageMembers` baris pertama
+  `MembersPage`), bukan route. Ditolak **403 + penjelasan**, BUKAN 404 (penerima
+  terbukti anggota). Menu `Anggota` pakai izin SAMA; `workspaceNav` terima
+  `canMembers` & `canSettings` terpisah (tak identik di single).
+- **PII disamarkan di HANDLER, bukan view** (kalau di view, alamat asli tetap
+  dioper → bocor di view-source). `maskEmail` dipertahankan (0008 §5): aturan
+  tampilan ≠ aturan akses. Domain DIPERTAHANKAN, panjang lokal TIDAK dibocorkan,
+  email sendiri utuh.
+- **Penanda orang = NAMA (`users.name`)**, email cadangan. Nama refresh tiap login
+  (`UpdateUserProfile`, COALESCE: NULL = "provider diam" bukan "hapus").
+  User-controlled → `oauth.NormalizeDisplayName` (potong pada batas RUNE), TAK
+  PERNAH penanda unik/otorisasi (`id` yang dipakai). **Kelak** "edit profil" akan
+  tertimpa refresh → nama pilihan sendiri harus kolom terpisah yang diutamakan.
+- **View TAK BOLEH rakit path workspace sendiri** — oper `base` dari handler
+  (`panel.Members`, `panel.WorkspaceView.Base`). Pelanggaran senyap (render rapi,
+  ketahuan saat SUBMIT). **Verifikasi UI harus mencakup submit.**
 
 ## Siklus hidup workspace (suspend · archive · delete) — keputusan 0005
 
-`tenants.status` = `active|suspended|archived`, plus `deleted_at` (soft-delete,
-tenggang 30 hari). Ditegakkan di `gateLifecycle` yang dipanggil `Scope`.
+`tenants.status` = `active|suspended|archived` + `deleted_at` (soft-delete, tenggang
+30 hari). Ditegakkan `gateLifecycle` (dipanggil `Scope`).
 
-- **Bedanya KEWENANGAN, bukan rasa**: `suspended` = tindakan PLATFORM (owner tak
-  bisa membatalkannya sendiri — kalau bisa, gunanya hilang); `archived` =
-  keputusan OWNER (harus bisa dibuka lagi tanpa memohon). Guard `status='active'`
-  di SQL `ArchiveTenant` mencegah owner keluar dari suspensi lewat arsip→unarsip.
-- **Kode status per keadaan**: bukan-anggota → 404 · suspended → **403 + alasan**
-  (anggota sah berhak tahu KENAPA; 404 bikin ia mengira workspace-nya hilang) ·
-  archived → GET lolos, non-GET 403 · deleted → 404.
-- **Platform SENGAJA menembus gerbang** (cabang platform di `Scope` tak memanggil
-  `gateLifecycle`) — merekalah yang menangguhkan; menghalangi mereka bikin
-  suspensi mustahil diselidiki. Dikunci `TestPlatformTembusSuspensi`.
-- **Unarchive ada DI LUAR `/w/{slug}`** (`/workspace/{slug}/unarchive`): gerbang
-  read-only memblokir semua POST di dalam, jadi pintu keluar tak boleh berada di
-  ruangan yang ia buka. Konsekuensinya handler itu mencari tenant sendiri — dan
-  **wajib lewat `tenantBySlug` untuk platform**, bukan `resolveTenantBySlug` yang
-  mensyaratkan keanggotaan (platform bukan anggota → 404 padahal `isOwnerOf`
-  mengizinkan; dua cek saling bertentangan, pernah terjadi).
-- **`audit_logs.tenant_id` NULLABLE + `ON DELETE SET NULL`**.
-  Sebelumnya NOT NULL tanpa CASCADE → `DELETE FROM tenants` GAGAL di tengah jalan
-  setelah memberships/invites/notifications terlanjur CASCADE terhapus. Bukti tak
-  boleh lenyap bersama yang dibuktikan.
-- **Kuota**: terhapus TAK dihitung (terasa seperti bug & mendorong purge cepat);
-  terarsip TETAP dihitung (datanya masih disimpan — arsip bukan celah kuota).
-- **Slug tak dilepas saat terhapus** — kalau dilepas, orang lain bisa mengambilnya
-  dan restore jadi mustahil.
-- **Purge kini TERJADWAL** (`internal/maintenance`, dipanggil dari `main.go`).
-  Dulu `PurgeTenant` + `ListExpiredTenants` ada tapi satu-satunya pemanggilnya
-  test, jadi workspace terhapus menumpuk selamanya dan slug-nya tak pernah
-  bebas. Runner-nya IN-PROCESS, bukan cron host: menuntut cron berarti
-  pemeliharaan yang "seharusnya sudah dipasang", yaitu yang tak pernah dipasang.
-  Dikunci `pg_try_advisory_lock` (id 4243, BEDA dari lock migrasi 4242) —
-  `try`, bukan blocking: instance yang kalah lomba harus LEWAT, bukan antre lalu
-  mengulang pekerjaan yang baru selesai. Purge dijalankan SATU PER SATU, bukan
-  DELETE massal: satu baris bermasalah tak boleh menggagalkan pembersihan
-  sisanya. Ditunda 5 menit setelah boot (saat tersibuk) dan berhenti sendiri
-  saat SIGTERM (ctx yang sama dengan shutdown).
-
+- **Bedanya KEWENANGAN**: `suspended` = tindakan PLATFORM (owner tak bisa batalkan
+  sendiri); `archived` = keputusan OWNER (bisa dibuka lagi). Guard `status='active'`
+  di `ArchiveTenant` cegah owner keluar suspensi lewat arsip→unarsip.
+- **Kode status**: bukan-anggota → 404 · suspended → 403 + alasan · archived → GET
+  lolos non-GET 403 · deleted → 404.
+- **Platform SENGAJA tembus gerbang** (cabang platform di `Scope` tak panggil
+  `gateLifecycle`). Dikunci `TestPlatformTembusSuspensi`.
+- **Unarchive DI LUAR `/w/{slug}`** (`/workspace/{slug}/unarchive`; gerbang
+  read-only blok POST di dalam). Handler cari tenant sendiri, **wajib lewat
+  `tenantBySlug` untuk platform** (bukan `resolveTenantBySlug` yang syaratkan
+  keanggotaan → platform bukan anggota → 404 salah).
+- **`audit_logs.tenant_id` NULLABLE + `ON DELETE SET NULL`** (dulu NOT NULL tanpa
+  CASCADE → `DELETE FROM tenants` gagal di tengah).
+- **Kuota**: terhapus TAK dihitung; terarsip TETAP dihitung (arsip bukan celah kuota).
+- **Slug tak dilepas saat terhapus** (kalau dilepas → restore mustahil).
+- **Purge TERJADWAL** (`internal/maintenance`, dari `main.go`). Runner IN-PROCESS.
+  Dikunci `pg_try_advisory_lock` (id 4243, beda dari migrasi 4242) — `try` bukan
+  blocking. Purge SATU PER SATU (bukan DELETE massal). Ditunda 5 menit setelah boot,
+  berhenti saat SIGTERM.
 - **`h.q(ctx)`, JANGAN `h.DB`** (dihapus). `h.q` ambil `*db.Queries` ber-tenant dari
-  middleware `Scope`. Lupa Scope = **panic keras** (bug wiring ketahuan seketika),
-  bukan query tak ter-scope. Jalur pre-identity (auth/oauth/boot — tenant belum
-  diketahui) pakai `db.WithSuper` eksplisit, BUKAN `h.q`.
+  `Scope`. Lupa Scope = **panic keras** (bug wiring ketahuan seketika). Jalur
+  pre-identity (auth/oauth/boot) pakai `db.WithSuper` eksplisit.
 - **`WithTenant`/`WithSuper` = SATU tx dgn GUC `set_config(...,true)` TRANSACTION-
-  LOCAL + `SET LOCAL ROLE app_rw`** (`internal/db/tenant.go`). `,true` wajib —
-  plain `SET` bocor ke peminjam pool berikutnya (kebocoran tenant #1 paling umum).
-  Keputusan bypass diambil dari **ROLE** (`isPlatformRole`), TAK PERNAH dari data
-  DB (anti privilege-escalation).
-- **SATU DSN, hak diturunkan PER-TRANSAKSI (0007).** `FORCE` RLS wajib — tanpanya
-  owner tabel bypass policy diam-diam — dan owner/superuser bypass apa pun yang
-  terjadi. Dulu itu menuntut koneksi kedua (`APP_DATABASE_URL`, sudah DIHAPUS);
-  sekarang `dropPrivileges` menjalankan `SET LOCAL ROLE app_rw` di dalam tx.
-  Terverifikasi: superuser ikut tercabut di dalam tx, hak pulih di COMMIT MAUPUN
-  ROLLBACK, `app.is_super` tetap bypass (jalur `/dev` utuh), DDL ditolak, ~5 µs.
-  **Migrasi WAJIB `GRANT app_rw TO CURRENT_USER`** — owner non-superuser tak
-  otomatis anggota app_rw, dan `SET LOCAL ROLE`-nya gagal di tiap transaksi.
-  Yang dibayar: injection yang berhasil bisa `RESET ROLE`. Diterima karena semua
-  query digenerate sqlc; **timbang ulang bila kelak ada SQL mentah dari user.**
-  Konsekuensi bagus: RLS mengikat di DEV juga — query yang lupa `WHERE tenant_id`
-  gagal di laptop, bukan di produksi.
-- **super_admin = ENV-ONLY, nol baris DB.** Role efektif di-overlay `RefreshIdentity`
-  per-request (env-check → `platform_staff` lookup → `memberships.role` di workspace
-  AKTIF). `platform_staff` TANPA RLS (platform-scope) → terbaca di WithTenant maupun
-  WithSuper. Tak ada `PromoteSuperAdmins` (dihapus).
-- **MEMBERSHIP: 1 user ↔ banyak workspace.** Role ada di `memberships` (user × tenant
-  × role), BUKAN di `users` — orang yang sama bisa owner di A & member di B. `users`
-  kini tabel **GLOBAL** (identitas murni): tanpa `tenant_id`/`role`, **KELUAR dari
-  RLS**. Konsekuensi: `ListUsers` (panel /dev) lintas-workspace — itu route platform;
-  daftar anggota workspace pakai `ListMembersByTenant`.
-- **`notifications` TANPA RLS — SENGAJA, dan berbeda alasannya.** Bukan
-  chicken-and-egg, tapi SEMANTIK: notifikasi milik USER dan lintas-workspace
-  (undangan justru datang dari workspace yang BELUM jadi miliknya). RLS
-  `tenant_id = GUC` malah akan menyembunyikan yang di luar workspace aktif —
-  yaitu inti fiturnya. `tenant_id` di tabel ini cuma KONTEKS tampilan (nullable),
-  bukan kunci isolasi. Konsekuensi: **jangan `h.q(ctx)`** (ter-scope satu tenant)
-  — pakai `db.WithSuper` + `WHERE user_id/email` sebagai satu-satunya penjaga,
-  dengan test isolasi antar-user sebagai pengganti jaring RLS.
-- **`memberships`/`invites` TANPA RLS — SENGAJA.** Keduanya dibaca justru untuk
-  MENENTUKAN scope (chicken-and-egg: tak bisa bergantung GUC yang belum di-set), dan
-  invite dibuka di jalur publik. Keamanan dari filter query (`WHERE user_id = <uid
-  sesi>` / token rahasia), bukan RLS.
-- **`Scope` MEMVALIDASI keanggotaan** sebelum `WithTenant` (`resolveActiveTenant`):
-  tenant di session itu user-controlled — tanpa cek ini user bisa memaksa workspace
-  orang lain. Tak valid → fallback workspace pertama; tanpa workspace → `/workspace/new`.
-  Validasi HARUS di Scope, bukan RefreshIdentity (yang jalan setelah scope terpilih).
-- **Kuota workspace = DUA lapis** (`internal/settings`): default global di tabel
-  `platform_settings` (bisa diubah dari `/dev/settings`, berlaku SEKETIKA tanpa
-  restart) + override per-user di `users.workspace_quota`. **`NULL` = ikut
-  global**, angka = hak khusus yang KEBAL perubahan global — pembedaan itu
-  mustahil dengan kolom NOT NULL, dan itulah alasan ia dibuat nullable.
-  `MAX_WORKSPACES_PER_USER` kini hanya **fallback** saat baris DB belum ada
-  (deployment baru); dulu ia "aturan global" yang menyesatkan — nilainya cuma
-  disalin saat user DIBUAT, jadi mengubahnya tak pernah menyentuh user lama.
-  Hitung kuota HANYA lewat `settings.EffectiveWorkspaceQuota` — penegakan
-  (`WorkspaceCreate`) dan tampilan (sidebar) wajib memakai sumber yang sama,
-  beda sedikit = user melihat tombol yang lalu ditolak.
-  Yang dihitung hanya workspace ber-role **owner** & belum terhapus — diundang
-  jadi member/admin tak memakan kuota. `CountTenantOwners` mencegah owner
-  terakhir diturunkan (workspace yatim).
-- **`/dev/settings` di-gate `platform:settings`, BUKAN `dev:users`.** Seluruh
-  grup `/dev` dijaga `dev:users` yang dimiliki **staff** — tanpa objek Casbin
-  tersendiri, staff (yang sengaja dibatasi: tak boleh suspend tenant/kelola staff)
-  bisa mengubah aturan yang berlaku bagi SETIAP user. `devNav` juga memeriksa izin
-  ini agar menunya tak jadi menu hantu. Deny-default; hanya super_admin lolos.
-- **Cache settings = PER-PROSES.** Perubahan seketika di instance yang melayani;
-  instance lain menyusul saat boot. Diterima karena penulisnya hanya operator
-  platform & efek terburuknya sementara. Kalau kelak butuh serempak: pub/sub
-  Redis (sudah ada di stack), bukan menghapus cache.
+  LOCAL + `SET LOCAL ROLE app_rw`** (`internal/db/tenant.go`). `,true` wajib (plain
+  `SET` bocor ke peminjam pool berikutnya — kebocoran tenant #1). Keputusan bypass
+  dari ROLE (`isPlatformRole`), tak pernah dari data.
+- **SATU DSN, hak diturunkan PER-TRANSAKSI (0007).** `FORCE` RLS wajib (tanpanya
+  owner tabel bypass diam-diam). `dropPrivileges` jalankan `SET LOCAL ROLE app_rw`
+  di dalam tx (dulu butuh `APP_DATABASE_URL`, DIHAPUS). **Migrasi WAJIB `GRANT
+  app_rw TO CURRENT_USER`**. Risiko diterima: injection berhasil bisa `RESET ROLE`
+  — semua query digenerate sqlc; **timbang ulang bila ada SQL mentah dari user.**
+- **super_admin = ENV-ONLY, nol baris DB.** Role efektif overlay `RefreshIdentity`
+  per-request (env → `platform_staff` → `memberships.role`). `platform_staff`
+  TANPA RLS. Tak ada `PromoteSuperAdmins`.
+- **MEMBERSHIP: 1 user ↔ banyak workspace.** Role di `memberships` (user × tenant ×
+  role), BUKAN `users`. `users` = tabel GLOBAL (identitas murni, tanpa
+  `tenant_id`/`role`, KELUAR dari RLS) → `ListUsers` (/dev) lintas-workspace; daftar
+  anggota pakai `ListMembersByTenant`.
+- **`notifications` TANPA RLS — SEMANTIK**: notifikasi milik USER & lintas-workspace
+  (undangan datang dari workspace yang belum jadi miliknya). `tenant_id` = konteks
+  tampilan (nullable). **Jangan `h.q(ctx)`** — pakai `db.WithSuper` + `WHERE
+  user_id/email`, test isolasi antar-user sebagai pengganti RLS.
+- **`memberships`/`invites` TANPA RLS** — dibaca untuk MENENTUKAN scope
+  (chicken-and-egg); invite di jalur publik. Keamanan dari filter query, bukan RLS.
+- **`Scope` MEMVALIDASI keanggotaan** sebelum `WithTenant` (`resolveActiveTenant`)
+  — tenant di session user-controlled. Tak valid → fallback workspace pertama;
+  tanpa workspace → `/workspace/new`. Validasi HARUS di Scope.
+- **Kuota = DUA lapis** (`internal/settings`): default global (`platform_settings`,
+  ubah dari `/dev/settings` tanpa restart) + override per-user
+  (`users.workspace_quota`). **`NULL` = ikut global**, angka = hak khusus kebal
+  perubahan global. `MAX_WORKSPACES_PER_USER` = fallback saat baris DB belum ada.
+  Hitung HANYA lewat `settings.EffectiveWorkspaceQuota` (penegakan & tampilan
+  sumber sama). Hanya workspace ber-role **owner** belum terhapus dihitung.
+  `CountTenantOwners` cegah owner terakhir diturunkan.
+- **`/dev/settings` gate `platform:settings`, BUKAN `dev:users`** (grup `/dev`
+  gated `dev:users` milik staff; tanpa objek Casbin tersendiri, staff bisa ubah
+  aturan semua user). `devNav` juga cek izin ini. Deny-default; hanya super_admin lolos.
+- **Cache settings = PER-PROSES** (instance lain menyusul saat boot). Kalau kelak
+  butuh serempak: pub/sub Redis.
 - **Register/OAuth = user + workspace + membership owner** dalam SATU tx `WithSuper`
-  (atomik). `startIdentity(preferTenant)` memilih workspace aktif.
-- **Audit di tx `WithSuper` TERPISAH** dari Scope tx (fail-soft struktural: gagal
-  audit tak abort aksi utama). `tenant_id` audit = tenant aktor.
-- **Test isolasi RLS** (`rls_test.go`) konek `app_rw` non-superuser via `SET ROLE` di
-  `AfterConnect` — HARUS begitu utk membuktikan RLS sungguh mengikat. Test handler
-  lain konek superuser (uji logika; RLS di-bypass diam-diam). Seed pakai owner-pool.
+  (atomik). `startIdentity(preferTenant)` pilih workspace aktif.
+- **Audit di tx `WithSuper` TERPISAH** dari Scope tx (fail-soft struktural).
+  `tenant_id` audit = tenant aktor.
+- **Test isolasi RLS** (`rls_test.go`) konek `app_rw` non-superuser via `SET ROLE`
+  di `AfterConnect`. Test handler lain konek superuser (RLS di-bypass). Seed pakai
+  owner-pool.
 - **Casbin CSV TAK dukung komentar inline** di akhir baris `g,`/`p,` (jadi bagian
-  nilai → link mati). Komentar HARUS di baris `#` tersendiri (gotcha: `g, super_admin,
-  root  # x` bikin target `"root  # x"` → god-mode mati senyap).
+  nilai → link mati). Komentar di baris `#` tersendiri.
 
 ## Client-side JS (CSP-safe)
 
 Datastar bukan untuk manipulasi tabel (filter/paginate/copy), zoom, chart, atau
-state UI persisten (collapse sidebar, tema). Untuk itu, file terpisah di `static/`
+state UI persisten (collapse sidebar, tema). Untuk itu file terpisah di `static/`
 (`sidebar.js`, `theme.js`, `health.js`, `erd.js`, `charts.js`) — same-origin lolos
-`script-src 'self'`, **bukan inline** (inline diblokir CSP). Muat via
-`<script src>`, dimuat SINKRON bila perlu set state sebelum paint (no-FOUC):
-`sidebar.js` & `theme.js` set atribut `<html>` (`data-sidebar`/`data-theme`)
-sebelum body render. Data untuk JS (mis. option ECharts) ditanam via
-`<script type="application/json">` — JSON tak dieksekusi (CSP-safe), JS `JSON.parse`.
+`script-src 'self'`, BUKAN inline. Muat via `<script src>`, SINKRON bila perlu set
+state sebelum paint (no-FOUC): `sidebar.js`/`theme.js` set atribut `<html>`
+(`data-sidebar`/`data-theme`) sebelum body render. Data untuk JS ditanam via
+`<script type="application/json">` (CSP-safe), JS `JSON.parse`.
 
 ## Aset vendored
 
-`static/` berisi aset vendored (datastar.js, daisyui.js, mermaid.min.js, echarts.min.js) —
-checksum di `static/VENDOR.md`. `daisyui.js` = plugin Tailwind (di-`@plugin` dari
-input.css, dikonsumsi saat `make css` — bukan dimuat browser). Tailwind CLI
-di-download `make setup` (gitignored, verifikasi integritas). Prinsip no-CDN:
-semua di-embed.
+`static/` = aset vendored (datastar.js, daisyui.js, mermaid.min.js, echarts.min.js);
+checksum di `static/VENDOR.md`. `daisyui.js` = plugin Tailwind (di-`@plugin`,
+dikonsumsi `make css`, bukan dimuat browser). Tailwind CLI di-download `make setup`
+(gitignored, verifikasi integritas). Prinsip no-CDN: semua di-embed.
 
 ## Konfigurasi produksi: gagal keras, jangan andalkan ingatan
 
-Prinsipnya: **yang berbahaya bila salah harus menggagalkan boot; yang bisa
-diturunkan otomatis jangan diminta ke manusia.** Warning di log adalah hal yang
-paling sering diabaikan — ia bukan pengaman.
+Prinsip: **yang berbahaya bila salah harus menggagalkan boot; yang bisa diturunkan
+otomatis jangan diminta ke manusia.** Warning di log bukan pengaman.
 
-- **Kalau harus gagal, gagallah dengan PETUNJUK** (`internal/preflight`, dipanggil
-  di awal `run()` dan oleh `make doctor` — sumber yang SAMA; doctor yang
-  memeriksa hal berbeda dari yang menggagalkan boot berubah jadi jebakan).
-  `database "x" does not exist` benar secara harfiah tapi menyembunyikan yang
-  dibutuhkan: nama yang dicari, database MIRIP yang ada di server itu (salah
-  ketik nyaris selalu beda tipis — `-` vs `_`, `_test` tertinggal, nama sebelum
-  `make rename`), dan perintah persis untuk membereskannya. Tiap `Problem` WAJIB
-  punya `Fix` — "periksa konfigurasi Anda" bukan petunjuk. Semua masalah
-  dikumpulkan sekaligus, tak berhenti di yang pertama.
-- **Database dibuat otomatis HANYA di dev** (`AutoCreateDB: !cfg.IsProduction()`).
-  Di production ini mengubah DSN salah ketik jadi database KOSONG yang tampak
-  sehat — aplikasi melayani seolah datanya hilang. `make doctor` pun tak pernah
-  membuatnya: alat diagnosis yang diam-diam mengubah keadaan tak bisa lagi
-  dipakai menjawab "apa yang sebenarnya terjadi di sini?".
+- **Gagal dengan PETUNJUK** (`internal/preflight`, dipanggil awal `run()` & `make
+  doctor` — sumber SAMA). Tiap `Problem` WAJIB punya `Fix` (nama yang dicari, DB
+  mirip yang ada, perintah persis). Semua masalah dikumpulkan sekaligus.
+- **DB dibuat otomatis HANYA di dev** (`AutoCreateDB: !cfg.IsProduction()`). Di
+  produksi, DSN salah ketik jadi DB kosong yang tampak sehat. `make doctor` tak
+  pernah membuatnya (alat diagnosis tak boleh ubah keadaan).
+- **Isolasi tenant DIBUKTIKAN** (`db.CheckRLSTx`, `verifyTenantIsolation` di
+  `main.go`) DI DALAM `WithSuper` (tx yang sudah turun hak). Periksa
+  `rolsuper`/`rolbypassrls`/pemilik-tabel + `FORCE RLS`. Sama di dev & produksi.
+  Sejarah: dulu sekadar "env `APP_DATABASE_URL` terisi" → DSN sama seperti
+  `DATABASE_URL` lolos sambil bocor (82 baris dari 15 tenant).
+- **Produksi tak butuh persiapan role manual.** Migrasi buat `app_rw` + GRANT +
+  `ALTER DEFAULT PRIVILEGES` + `GRANT app_rw TO CURRENT_USER`. Role `NOLOGIN` (tak
+  ada password/entri PgBouncer). `GENERATED ALWAYS AS IDENTITY` tak butuh GRANT
+  sequence terpisah.
+- **`SESSION_KEY` divalidasi PANJANG** (min 32, `config.MinSessionKeyLen`), bukan
+  cuma keberadaan (kunci lemah lebih bahaya dari kosong). Kini DIPAKAI: turunkan
+  nama cookie sesi (`Config.SessionCookieName`, pakai HASH-nya) agar dua deployment
+  di host sama tak saling timpa sesi.
+- **`Cookie.Secure` diturunkan dari `ENV=production`**, bukan env sendiri.
+  Konsekuensi: produksi tanpa HTTPS = login mati (gagal keras, bukan bocor senyap).
+- **Jangan tambah env baru untuk hal yang bisa diturunkan** dari env yang ada.
 
-- **Isolasi tenant DIBUKTIKAN, bukan dijanjikan** (`db.CheckRLSTx`, dipanggil
-  `verifyTenantIsolation` di `main.go`). Diperiksa DI DALAM `WithSuper` — yaitu
-  pada transaksi yang sudah menurunkan haknya, persis keadaan setiap query
-  aplikasi. Memeriksa pool telanjang menjawab pertanyaan yang SALAH: di sana
-  koneksi memang masih owner, dan memang seharusnya (migrasi butuh itu).
-  Yang ditanyakan ke Postgres jawabannya pasti: `rolsuper`/`rolbypassrls`/
-  pemilik-tabel + `FORCE RLS`.
-  **Berlaku sama di dev & production** — tak ada lagi kelonggaran per-mode, sebab
-  gesekannya kini nol (dulu mengikat RLS menuntut role & DSN kedua).
-  Sejarah yang tak boleh berulang: dulu ini sekadar "env `APP_DATABASE_URL`
-  terisi", dan mengisinya dengan DSN yang SAMA seperti `DATABASE_URL` lolos
-  sambil tetap membocorkan data — terukur di DB nyata: 82 baris dari 15 tenant.
-- **Produksi tak butuh persiapan role manual.** Migrasi membuat `app_rw` lengkap
-  dengan GRANT + `ALTER DEFAULT PRIVILEGES` (tabel dari migrasi berikutnya
-  terjangkau otomatis) + `GRANT app_rw TO CURRENT_USER`. Rolenya tetap `NOLOGIN`
-  — tak ada password, jadi tak ada `ALTER ROLE ... LOGIN` maupun entri
-  `userlist.txt` PgBouncer. Kolom `GENERATED ALWAYS AS IDENTITY` juga tak
-  menuntut GRANT sequence terpisah (terverifikasi: semua INSERT/UPDATE/DELETE
-  aplikasi lolos sebagai `app_rw`).
-- **`SESSION_KEY` divalidasi PANJANGNYA** (min 32, `config.MinSessionKeyLen`),
-  bukan cuma keberadaannya. `mustEnv` meloloskan `SESSION_KEY=rahasia` — kunci
-  lemah lebih berbahaya daripada kosong, sebab kosong menggagalkan boot sedangkan
-  lemah menciptakan rasa aman yang keliru.
-- **`SESSION_KEY` kini benar-benar DIPAKAI**: menurunkan nama cookie sesi
-  (`Config.SessionCookieName`) agar dua deployment di host sama tak saling
-  menimpa sesi. Yang dipakai HASH-nya — nama cookie terlihat di browser, jadi
-  menaruh kuncinya di sana justru membocorkannya. Sebelumnya env ini divalidasi
-  tapi nol pemakai: konfigurasi yang berbohong, pola yang sama dengan
-  `tenants.status` (0005) & `MAX_WORKSPACES_PER_USER` (0006).
-- **`Cookie.Secure` diturunkan dari `ENV=production`**, BUKAN env sendiri —
-  tak ada yang bisa lupa mengisinya. Konsekuensi disengaja: production tanpa
-  HTTPS = login tak berfungsi sama sekali (gagal keras, bukan bocor senyap).
-- **Jangan tambah env baru untuk hal yang bisa diturunkan** dari env yang sudah
-  ada. Tiap env baru adalah satu lagi hal yang bisa lupa diisi.
+## MCP server read-only (`internal/mcpserver`) — akses runtime untuk agent AI
+
+Memberi agent AI "mata" ke runtime dev/staging/prod (bug di staging tak lagi
+buta) — SEMUA read-only. SDK resmi `modelcontextprotocol/go-sdk` v1.7.0.
+
+- **ADAPTER TIPIS, bukan pintu baru.** Tiap tool memanggil ULANG fungsi baca yang
+  sudah aman (`erd.Introspect`, `db.CheckRLS`, `preflight.Run`, query `List*`/
+  `Count*`/`Presence*`), tak menulis logika/query baru. Menambah tool = memetakan
+  satu fungsi read-only ke satu handler. DILARANG: tool SQL/shell mentah, embed
+  `maintenance`/`MigrateWithLock`/`Create*`, mengalirkan nilai rahasia (lapor
+  keberadaan/panjang, bukan nilai — Rule 7/12).
+- **`platform_stats` menyaring settings lewat ALLOWLIST** (`exposedSettings` di
+  `tools_health.go`), bukan mengekspos seluruh `platform_settings`. Sebabnya
+  masa-depan: `platform_settings` bisa menampung key baru kapan saja (kredensial
+  SMTP, secret webhook), dan denylist/tanpa-filter akan membocorkannya diam-diam
+  ke agent — penambahnya sedang mengurus fitur lain, tak memikirkan MCP. Dengan
+  allowlist, key baru TAK muncul sampai sengaja didaftarkan, dan di titik itu
+  penambahnya menimbang "aman dibaca agent?". Menambah key ke allowlist =
+  keputusan sadar; JANGAN kembalikan ke "ekspos semua". Dikunci
+  `TestPlatformStats_AllowlistMenyaringKeySensitif`.
+- **Read-only STRUKTURAL, bukan disiplin.** Semua akses DB lewat
+  `db.WithSuper(ctx, pool, fn)` → `SET LOCAL ROLE app_rw` → **DDL ditolak DB**.
+  `h.q(ctx)` TAK BISA dipakai (panic tanpa Scope middleware) — MCP tanpa request
+  context. Test `TestReadOnly_NolTulis` menghitung baris sebelum/sesudah tiap
+  tool = harus SAMA; kalau kelak ada tool menulis tak sengaja, itu yang menangkap.
+- **BUKAN service/proses terpisah.** `mcpserver.Handler()` = `http.Handler` biasa,
+  dipasang sebagai rute `/mcp` di app yang sudah jalan (Streamable HTTP, Stateless+
+  JSONResponse). Image/container/deploy/reverse-proxy SAMA. Ini keputusan yang
+  membedakannya dari refleks "MCP = binary terpisah" (benar untuk stdio subprocess,
+  SALAH untuk HTTP remote).
+- **Rute opt-in, dijaga Bearer.** `routes.go` mendaftarkan `/mcp` HANYA bila
+  `cfg.MCPToken != ""` (fitur yang membuka runtime ke AI tak menyala karena lupa).
+  Dijaga `mw.RequireBearer` (constant-time compare) — BUKAN RequireAuth (kliennya
+  agent/program, bukan manusia ber-session). Sejajar `/healthz`, di luar auth sesi.
+- **Satu server, dua transport.** `build()` merakit `*mcp.Server` sekali; dipakai
+  HTTP (`Handler`) & stdio (`ServeStdio`, subcommand `./app mcp` untuk dev). Jadi
+  kemampuan keduanya mustahil berbeda. Di stdio, logger WAJIB ke STDERR — stdout
+  milik protokol JSON-RPC (satu baris log ke sana merusak framing).
+- **Fase berikutnya (belum ada):** tool tulis terjaga (migrasi/purge) dev+staging
+  saja, gated `!IsProduction()`, tiap aksi → `audit_logs` (aktor "agent"). Produksi
+  tetap read-only.
 
 ## Batasan
 
 - Semua interaktivitas = **Datastar** (satu paradigma). Jangan tambah framework JS.
 - Single-binary — jangan tambah dependency yang butuh runtime kedua / Node.
-- Password auth = dev-only; jangan aktifkan jalurnya di production.
-- **`unsafe-eval` = keputusan sadar, BUKAN bug** (riset terverifikasi 2026): Datastar
-  meng-`new Function()` ekspresi `data-*` di browser — nonce TAK bisa menggantikannya
-  (beda concern). Menghapusnya butuh ganti runtime (fork dataSPA rapuh: 0 rilis/bus-
-  factor-1, atau rombak ke `<form>`+POST yang buang SSE fragment patch). Risiko rendah:
-  ekspresi cuma ID integer + literal internal, tak pernah input user. Jangan "perbaiki"
-  dengan menambah `unsafe-inline` atau menukar runtime tanpa diskusi. Footgun authoring
-  (bukan CSP) sudah ditutup helper `dsx.go` (gotcha #5–6).
+- Password auth = dev-only; jangan aktifkan di produksi.
+- **`unsafe-eval` = keputusan sadar, BUKAN bug**: Datastar `new Function()` ekspresi
+  `data-*`; nonce tak bisa menggantikan. Risiko rendah (ekspresi cuma ID integer +
+  literal internal, tak pernah input user). Jangan "perbaiki" dengan `unsafe-inline`
+  atau tukar runtime tanpa diskusi. Footgun authoring ditutup helper `dsx.go` (#5–6).

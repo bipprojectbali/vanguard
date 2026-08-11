@@ -83,6 +83,31 @@ func AssignableRoles(singleApp bool) []string {
 	return []string{RoleNameMember, RoleNameAdmin, RoleNameOwner}
 }
 
+// ValidBusinessRoleName melaporkan apakah s berformat sah sebagai NAMA peran CRM
+// baru (sumbu bisnis, per-workspace). Ini validasi FORMAT, bukan keberadaan:
+// apakah peran itu ADA di workspace divalidasi terpisah lewat GetBusinessRole.
+//
+// Nama menjadi subject Casbin (`t<id>:<name>`) DAN nilai memberships.business_role,
+// jadi ia dibatasi ke [a-z0-9_], 2–32 char, diawali huruf: cukup untuk label
+// mesin yang stabil, sempit agar tak ada spasi/kapital/tanda yang membuat "Sales"
+// dan "sales" jadi dua peran berbeda yang membingungkan. Nama tampilan bebas ada
+// di display_name; ini identitasnya.
+func ValidBusinessRoleName(s string) bool {
+	if len(s) < 2 || len(s) > 32 {
+		return false
+	}
+	for i, c := range s {
+		switch {
+		case c >= 'a' && c <= 'z':
+		case c == '_':
+		case c >= '0' && c <= '9' && i > 0: // digit boleh, tapi tak di awal
+		default:
+			return false
+		}
+	}
+	return s[0] >= 'a' && s[0] <= 'z'
+}
+
 // PlatformHomePath = rumah role PLATFORM (super_admin/staff). Panel lintas-
 // workspace, jadi ia satu-satunya home yang tak bergantung workspace.
 const PlatformHomePath = "/dev"

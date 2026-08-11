@@ -10,10 +10,18 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// mcpRoute membawa rute /mcp opsional ke registerRoutes tanpa memaksa routes.go
+// mengimpor config/mcpserver — handler-nya dirakit di main (tempat cfg & pool
+// ada). Token kosong / handler nil = rute tak didaftarkan.
+type mcpRoute struct {
+	Token   string
+	Handler http.Handler
+}
+
 // registerRoutes mendaftarkan SEMUA route — single source of truth (§4.1).
 // devMode (=!production) menentukan apakah auth password diaktifkan; di produksi
 // hanya Google yang jadi jalur login.
-func registerRoutes(r chi.Router, h *handler.Handler, staticFS http.Handler, log *slog.Logger, devMode bool) {
+func registerRoutes(r chi.Router, h *handler.Handler, staticFS http.Handler, log *slog.Logger, devMode bool, mcp mcpRoute) {
 	// Urutan middleware penting: request-id dulu (dipakai log/recover),
 	// lalu recover (tangkap panic downstream), log, security headers.
 	r.Use(mw.RequestID)
@@ -24,6 +32,19 @@ func registerRoutes(r chi.Router, h *handler.Handler, staticFS http.Handler, log
 	// Health (tanpa auth)
 	r.Get("/healthz", h.Liveness)
 	r.Get("/readyz", h.Readiness)
+
+	// MCP server READ-ONLY — hanya didaftarkan bila token diisi (opt-in).
+	//
+	// Sejajar /healthz (di luar auth SESSION): kliennya agent/program, bukan
+	// manusia ber-cookie, jadi ia dijaga Bearer token sendiri — bukan RequireAuth.
+	// Token kosong = rute TAK ADA sama sekali: fitur yang membuka runtime ke AI
+	// tak boleh menyala karena lupa, hanya karena sengaja diisi.
+	if mcp.Token != "" && mcp.Handler != nil {
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireBearer(mcp.Token))
+			r.Handle("/mcp", mcp.Handler)
+		})
+	}
 
 	// Static (embedded, tanpa auth)
 	r.Handle("/static/*", staticFS)
@@ -239,6 +260,13 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/settings", h.WorkspaceSettings)
 		r.Post("/settings", h.WorkspaceUpdate)
 
+		// Format kode-unik entitas (DESA-001, dst). Alamat sibling (bukan nested di
+		// /settings) agar active-state sidebar tak menyala ganda — matcher memakai
+		// prefix. Gerbang SAMA dengan ganti nama (canEditWorkspace di handler):
+		// lihat untuk semua anggota, ubah untuk pengelola.
+		r.Get("/codes", h.WorkspaceCodeFormats)
+		r.Post("/codes", h.WorkspaceCodeFormatUpdate)
+
 		// Siklus hidup oleh OWNER (0005). Keduanya POST di dalam workspace, jadi
 		// otomatis tertolak saat workspace sudah diarsipkan — kecuali unarchive,
 		// yang justru karena itu diletakkan di luar prefix ini.
@@ -258,5 +286,48 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/members/{id}/remove", h.MemberRemove)
 		r.Post("/members/invite", h.InviteCreate)
 		r.Post("/members/invite/{id}/delete", h.InviteDelete)
+
+		// Desa (Account, hub CRM Modul 2). Gerbang di HANDLER pada sumbu BISNIS
+		// (CanBusiness "crm:accounts"), BUKAN role tenant: satu alamat melayani
+		// semua role (0004), dan pemegang otoritas workspace (owner/super_admin)
+		// TIDAK otomatis punya akses CRM. Baca = read; tulis = write. Kepemilikan
+		// antar-desa (F3) menyaring baris di dalam handler/query.
+		r.Get("/accounts", h.AccountsList)
+		r.Get("/accounts/new", h.AccountNew)
+		r.Post("/accounts", h.AccountCreate)
+		r.Get("/accounts/{id}", h.AccountDetail)
+		r.Get("/accounts/{id}/edit", h.AccountEdit)
+		r.Post("/accounts/{id}", h.AccountUpdate)
+		r.Post("/accounts/{id}/assign", h.AccountAssign)
+		r.Post("/accounts/{id}/delete", h.AccountDelete)
+
+		// Kontak (Modul 3). Nested di bawah desa induk — kepemilikan F3 DIWARISI
+		// desa (bukan filter kontak sendiri): gerbangnya loadOwnedAccount atas
+		// {id}. Gerbang F2 di HANDLER pada objek "crm:contacts" (BUKAN role
+		// tenant): support = read, pemegang peran CRM = write. Nomor HP/WhatsApp
+		// tersamar F4 (Sales saja utuh) — sejajar accounts.
+		r.Get("/accounts/{id}/contacts", h.ContactsList)
+		r.Get("/accounts/{id}/contacts/new", h.ContactNew)
+		r.Post("/accounts/{id}/contacts", h.ContactCreate)
+		r.Get("/accounts/{id}/contacts/{contactID}", h.ContactDetail)
+		r.Get("/accounts/{id}/contacts/{contactID}/edit", h.ContactEdit)
+		r.Post("/accounts/{id}/contacts/{contactID}", h.ContactUpdate)
+		r.Post("/accounts/{id}/contacts/{contactID}/primary", h.ContactSetPrimary)
+		r.Post("/accounts/{id}/contacts/{contactID}/delete", h.ContactDelete)
+
+		// Daftar kontak LINTAS-desa (global). Cakupannya masih satu workspace
+		// (RLS), tapi menembus batas per-desa; filter kepemilikan DESA INDUK di
+		// query (ListContacts JOIN accounts). Alamat sibling accounts.
+		r.Get("/contacts", h.ContactsAll)
+
+		// Peran CRM per-workspace (sumbu BISNIS, objek "crm:roles"). Gerbang di
+		// HANDLER (canManageRoles), BUKAN role tenant: satu alamat melayani semua
+		// role, izin yang membedakan. Editor matriks izin per-modul + cakupan data
+		// F3. {name} = identitas mesin peran (subject Casbin), bukan angka.
+		r.Get("/roles", h.RolesPage)
+		r.Post("/roles", h.RoleCreate)
+		r.Get("/roles/{name}", h.RoleEditPage)
+		r.Post("/roles/{name}", h.RoleUpdate)
+		r.Post("/roles/{name}/delete", h.RoleDelete)
 	})
 }

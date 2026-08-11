@@ -25,6 +25,14 @@ type Opts struct {
 	// production ini menyembunyikan DSN salah ketik sebagai database kosong
 	// yang tampak sehat.
 	AutoCreateDB bool
+	// FromFile = env berasal dari file .env yang harus ADA di direktori kerja
+	// (jalur `make doctor` saat setup). false = env datang dari lingkungan
+	// runtime (container/Portainer), tempat .env memang tak ada & tak relevan.
+	//
+	// Dibutuhkan karena `os.Stat(".env")` menilai working directory: dari dalam
+	// container distroless, file itu tak pernah ada, dan memeriksanya menghasilkan
+	// diagnosis palsu ".env belum ada" untuk keadaan yang justru normal.
+	FromFile bool
 }
 
 // Run memeriksa seluruh lingkungan dan mengembalikan laporannya.
@@ -35,17 +43,22 @@ type Opts struct {
 func Run(ctx context.Context, o Opts) *Report {
 	r := &Report{}
 
-	if _, err := os.Stat(".env"); os.IsNotExist(err) {
-		r.Add(EnvMissing())
-		// Tanpa .env, DSN-nya pun tak akan terisi — pemeriksaan berikutnya cuma
-		// akan menghasilkan kebisingan yang menutupi sebab sebenarnya.
-		return r
+	// Pemeriksaan file .env HANYA saat setup dari direktori repo (make doctor).
+	// Di runtime container env datang dari lingkungan, jadi ketiadaan .env itu
+	// normal — memeriksanya di sana melapor masalah yang tak ada.
+	if o.FromFile {
+		if _, err := os.Stat(".env"); os.IsNotExist(err) {
+			r.Add(EnvMissing())
+			// Tanpa .env, DSN-nya pun tak akan terisi — pemeriksaan berikutnya cuma
+			// akan menghasilkan kebisingan yang menutupi sebab sebenarnya.
+			return r
+		}
 	}
 
 	t, err := ParseDSN(o.DatabaseURL)
 	if err != nil {
 		r.Add(Problem{
-			What: "DATABASE_URL di .env tak bisa diurai.",
+			What: "DATABASE_URL tak bisa diurai.",
 			Why:  firstLine(err.Error()),
 			Fix:  []string{"# format: postgres://user@host:5432/namadb?sslmode=disable"},
 		})

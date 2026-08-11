@@ -98,10 +98,13 @@ func (h *Handler) WorkspaceCreate(w http.ResponseWriter, r *http.Request) {
 			return e
 		}
 		newID, newSlug = t.ID, t.Slug
-		_, e = q.CreateMembership(ctx, db.CreateMembershipParams{
+		if _, e = q.CreateMembership(ctx, db.CreateMembershipParams{
 			UserID: uid, TenantID: t.ID, Role: authz.RoleNameOwner,
-		})
-		return e
+		}); e != nil {
+			return e
+		}
+		// Peran CRM bawaan, di tx yang sama dengan tenant+membership → atomik.
+		return seedBusinessRoles(ctx, q, t.ID)
 	})
 	if err != nil {
 		h.Log.Error("workspace create", "err", err)

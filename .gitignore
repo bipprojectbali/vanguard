@@ -11,6 +11,9 @@
 .env.*
 !.env.example
 
+# MCP client config — berisi token/URL nyata; hanya .example yang di-commit.
+.mcp.json
+
 # Editor / OS
 .DS_Store
 .idea/

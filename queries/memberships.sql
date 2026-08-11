@@ -45,6 +45,20 @@ ORDER BY m.created_at, m.id;
 -- name: UpdateMemberRole :exec
 UPDATE memberships SET role = $3 WHERE user_id = $1 AND tenant_id = $2;
 
+-- name: UpdateMemberBusinessRole :exec
+-- Set/ganti business_role (sumbu CRM F2) satu anggota. Nilai divalidasi tenant-
+-- aware di handler (ada di business_roles workspace ini) SEBELUM query — kolom
+-- tak lagi punya CHECK sejak 00007. NULL = cabut peran CRM (mis. saat perannya
+-- dihapus) — pgtype/pointer NULL diteruskan apa adanya.
+UPDATE memberships SET business_role = $3 WHERE user_id = $1 AND tenant_id = $2;
+
+-- name: UnassignBusinessRole :exec
+-- Cabut satu business_role dari SEMUA anggota workspace yang memegangnya —
+-- dipanggil SEBELUM menghapus perannya, agar penghapusan peran meng-unassign
+-- orang alih-alih (lewat FK) menghapus keanggotaannya. Idempoten.
+UPDATE memberships SET business_role = NULL
+WHERE tenant_id = $1 AND business_role = $2;
+
 -- name: DeleteMembership :exec
 -- Keluarkan anggota dari workspace (atau user keluar sendiri).
 DELETE FROM memberships WHERE user_id = $1 AND tenant_id = $2;

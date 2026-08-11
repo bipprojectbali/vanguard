@@ -10,4 +10,14 @@ var (
 
 	//go:embed policy.csv
 	Policy string
+
+	// Sumbu BISNIS (CRM) — enforcer TERPISAH dari tenant/platform. Model &
+	// policynya sengaja tak menumpang Model/Policy di atas: sumbu tenant punya
+	// god-mode root + warisan staff→owner yang, bila diwarisi izin bisnis,
+	// membuat owner/super_admin jadi "pemilik bayangan seluruh desa" (§3).
+	//go:embed business.conf
+	BusinessModel string
+
+	//go:embed business_policy.csv
+	BusinessPolicy string
 )

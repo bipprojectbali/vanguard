@@ -33,6 +33,9 @@ func runDoctor() int {
 		// diagnosis yang diam-diam mengubah keadaan membuat orang tak bisa lagi
 		// memakainya untuk menjawab "apa yang sebenarnya terjadi di sini?".
 		AutoCreateDB: false,
+		// doctor dijalankan saat SETUP dari direktori repo — .env memang harus
+		// ada di sini, dan ketiadaannya justru masalah pertama yang dilaporkan.
+		FromFile: true,
 	})
 	rep.Add(sessionKeyProblem()...)
 

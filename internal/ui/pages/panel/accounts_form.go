@@ -1,0 +1,285 @@
+package panel
+
+import (
+	"strconv"
+
+	"go_starter/internal/ui"
+
+	g "maragu.dev/gomponents"
+	h "maragu.dev/gomponents/html"
+)
+
+// accounts_form.go — form buat/sunting desa + penugasan CSM. Form NATIVE POST →
+// 303 (gotcha #16: redirect lewat SSE diblokir CSP). Validasi sesungguhnya di
+// backend (parseAccountForm); atribut di sini hanya jaring klien.
+//
+// Nilai enum untuk dropdown dioper handler (AccountEnumOptions) — view tak
+// memutuskan mode/aturan. Semua nilai prefill sudah string di handler.
+
+// AccountFormFields = nilai prefill form (edit) atau kosong (buat). Semua string
+// agar view netral terhadap tipe DB. Population/HamletsCount/Budget sebagai
+// string apa adanya untuk input number/text.
+type AccountFormFields struct {
+	VillageName           string
+	VillageCode           string
+	AccountType           string
+	Website               string
+	Description           string
+	Province              string
+	Regency               string
+	District              string
+	VillageAddress        string
+	PostalCode            string
+	Territory             string
+	VillageStatus         string
+	VillageClassification string
+	Population            string
+	HamletsCount          string
+	VillageBudget         string
+	ContactPhone          string
+	OfficePhone           string
+	OfficeEmail           string
+}
+
+// AccountMemberOption = satu kandidat penerima tugas (assigned/backup CSM).
+type AccountMemberOption struct {
+	ID    int64
+	Label string
+}
+
+// AccountFormView = data halaman form. Action = URL POST tujuan. IsEdit
+// mengubah judul/label & memunculkan kartu penugasan. PhoneEditable=false (bukan
+// Sales) → field HP dikunci: nilainya tersamar, dan membiarkannya editable akan
+// menimpa nomor asli dengan mask saat submit (handler juga mempertahankannya).
+type AccountFormView struct {
+	Base   string
+	Action string
+	IsEdit bool
+	Err    string
+	Fields AccountFormFields
+
+	PhoneEditable bool
+
+	Types           []string
+	Statuses        []string
+	Classifications []string
+
+	// Penugasan CSM (hanya edit). AssignAction = URL POST /assign. Members =
+	// kandidat. AssignedCSM/BackupCSM = pilihan saat ini (id sebagai string, ""
+	// = belum ditugaskan).
+	AssignAction string
+	Members      []AccountMemberOption
+	AssignedCSM  string
+	BackupCSM    string
+}
+
+// AccountForm merender halaman form lengkap.
+func AccountForm(v AccountFormView) g.Node {
+	title := "Tambah Desa"
+	submit := "Simpan Desa"
+	if v.IsEdit {
+		title = "Sunting Desa"
+		submit = "Simpan Perubahan"
+	}
+
+	body := []g.Node{
+		h.Div(
+			h.H1(h.Class("text-xl font-semibold"), g.Text(title)),
+			h.A(h.Href(v.Base+"/accounts"), h.Class("text-sm text-base-content/60"),
+				g.Text("« Kembali ke daftar desa")),
+		),
+	}
+	if v.Err != "" {
+		body = append(body, ui.Alert(ui.VariantDestructive, "account-form-err", g.Text(v.Err)))
+	}
+
+	body = append(body, h.FormEl(
+		h.Method("post"), h.Action(v.Action),
+		h.Class("grid gap-4 min-w-0"),
+
+		formCard("Identitas",
+			field("Nama Desa", "village_name", v.Fields.VillageName, true, "text"),
+			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.Types, true),
+			field("Kode Desa (Kemendagri)", "village_code", v.Fields.VillageCode, false, "text"),
+			field("Website", "website", v.Fields.Website, false, "url"),
+			textareaField("Deskripsi", "description", v.Fields.Description),
+		),
+		formCard("Wilayah",
+			field("Provinsi", "province", v.Fields.Province, false, "text"),
+			field("Kabupaten/Kota", "regency", v.Fields.Regency, false, "text"),
+			field("Kecamatan", "district", v.Fields.District, false, "text"),
+			field("Alamat", "village_address", v.Fields.VillageAddress, false, "text"),
+			field("Kode Pos", "postal_code", v.Fields.PostalCode, false, "text"),
+			field("Teritori", "territory", v.Fields.Territory, false, "text"),
+		),
+		formCard("Profil Desa",
+			selectField("Status", "village_status", v.Fields.VillageStatus, v.Statuses, false),
+			selectField("Klasifikasi (IDM)", "village_classification", v.Fields.VillageClassification, v.Classifications, false),
+			field("Jumlah Penduduk", "population", v.Fields.Population, false, "number"),
+			field("Jumlah Dusun", "hamlets_count", v.Fields.HamletsCount, false, "number"),
+			field("Anggaran (APBDes)", "village_budget", v.Fields.VillageBudget, false, "text"),
+		),
+		formCard("Kontak",
+			phoneField(v.PhoneEditable, v.Fields.ContactPhone),
+			field("Telepon Kantor", "office_phone", v.Fields.OfficePhone, false, "tel"),
+			field("Email Kantor", "office_email", v.Fields.OfficeEmail, false, "email"),
+		),
+
+		h.Div(
+			h.Class("flex flex-wrap items-center gap-2"),
+			h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"), g.Text(submit)),
+			h.A(h.Href(v.Base+"/accounts"), h.Class("btn btn-ghost min-h-11"), g.Text("Batal")),
+		),
+	))
+
+	if v.IsEdit {
+		body = append(body, assignCard(v))
+	}
+
+	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// formCard = satu kelompok field dalam kartu. Grid 1-kolom di mobile → 2 di sm
+// ke atas (mobile-first).
+func formCard(title string, fields ...g.Node) g.Node {
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+		h.Div(
+			h.Class("card-body min-w-0"),
+			h.H2(h.Class("font-semibold mb-2"), g.Text(title)),
+			h.Div(h.Class("grid gap-3 sm:grid-cols-2 min-w-0"), g.Group(fields)),
+		),
+	)
+}
+
+// field = satu input teks/angka. required menandai wajib (jaring klien; backend
+// tetap memvalidasi). text-base (≥16px) agar iOS tak auto-zoom saat fokus.
+func field(label, name, val string, required bool, typ string) g.Node {
+	attrs := []g.Node{
+		h.ID("f-" + name), h.Name(name), h.Type(typ),
+		h.Value(val), h.Class("input text-base w-full"),
+	}
+	if required {
+		attrs = append(attrs, h.Required())
+	}
+	if typ == "number" {
+		attrs = append(attrs, g.Attr("min", "0"))
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor(label, "f-"+name, required),
+		ui.Input(attrs...),
+	)
+}
+
+// phoneField = HP kontak. Bila tak boleh disunting (bukan Sales), field dikunci
+// menampilkan nilai tersamar + keterangan, dan TANPA name agar tak terkirim —
+// handler juga mempertahankan nomor asli, jadi mask tak pernah menimpa data.
+func phoneField(editable bool, val string) g.Node {
+	if editable {
+		return field("HP Kontak", "contact_phone", val, false, "tel")
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor("HP Kontak", "f-contact_phone_ro", false),
+		ui.Input(
+			h.ID("f-contact_phone_ro"), h.Type("tel"), h.Value(val),
+			h.Disabled(), h.Class("input text-base w-full"),
+		),
+		h.P(h.Class("text-xs text-base-content/60"),
+			g.Text("Nomor disamarkan & hanya bisa disunting oleh Sales.")),
+	)
+}
+
+// textareaField = teks bebas panjang (deskripsi). Lebar penuh (rentang 2 kolom).
+func textareaField(label, name, val string) g.Node {
+	return h.Div(
+		h.Class("grid gap-1 min-w-0 sm:col-span-2"),
+		labelFor(label, "f-"+name, false),
+		h.Textarea(
+			h.ID("f-"+name), h.Name(name), h.Class("textarea text-base w-full"),
+			h.Rows("3"), g.Text(val),
+		),
+	)
+}
+
+// selectField = dropdown enum. Opsi kosong "—" hanya bila tak wajib (nilai
+// opsional boleh dikosongkan = NULL).
+func selectField(label, name, current string, opts []string, required bool) g.Node {
+	nodes := make([]g.Node, 0, len(opts)+1)
+	if !required {
+		nodes = append(nodes, h.Option(h.Value(""), g.Text("—")))
+	}
+	for _, o := range opts {
+		attrs := []g.Node{h.Value(o)}
+		if o == current {
+			attrs = append(attrs, h.Selected())
+		}
+		nodes = append(nodes, h.Option(append(attrs, g.Text(o))...))
+	}
+	sel := []g.Node{
+		h.ID("f-" + name), h.Name(name), h.Class("select text-base w-full"),
+	}
+	if required {
+		sel = append(sel, h.Required())
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor(label, "f-"+name, required),
+		h.Select(append(sel, g.Group(nodes))...),
+	)
+}
+
+// assignCard = penugasan CSM (assigned + backup). FORM TERPISAH posting ke
+// /assign — aksi berbeda dari simpan-field, jadi tak boleh berbagi tombol submit.
+func assignCard(v AccountFormView) g.Node {
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+		h.Div(
+			h.Class("card-body min-w-0"),
+			h.H2(h.Class("font-semibold mb-1"), g.Text("Penugasan CSM")),
+			h.P(h.Class("text-sm text-base-content/60 mb-2"),
+				g.Text("Menentukan siapa yang melihat desa ini di daftar mereka.")),
+			h.FormEl(
+				h.Method("post"), h.Action(v.AssignAction),
+				h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
+				memberSelect("CSM Utama", "assigned_csm", v.AssignedCSM, v.Members),
+				memberSelect("CSM Cadangan", "backup_csm", v.BackupCSM, v.Members),
+				h.Div(
+					h.Class("sm:col-span-2"),
+					h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
+						g.Text("Simpan Penugasan")),
+				),
+			),
+		),
+	)
+}
+
+// memberSelect = dropdown anggota (opsional; "" = tak ditugaskan).
+func memberSelect(label, name, current string, members []AccountMemberOption) g.Node {
+	nodes := []g.Node{h.Option(h.Value(""), g.Text("— Tidak ditugaskan —"))}
+	for _, m := range members {
+		id := strconv.FormatInt(m.ID, 10)
+		attrs := []g.Node{h.Value(id)}
+		if id == current {
+			attrs = append(attrs, h.Selected())
+		}
+		nodes = append(nodes, h.Option(append(attrs, g.Text(m.Label))...))
+	}
+	sel := []g.Node{h.ID("f-" + name), h.Name(name), h.Class("select text-base w-full")}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor(label, "f-"+name, false),
+		h.Select(append(sel, g.Group(nodes))...),
+	)
+}
+
+// labelFor merender label + penanda wajib (*). Diberi `for` agar tap label
+// memfokus input (tap target).
+func labelFor(text, forID string, required bool) g.Node {
+	children := []g.Node{g.Text(text)}
+	if required {
+		children = append(children, h.Span(h.Class("text-error ml-0.5"), g.Text("*")))
+	}
+	return h.Label(h.For(forID), h.Class("text-sm text-base-content/70"), g.Group(children))
+}

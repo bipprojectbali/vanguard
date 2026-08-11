@@ -18,6 +18,11 @@ import (
 // tebak-paksa, dan cukup rendah untuk tak menolak kunci yang sah.
 const MinSessionKeyLen = 32
 
+// MinMCPTokenLen = panjang minimum MCP_TOKEN bila diisi. Sama dengan SESSION_KEY
+// dan alasannya sama: token ini membuka pembacaan runtime database ke pemegangnya,
+// jadi harus tak-bisa-ditebak. Kosong (fitur mati) sah; diisi tapi lemah tidak.
+const MinMCPTokenLen = 32
+
 // Config menampung seluruh konfigurasi runtime aplikasi.
 type Config struct {
 	Port string // PORT, default "8080"
@@ -70,6 +75,20 @@ type Config struct {
 	// TIDAK ADA APP_MODE di sini — mode tenancy hidup di DATABASE (0007). Env bisa
 	// dibalik; baris DB-nya dijaga trigger yang menolak penurunan.
 	AppName string
+
+	// MCPToken = rahasia Bearer yang menjaga rute /mcp (server MCP read-only).
+	// MCP_TOKEN, default KOSONG.
+	//
+	// Kosong = rute /mcp TAK didaftarkan sama sekali (opt-in). Ini pengaman
+	// utama: fitur yang membuka runtime ke agent AI tak boleh menyala hanya
+	// karena lupa — ia menyala HANYA bila token sengaja diisi. Jadi dev lokal
+	// yang tak mengisinya tak punya endpoint MCP HTTP terbuka (dev pakai stdio
+	// `./app mcp`, bukan HTTP).
+	//
+	// Bila diisi, WAJIB >= MinMCPTokenLen (divalidasi di MustLoad): token lemah
+	// pada endpoint yang membaca database jauh lebih berbahaya daripada tak ada
+	// endpoint — pola yang sama dengan SESSION_KEY.
+	MCPToken string
 }
 
 // SessionCookieName menurunkan nama cookie sesi dari SESSION_KEY, sehingga dua
@@ -134,6 +153,15 @@ func MustLoad() *Config {
 		AppTimezone:          getEnv("APP_TIMEZONE", "Asia/Jakarta"),
 		MaxWorkspacesPerUser: getEnvInt("MAX_WORKSPACES_PER_USER", 3),
 		AppName:              getEnv("APP_NAME", "App"),
+		MCPToken:             getEnv("MCP_TOKEN", ""),
+	}
+	// MCP_TOKEN opsional & lintas-lingkungan (bukan cuma production): kalau diisi,
+	// panjangnya divalidasi di MANA PUN — endpoint MCP yang membaca database sama
+	// berbahayanya dijaga token lemah di dev maupun prod. Kosong = fitur mati, sah.
+	if c.MCPToken != "" && len(c.MCPToken) < MinMCPTokenLen {
+		panic(fmt.Sprintf("config: MCP_TOKEN terlalu pendek (%d karakter, minimal %d) — "+
+			"kosongkan untuk mematikan MCP, atau buat dengan: openssl rand -base64 48",
+			len(c.MCPToken), MinMCPTokenLen))
 	}
 	// Validasi TZ fail-fast: nama IANA salah → panic saat startup, bukan error
 	// senyap saat render panel logs. (tzdata di-embed via import di main.)

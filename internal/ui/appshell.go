@@ -15,11 +15,19 @@ import (
 	h "maragu.dev/gomponents/html"
 )
 
-// NavItem = satu entri menu sidebar.
+// NavItem = satu entri menu sidebar. Tiga bentuk, saling eksklusif:
+//   - link biasa: Href terisi, Children/Disabled kosong;
+//   - modul belum jadi: Disabled=true (Href diabaikan) → dirender non-link
+//     teredam + badge "Segera hadir" (wireframe menampilkan peta jalan penuh,
+//     tapi pintunya belum terbuka);
+//   - grup bersarang: Children terisi (Href diabaikan) → header collapsible +
+//     anak-anak indent (mis. Settings).
 type NavItem struct {
-	Label string
-	Href  string
-	Icon  g.Node // ikon lucide (mis. lucide.Users(...))
+	Label    string
+	Href     string
+	Icon     g.Node    // ikon lucide (mis. lucide.Users(...))
+	Disabled bool      // true → item mati (modul wireframe belum dibangun)
+	Children []NavItem // non-kosong → grup bersarang, bukan link
 }
 
 // ShellData = konteks AppShell (panel /dev, /admin, /user). Terpisah dari

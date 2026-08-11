@@ -1,0 +1,39 @@
+{
+  "_comment": [
+    "Contoh entri MCP client (Claude Code / Cursor / VS Code) untuk server MCP",
+    "read-only go_starter. SALIN yang relevan ke .mcp.json Anda — file ini contoh.",
+    "",
+    "TIGA LINGKUNGAN, TIGA ENTRI. Bedakan lewat NAMA. URL menentukan box mana yang",
+    "dihubungi; Bearer token membuktikan boleh masuk.",
+    "",
+    "TOKEN DI HEADER, BUKAN DI URL. Query string (?token=..) bocor ke access-log",
+    "reverse proxy; header Authorization tidak. Standar 2026.",
+    "",
+    "TOKEN VIA ${ENV}, JANGAN DITULIS MENTAH. File .mcp.json aman masuk git;",
+    "nilai asli ada di env shell Anda (export GOSTARTER_PROD_TOKEN=...).",
+    "",
+    "NAMA ENV BEDA per-lingkungan (bukan MCP_TOKEN polos): di satu mesin client,",
+    "staging & prod hidup berdampingan — token tak boleh tertukar. (Di SERVER,",
+    "tiap container terisolasi, jadi di sana env-nya tetap bernama MCP_TOKEN.)"
+  ],
+
+  "mcpServers": {
+    "gostarter-dev": {
+      "_comment": "Dev lokal: stdio, tanpa server/token. Jalankan langsung.",
+      "command": "go",
+      "args": ["run", ".", "mcp"]
+    },
+
+    "gostarter-staging": {
+      "type": "http",
+      "url": "https://staging.app-anda.com/mcp",
+      "headers": { "Authorization": "Bearer ${GOSTARTER_STAGING_TOKEN}" }
+    },
+
+    "gostarter-prod": {
+      "type": "http",
+      "url": "https://app-anda.com/mcp",
+      "headers": { "Authorization": "Bearer ${GOSTARTER_PROD_TOKEN}" }
+    }
+  }
+}

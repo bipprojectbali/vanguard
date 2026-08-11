@@ -14,6 +14,22 @@ import (
 // dipilih dari role. Kalau salah pilih, user melihat menu yang tak boleh ia
 // akses (atau kehilangan menu panelnya saat membuka notifikasi).
 
+// navContainsSuffix mencari item ber-href berakhiran sub di SELURUH pohon menu
+// (top-level + anak grup). Sejak menu jadi bersarang (wireframe: /members,
+// /settings, /roles hidup sebagai anak grup Settings), pencarian datar tak lagi
+// cukup — item yang dulu di level atas kini satu tingkat lebih dalam.
+func navContainsSuffix(nav []ui.NavItem, sub string) bool {
+	for _, it := range nav {
+		if it.Href != "" && strings.HasSuffix(it.Href, sub) {
+			return true
+		}
+		if len(it.Children) > 0 && navContainsSuffix(it.Children, sub) {
+			return true
+		}
+	}
+	return false
+}
+
 // Role tenant kini bermuara ke ruang kerja yang SAMA (0004): menu mereka
 // menunjuk /w/{slug}, bukan /admin vs /user. Yang membedakan hanya entri
 // "Pengaturan" (owner/platform) — lihat TestNavFor_PengaturanIkutIzin.
@@ -44,18 +60,10 @@ func TestNavFor_MenuIkutRole(t *testing.T) {
 // Member melihat pintu Pengaturan lalu ditolak 403 = menu hantu — persis yang
 // dihindari TestNavFor_MemberTakDapatMenuAdmin sebelum peleburan.
 func TestNavFor_PengaturanIkutIzin(t *testing.T) {
-	has := func(nav []ui.NavItem, sub string) bool {
-		for _, it := range nav {
-			if strings.HasSuffix(it.Href, sub) {
-				return true
-			}
-		}
-		return false
-	}
-	if has(navFor(ctxWithRole(t, "member")), "/settings") {
+	if navContainsSuffix(navFor(ctxWithRole(t, "member")), "/settings") {
 		t.Error("member tak boleh melihat menu Pengaturan (route akan menolaknya)")
 	}
-	if !has(navFor(ctxWithRole(t, "owner")), "/settings") {
+	if !navContainsSuffix(navFor(ctxWithRole(t, "owner")), "/settings") {
 		t.Error("owner harus melihat menu Pengaturan")
 	}
 }
@@ -65,23 +73,15 @@ func TestNavFor_PengaturanIkutIzin(t *testing.T) {
 // adalah menu hantu — dan di sini ia lebih buruk daripada sekadar mengganggu:
 // ia menjanjikan direktori orang yang memang sengaja tak dibuka untuk member.
 func TestNavFor_AnggotaIkutIzin(t *testing.T) {
-	has := func(nav []ui.NavItem, sub string) bool {
-		for _, it := range nav {
-			if strings.HasSuffix(it.Href, sub) {
-				return true
-			}
-		}
-		return false
-	}
 	// Berlaku di KEDUA mode: pembatasan ini soal siapa yang mengelola
 	// keanggotaan, bukan soal bentuk aplikasinya.
 	for _, mode := range []appmode.Mode{appmode.Single, appmode.Multi} {
 		withMode(t, mode, func() {
-			if has(navFor(ctxWithRole(t, "member")), "/members") {
+			if navContainsSuffix(navFor(ctxWithRole(t, "member")), "/members") {
 				t.Errorf("mode %v: member tak boleh melihat menu Anggota", mode)
 			}
 			for _, role := range []string{"admin", "owner"} {
-				if !has(navFor(ctxWithRole(t, role)), "/members") {
+				if !navContainsSuffix(navFor(ctxWithRole(t, role)), "/members") {
 					t.Errorf("mode %v: %s harus melihat menu Anggota — ia yang mengelola", mode, role)
 				}
 			}

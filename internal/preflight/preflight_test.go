@@ -155,6 +155,45 @@ func TestParseDSN_RusakDitolakDenganJelas(t *testing.T) {
 	}
 }
 
+// TestRun_FromFileFalse_TakLaporEnvHilang: BUG yang ditemukan saat review MCP.
+// Run dulu SELALU os.Stat(".env"); dari dalam container (env dari lingkungan,
+// bukan file) itu selalu gagal dan melapor ".env belum ada" untuk keadaan yang
+// justru normal — diagnosis palsu yang menyesatkan.
+//
+// Dengan FromFile:false, pemeriksaan file dilewati. DSN sengaja dibuat rusak
+// supaya Run berhenti CEPAT (tak menyentuh Postgres nyata di unit test) — yang
+// diuji cukup: laporannya BUKAN "EnvMissing".
+func TestRun_FromFileFalse_TakLaporEnvHilang(t *testing.T) {
+	rep := Run(t.Context(), Opts{
+		DatabaseURL: "dsn-sengaja-rusak",
+		FromFile:    false, // runtime container: .env memang tak ada
+	})
+	want := EnvMissing().What
+	for _, p := range rep.Problems {
+		if p.What == want {
+			t.Error("FromFile:false tak boleh melapor .env hilang — env datang dari lingkungan, bukan file")
+		}
+	}
+}
+
+// TestRun_FromFileTrue_MasihLaporEnvHilang: jalur `make doctor` (setup dari
+// repo) TETAP harus melapor .env hilang — di sana ketiadaannya memang masalah
+// pertama. Dijalankan di t.TempDir() yang pasti tanpa .env.
+func TestRun_FromFileTrue_MasihLaporEnvHilang(t *testing.T) {
+	t.Chdir(t.TempDir()) // dir kosong → .env pasti tak ada
+	rep := Run(t.Context(), Opts{DatabaseURL: "apa-saja", FromFile: true})
+	want := EnvMissing().What
+	found := false
+	for _, p := range rep.Problems {
+		if p.What == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("FromFile:true di dir tanpa .env harus melapor .env hilang (jalur make doctor)")
+	}
+}
+
 type errFake string
 
 func (e errFake) Error() string { return string(e) }

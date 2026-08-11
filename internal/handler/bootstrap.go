@@ -39,17 +39,25 @@ import (
 func BootstrapPrimary(ctx context.Context, pool *pgxpool.Pool, appName string) (appmode.Mode, error) {
 	var mode appmode.Mode
 	err := db.WithSuper(ctx, pool, func(q *db.Queries) error {
-		if _, err := q.GetPrimaryTenant(ctx); err != nil {
+		primary, err := q.GetPrimaryTenant(ctx)
+		if err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("baca workspace primer: %w", err)
 			}
 			// Belum ada → buat. Namanya dari APP_NAME: migrasi tak tahu apa-apa
 			// tentang aplikasi di atasnya, jadi ia bukan tempat menaruh seed.
-			if _, err := q.CreatePrimaryTenant(ctx, db.CreatePrimaryTenantParams{
+			primary, err = q.CreatePrimaryTenant(ctx, db.CreatePrimaryTenantParams{
 				Name: appName, Slug: appmode.PrimarySlug,
-			}); err != nil {
+			})
+			if err != nil {
 				return fmt.Errorf("buat workspace primer: %w", err)
 			}
+		}
+		// Seed peran CRM bawaan ke workspace primer. Idempoten (ON CONFLICT DO
+		// NOTHING) → aman diulang tiap boot; menutup workspace primer yang lahir
+		// di deployment baru (sebelum migrasi 00007 sempat mem-backfill-nya).
+		if err := seedBusinessRoles(ctx, q, primary.ID); err != nil {
+			return fmt.Errorf("seed peran workspace primer: %w", err)
 		}
 
 		s, err := q.GetSetting(ctx, appmode.SettingKey)

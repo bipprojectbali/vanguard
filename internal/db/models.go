@@ -8,6 +8,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Account struct {
+	ID                    int64              `json:"id"`
+	TenantID              int64              `json:"tenant_id"`
+	AccountOwner          *int64             `json:"account_owner"`
+	AssignedCsm           *int64             `json:"assigned_csm"`
+	BackupCsm             *int64             `json:"backup_csm"`
+	VillageName           string             `json:"village_name"`
+	VillageCode           *string            `json:"village_code"`
+	AccountType           string             `json:"account_type"`
+	ParentAccountID       *int64             `json:"parent_account_id"`
+	Website               *string            `json:"website"`
+	Description           *string            `json:"description"`
+	Province              *string            `json:"province"`
+	Regency               *string            `json:"regency"`
+	District              *string            `json:"district"`
+	VillageAddress        *string            `json:"village_address"`
+	PostalCode            *string            `json:"postal_code"`
+	Latitude              pgtype.Numeric     `json:"latitude"`
+	Longitude             pgtype.Numeric     `json:"longitude"`
+	Territory             *string            `json:"territory"`
+	VillageStatus         *string            `json:"village_status"`
+	VillageClassification *string            `json:"village_classification"`
+	Population            *int32             `json:"population"`
+	HamletsCount          *int32             `json:"hamlets_count"`
+	VillageBudget         pgtype.Numeric     `json:"village_budget"`
+	ContactPhone          *string            `json:"contact_phone"`
+	OfficePhone           *string            `json:"office_phone"`
+	OfficeEmail           *string            `json:"office_email"`
+	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy             *int64             `json:"created_by"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy             *int64             `json:"updated_by"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	EntityCode            *string            `json:"entity_code"`
+}
+
 type ActivityPresence struct {
 	UserID     int64              `json:"user_id"`
 	BucketAt   pgtype.Timestamptz `json:"bucket_at"`
@@ -28,6 +64,79 @@ type AuditLog struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
+type BusinessRole struct {
+	ID          int64              `json:"id"`
+	TenantID    int64              `json:"tenant_id"`
+	Name        string             `json:"name"`
+	DisplayName string             `json:"display_name"`
+	DataScope   string             `json:"data_scope"`
+	IsSystem    bool               `json:"is_system"`
+	CreatedBy   *int64             `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy   *int64             `json:"updated_by"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Description string             `json:"description"`
+}
+
+type BusinessRolePermission struct {
+	ID       int64  `json:"id"`
+	TenantID int64  `json:"tenant_id"`
+	Role     string `json:"role"`
+	Obj      string `json:"obj"`
+	Act      string `json:"act"`
+}
+
+type CodeFormat struct {
+	ID        int64              `json:"id"`
+	TenantID  int64              `json:"tenant_id"`
+	Entity    string             `json:"entity"`
+	Prefix    string             `json:"prefix"`
+	Separator string             `json:"separator"`
+	Padding   int32              `json:"padding"`
+	CreatedBy *int64             `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy *int64             `json:"updated_by"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CodeSequence struct {
+	TenantID int64  `json:"tenant_id"`
+	Entity   string `json:"entity"`
+	NextVal  int64  `json:"next_val"`
+}
+
+type Contact struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	AccountID          int64              `json:"account_id"`
+	ContactOwner       *int64             `json:"contact_owner"`
+	ReportsToID        *int64             `json:"reports_to_id"`
+	FirstName          string             `json:"first_name"`
+	LastName           *string            `json:"last_name"`
+	Salutation         *string            `json:"salutation"`
+	JobTitle           *string            `json:"job_title"`
+	PositionCategory   *string            `json:"position_category"`
+	ContactRole        *string            `json:"contact_role"`
+	IsPrimaryContact   bool               `json:"is_primary_contact"`
+	IsTechnicalContact bool               `json:"is_technical_contact"`
+	TermPeriod         *string            `json:"term_period"`
+	MobilePhone        *string            `json:"mobile_phone"`
+	WhatsappNumber     *string            `json:"whatsapp_number"`
+	OfficePhone        *string            `json:"office_phone"`
+	Email              *string            `json:"email"`
+	PreferredChannel   *string            `json:"preferred_channel"`
+	MailingAddress     *string            `json:"mailing_address"`
+	City               *string            `json:"city"`
+	PostalCode         *string            `json:"postal_code"`
+	EmailOptOut        bool               `json:"email_opt_out"`
+	DoNotContact       bool               `json:"do_not_contact"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Invite struct {
 	ID         int64              `json:"id"`
 	TenantID   int64              `json:"tenant_id"`
@@ -41,11 +150,12 @@ type Invite struct {
 }
 
 type Membership struct {
-	ID        int64              `json:"id"`
-	UserID    int64              `json:"user_id"`
-	TenantID  int64              `json:"tenant_id"`
-	Role      string             `json:"role"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID           int64              `json:"id"`
+	UserID       int64              `json:"user_id"`
+	TenantID     int64              `json:"tenant_id"`
+	Role         string             `json:"role"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	BusinessRole *string            `json:"business_role"`
 }
 
 type Notification struct {
@@ -67,6 +177,25 @@ type OauthAccount struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type Plan struct {
+	ID               int64              `json:"id"`
+	TenantID         int64              `json:"tenant_id"`
+	PlanName         string             `json:"plan_name"`
+	PlanCode         string             `json:"plan_code"`
+	Description      *string            `json:"description"`
+	PlanCategory     string             `json:"plan_category"`
+	IsActive         bool               `json:"is_active"`
+	BasePrice        pgtype.Numeric     `json:"base_price"`
+	BillingFrequency *string            `json:"billing_frequency"`
+	SetupFee         pgtype.Numeric     `json:"setup_fee"`
+	Currency         string             `json:"currency"`
+	IncludedFeatures *string            `json:"included_features"`
+	CreatedBy        *int64             `json:"created_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy        *int64             `json:"updated_by"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type PlatformSetting struct {
 	Key       string             `json:"key"`
 	Value     string             `json:"value"`
@@ -78,6 +207,22 @@ type PlatformStaff struct {
 	ID        int64              `json:"id"`
 	Email     string             `json:"email"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type SlaPolicy struct {
+	ID                       int64              `json:"id"`
+	TenantID                 int64              `json:"tenant_id"`
+	SlaName                  string             `json:"sla_name"`
+	AppliesToPriority        *string            `json:"applies_to_priority"`
+	FirstResponseTargetHours *int32             `json:"first_response_target_hours"`
+	ResolutionTargetHours    *int32             `json:"resolution_target_hours"`
+	BusinessHours            *string            `json:"business_hours"`
+	EscalationRule           *string            `json:"escalation_rule"`
+	IsActive                 bool               `json:"is_active"`
+	CreatedBy                *int64             `json:"created_by"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy                *int64             `json:"updated_by"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Tenant struct {

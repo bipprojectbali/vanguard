@@ -13,7 +13,9 @@ import (
 const (
 	keyUserID        = "userID"
 	keyEmail         = "email"         // cache email (hindari GetUser tiap render)
-	keyRole          = "role"          // otoritas (subject Casbin)
+	keyRole          = "role"          // otoritas tenant/platform (subject Casbin)
+	keyBusinessRole  = "businessRole"  // peran CRM di workspace aktif (subject Casbin sumbu bisnis; "" = belum diberi)
+	keyBusinessScope = "businessScope" // cakupan data (F3) role aktif: 'all'/'own'/'none'; "" = tak lihat desa (fail-closed)
 	keyIsRoot        = "isRoot"        // super-admin env (immutable root)
 	keyTenantID      = "tenantID"      // tenant user (multi-tenancy; 0 = platform/anonim)
 	keyTenantName    = "tenantName"    // nama workspace (cache utk brand sidebar; bukan PII)
@@ -144,6 +146,31 @@ func Email(ctx context.Context) string { return mgr.GetString(ctx, keyEmail) }
 
 // Role mengembalikan role user login (kosong bila belum login) — subject Casbin.
 func Role(ctx context.Context) string { return mgr.GetString(ctx, keyRole) }
+
+// BusinessRole mengembalikan peran CRM (admin/manager/sales/csm/support) user di
+// WORKSPACE AKTIF — subject enforcer sumbu bisnis (authz.CanBusiness). "" bila
+// belum diberi peran CRM di workspace ini; sengaja TEGAK LURUS terhadap Role:
+// satu orang bisa owner tenant tapi bukan siapa-siapa di CRM, dan sebaliknya.
+func BusinessRole(ctx context.Context) string { return mgr.GetString(ctx, keyBusinessRole) }
+
+// SetBusinessRole menyimpan peran CRM workspace aktif ke session. Dipanggil
+// RefreshIdentity tiap request (real-time, per-workspace: pindah workspace =
+// peran CRM bisa berbeda). Kosongkan ("") saat user tak punya peran CRM di sana.
+func SetBusinessRole(ctx context.Context, role string) { mgr.Put(ctx, keyBusinessRole, role) }
+
+// BusinessDataScope mengembalikan cakupan data (F3) role CRM aktif: 'all'/'own'/
+// 'none'. Menentukan DESA SIAPA yang terlihat (db.AccountsListFilterFor), tegak
+// lurus terhadap BusinessRole (yang menentukan MENU apa yang boleh diakses).
+// Dibaca dari kolom business_roles.data_scope, jadi role custom yang disunting
+// operator berefek tanpa perubahan kode. "" (belum diberi peran / tak dikenal) →
+// fail-closed: db.AccountsScopeFor memetakannya ke ScopeNone (nol baris).
+func BusinessDataScope(ctx context.Context) string { return mgr.GetString(ctx, keyBusinessScope) }
+
+// SetBusinessDataScope menyimpan cakupan data role aktif. Dipanggil RefreshIdentity
+// tiap request bersama SetBusinessRole (real-time: menyunting data_scope role di
+// panel berefek pada request berikutnya tanpa re-login). Kosongkan ("") saat user
+// tak punya peran CRM di workspace ini.
+func SetBusinessDataScope(ctx context.Context, scope string) { mgr.Put(ctx, keyBusinessScope, scope) }
 
 // IsRoot melaporkan apakah user login adalah super-admin env (root immutable).
 func IsRoot(ctx context.Context) bool { return mgr.GetBool(ctx, keyIsRoot) }

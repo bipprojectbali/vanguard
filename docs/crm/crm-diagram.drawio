@@ -1,0 +1,1620 @@
+<mxfile host="drawio.wibudev.com" agent="claude-code" pages="8">
+  <diagram id="dataflow" name="Alur Data CRM">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <!-- ===== TITLE ===== -->
+        <mxCell id="title" value="Alur Data CRM Desa+ — dari Prospek ke Retensi" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="700" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Kotak = tabel. Panah tebal = alur konversi/lifecycle. Panah putus-putus = referensi (FK). Warna = domain modul." style="text;html=1;fontSize=12;align=left;verticalAlign=middle;fontColor=#555555;" vertex="1" parent="1">
+          <mxGeometry x="40" y="56" width="900" height="24" as="geometry" />
+        </mxCell>
+        <!-- ===== SWIMLANE: MASTER / KATALOG ===== -->
+        <mxCell id="lane_master" value="MASTER / KATALOG (dikelola Admin)" style="swimlane;horizontal=0;fillColor=#f5f5f5;strokeColor=#999999;fontStyle=1;fontSize=12;startSize=28;" vertex="1" parent="1">
+          <mxGeometry x="40" y="110" width="1500" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="plan" value="plans&#xa;(katalog produk)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="lane_master">
+          <mxGeometry x="60" y="45" width="150" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="sla" value="sla_policies" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="lane_master">
+          <mxGeometry x="290" y="45" width="140" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="playbook" value="playbooks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="lane_master">
+          <mxGeometry x="500" y="45" width="140" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="kb" value="kb_articles" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="lane_master">
+          <mxGeometry x="710" y="45" width="140" height="55" as="geometry" />
+        </mxCell>
+        <!-- ===== SALES FLOW (top row) ===== -->
+        <mxCell id="lead" value="leads&#xa;&#xa;entity FLAT (region text mentah)&#xa;Owner: Sales" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;align=center;" vertex="1" parent="1">
+          <mxGeometry x="80" y="290" width="180" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="deal" value="deals&#xa;&#xa;pipeline / stage&#xa;Owner: Sales" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="620" y="290" width="170" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="quote" value="quotes&#xa;+ quote_items&#xa;&#xa;snapshot harga" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="880" y="290" width="160" height="90" as="geometry" />
+        </mxCell>
+        <!-- ===== HUB ===== -->
+        <mxCell id="account" value="accounts  (DESA — HUB)&#xa;&#xa;account_owner · assigned_csm · backup_csm&#xa;Semua modul menyambung ke sini" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="560" y="480" width="290" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="contact" value="contacts&#xa;&#xa;perangkat desa&#xa;Owner: Sales" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="320" y="490" width="160" height="80" as="geometry" />
+        </mxCell>
+        <!-- ===== SUBSCRIPTION ===== -->
+        <mxCell id="sub" value="subscriptions&#xa;&#xa;1 baris = 1 periode 1 plan&#xa;renewal = INSERT baris baru&#xa;+ churn + ARR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="920" y="470" width="200" height="110" as="geometry" />
+        </mxCell>
+        <!-- ===== CUSTOMER SUCCESS ===== -->
+        <mxCell id="cs" value="customer_success&#xa;(1:1 desa)&#xa;health · lifecycle · onboarding · adoption&#xa;Owner: CSM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="560" y="660" width="290" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="cschild" value="cs_impl_tasks · cs_trainings&#xa;success_plans · surveys" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="800" width="290" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ticket" value="tickets&#xa;(+ SLA)&#xa;Owner: Support Agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="920" y="660" width="200" height="90" as="geometry" />
+        </mxCell>
+        <!-- ===== ACTIVITIES ===== -->
+        <mxCell id="activity" value="activities  (polymorphic, kind enum)&#xa;&#xa;task · meeting · call · chat · email · note&#xa;+ activity_attendees&#xa;target_type / target_id → ke SEMUA entity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="470" width="270" height="130" as="geometry" />
+        </mxCell>
+        <!-- ===== EDGES: sales flow ===== -->
+        <mxCell id="e_lead_acc" value="KONVERSI" style="endArrow=block;html=1;strokeWidth=3;strokeColor=#82b366;fontStyle=1;fontColor=#4a7a2a;" edge="1" parent="1" source="lead" target="account">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_lead_con" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#82b366;dashed=1;" edge="1" parent="1" source="lead" target="contact">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_lead_deal" style="endArrow=block;html=1;strokeWidth=3;strokeColor=#82b366;" edge="1" parent="1" source="lead" target="deal">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="705" y="335" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_deal_quote" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#82b366;" edge="1" parent="1" source="deal" target="quote">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_deal_sub" value="Closed Won" style="endArrow=block;html=1;strokeWidth=3;strokeColor=#d6b656;fontStyle=1;fontColor=#9a7d1a;" edge="1" parent="1" source="deal" target="sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_deal_acc" style="endArrow=open;html=1;strokeWidth=1;strokeColor=#999999;dashed=1;" edge="1" parent="1" source="deal" target="account">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- ===== EDGES: hub relations ===== -->
+        <mxCell id="e_acc_con" value="1:N" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#d79b00;" edge="1" parent="1" source="account" target="contact">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_acc_sub" value="1:N" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#d79b00;" edge="1" parent="1" source="account" target="sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_acc_cs" value="1:1" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#d79b00;" edge="1" parent="1" source="account" target="cs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_acc_ticket" value="1:N" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#d79b00;" edge="1" parent="1" source="account" target="ticket">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cs_child" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#9673a6;" edge="1" parent="1" source="cs" target="cschild">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- renewal self loop -->
+        <mxCell id="e_sub_renew" value="renewal&#xa;previous_subscription_id" style="endArrow=block;html=1;strokeWidth=2;strokeColor=#d6b656;fontColor=#9a7d1a;rounded=1;exitX=1;exitY=0.25;entryX=1;entryY=0.75;" edge="1" parent="1" source="sub" target="sub">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1170" y="500" />
+              <mxPoint x="1170" y="555" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <!-- ===== EDGES: masters (dashed FK) ===== -->
+        <mxCell id="e_plan_deal" style="endArrow=open;html=1;strokeWidth=1;strokeColor=#6c8ebf;dashed=1;" edge="1" parent="1" source="plan" target="deal">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_plan_sub" style="endArrow=open;html=1;strokeWidth=1;strokeColor=#6c8ebf;dashed=1;" edge="1" parent="1" source="plan" target="sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sla_ticket" style="endArrow=open;html=1;strokeWidth=1;strokeColor=#6c8ebf;dashed=1;" edge="1" parent="1" source="sla" target="ticket">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- ===== EDGES: activities polymorphic ===== -->
+        <mxCell id="e_act_acc" value="target_type/target_id&#xa;(polymorphic)" style="endArrow=open;html=1;strokeWidth=1.5;strokeColor=#b85450;dashed=1;fontColor=#8a3a36;" edge="1" parent="1" source="activity" target="account">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_act_deal" style="endArrow=open;html=1;strokeWidth=1;strokeColor=#b85450;dashed=1;" edge="1" parent="1" source="activity" target="deal">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_act_ticket" style="endArrow=open;html=1;strokeWidth=1;strokeColor=#b85450;dashed=1;" edge="1" parent="1" source="activity" target="ticket">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- ===== LEGEND ===== -->
+        <mxCell id="legend" value="Keterangan Warna Domain" style="swimlane;fontStyle=1;fontSize=12;startSize=24;fillColor=none;strokeColor=#999999;" vertex="1" parent="1">
+          <mxGeometry x="80" y="640" width="380" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="lg1" value="Sales (leads, deals, quotes)" style="text;html=1;fillColor=#d5e8d4;strokeColor=#82b366;rounded=1;" vertex="1" parent="legend">
+          <mxGeometry x="15" y="35" width="350" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="lg2" value="Hub (accounts, contacts)" style="text;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;rounded=1;" vertex="1" parent="legend">
+          <mxGeometry x="15" y="64" width="350" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="lg3" value="Subscription (plans, subscriptions)" style="text;html=1;fillColor=#fff2cc;strokeColor=#d6b656;rounded=1;" vertex="1" parent="legend">
+          <mxGeometry x="15" y="93" width="350" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="lg4" value="Customer Success (cs, tickets, surveys, ...)" style="text;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;rounded=1;" vertex="1" parent="legend">
+          <mxGeometry x="15" y="122" width="350" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="lg5" value="Activities (polymorphic — semua entity)" style="text;html=1;fillColor=#f8cecc;strokeColor=#b85450;rounded=1;" vertex="1" parent="legend">
+          <mxGeometry x="15" y="151" width="350" height="24" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="roles" name="Kewenangan Role">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="rtitle" value="Kewenangan Role — 3 Sumbu Ortogonal + Ownership Data" style="text;html=1;fontSize=20;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="900" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="rsub" value="Ketiga sumbu berdiri sendiri (tak saling menurunkan) &amp; disimpan per-MEMBERSHIP (user × tenant), bukan per-user. Keputusan bypass RLS SELALU dari sumbu Platform, tak pernah dari data." style="text;html=1;fontSize=12;fontColor=#555555;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="56" width="1200" height="24" as="geometry" />
+        </mxCell>
+        <!-- ===== AXIS 1: PLATFORM ===== -->
+        <mxCell id="ax1" value="SUMBU 1 — PLATFORM&#xa;(operator Desa+ sbg perusahaan)&#xa;disimpan: ENV + platform_staff (tanpa RLS)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=13;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="110" width="460" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="ax1a" value="super_admin — akses /dev penuh, atur kuota, mode tenancy, kelola staff, suspend workspace. Dari SUPER_ADMIN_EMAILS. Deny-default; hanya ini yg lolos platform:settings." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="ax1">
+          <mxGeometry x="15" y="70" width="430" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ax1b" value="staff — /dev terbatas (dev:users). TIDAK boleh suspend tenant / kelola staff / ubah platform:settings." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="ax1">
+          <mxGeometry x="15" y="150" width="430" height="60" as="geometry" />
+        </mxCell>
+        <!-- ===== AXIS 2: TENANT ===== -->
+        <mxCell id="ax2" value="SUMBU 2 — TENANT (workspace)&#xa;disimpan: memberships.role&#xa;(template bawaan)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=13;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="540" y="110" width="460" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="ax2a" value="owner — kelola workspace penuh: ganti nama, kelola anggota, archive. Kuota dihitung dari role ini." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="ax2">
+          <mxGeometry x="15" y="70" width="430" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ax2b" value="admin — operasional workspace (kelola anggota, nama app di mode single). GuardSetRole pakai &gt;= (tak bisa angkat sesama admin)." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="ax2">
+          <mxGeometry x="15" y="125" width="430" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="ax2c" value="member — pakai workspace, tak kelola anggota." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="ax2">
+          <mxGeometry x="15" y="185" width="430" height="35" as="geometry" />
+        </mxCell>
+        <!-- ===== AXIS 3: BUSINESS ===== -->
+        <mxCell id="ax3" value="SUMBU 3 — BISNIS (peran CRM)&#xa;disimpan: memberships.business_role (KOLOM BARU)&#xa;NULL = tanpa peran CRM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="110" width="480" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="ax3note" value="Setiap peran = 2 lapis: PERMISSION SET (aksi apa) + OWNERSHIP RULE (data desa siapa). Detail di tabel bawah." style="text;html=1;fontSize=11;align=left;fontColor=#3d6b28;spacingLeft=6;" vertex="1" parent="ax3">
+          <mxGeometry x="15" y="65" width="450" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ax3roles" value="admin · manager · sales · csm · support" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="ax3">
+          <mxGeometry x="15" y="130" width="450" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="ax3warn" value="Ortogonal dari sumbu 1 &amp; 2: satu orang bisa owner+csm di workspace A, member+sales di B." style="text;html=1;fontSize=11;align=left;fontColor=#3d6b28;spacingLeft=6;" vertex="1" parent="ax3">
+          <mxGeometry x="15" y="180" width="450" height="40" as="geometry" />
+        </mxCell>
+        <!-- ===== MATRIX: business role x data ===== -->
+        <mxCell id="mtitle" value="Matriks Sumbu 3 — Peran Bisnis × Data yang Boleh Disentuh" style="text;html=1;fontSize=15;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="380" width="900" height="30" as="geometry" />
+        </mxCell>
+        <!-- header row -->
+        <mxCell id="h_role" value="Peran" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#333333;fontColor=#ffffff;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="420" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="h_perm" value="Permission Set (aksi utama)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#333333;fontColor=#ffffff;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="190" y="420" width="470" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="h_own" value="Ownership Rule (data desa mana)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#333333;fontColor=#ffffff;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="660" y="420" width="360" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="h_fls" value="Field disembunyikan (§5 FLS)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#333333;fontColor=#ffffff;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="420" width="500" height="50" as="geometry" />
+        </mxCell>
+        <!-- admin -->
+        <mxCell id="r1_role" value="admin" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="470" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="r1_perm" value="Konfigurasi sistem CRM: plans, sla_policies, playbooks, kb_articles, assign ownership desa, kelola business_role anggota." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="190" y="470" width="470" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="r1_own" value="SEMUA desa dalam workspace." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="660" y="470" width="360" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="r1_fls" value="(tidak ada — lihat semua)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="470" width="500" height="80" as="geometry" />
+        </mxCell>
+        <!-- manager -->
+        <mxCell id="r2_role" value="manager" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="550" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="r2_perm" value="Approval &amp; visibilitas lintas-tim. Melihat pipeline/CS/tiket semua tim, approve deal/quote, tak wajib config sistem." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="190" y="550" width="470" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="r2_own" value="SEMUA desa (read lintas-tim untuk pengawasan)." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="660" y="550" width="360" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="r2_fls" value="Terikat FLS KECUALI ARR (§8.3) — boleh lihat ARR untuk forecast." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="550" width="500" height="80" as="geometry" />
+        </mxCell>
+        <!-- sales -->
+        <mxCell id="r3_role" value="sales" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="630" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="r3_perm" value="Kelola leads, deals, quotes, contacts. Konversi lead → account+contact+deal. Aktivitas sales (activity_context=sales)." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="190" y="630" width="470" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="r3_own" value="HANYA desa yg di-assign (account_owner = dirinya). Assign manual per-desa, bukan teritori administratif." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="660" y="630" width="360" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="r3_fls" value="(punya akses nomor HP kontak — justru role yg boleh)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="630" width="500" height="80" as="geometry" />
+        </mxCell>
+        <!-- csm -->
+        <mxCell id="r4_role" value="csm" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="710" width="150" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r4_perm" value="Kelola customer_success, success_plans, trainings, impl_tasks, surveys, renewal (subscriptions), engagement (activity_context=cs)." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="190" y="710" width="470" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r4_own" value="HANYA desa yg dikelola (assigned_csm / backup_csm = dirinya). 1 CSM utama per desa (§8.1)." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="660" y="710" width="360" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r4_fls" value="Boleh lihat catatan internal (Admin &amp; CSM saja)." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="710" width="500" height="90" as="geometry" />
+        </mxCell>
+        <!-- support -->
+        <mxCell id="r5_role" value="support" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="800" width="150" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r5_perm" value="Kelola tickets + SLA saja. Baca kb_articles. TIDAK menyentuh deals/subscriptions/CS." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="190" y="800" width="470" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r5_own" value="SEMUA desa — tapi hanya OBJEK TIKET. Lintas-desa untuk tiket, bukan data komersial." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="660" y="800" width="360" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="r5_fls" value="ARR/amount DISEMBUNYIKAN (subscriptions, deals). Nomor HP kontak tersamar (non-Sales)." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="800" width="500" height="90" as="geometry" />
+        </mxCell>
+        <!-- footer note -->
+        <mxCell id="rfoot" value="CATATAN: Isolasi antar-WORKSPACE = RLS Postgres (sumbu 2). Isolasi antar-DESA (Ownership Rule di atas) = filter di LAYER APLIKASI (query sqlc: WHERE account_owner=$uid OR assigned_csm=$uid ...), BUKAN RLS lapis kedua. Field-Level Security (§5) disamarkan di HANDLER, bukan view — kolom asli tetap ada." style="text;html=1;fontSize=12;align=left;fontColor=#8a3a36;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="910" width="1480" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="flowchart" name="Flowchart Lifecycle">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="1700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ftitle" value="Flowchart — Lifecycle Pelanggan: Prospek → Retensi" style="text;html=1;fontSize=18;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="800" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="fsub" value="Belah ketupat = keputusan. Kapsul = mulai/selesai. Persegi = aksi (menulis ke tabel yg disebut)." style="text;html=1;fontSize=12;fontColor=#555555;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="52" width="900" height="22" as="geometry" />
+        </mxCell>
+        <!-- START -->
+        <mxCell id="f_start" value="MULAI&#xa;Lead masuk" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="420" y="100" width="160" height="50" as="geometry" />
+        </mxCell>
+        <!-- capture lead -->
+        <mxCell id="f_lead" value="Catat Lead&#xa;(tabel: leads)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="420" y="185" width="160" height="55" as="geometry" />
+        </mxCell>
+        <!-- decision qualify -->
+        <mxCell id="f_dq" value="Lead&#xa;memenuhi syarat?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="410" y="275" width="180" height="100" as="geometry" />
+        </mxCell>
+        <!-- unqualified end -->
+        <mxCell id="f_unq" value="Tandai Unqualified&#xa;(leads.lead_status)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="740" y="298" width="180" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="f_end1" value="SELESAI" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;" vertex="1" parent="1">
+          <mxGeometry x="780" y="400" width="100" height="45" as="geometry" />
+        </mxCell>
+        <!-- convert -->
+        <mxCell id="f_conv" value="KONVERSI Lead&#xa;→ buat accounts + contacts + deals&#xa;(leads.converted_* diisi)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="390" y="410" width="220" height="70" as="geometry" />
+        </mxCell>
+        <!-- deal pipeline -->
+        <mxCell id="f_deal" value="Kelola Deal di Pipeline&#xa;+ Buat Quote (quotes/quote_items)&#xa;(deals.stage berjalan)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="390" y="515" width="220" height="70" as="geometry" />
+        </mxCell>
+        <!-- decision won -->
+        <mxCell id="f_dw" value="Deal menang?&#xa;(Closed Won)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="410" y="620" width="180" height="100" as="geometry" />
+        </mxCell>
+        <!-- lost -->
+        <mxCell id="f_lost" value="Closed Lost&#xa;catat win_loss_reason&#xa;(deals)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="740" y="642" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="f_end2" value="SELESAI" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;" vertex="1" parent="1">
+          <mxGeometry x="780" y="740" width="100" height="45" as="geometry" />
+        </mxCell>
+        <!-- create subscription -->
+        <mxCell id="f_sub" value="Buat Subscription&#xa;(subscriptions; ARR/MRR dihitung)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="390" y="760" width="220" height="60" as="geometry" />
+        </mxCell>
+        <!-- onboarding -->
+        <mxCell id="f_onb" value="Onboarding (serah terima ke CSM)&#xa;(customer_success, cs_impl_tasks, cs_trainings)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="380" y="855" width="240" height="65" as="geometry" />
+        </mxCell>
+        <!-- health monitoring -->
+        <mxCell id="f_health" value="Monitor Health &amp; Adoption&#xa;(customer_success, surveys, tickets, activities)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="380" y="955" width="240" height="65" as="geometry" />
+        </mxCell>
+        <!-- decision at risk -->
+        <mxCell id="f_drisk" value="Health kritis /&#xa;At-Risk?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="410" y="1055" width="180" height="100" as="geometry" />
+        </mxCell>
+        <!-- playbook -->
+        <mxCell id="f_pb" value="Jalankan Playbook&#xa;intervensi CSM&#xa;(playbooks)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="740" y="1077" width="180" height="60" as="geometry" />
+        </mxCell>
+        <!-- decision renewal due -->
+        <mxCell id="f_dren" value="Mendekati&#xa;jatuh tempo renewal?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="400" y="1195" width="200" height="110" as="geometry" />
+        </mxCell>
+        <!-- decision renew? -->
+        <mxCell id="f_drenew" value="Pelanggan&#xa;perpanjang?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="400" y="1345" width="200" height="110" as="geometry" />
+        </mxCell>
+        <!-- renew -->
+        <mxCell id="f_renew" value="Buat SUBSCRIPTION BARU&#xa;previous_subscription_id → baris lama&#xa;(renewal = INSERT, bukan update)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1360" width="250" height="80" as="geometry" />
+        </mxCell>
+        <!-- churn -->
+        <mxCell id="f_churn" value="Catat Churn&#xa;churn_reason / churn_type&#xa;(subscriptions.status=Churned)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="690" y="1365" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f_end3" value="SELESAI (churn)" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;" vertex="1" parent="1">
+          <mxGeometry x="720" y="1480" width="170" height="45" as="geometry" />
+        </mxCell>
+        <!-- EDGES -->
+        <mxCell id="fe1" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="f_start" target="f_lead">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe2" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="f_lead" target="f_dq">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe3" value="Tidak" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#b85450;" edge="1" parent="1" source="f_dq" target="f_unq">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe4" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="f_unq" target="f_end1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe5" value="Ya" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#4a7a2a;" edge="1" parent="1" source="f_dq" target="f_conv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe6" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="f_conv" target="f_deal">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe7" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="f_deal" target="f_dw">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe8" value="Tidak" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#b85450;" edge="1" parent="1" source="f_dw" target="f_lost">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe9" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="f_lost" target="f_end2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe10" value="Ya" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#4a7a2a;" edge="1" parent="1" source="f_dw" target="f_sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe11" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="f_sub" target="f_onb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe12" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="f_onb" target="f_health">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe13" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="f_health" target="f_drisk">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe14" value="Ya" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#b85450;" edge="1" parent="1" source="f_drisk" target="f_pb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe15" value="balik memantau" style="endArrow=block;html=1;strokeWidth=2;dashed=1;exitX=0.5;exitY=0;entryX=1;entryY=0.5;" edge="1" parent="1" source="f_pb" target="f_health">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="830" y="987" />
+              <mxPoint x="640" y="987" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fe16" value="Tidak" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#4a7a2a;" edge="1" parent="1" source="f_drisk" target="f_dren">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe17" value="Belum (loop pantau)" style="endArrow=block;html=1;strokeWidth=2;dashed=1;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="f_dren" target="f_health">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="340" y="1250" />
+              <mxPoint x="340" y="987" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fe18" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="f_dren" target="f_drenew">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe19" value="Ya (renew/upsell)" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#4a7a2a;" edge="1" parent="1" source="f_drenew" target="f_renew">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe20" value="Tidak (churn)" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#b85450;" edge="1" parent="1" source="f_drenew" target="f_churn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe21" value="siklus baru:&#xa;kembali memantau health" style="endArrow=block;html=1;strokeWidth=2;dashed=1;exitX=0.5;exitY=0;entryX=0;entryY=0.5;fontColor=#9a7d1a;" edge="1" parent="1" source="f_renew" target="f_health">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="185" y="987" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fe22" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="f_churn" target="f_end3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="usecase" name="Use Case Diagram">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="utitle" value="Use Case Diagram — CRM Desa+" style="text;html=1;fontSize=18;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="700" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="usub" value="Aktor = business_role (per-membership). Garis = asosiasi &quot;boleh melakukan&quot;. &lt;&lt;include&gt;&gt; = wajib memicu use case lain." style="text;html=1;fontSize=12;fontColor=#555555;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="52" width="1000" height="22" as="geometry" />
+        </mxCell>
+        <!-- ACTORS LEFT -->
+        <mxCell id="a_sales" value="Sales" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fontStyle=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="60" y="150" width="50" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="a_csm" value="CSM" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fontStyle=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="400" width="50" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="a_support" value="Support Agent" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fontStyle=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="60" y="650" width="50" height="90" as="geometry" />
+        </mxCell>
+        <!-- ACTORS RIGHT -->
+        <mxCell id="a_manager" value="Manager" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fontStyle=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1500" y="200" width="50" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="a_admin" value="Admin (CRM)" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fontStyle=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1500" y="500" width="50" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="a_platform" value="super_admin&#xa;(Platform)" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1500" y="800" width="50" height="90" as="geometry" />
+        </mxCell>
+        <!-- SYSTEM BOUNDARY -->
+        <mxCell id="boundary" value="Sistem CRM Desa+" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#333333;verticalAlign=top;fontStyle=1;fontSize=14;dashed=1;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="360" y="120" width="840" height="920" as="geometry" />
+        </mxCell>
+        <!-- USE CASES -->
+        <mxCell id="uc_lead" value="Kelola Lead" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="420" y="150" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_conv" value="Konversi Lead" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="660" y="150" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_deal" value="Kelola Deal &amp; Pipeline" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="420" y="250" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_quote" value="Buat Quote" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="680" y="250" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_acc" value="Kelola Desa &amp; Kontak" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="900" y="200" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_sub" value="Kelola Subscription&#xa;&amp; Renewal" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="420" y="380" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_health" value="Monitor Health&#xa;&amp; Lifecycle" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="680" y="380" width="170" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_succ" value="Kelola Success Plan,&#xa;Training, Onboarding" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="900" y="380" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_ticket" value="Kelola Tiket &amp; SLA" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="420" y="520" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_survey" value="Survey NPS / CSAT" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="680" y="520" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_kb" value="Baca / Kelola&#xa;Knowledge Base" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="910" y="520" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_act" value="Catat Aktivitas&#xa;(task/meeting/call/...)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="560" y="640" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_report" value="Laporan &amp; Dashboard" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="850" y="650" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_approve" value="Approve Deal / Quote /&#xa;Upsell Renewal" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="880" y="770" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_config" value="Konfigurasi Sistem CRM&#xa;(plans, SLA, playbook,&#xa;assign ownership desa)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="600" y="800" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_platform" value="Kelola Kuota, Mode Tenancy,&#xa;Staff, Suspend Workspace&#xa;(/dev)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="600" y="920" width="240" height="80" as="geometry" />
+        </mxCell>
+        <!-- includes -->
+        <mxCell id="inc1" value="&lt;&lt;include&gt;&gt;" style="endArrow=open;dashed=1;html=1;fontSize=10;fontStyle=2;" edge="1" parent="1" source="uc_conv" target="uc_acc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="inc2" value="&lt;&lt;include&gt;&gt;" style="endArrow=open;dashed=1;html=1;fontSize=10;fontStyle=2;" edge="1" parent="1" source="uc_deal" target="uc_quote">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- SALES associations -->
+        <mxCell id="s1" style="endArrow=none;html=1;strokeColor=#82b366;" edge="1" parent="1" source="a_sales" target="uc_lead">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" style="endArrow=none;html=1;strokeColor=#82b366;" edge="1" parent="1" source="a_sales" target="uc_conv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" style="endArrow=none;html=1;strokeColor=#82b366;" edge="1" parent="1" source="a_sales" target="uc_deal">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" style="endArrow=none;html=1;strokeColor=#82b366;" edge="1" parent="1" source="a_sales" target="uc_acc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" style="endArrow=none;html=1;strokeColor=#82b366;" edge="1" parent="1" source="a_sales" target="uc_act">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- CSM associations -->
+        <mxCell id="c1" style="endArrow=none;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="a_csm" target="uc_sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" style="endArrow=none;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="a_csm" target="uc_health">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" style="endArrow=none;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="a_csm" target="uc_succ">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c4" style="endArrow=none;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="a_csm" target="uc_survey">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c5" style="endArrow=none;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="a_csm" target="uc_act">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- SUPPORT associations -->
+        <mxCell id="sp1" style="endArrow=none;html=1;strokeColor=#b85450;" edge="1" parent="1" source="a_support" target="uc_ticket">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sp2" style="endArrow=none;html=1;strokeColor=#b85450;" edge="1" parent="1" source="a_support" target="uc_kb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sp3" style="endArrow=none;html=1;strokeColor=#b85450;" edge="1" parent="1" source="a_support" target="uc_act">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- MANAGER associations -->
+        <mxCell id="m1" style="endArrow=none;html=1;strokeColor=#d6b656;" edge="1" parent="1" source="a_manager" target="uc_approve">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m2" style="endArrow=none;html=1;strokeColor=#d6b656;" edge="1" parent="1" source="a_manager" target="uc_report">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m3" style="endArrow=none;html=1;strokeColor=#d6b656;dashed=1;" edge="1" parent="1" source="a_manager" target="uc_health">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- ADMIN associations -->
+        <mxCell id="ad1" style="endArrow=none;html=1;strokeColor=#d79b00;" edge="1" parent="1" source="a_admin" target="uc_config">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad2" style="endArrow=none;html=1;strokeColor=#d79b00;" edge="1" parent="1" source="a_admin" target="uc_kb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ad3" style="endArrow=none;html=1;strokeColor=#d79b00;" edge="1" parent="1" source="a_admin" target="uc_report">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- PLATFORM associations -->
+        <mxCell id="p1" style="endArrow=none;html=1;strokeColor=#666666;" edge="1" parent="1" source="a_platform" target="uc_platform">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ufoot" value="Support Agent lintas-desa TAPI hanya objek tiket. Sales/CSM dibatasi Ownership Rule (desa yg di-assign/dikelola). super_admin = sumbu Platform, di luar peran CRM — mengurus workspace, bukan data CRM." style="text;html=1;fontSize=11;align=left;fontColor=#8a3a36;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="360" y="1050" width="840" height="50" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="activity" name="Activity Diagram Renewal">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="acttitle" value="Activity Diagram — Proses Renewal Langganan (swimlane per aktor)" style="text;html=1;fontSize=18;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="900" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="actsub" value="Lajur = siapa yang mengerjakan. Lingkaran hitam = mulai, lingkaran cincin = selesai. Belah ketupat = keputusan/percabangan." style="text;html=1;fontSize=12;fontColor=#555555;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="52" width="1000" height="22" as="geometry" />
+        </mxCell>
+        <!-- SWIMLANES (pool) -->
+        <mxCell id="pool" value="Proses Renewal" style="swimlane;html=1;startSize=25;horizontal=0;fillColor=none;strokeColor=#333333;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="1300" height="1050" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_sys" value="Sistem (in-process runner)" style="swimlane;html=1;startSize=30;horizontal=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="pool">
+          <mxGeometry x="25" y="0" width="1275" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_csm" value="CSM" style="swimlane;html=1;startSize=30;horizontal=0;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="pool">
+          <mxGeometry x="25" y="230" width="1275" height="480" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_mgr" value="Manager" style="swimlane;html=1;startSize=30;horizontal=0;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="pool">
+          <mxGeometry x="25" y="710" width="1275" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="lane_sys2" value="Sistem" style="swimlane;html=1;startSize=30;horizontal=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="pool">
+          <mxGeometry x="25" y="870" width="1275" height="180" as="geometry" />
+        </mxCell>
+        <!-- SYSTEM lane nodes -->
+        <mxCell id="ac_start" value="" style="ellipse;html=1;fillColor=#000000;strokeColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="120" y="160" width="30" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="ac_detect" value="Deteksi langganan mendekati&#xa;end_date (mis. H-90)&#xa;idx_subs_renewal" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="230" y="140" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ac_task" value="Set renewal_status=Upcoming&#xa;+ notifikasi ke renewal_owner (CSM)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="560" y="140" width="240" height="70" as="geometry" />
+        </mxCell>
+        <!-- CSM lane nodes -->
+        <mxCell id="ac_outreach" value="Outreach ke desa&#xa;(activities kind=call/meeting,&#xa;activity_context=cs)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="230" y="360" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ac_assess" value="Nilai risiko &amp; niat&#xa;renewal_risk, renewal_stage" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="560" y="360" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ac_dwill" value="Pelanggan&#xa;mau lanjut?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="880" y="345" width="160" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ac_churn" value="Set status=Churned&#xa;isi churn_reason/type&#xa;(subscriptions)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="360" width="170" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ac_dupsell" value="Upsell / ubah nilai?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="240" y="500" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ac_quote" value="Buat renewal quote&#xa;(quotes, renewal_quote_id)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="560" y="515" width="230" height="70" as="geometry" />
+        </mxCell>
+        <!-- MANAGER lane -->
+        <mxCell id="ac_approve" value="Approve upsell / diskon&#xa;(hanya jika ubah nilai)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="560" y="740" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ac_dappr" value="Disetujui?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="880" y="725" width="150" height="100" as="geometry" />
+        </mxCell>
+        <!-- SYSTEM lane 2 -->
+        <mxCell id="ac_newsub" value="INSERT subscription BARU&#xa;previous_subscription_id → baris lama&#xa;previous_value = nilai lama&#xa;status=Active, renewal_status=Renewed" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="230" y="905" width="290" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ac_close" value="Baris lama status=Expired&#xa;audit_logs mencatat renewal" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="600" y="915" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ac_end" value="" style="ellipse;html=1;fillColor=#ffffff;strokeColor=#000000;strokeWidth=3;" vertex="1" parent="1">
+          <mxGeometry x="900" y="925" width="34" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="ac_endchurn" value="" style="ellipse;html=1;fillColor=#ffffff;strokeColor=#b85450;strokeWidth=3;" vertex="1" parent="1">
+          <mxGeometry x="1158" y="480" width="34" height="34" as="geometry" />
+        </mxCell>
+        <!-- EDGES -->
+        <mxCell id="ae1" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="ac_start" target="ac_detect">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae2" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="ac_detect" target="ac_task">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae3" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="ac_task" target="ac_outreach">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="680" y="270" />
+              <mxPoint x="345" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ae4" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="ac_outreach" target="ac_assess">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae5" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="ac_assess" target="ac_dwill">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae6" value="Tidak" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#b85450;" edge="1" parent="1" source="ac_dwill" target="ac_churn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae7" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="ac_churn" target="ac_endchurn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae8" value="Ya" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#4a7a2a;" edge="1" parent="1" source="ac_dwill" target="ac_dupsell">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="960" y="640" />
+              <mxPoint x="340" y="640" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ae9" value="Ya" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#9a7d1a;" edge="1" parent="1" source="ac_dupsell" target="ac_quote">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae10" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="ac_quote" target="ac_approve">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae11" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="ac_approve" target="ac_dappr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae12" value="Ya" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#4a7a2a;" edge="1" parent="1" source="ac_dappr" target="ac_newsub">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="955" y="890" />
+              <mxPoint x="375" y="890" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ae13" value="Tidak (nego ulang)" style="endArrow=block;html=1;strokeWidth=2;dashed=1;fontColor=#b85450;" edge="1" parent="1" source="ac_dappr" target="ac_assess">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1200" y="775" />
+              <mxPoint x="1200" y="395" />
+              <mxPoint x="790" y="395" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ae14" value="Tidak (renew nilai sama)" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#4a7a2a;" edge="1" parent="1" source="ac_dupsell" target="ac_newsub">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="340" y="850" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ae15" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="ac_newsub" target="ac_close">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ae16" style="endArrow=block;html=1;strokeWidth=2;" edge="1" parent="1" source="ac_close" target="ac_end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="activity_lead" name="Activity Diagram Lead">
+    <mxGraphModel dx="2291" dy="1285" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1350" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ltitle" parent="1" style="text;html=1;fontSize=18;fontStyle=1;align=left;" value="Activity Diagram — Data Lead Pertama Kali Masuk (intake → kualifikasi → konversi)" vertex="1">
+          <mxGeometry height="34" width="1100" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lsub" parent="1" style="text;html=1;fontSize=12;fontColor=#555555;align=left;" value="Lajur = siapa yang mengerjakan. Lingkaran hitam = mulai, cincin = selesai. Belah ketupat = keputusan. Data lead disimpan MENTAH (region text) sebelum jadi account." vertex="1">
+          <mxGeometry height="22" width="1150" x="40" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="lpool" parent="1" style="swimlane;html=1;startSize=25;horizontal=0;fillColor=none;strokeColor=#333333;fontStyle=1;" value="Intake Lead" vertex="1">
+          <mxGeometry height="1200" width="1320" x="40" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="llane_src" parent="lpool" style="swimlane;html=1;startSize=30;horizontal=0;fillColor=#f5f5f5;strokeColor=#999999;fontStyle=1;" value="Sumber / Kanal" vertex="1">
+          <mxGeometry height="170" width="1295" x="25" as="geometry" />
+        </mxCell>
+        <mxCell id="llane_sales" parent="lpool" style="swimlane;html=1;startSize=30;horizontal=0;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" value="Sales (Lead Owner)" vertex="1">
+          <mxGeometry height="720" width="1295" x="25" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="llane_sys" parent="lpool" style="swimlane;html=1;startSize=30;horizontal=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" value="Sistem (CRM)" vertex="1">
+          <mxGeometry height="310" width="1295" x="25" y="890" as="geometry" />
+        </mxCell>
+        <mxCell id="l_start" parent="1" style="ellipse;html=1;fillColor=#000000;strokeColor=#000000;" value="" vertex="1">
+          <mxGeometry height="30" width="30" x="120" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="l_channel" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;" value="Lead datang dari kanal:&#xa;Web form · WhatsApp · Pameran/Event ·&#xa;Referral · Import spreadsheet · Manual" vertex="1">
+          <mxGeometry height="80" width="290" x="230" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="l_raw" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;" value="Kumpulkan data mentah:&#xa;lead_name, contact_person, HP/WA/email,&#xa;province/regency/district (TEXT), lead_source" vertex="1">
+          <mxGeometry height="80" width="330" x="600" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="l_create" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;" value="Buat record Lead&#xa;INSERT leads (lead_status=New,&#xa;lead_owner = Sales, converted=false)" vertex="1">
+          <mxGeometry height="80" width="300" x="230" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="l_ddup" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Sudah ada di sistem?&#xa;(cek village_code / nama+wilayah&#xa;di leads &amp; accounts)" vertex="1">
+          <mxGeometry height="110" width="240" x="620" y="315" as="geometry" />
+        </mxCell>
+        <mxCell id="l_dup" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" value="Tandai Duplicate&#xa;lead_status=Unqualified,&#xa;unqualified_reason=Duplicate" vertex="1">
+          <mxGeometry height="80" width="240" x="960" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="l_enddup" parent="1" style="ellipse;html=1;fillColor=#ffffff;strokeColor=#b85450;strokeWidth=3;" value="" vertex="1">
+          <mxGeometry height="34" width="34" x="1063" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="l_contact" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="Kontak &amp; kualifikasi lead&#xa;catat aktivitas (activities kind=call/chat,&#xa;activity_context=sales) · lead_status=Contacted" vertex="1">
+          <mxGeometry height="80" width="360" x="200" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="l_score" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="Nilai kelayakan:&#xa;rating (Hot/Warm/Cold),&#xa;estimated_value" vertex="1">
+          <mxGeometry height="80" width="240" x="620" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="l_dqual" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Memenuhi&#xa;syarat?" vertex="1">
+          <mxGeometry height="100" width="180" x="920" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="l_unq" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" value="lead_status=Unqualified&#xa;isi unqualified_reason&#xa;(No Budget / Not Ready / dst)" vertex="1">
+          <mxGeometry height="80" width="160" x="1130" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="l_nurture" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;dashed=1;" value="Simpan untuk nurture&#xa;(follow-up terjadwal, activities)" vertex="1">
+          <mxGeometry height="70" width="160" x="1130" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="l_markq" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="lead_status=Qualified" vertex="1">
+          <mxGeometry height="50" width="240" x="360" y="660" as="geometry" />
+        </mxCell>
+        <mxCell id="l_triggerconv" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;" value="Tekan &quot;Konversi Lead&quot;&#xa;(pilih plan diminta, term)" vertex="1">
+          <mxGeometry height="70" width="240" x="360" y="750" as="geometry" />
+        </mxCell>
+        <mxCell id="l_txnote" parent="1" style="text;html=1;fontSize=11;fontStyle=2;align=left;fontColor=#6c8ebf;" value="SATU transaksi (atomik) — semua atau tidak sama sekali:" vertex="1">
+          <mxGeometry height="20" width="600" x="140" y="915" as="geometry" />
+        </mxCell>
+        <mxCell id="l_mkacc" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="1. INSERT accounts&#xa;(dari data lead; region text → kolom,&#xa;account_type=prospect/customer)" vertex="1">
+          <mxGeometry height="75" width="270" x="140" y="945" as="geometry" />
+        </mxCell>
+        <mxCell id="l_mkcon" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="2. INSERT contacts&#xa;(contact_person → kontak utama desa)" vertex="1">
+          <mxGeometry height="75" width="270" x="450" y="945" as="geometry" />
+        </mxCell>
+        <mxCell id="l_mkdeal" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="3. INSERT deals&#xa;(stage=Prospecting, deal_owner=Sales,&#xa;plan_requested_id)" vertex="1">
+          <mxGeometry height="75" width="270" x="760" y="945" as="geometry" />
+        </mxCell>
+        <mxCell id="l_link" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="4. Update leads:&#xa;converted=true, converted_at,&#xa;converted_account_id / _contact_id / _deal_id" vertex="1">
+          <mxGeometry height="75" width="220" x="1055" y="945" as="geometry" />
+        </mxCell>
+        <mxCell id="l_audit" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Audit: audit_logs mencatat konversi&#xa;(actor=Sales, target=lead→account)" vertex="1">
+          <mxGeometry height="60" width="330" x="450" y="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="l_end" parent="1" style="ellipse;html=1;fillColor=#ffffff;strokeColor=#000000;strokeWidth=3;" value="" vertex="1">
+          <mxGeometry height="34" width="34" x="600" y="1140" as="geometry" />
+        </mxCell>
+        <mxCell id="le1" edge="1" parent="1" source="l_start" style="endArrow=block;html=1;strokeWidth=2;" target="l_channel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le2" edge="1" parent="1" source="l_channel" style="endArrow=block;html=1;strokeWidth=2;" target="l_raw">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le3" edge="1" parent="1" source="l_raw" style="endArrow=block;html=1;strokeWidth=2;" target="l_create">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="765" y="250" />
+              <mxPoint x="380" y="250" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="le4" edge="1" parent="1" source="l_create" style="endArrow=block;html=1;strokeWidth=2;" target="l_ddup">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le5" edge="1" parent="1" source="l_ddup" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#b85450;" target="l_dup" value="Ya">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le6" edge="1" parent="1" source="l_dup" style="endArrow=block;html=1;strokeWidth=2;" target="l_enddup">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le7" edge="1" parent="1" source="l_ddup" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#4a7a2a;" target="l_contact" value="Tidak">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="740" y="460" />
+              <mxPoint x="380" y="460" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="le8" edge="1" parent="1" source="l_contact" style="endArrow=block;html=1;strokeWidth=2;" target="l_score">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le9" edge="1" parent="1" source="l_score" style="endArrow=block;html=1;strokeWidth=2;" target="l_dqual">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le10" edge="1" parent="1" source="l_dqual" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#b85450;" target="l_unq" value="Tidak">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le11" edge="1" parent="1" source="l_unq" style="endArrow=block;html=1;strokeWidth=2;" target="l_nurture">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le12" edge="1" parent="1" source="l_dqual" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;fontColor=#4a7a2a;" target="l_markq" value="Ya">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="635" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="le13" edge="1" parent="1" source="l_markq" style="endArrow=block;html=1;strokeWidth=2;" target="l_triggerconv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le14" edge="1" parent="1" source="l_triggerconv" style="endArrow=block;html=1;strokeWidth=2;fontStyle=1;" target="l_mkacc" value="konversi">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="275" y="960" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="le15" edge="1" parent="1" source="l_mkacc" style="endArrow=block;html=1;strokeWidth=2;" target="l_mkcon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le16" edge="1" parent="1" source="l_mkcon" style="endArrow=block;html=1;strokeWidth=2;" target="l_mkdeal">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le17" edge="1" parent="1" source="l_mkdeal" style="endArrow=block;html=1;strokeWidth=2;" target="l_link">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="le18" edge="1" parent="1" source="l_link" style="endArrow=block;html=1;strokeWidth=2;" target="l_audit">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1165" y="1090" />
+              <mxPoint x="615" y="1090" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="le19" edge="1" parent="1" source="l_audit" style="endArrow=block;html=1;strokeWidth=2;" target="l_end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="erd" name="ERD">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2400" pageHeight="1800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ertitle" value="ERD — CRM Desa+ (19 tabel + memberships.business_role)" style="text;html=1;fontSize=18;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1000" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="ersub" value="PK = kunci utama · FK = kunci tamu · UQ = unik. Relasi crow&#39;s-foot: ||—&lt; = satu-ke-banyak, ||—|| = satu-ke-satu. Panah putus-putus = polymorphic (target_id BUKAN FK). Semua tabel punya tenant_id (RLS) + audit; hanya kolom kunci ditampilkan." style="text;html=1;fontSize=12;fontColor=#555555;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="52" width="1600" height="22" as="geometry" />
+        </mxCell>
+        <!-- ============ ACCOUNTS (HUB) ============ -->
+        <mxCell id="t_acc" value="accounts" style="swimlane;html=1;startSize=26;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="900" y="640" width="260" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="acc_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;strokeColor=#d79b00;fillColor=none;" vertex="1" parent="t_acc">
+          <mxGeometry x="0" y="26" width="260" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="acc_c1" value="FK  tenant_id → tenants" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_acc">
+          <mxGeometry x="0" y="48" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="acc_c2" value="FK  account_owner → users" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_acc">
+          <mxGeometry x="0" y="68" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="acc_c3" value="FK  assigned_csm → users" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_acc">
+          <mxGeometry x="0" y="88" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="acc_c4" value="FK  backup_csm → users" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_acc">
+          <mxGeometry x="0" y="108" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="acc_c5" value="FK  parent_account_id → accounts" style="text;html=1;align=left;spacingLeft=6;fontStyle=2;fillColor=none;" vertex="1" parent="t_acc">
+          <mxGeometry x="0" y="128" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="acc_c6" value="UQ  village_code" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_acc">
+          <mxGeometry x="0" y="148" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="acc_c7" value="village_name, account_type" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_acc">
+          <mxGeometry x="0" y="168" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="acc_c8" value="province/regency/district (text)" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_acc">
+          <mxGeometry x="0" y="188" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="acc_c9" value="lat/long, village_budget…" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_acc">
+          <mxGeometry x="0" y="208" width="260" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ USERS / TENANTS / MEMBERSHIPS (existing) ============ -->
+        <mxCell id="t_ten" value="tenants  (ADA)" style="swimlane;html=1;startSize=26;fillColor=#f5f5f5;strokeColor=#666;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ten_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_ten">
+          <mxGeometry x="0" y="26" width="200" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="ten_c" value="slug, is_primary, status" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_ten">
+          <mxGeometry x="0" y="46" width="200" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="t_usr" value="users  (ADA — global)" style="swimlane;html=1;startSize=26;fillColor=#f5f5f5;strokeColor=#666;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="300" y="120" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="usr_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_usr">
+          <mxGeometry x="0" y="26" width="200" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="usr_c" value="name, email" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_usr">
+          <mxGeometry x="0" y="46" width="200" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="t_mem" value="memberships  (ADA — + kolom baru)" style="swimlane;html=1;startSize=26;fillColor=#fde7cf;strokeColor=#d79b00;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="120" y="250" width="260" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="mem_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_mem">
+          <mxGeometry x="0" y="26" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="mem_c1" value="FK  user_id → users" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_mem">
+          <mxGeometry x="0" y="46" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="mem_c2" value="FK  tenant_id → tenants" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_mem">
+          <mxGeometry x="0" y="66" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="mem_c3" value="role (owner/admin/member)" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_mem">
+          <mxGeometry x="0" y="86" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="mem_c4" value="+ business_role (BARU, nullable)" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fontColor=#b85450;fillColor=none;" vertex="1" parent="t_mem">
+          <mxGeometry x="0" y="106" width="260" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ CONTACTS ============ -->
+        <mxCell id="t_con" value="contacts" style="swimlane;html=1;startSize=26;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="560" y="660" width="250" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="con_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_con">
+          <mxGeometry x="0" y="26" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="con_c1" value="FK  account_id → accounts" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_con">
+          <mxGeometry x="0" y="46" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="con_c2" value="FK  contact_owner → users" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_con">
+          <mxGeometry x="0" y="66" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="con_c3" value="FK  reports_to_id → contacts" style="text;html=1;align=left;spacingLeft=6;fontStyle=2;fillColor=none;" vertex="1" parent="t_con">
+          <mxGeometry x="0" y="86" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="con_c4" value="is_primary, email_opt_out…" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_con">
+          <mxGeometry x="0" y="106" width="250" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ LEADS ============ -->
+        <mxCell id="t_lead" value="leads" style="swimlane;html=1;startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="560" y="120" width="250" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="lead_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_lead">
+          <mxGeometry x="0" y="26" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lead_c1" value="FK  lead_owner → users" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_lead">
+          <mxGeometry x="0" y="46" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lead_c2" value="FK  converted_account_id →acc" style="text;html=1;align=left;spacingLeft=6;fontStyle=2;fillColor=none;" vertex="1" parent="t_lead">
+          <mxGeometry x="0" y="66" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lead_c3" value="FK  converted_contact_id →con" style="text;html=1;align=left;spacingLeft=6;fontStyle=2;fillColor=none;" vertex="1" parent="t_lead">
+          <mxGeometry x="0" y="86" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lead_c4" value="FK  converted_deal_id → deals" style="text;html=1;align=left;spacingLeft=6;fontStyle=2;fillColor=none;" vertex="1" parent="t_lead">
+          <mxGeometry x="0" y="106" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lead_c5" value="lead_status, region (text)" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_lead">
+          <mxGeometry x="0" y="126" width="250" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ DEALS ============ -->
+        <mxCell id="t_deal" value="deals" style="swimlane;html=1;startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="900" y="120" width="250" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="deal_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_deal">
+          <mxGeometry x="0" y="26" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="deal_c1" value="FK  account_id → accounts" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_deal">
+          <mxGeometry x="0" y="46" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="deal_c2" value="FK  primary_contact_id → con" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_deal">
+          <mxGeometry x="0" y="66" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="deal_c3" value="FK  deal_owner → users" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_deal">
+          <mxGeometry x="0" y="86" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="deal_c4" value="FK  plan_requested_id → plans" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_deal">
+          <mxGeometry x="0" y="106" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="deal_c5" value="FK  created_subscription_id →sub" style="text;html=1;align=left;spacingLeft=6;fontStyle=2;fillColor=none;" vertex="1" parent="t_deal">
+          <mxGeometry x="0" y="126" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="deal_c6" value="stage, amount, probability" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_deal">
+          <mxGeometry x="0" y="146" width="250" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ QUOTES + ITEMS ============ -->
+        <mxCell id="t_quote" value="quotes" style="swimlane;html=1;startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="120" width="230" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="q_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_quote">
+          <mxGeometry x="0" y="26" width="230" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="q_c1" value="FK  deal_id → deals" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_quote">
+          <mxGeometry x="0" y="46" width="230" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="q_c2" value="FK  account_id → accounts" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_quote">
+          <mxGeometry x="0" y="66" width="230" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="q_c3" value="UQ  quote_number" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_quote">
+          <mxGeometry x="0" y="86" width="230" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="q_c4" value="quote_status, grand_total" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_quote">
+          <mxGeometry x="0" y="106" width="230" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="t_qi" value="quote_items" style="swimlane;html=1;startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1560" y="120" width="220" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="qi_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_qi">
+          <mxGeometry x="0" y="26" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="qi_c1" value="FK  quote_id → quotes" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_qi">
+          <mxGeometry x="0" y="46" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="qi_c2" value="FK  plan_id → plans" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_qi">
+          <mxGeometry x="0" y="66" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="qi_c3" value="qty, unit_price, subtotal" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_qi">
+          <mxGeometry x="0" y="86" width="220" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ PLANS ============ -->
+        <mxCell id="t_plan" value="plans  (master)" style="swimlane;html=1;startSize=26;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1560" y="440" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="plan_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_plan">
+          <mxGeometry x="0" y="26" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="plan_c1" value="UQ  plan_code" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_plan">
+          <mxGeometry x="0" y="46" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="plan_c2" value="plan_category, base_price" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_plan">
+          <mxGeometry x="0" y="66" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="plan_c3" value="billing_frequency, is_active" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_plan">
+          <mxGeometry x="0" y="86" width="220" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ SUBSCRIPTIONS ============ -->
+        <mxCell id="t_sub" value="subscriptions" style="swimlane;html=1;startSize=26;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="620" width="270" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="sub_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_sub">
+          <mxGeometry x="0" y="26" width="270" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sub_c1" value="FK  account_id → accounts" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_sub">
+          <mxGeometry x="0" y="46" width="270" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sub_c2" value="FK  plan_id → plans" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_sub">
+          <mxGeometry x="0" y="66" width="270" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sub_c3" value="FK  subscription_owner → users" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_sub">
+          <mxGeometry x="0" y="86" width="270" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sub_c4" value="FK  source_deal_id → deals" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_sub">
+          <mxGeometry x="0" y="106" width="270" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sub_c5" value="FK  previous_subscription_id →sub" style="text;html=1;align=left;spacingLeft=6;fontStyle=2;fillColor=none;" vertex="1" parent="t_sub">
+          <mxGeometry x="0" y="126" width="270" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sub_c6" value="FK  renewal_quote_id → quotes" style="text;html=1;align=left;spacingLeft=6;fontStyle=2;fillColor=none;" vertex="1" parent="t_sub">
+          <mxGeometry x="0" y="146" width="270" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sub_c7" value="status, mrr, arr, previous_value" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_sub">
+          <mxGeometry x="0" y="166" width="270" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sub_c8" value="renewal_* , churn_* (kolom)" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_sub">
+          <mxGeometry x="0" y="186" width="270" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ CUSTOMER_SUCCESS ============ -->
+        <mxCell id="t_cs" value="customer_success" style="swimlane;html=1;startSize=26;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="560" y="960" width="250" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cs_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_cs">
+          <mxGeometry x="0" y="26" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cs_c1" value="UQ FK  account_id → accounts" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_cs">
+          <mxGeometry x="0" y="46" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cs_c2" value="health_score, lifecycle_stage" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_cs">
+          <mxGeometry x="0" y="66" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cs_c3" value="onboarding_*, adoption_*" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_cs">
+          <mxGeometry x="0" y="86" width="250" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ CS CHILDREN (compact) ============ -->
+        <mxCell id="t_csk" value="cs_impl_tasks · cs_trainings&#xa;success_plans · surveys" style="swimlane;html=1;startSize=44;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=12;align=center;verticalAlign=top;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="220" y="1130" width="280" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="csk_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_csk">
+          <mxGeometry x="0" y="44" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="csk_c1" value="FK  account_id → accounts" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_csk">
+          <mxGeometry x="0" y="64" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="csk_c2" value="FK  owner/trainer → users" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_csk">
+          <mxGeometry x="0" y="84" width="280" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ TICKETS ============ -->
+        <mxCell id="t_tik" value="tickets" style="swimlane;html=1;startSize=26;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="900" y="960" width="260" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="tik_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_tik">
+          <mxGeometry x="0" y="26" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="tik_c1" value="FK  account_id → accounts" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_tik">
+          <mxGeometry x="0" y="46" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="tik_c2" value="FK  reporter_contact_id → con" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_tik">
+          <mxGeometry x="0" y="66" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="tik_c3" value="FK  ticket_owner → users" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_tik">
+          <mxGeometry x="0" y="86" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="tik_c4" value="FK  sla_policy_id → sla_policies" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_tik">
+          <mxGeometry x="0" y="106" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="tik_c5" value="UQ ticket_number, status, priority" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_tik">
+          <mxGeometry x="0" y="126" width="260" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ MASTERS M6: sla / playbooks / kb ============ -->
+        <mxCell id="t_master6" value="sla_policies · playbooks · kb_articles&#xa;(master, tenant-scoped)" style="swimlane;html=1;startSize=44;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;align=center;verticalAlign=top;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="990" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m6_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_master6">
+          <mxGeometry x="0" y="44" width="300" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="m6_c1" value="FK  tenant_id → tenants" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_master6">
+          <mxGeometry x="0" y="64" width="300" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="m6_c2" value="is_active, target/rule/body…" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_master6">
+          <mxGeometry x="0" y="84" width="300" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ ACTIVITIES (polymorphic) ============ -->
+        <mxCell id="t_act" value="activities  (polymorphic)" style="swimlane;html=1;startSize=26;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1600" y="700" width="280" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="act_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_act">
+          <mxGeometry x="0" y="26" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="act_c1" value="kind (task/meeting/call/…)" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_act">
+          <mxGeometry x="0" y="46" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="act_c2" value="target_type (account/deal/…)" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fontColor=#b85450;fillColor=none;" vertex="1" parent="t_act">
+          <mxGeometry x="0" y="66" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="act_c3" value="target_id (BUKAN FK ↯)" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fontColor=#b85450;fillColor=none;" vertex="1" parent="t_act">
+          <mxGeometry x="0" y="86" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="act_c4" value="FK  owner_id → users" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_act">
+          <mxGeometry x="0" y="106" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="act_c5" value="activity_context (sales/cs/general)" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_act">
+          <mxGeometry x="0" y="126" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="t_att" value="activity_attendees" style="swimlane;html=1;startSize=26;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1620" y="960" width="240" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="att_pk" value="PK  id" style="text;html=1;align=left;spacingLeft=6;fontStyle=1;fillColor=none;" vertex="1" parent="t_att">
+          <mxGeometry x="0" y="26" width="240" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="att_c1" value="FK  activity_id → activities" style="text;html=1;align=left;spacingLeft=6;fillColor=none;" vertex="1" parent="t_att">
+          <mxGeometry x="0" y="46" width="240" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="att_c2" value="attendee_type (user/contact)" style="text;html=1;align=left;spacingLeft=6;fontColor=#777;fillColor=none;" vertex="1" parent="t_att">
+          <mxGeometry x="0" y="66" width="240" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="att_c3" value="attendee_id (polymorphic ↯)" style="text;html=1;align=left;spacingLeft=6;fontStyle=2;fontColor=#b85450;fillColor=none;" vertex="1" parent="t_att">
+          <mxGeometry x="0" y="86" width="240" height="20" as="geometry" />
+        </mxCell>
+        <!-- ============ RELATIONS (crow's foot) ============ -->
+        <!-- tenants/users → memberships -->
+        <mxCell id="re_ten_mem" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#999;" edge="1" parent="1" source="t_ten" target="t_mem">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="re_usr_mem" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#999;" edge="1" parent="1" source="t_usr" target="t_mem">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- accounts → contacts, subs, cs(1:1), tickets, deals, quotes, cs-children -->
+        <mxCell id="re_acc_con" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="t_acc" target="t_con">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="re_acc_sub" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="t_acc" target="t_sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="re_acc_cs" value="1:1" style="html=1;endArrow=ERone;startArrow=ERone;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="t_acc" target="t_cs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="re_acc_tik" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="t_acc" target="t_tik">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="re_acc_deal" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="t_acc" target="t_deal">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="re_acc_csk" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="t_acc" target="t_csk">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="re_acc_self" value="parent (self)" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#d79b00;dashed=1;exitX=1;exitY=0.15;entryX=1;entryY=0;" edge="1" parent="1" source="t_acc" target="t_acc">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1200" y="655" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <!-- contacts self -->
+        <mxCell id="re_con_self" value="reports_to (self)" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#d79b00;dashed=1;exitX=0;exitY=0.2;entryX=0;entryY=0;" edge="1" parent="1" source="t_con" target="t_con">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="675" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <!-- leads → converted acc/con/deal -->
+        <mxCell id="re_lead_acc" value="converts" style="html=1;endArrow=ERone;startArrow=ERzeroToOne;strokeColor=#82b366;strokeWidth=2;dashed=1;" edge="1" parent="1" source="t_lead" target="t_acc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="re_lead_deal" style="html=1;endArrow=ERone;startArrow=ERzeroToOne;strokeColor=#82b366;dashed=1;" edge="1" parent="1" source="t_lead" target="t_deal">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- deals → quotes, subs -->
+        <mxCell id="re_deal_q" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="t_deal" target="t_quote">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="re_deal_sub" value="Closed Won" style="html=1;endArrow=ERzeroToOne;startArrow=ERone;strokeColor=#d6b656;strokeWidth=2;" edge="1" parent="1" source="t_deal" target="t_sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- quotes → items -->
+        <mxCell id="re_q_qi" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="t_quote" target="t_qi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- plans → deals, subs, quote_items -->
+        <mxCell id="re_plan_sub" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#6c8ebf;" edge="1" parent="1" source="t_plan" target="t_sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="re_plan_qi" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#6c8ebf;dashed=1;" edge="1" parent="1" source="t_plan" target="t_qi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- subs self renewal -->
+        <mxCell id="re_sub_self" value="renewal (self)" style="html=1;endArrow=ERzeroToOne;startArrow=ERone;strokeColor=#d6b656;dashed=1;exitX=0;exitY=0.8;entryX=0;entryY=1;" edge="1" parent="1" source="t_sub" target="t_sub">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1210" y="820" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <!-- subs → renewal_quote -->
+        <mxCell id="re_sub_q" style="html=1;endArrow=ERzeroToOne;startArrow=ERmany;strokeColor=#d6b656;dashed=1;" edge="1" parent="1" source="t_sub" target="t_quote">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- cs → children -->
+        <mxCell id="re_cs_csk" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#9673a6;dashed=1;" edge="1" parent="1" source="t_cs" target="t_csk">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- sla → tickets -->
+        <mxCell id="re_sla_tik" style="html=1;endArrow=ERmany;startArrow=ERzeroToOne;strokeColor=#6c8ebf;" edge="1" parent="1" source="t_master6" target="t_tik">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- activities → attendees -->
+        <mxCell id="re_act_att" style="html=1;endArrow=ERmany;startArrow=ERone;strokeColor=#b85450;strokeWidth=2;" edge="1" parent="1" source="t_act" target="t_att">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- activities polymorphic → accounts (representative) -->
+        <mxCell id="re_act_acc" value="target_type/target_id&#xa;(polymorphic — ke SEMUA entity)" style="html=1;endArrow=open;startArrow=none;strokeColor=#b85450;dashed=1;strokeWidth=1.5;fontColor=#8a3a36;fontSize=10;" edge="1" parent="1" source="t_act" target="t_acc">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1740" y="620" />
+              <mxPoint x="1160" y="620" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <!-- LEGEND -->
+        <mxCell id="er_legend" value="Keterangan" style="swimlane;fontStyle=1;fontSize=12;startSize=24;fillColor=none;strokeColor=#999;" vertex="1" parent="1">
+          <mxGeometry x="40" y="440" width="440" height="340" as="geometry" />
+        </mxCell>
+        <mxCell id="erl0" value="Warna kotak = domain modul (lihat halaman 1)." style="text;html=1;align=left;fillColor=none;fontStyle=2;fontColor=#555;" vertex="1" parent="er_legend">
+          <mxGeometry x="10" y="34" width="420" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="erl1" value="||—&lt;   satu-ke-banyak (1:N)" style="text;html=1;align=left;fillColor=none;" vertex="1" parent="er_legend">
+          <mxGeometry x="10" y="64" width="420" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="erl2" value="||—||   satu-ke-satu (1:1) — accounts↔customer_success" style="text;html=1;align=left;fillColor=none;" vertex="1" parent="er_legend">
+          <mxGeometry x="10" y="92" width="420" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="erl3" value="o&lt;    nol-atau-satu (opsional) — mis. deal→subscription" style="text;html=1;align=left;fillColor=none;" vertex="1" parent="er_legend">
+          <mxGeometry x="10" y="120" width="420" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="erl4" value="— — —   putus-putus = FK nullable / self-FK / polymorphic" style="text;html=1;align=left;fillColor=none;" vertex="1" parent="er_legend">
+          <mxGeometry x="10" y="148" width="420" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="erl5" value="↯  target_id / attendee_id BUKAN FK — tetap terbaca&#xa;    setelah target hard-delete (pola audit_logs)." style="text;html=1;align=left;fillColor=none;fontColor=#b85450;" vertex="1" parent="er_legend">
+          <mxGeometry x="10" y="176" width="420" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="erl6" value="Tabel abu-abu (tenants/users/memberships) = SUDAH ADA;&#xa;memberships DAPAT kolom baru business_role." style="text;html=1;align=left;fillColor=none;fontColor=#555;" vertex="1" parent="er_legend">
+          <mxGeometry x="10" y="214" width="420" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="erl7" value="Setiap tabel CRM juga punya: tenant_id (FK, RLS),&#xa;created_by/at, updated_by/at, deleted_at (soft-delete).&#xa;Disembunyikan di ERD agar tak berulang 19×." style="text;html=1;align=left;fillColor=none;fontColor=#555;fontStyle=2;" vertex="1" parent="er_legend">
+          <mxGeometry x="10" y="252" width="420" height="50" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="activity_e2e" name="Activity End-to-End">
+    <mxGraphModel dx="2021" dy="1134" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="2300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="e2etitle" parent="1" style="text;html=1;fontSize=18;fontStyle=1;align=left;" value="Activity Diagram End-to-End — Lead → Konversi → Subscription → Renewal" vertex="1">
+          <mxGeometry height="32" width="1200" x="40" y="16" as="geometry" />
+        </mxCell>
+        <mxCell id="e2esub" parent="1" style="text;html=1;fontSize=12;fontColor=#555;align=left;" value="Satu siklus penuh customer lifecycle. Swimlane = aktor/pihak yang bertindak. Kotak aksi menyebut tabel yang ditulis. Belah ketupat = keputusan. Elips = mulai/akhir. Node hasil (outcome) dikumpulkan di jalur kiri (netral)." vertex="1">
+          <mxGeometry height="22" width="1500" x="40" y="48" as="geometry" />
+        </mxCell>
+        <mxCell id="laneA" parent="1" style="swimlane;horizontal=0;html=1;startSize=24;fillColor=#fafafa;strokeColor=#bbb;fontStyle=1;fontSize=12;verticalAlign=top;" value="OUTCOME / KANAL" vertex="1">
+          <mxGeometry height="2170" width="300" x="40" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="laneB" parent="1" style="swimlane;horizontal=0;html=1;startSize=24;fillColor=#f3faf1;strokeColor=#82b366;fontStyle=1;fontSize=12;verticalAlign=top;" value="SALES" vertex="1">
+          <mxGeometry height="2170" width="340" x="360" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="laneC" parent="1" style="swimlane;horizontal=0;html=1;startSize=24;fillColor=#fbf8ef;strokeColor=#d6b656;fontStyle=1;fontSize=12;verticalAlign=top;" value="SISTEM (CRM)" vertex="1">
+          <mxGeometry height="2170" width="360" x="720" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="laneD" parent="1" style="swimlane;horizontal=0;html=1;startSize=24;fillColor=#f7f3f9;strokeColor=#9673a6;fontStyle=1;fontSize=12;verticalAlign=top;" value="CSM" vertex="1">
+          <mxGeometry height="2170" width="340" x="1100" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="laneE" parent="1" style="swimlane;horizontal=0;html=1;startSize=24;fillColor=#f2f6fb;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;verticalAlign=top;" value="MANAGER" vertex="1">
+          <mxGeometry height="2170" width="300" x="1460" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ph1" parent="1" style="text;html=1;fontStyle=1;fontSize=13;fontColor=#82b366;align=left;" value="① LEAD" vertex="1">
+          <mxGeometry height="20" width="120" x="360" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="ph2" parent="1" style="text;html=1;fontStyle=1;fontSize=13;fontColor=#d79b00;align=left;" value="② KONVERSI &amp; DEAL" vertex="1">
+          <mxGeometry height="20" width="220" x="360" y="700" as="geometry" />
+        </mxCell>
+        <mxCell id="ph3" parent="1" style="text;html=1;fontStyle=1;fontSize=13;fontColor=#d6b656;align=left;" value="③ SUBSCRIPTION &amp; ONBOARDING" vertex="1">
+          <mxGeometry height="20" width="320" x="720" y="1105" as="geometry" />
+        </mxCell>
+        <mxCell id="ph4" parent="1" style="text;html=1;fontStyle=1;fontSize=13;fontColor=#9673a6;align=left;" value="④ RENEWAL / CHURN" vertex="1">
+          <mxGeometry height="20" width="260" x="1100" y="1450" as="geometry" />
+        </mxCell>
+        <mxCell id="n_start" parent="1" style="ellipse;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" value="● Lead masuk" vertex="1">
+          <mxGeometry height="46" width="140" x="430" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="n_kanal" parent="1" style="rounded=1;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;whiteSpace=wrap;" value="Kanal masuk:&#xa;web · WhatsApp · event&#xa;referral · import · manual" vertex="1">
+          <mxGeometry height="64" width="260" x="400" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="n_inslead" parent="1" style="rounded=1;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;whiteSpace=wrap;" value="INSERT leads&#xa;(lead_status=New, region = teks mentah)" vertex="1">
+          <mxGeometry height="64" width="300" x="740" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="n_qualify" parent="1" style="rounded=1;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;whiteSpace=wrap;" value="Kontak &amp; kualifikasi lead&#xa;(BANT / kebutuhan desa)" vertex="1">
+          <mxGeometry height="56" width="300" x="400" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="d_qual" parent="1" style="rhombus;html=1;fillColor=#ffffff;strokeColor=#666;align=center;whiteSpace=wrap;" value="Qualified?" vertex="1">
+          <mxGeometry height="90" width="160" x="470" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="e_unqual" parent="1" style="ellipse;html=1;fillColor=#f5f5f5;strokeColor=#999;align=center;whiteSpace=wrap;" value="◍ Unqualified / nurture&#xa;(leads tetap, converted=false)" vertex="1">
+          <mxGeometry height="60" width="220" x="70" y="424" as="geometry" />
+        </mxCell>
+        <mxCell id="d_dup" parent="1" style="rhombus;html=1;fillColor=#ffffff;strokeColor=#666;align=center;whiteSpace=wrap;" value="Duplikat?&#xa;(village_code /&#xa;name + region)" vertex="1">
+          <mxGeometry height="110" width="240" x="800" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="e_dup" parent="1" style="ellipse;html=1;fillColor=#f5f5f5;strokeColor=#999;align=center;whiteSpace=wrap;" value="◍ Ditolak: duplikat&#xa;(desa sudah ada)" vertex="1">
+          <mxGeometry height="56" width="220" x="70" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="n_convert" parent="1" style="rounded=1;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;align=center;whiteSpace=wrap;" value="KONVERSI — 1 TX ATOMIK&#xa;INSERT accounts + contacts + deals&#xa;UPDATE leads.converted_*, converted=true&#xa;audit_logs" vertex="1">
+          <mxGeometry height="90" width="300" x="740" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="n_kelola" parent="1" style="rounded=1;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;whiteSpace=wrap;" value="Kelola deal&#xa;(Qualification → Proposal → Negotiation)" vertex="1">
+          <mxGeometry height="56" width="300" x="400" y="760" as="geometry" />
+        </mxCell>
+        <mxCell id="n_quote" parent="1" style="rounded=1;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;whiteSpace=wrap;" value="Buat quote + quote_items&#xa;(snapshot harga per plan)" vertex="1">
+          <mxGeometry height="56" width="300" x="400" y="850" as="geometry" />
+        </mxCell>
+        <mxCell id="d_won" parent="1" style="rhombus;html=1;fillColor=#ffffff;strokeColor=#666;align=center;whiteSpace=wrap;" value="Deal Won?" vertex="1">
+          <mxGeometry height="90" width="160" x="470" y="940" as="geometry" />
+        </mxCell>
+        <mxCell id="e_lost" parent="1" style="ellipse;html=1;fillColor=#f5f5f5;strokeColor=#999;align=center;whiteSpace=wrap;" value="◍ Closed Lost&#xa;(deals.stage = Lost)" vertex="1">
+          <mxGeometry height="56" width="220" x="70" y="944" as="geometry" />
+        </mxCell>
+        <mxCell id="n_inssub" parent="1" style="rounded=1;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;align=center;whiteSpace=wrap;" value="INSERT subscription (status=Active)&#xa;plan_id, mrr / arr, source_deal_id&#xa;UPDATE deals.created_subscription_id,&#xa;stage=Closed Won · audit" vertex="1">
+          <mxGeometry height="90" width="300" x="740" y="1130" as="geometry" />
+        </mxCell>
+        <mxCell id="n_onboard" parent="1" style="rounded=1;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=center;whiteSpace=wrap;" value="Onboarding&#xa;customer_success (1:1),&#xa;cs_impl_tasks, cs_trainings" vertex="1">
+          <mxGeometry height="64" width="300" x="1120" y="1250" as="geometry" />
+        </mxCell>
+        <mxCell id="n_monitor" parent="1" style="rounded=1;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=center;whiteSpace=wrap;" value="Monitor health&#xa;(health_score, adoption, aktivitas)" vertex="1">
+          <mxGeometry height="64" width="300" x="1120" y="1360" as="geometry" />
+        </mxCell>
+        <mxCell id="d_renew" parent="1" style="rhombus;html=1;fillColor=#ffffff;strokeColor=#666;align=center;whiteSpace=wrap;" value="Renewal due?&#xa;(H-90)" vertex="1">
+          <mxGeometry height="100" width="240" x="800" y="1480" as="geometry" />
+        </mxCell>
+        <mxCell id="n_outreach" parent="1" style="rounded=1;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=center;whiteSpace=wrap;" value="Outreach renewal (CSM)&#xa;+ log activities" vertex="1">
+          <mxGeometry height="56" width="300" x="1120" y="1620" as="geometry" />
+        </mxCell>
+        <mxCell id="d_cont" parent="1" style="rhombus;html=1;fillColor=#ffffff;strokeColor=#666;align=center;whiteSpace=wrap;" value="Pelanggan&#xa;lanjut?" vertex="1">
+          <mxGeometry height="90" width="170" x="1195" y="1710" as="geometry" />
+        </mxCell>
+        <mxCell id="n_churn" parent="1" style="rounded=1;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=center;whiteSpace=wrap;" value="UPDATE subscription&#xa;status=Churned, churn_reason,&#xa;churn_date · audit" vertex="1">
+          <mxGeometry height="64" width="300" x="740" y="1712" as="geometry" />
+        </mxCell>
+        <mxCell id="e_churn" parent="1" style="ellipse;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=center;whiteSpace=wrap;" value="◍ Churned&#xa;(langganan berakhir)" vertex="1">
+          <mxGeometry height="56" width="220" x="70" y="1716" as="geometry" />
+        </mxCell>
+        <mxCell id="d_upsell" parent="1" style="rhombus;html=1;fillColor=#ffffff;strokeColor=#666;align=center;whiteSpace=wrap;" value="Upsell /&#xa;naik plan?" vertex="1">
+          <mxGeometry height="90" width="170" x="1195" y="1840" as="geometry" />
+        </mxCell>
+        <mxCell id="n_approve" parent="1" style="rounded=1;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;whiteSpace=wrap;" value="Approval upsell&#xa;(nilai kontrak naik)" vertex="1">
+          <mxGeometry height="64" width="260" x="1490" y="1850" as="geometry" />
+        </mxCell>
+        <mxCell id="n_insrenew" parent="1" style="rounded=1;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;align=center;whiteSpace=wrap;" value="INSERT subscription BARU&#xa;previous_subscription_id (self-FK),&#xa;previous_value (snapshot), renewal_quote_id&#xa;baris lama → status=Expired · audit" vertex="1">
+          <mxGeometry height="100" width="300" x="740" y="1980" as="geometry" />
+        </mxCell>
+        <mxCell id="e_renewed" parent="1" style="ellipse;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=center;whiteSpace=wrap;" value="◉ Renewed ✓&#xa;(siklus kembali ke monitor)" vertex="1">
+          <mxGeometry height="60" width="220" x="70" y="2000" as="geometry" />
+        </mxCell>
+        <mxCell id="ed1" edge="1" parent="1" source="n_start" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;rounded=0;" target="n_kanal">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed2" edge="1" parent="1" source="n_kanal" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;" target="n_inslead">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed3" edge="1" parent="1" source="n_inslead" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;" target="n_qualify">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed4" edge="1" parent="1" source="n_qualify" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;" target="d_qual">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed5" edge="1" parent="1" source="d_qual" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#b85450;" target="e_unqual" value="Tidak">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed6" edge="1" parent="1" source="d_qual" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#82b366;" target="d_dup" value="Ya">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed7" edge="1" parent="1" source="d_dup" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#b85450;" target="e_dup" value="Ya (duplikat)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed8" edge="1" parent="1" source="d_dup" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#82b366;" target="n_convert" value="Tidak">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed9" edge="1" parent="1" source="n_convert" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;" target="n_kelola">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed10" edge="1" parent="1" source="n_kelola" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;" target="n_quote">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed11" edge="1" parent="1" source="n_quote" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;" target="d_won">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed12" edge="1" parent="1" source="d_won" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#b85450;" target="e_lost" value="Tidak">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed13" edge="1" parent="1" source="d_won" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#82b366;" target="n_inssub" value="Ya (Closed Won)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed14" edge="1" parent="1" source="n_inssub" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;" target="n_onboard">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed15" edge="1" parent="1" source="n_onboard" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;" target="n_monitor">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed16" edge="1" parent="1" source="n_monitor" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;" target="d_renew" value="pantau berkala">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed17" edge="1" parent="1" source="d_renew" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#666;dashed=1;" target="n_monitor" value="Belum">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1070" y="1410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ed18" edge="1" parent="1" source="d_renew" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#9673a6;" target="n_outreach" value="Ya (H-90)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed19" edge="1" parent="1" source="n_outreach" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;" target="d_cont">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed20" edge="1" parent="1" source="d_cont" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#b85450;" target="n_churn" value="Tidak">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed21" edge="1" parent="1" source="n_churn" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;" target="e_churn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed22" edge="1" parent="1" source="d_cont" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#82b366;" target="d_upsell" value="Ya">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed23" edge="1" parent="1" source="d_upsell" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#6c8ebf;" target="n_approve" value="Ya">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed24" edge="1" parent="1" source="d_upsell" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#666;" target="n_insrenew" value="Tidak (renewal flat)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1280" y="1960" />
+              <mxPoint x="890" y="1960" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ed25" edge="1" parent="1" source="n_approve" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#6c8ebf;" target="n_insrenew" value="disetujui">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed26" edge="1" parent="1" source="n_insrenew" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;fontColor=#82b366;" target="e_renewed" value="sukses">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ed27" edge="1" parent="1" source="n_insrenew" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;fontColor=#9673a6;strokeColor=#9673a6;" target="n_monitor" value="siklus berlanjut">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1620" y="2030" />
+              <mxPoint x="1620" y="1392" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

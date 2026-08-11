@@ -1,11 +1,26 @@
 # Stack produksi go_starter untuk Portainer (Docker + Portainer).
 #
-# ALUR AMAN-MIGRASI:
-#   1. service `migrate` jalan sekali (`/app/app migrate`) → advisory lock 4242 →
-#      goose up → exit 0. TIDAK me-restart.
-#   2. service `app` MENUNGGU migrate selesai sukses (service_completed_successfully)
-#      baru start, dengan AUTO_MIGRATE=false (app TIDAK migrate sendiri).
-#   Fail-safe: migrate gagal (exit ≠ 0) → app TAK PERNAH start.
+# ══════════════════════════════════════════════════════════════════════════════
+# DUA MODE MIGRASI — PILIH SATU, JANGAN CAMPUR. File ini memakai MODE A.
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Migrasi dijalankan HANYA di satu tempat. Menjalankannya di dua tempat sekaligus
+# tidak merusak data (advisory lock 4242 membuat yang kedua menunggu lalu melihat
+# "tak ada yang perlu dijalankan") — TAPI tetap dilarang: ia membingungkan,
+# memboroskan boot, dan menyembunyikan mana yang sebenarnya bekerja.
+#
+# MODE A — SERVICE `migrate` TERPISAH (dipakai file ini; disarankan produksi):
+#   1. `migrate` jalan sekali (`/app/app migrate`) → advisory lock → goose up → exit 0.
+#   2. `app` MENUNGGU migrate sukses (service_completed_successfully) baru start,
+#      dengan AUTO_MIGRATE=false → app TIDAK migrate sendiri.
+#   Untung: migrate gagal (exit ≠ 0) → app TAK PERNAH start (trafik tak menyentuh
+#   skema setengah jadi); log migrasi terpisah & mudah dibaca; titik henti bersih.
+#
+# MODE B — SATU SERVICE (app migrate sendiri; lebih ringkas, tanpa gerbang gagal):
+#   Hapus service `migrate`, hapus depends_on di `app`, set AUTO_MIGRATE=true.
+#   Petunjuk lengkap ada di blok "MODE B" di bawah service `app`. JANGAN separuh:
+#   menghapus `migrate` tapi lupa AUTO_MIGRATE → app boot tanpa skema (gagal);
+#   set AUTO_MIGRATE=true tapi `migrate` masih ada → migrasi ganda (dilarang).
 #
 # Ganti nilai env via Portainer stack env / file .env di sebelah compose ini.
 # TAG image: prod-latest (di-push publish.yml) atau prod-<versi> spesifik.
@@ -31,7 +46,13 @@ services:
     environment:
       PORT: "8080"
       ENV: production
-      AUTO_MIGRATE: "false"        # WAJIB false di prod — lifecycle migrasi dipisah
+      # HARDCODED "false", BUKAN ${AUTO_MIGRATE} — dan itu DISENGAJA (jangan
+      # "diperbaiki" jadi variabel). Di MODE A, service `migrate` yang mengurus
+      # migrasi; kalau nilai ini bisa diubah dari Portainer, satu ketik
+      # AUTO_MIGRATE=true menyalakan migrasi KEDUA di app. Dipaku di sini =
+      # mustahil salah dari luar. (MODE B mengubahnya jadi "true" DI FILE, satu
+      # paket dengan menghapus service `migrate` — lihat blok MODE B di bawah.)
+      AUTO_MIGRATE: "false"
       # SATU DSN (0007). Hak diturunkan ke app_rw per-transaksi, jadi RLS
       # mengikat tanpa koneksi kedua — app MEMBUKTIKANNYA saat boot & menolak
       # start bila tidak. Harus koneksi LANGSUNG bila memakai PgBouncer:
@@ -61,6 +82,19 @@ services:
     #     timeout: 3s
     #     retries: 5
     #     start_period: 20s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # MODE B — SATU SERVICE (app migrate sendiri). Untuk pindah dari MODE A:
+  #   1. HAPUS seluruh service `migrate` di atas (baris service migrate).
+  #   2. HAPUS blok `depends_on:` di service `app` (yang menunggu migrate).
+  #   3. GANTI di service `app`:  AUTO_MIGRATE: "false"  →  AUTO_MIGRATE: "true"
+  # Ketiganya SATU PAKET — melakukan sebagian menghasilkan salah satu dari:
+  #   • hapus `migrate` tapi AUTO_MIGRATE tetap "false" → app boot TANPA skema (gagal);
+  #   • AUTO_MIGRATE "true" tapi `migrate` masih ada    → migrasi GANDA (dilarang).
+  # Aman di single-instance Compose: advisory lock 4242 melindungi dari race.
+  # Yang HILANG vs MODE A: gerbang "app tak start bila migrasi gagal" — app yang
+  # migrasi sendiri bisa menerima trafik sesaat sebelum gagal. Timbang sebelum pindah.
+  # ═══════════════════════════════════════════════════════════════════════════
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Opsi B — Postgres & Redis DI DALAM stack (uncomment bila TAK pakai DB eksternal).

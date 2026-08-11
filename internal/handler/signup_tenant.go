@@ -61,5 +61,10 @@ func placeNewUser(ctx context.Context, q *db.Queries, userID int64, wantName str
 	}); err != nil {
 		return db.Tenant{}, err
 	}
+	// Peran CRM bawaan, di tx yang sama → atomik: workspace tak pernah lahir tanpa
+	// perannya. (Cabang single tak menyeed: workspace primer sudah di-seed boot.)
+	if err := seedBusinessRoles(ctx, q, t.ID); err != nil {
+		return db.Tenant{}, err
+	}
 	return t, nil
 }

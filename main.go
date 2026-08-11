@@ -24,6 +24,7 @@ import (
 	"go_starter/internal/db"
 	"go_starter/internal/handler"
 	"go_starter/internal/maintenance"
+	"go_starter/internal/mcpserver"
 	"go_starter/internal/oauth"
 	"go_starter/internal/preflight"
 	"go_starter/internal/session"
@@ -54,6 +55,13 @@ func main() {
 			os.Exit(0)
 		case "doctor":
 			os.Exit(runDoctor())
+		case "mcp":
+			if err := runMCPStdio(); err != nil {
+				// Log ke STDERR — stdout milik protokol MCP.
+				slog.Error("mcp: fatal", "err", err)
+				os.Exit(1)
+			}
+			os.Exit(0)
 		default:
 			slog.Error("unknown subcommand", "arg", os.Args[1])
 			os.Exit(2)
@@ -136,6 +144,10 @@ func run() (err error) {
 		DatabaseURL:  cfg.DatabaseURL,
 		RedisAddr:    cfg.RedisAddr,
 		AutoCreateDB: !cfg.IsProduction(),
+		// .env hanya dicek di dev (boot dari direktori repo). Di production env
+		// datang dari container/Portainer — .env tak ada & tak relevan; mengeceknya
+		// menolak boot karena file yang memang tak seharusnya ada.
+		FromFile: !cfg.IsProduction(),
 	}); !rep.OK() {
 		return errors.New(rep.String())
 	}
@@ -242,6 +254,27 @@ func run() (err error) {
 	}
 	authz.Init(enforcer)
 
+	// Sumbu BISNIS (CRM) — enforcer TERPISAH atas business_role. Sengaja bukan
+	// menumpang enforcer di atas: god-mode root & warisan platform→tenant di sana
+	// akan membocorkan izin CRM ke owner/super_admin (§3).
+	//
+	// SEJAK 00007 peran bisa diedit per-workspace → policy dibaca dari DB, bukan
+	// CSV embed. Subject di-fold `t<id>:<role>` di authz agar peran senama di dua
+	// workspace tak saling memberi izin. Load-nya WAJIB WithSuper: di tenant-tx RLS
+	// menyembunyikan tenant lain → enforcer deny-all senyap bagi mereka.
+	bEnforcer, err := authz.NewBusinessEmpty()
+	if err != nil {
+		return err
+	}
+	perms, err := loadBusinessPerms(ctx, pool)
+	if err != nil {
+		return err
+	}
+	if err := authz.LoadBusiness(bEnforcer, perms); err != nil {
+		return err
+	}
+	authz.InitBusiness(bEnforcer)
+
 	// Google OAuth — di-wire bila kredensial tersedia. Di dev tanpa kredensial,
 	// app tetap start (tombol Google membalas 503 saat diklik).
 	if cfg.GoogleEnabled() {
@@ -262,7 +295,15 @@ func run() (err error) {
 	// Wiring handler + router.
 	h := handler.New(pool, log)
 	r := chi.NewRouter()
-	registerRoutes(r, h, assetSrv.Handler(), log, !cfg.IsProduction())
+	// MCP server read-only, dirakit di sini (tempat cfg & pool ada) lalu dioper
+	// sebagai http.Handler — routes.go tak perlu tahu isinya. Token kosong =
+	// rute tak didaftarkan (opt-in; lihat mcpRoute di routes.go).
+	mcpRt := mcpRoute{Token: cfg.MCPToken}
+	if cfg.MCPToken != "" {
+		mcpRt.Handler = mcpserver.Handler(pool, cfg, log)
+		log.Info("MCP read-only route aktif di /mcp")
+	}
+	registerRoutes(r, h, assetSrv.Handler(), log, !cfg.IsProduction(), mcpRt)
 
 	// Bungkus: CSRF (terluar) → session LoadAndSave → router.
 	// CrossOriginProtection butuh Go ≥1.25.1 (CVE-2025-47910 di 1.25.0).
@@ -378,6 +419,28 @@ func loadSettings(ctx context.Context, pool *pgxpool.Pool) (map[string]string, e
 		return nil
 	})
 	return kv, err
+}
+
+// loadBusinessPerms membaca SELURUH izin CRM (semua tenant) untuk membangun
+// enforcer bisnis saat startup. WithSuper WAJIB: business_role_permissions ber-RLS,
+// jadi di tenant-tx tenant lain tak terbaca → peran mereka deny-all senyap.
+// Baris sqlc dipetakan ke authz.BusinessPerm agar paket authz tetap DB-free.
+func loadBusinessPerms(ctx context.Context, pool *pgxpool.Pool) ([]authz.BusinessPerm, error) {
+	var out []authz.BusinessPerm
+	err := db.WithSuper(ctx, pool, func(q *db.Queries) error {
+		rows, e := q.ListAllBusinessRolePermissions(ctx)
+		if e != nil {
+			return e
+		}
+		out = make([]authz.BusinessPerm, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, authz.BusinessPerm{
+				TenantID: r.TenantID, Role: r.Role, Obj: r.Obj, Act: r.Act,
+			})
+		}
+		return nil
+	})
+	return out, err
 }
 
 func newLogger(cfg *config.Config) *slog.Logger {

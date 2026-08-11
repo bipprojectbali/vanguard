@@ -1,0 +1,98 @@
+# Policy SUMBU BISNIS (CRM) — subject = memberships.business_role, BUKAN role
+# tenant/platform. Dipetakan langsung dari matriks akses per modul
+# (docs/crm/sistem-dan-role.md §4). Casbin CSV TAK dukung komentar inline di
+# akhir baris p — komentar HARUS di baris '#' tersendiri.
+#
+# Yang dikodekan di sini HANYA "boleh melakukan APA" (Permission Set). "Atas data
+# SIAPA" (Ownership Rule: ◐ desa yang ditugaskan vs ✓ semua) BUKAN urusan Casbin —
+# itu filter query lapis-aplikasi (F3). Karena itu ◐ubah dan ✓ sama-sama jadi
+# `write` di sini; yang membedakan cakupannya adalah WHERE, bukan policy.
+#
+# act: read < write (write mencakup read via matcher) < approve (berdiri sendiri).
+# obj: crm:<modul>. Deny-default: modul tanpa baris = ditolak untuk role itu.
+
+# --- ADMIN: konfigurasi sistem, semua modul tanpa batas (matriks kolom Admin = ✓) ---
+p, admin, crm:*, write
+p, admin, crm:*, approve
+
+# --- MANAGER: lintas-tim, menyetujui. ✓ hampir semua KECUALI Plans (👁) & Settings (✕) ---
+p, manager, crm:dashboard, read
+p, manager, crm:accounts, write
+p, manager, crm:contacts, write
+p, manager, crm:leads, write
+p, manager, crm:deals, write
+p, manager, crm:deals, approve
+p, manager, crm:quotes, write
+p, manager, crm:quotes, approve
+p, manager, crm:sales_activity, write
+p, manager, crm:subscriptions, write
+p, manager, crm:renewals, write
+p, manager, crm:plans, read
+p, manager, crm:churn, write
+p, manager, crm:health, write
+p, manager, crm:journey, write
+p, manager, crm:success_plans, write
+p, manager, crm:adoption, write
+p, manager, crm:engagements, write
+p, manager, crm:renewal_mgmt, write
+p, manager, crm:renewal_mgmt, approve
+p, manager, crm:playbooks, write
+p, manager, crm:voc, write
+p, manager, crm:tickets, write
+p, manager, crm:kb, write
+p, manager, crm:sla, write
+p, manager, crm:activities, write
+p, manager, crm:reports, read
+
+# --- SALES: cari desa → deal → quote. Nol akses Customer Success (kolom Sales ✕) ---
+p, sales, crm:dashboard, read
+p, sales, crm:accounts, write
+p, sales, crm:contacts, write
+p, sales, crm:leads, write
+p, sales, crm:deals, write
+p, sales, crm:quotes, write
+p, sales, crm:sales_activity, write
+p, sales, crm:subscriptions, read
+p, sales, crm:renewals, read
+p, sales, crm:plans, read
+p, sales, crm:churn, read
+p, sales, crm:health, read
+p, sales, crm:renewal_mgmt, read
+p, sales, crm:tickets, read
+p, sales, crm:kb, read
+p, sales, crm:activities, write
+p, sales, crm:reports, read
+
+# --- CSM: jaga desa pelanggan. Pemilik Customer Success; nol akses Leads/Quotes (✕) ---
+p, csm, crm:dashboard, read
+p, csm, crm:accounts, write
+p, csm, crm:contacts, write
+p, csm, crm:deals, read
+p, csm, crm:subscriptions, read
+p, csm, crm:renewals, read
+p, csm, crm:plans, read
+p, csm, crm:churn, write
+p, csm, crm:health, write
+p, csm, crm:journey, write
+p, csm, crm:success_plans, write
+p, csm, crm:adoption, write
+p, csm, crm:engagements, write
+p, csm, crm:renewal_mgmt, write
+p, csm, crm:playbooks, write
+p, csm, crm:voc, write
+p, csm, crm:tickets, read
+p, csm, crm:kb, read
+p, csm, crm:sla, read
+p, csm, crm:activities, write
+p, csm, crm:reports, read
+
+# --- SUPPORT: selesaikan tiket sesuai SLA. HANYA objek tiket (kolom Support) ---
+p, support, crm:dashboard, read
+p, support, crm:accounts, read
+p, support, crm:contacts, read
+p, support, crm:health, read
+p, support, crm:tickets, write
+p, support, crm:kb, write
+p, support, crm:sla, read
+p, support, crm:activities, write
+p, support, crm:reports, read

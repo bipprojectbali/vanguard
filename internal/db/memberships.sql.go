@@ -55,7 +55,7 @@ const createMembership = `-- name: CreateMembership :one
 INSERT INTO memberships (user_id, tenant_id, role)
 VALUES ($1, $2, $3)
 ON CONFLICT (user_id, tenant_id) DO NOTHING
-RETURNING id, user_id, tenant_id, role, created_at
+RETURNING id, user_id, tenant_id, role, created_at, business_role
 `
 
 type CreateMembershipParams struct {
@@ -75,6 +75,7 @@ func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipPara
 		&i.TenantID,
 		&i.Role,
 		&i.CreatedAt,
+		&i.BusinessRole,
 	)
 	return i, err
 }
@@ -95,7 +96,7 @@ func (q *Queries) DeleteMembership(ctx context.Context, arg DeleteMembershipPara
 }
 
 const getMembership = `-- name: GetMembership :one
-SELECT id, user_id, tenant_id, role, created_at FROM memberships WHERE user_id = $1 AND tenant_id = $2
+SELECT id, user_id, tenant_id, role, created_at, business_role FROM memberships WHERE user_id = $1 AND tenant_id = $2
 `
 
 type GetMembershipParams struct {
@@ -114,6 +115,7 @@ func (q *Queries) GetMembership(ctx context.Context, arg GetMembershipParams) (M
 		&i.TenantID,
 		&i.Role,
 		&i.CreatedAt,
+		&i.BusinessRole,
 	)
 	return i, err
 }
@@ -269,6 +271,43 @@ func (q *Queries) ListMembershipsForUsers(ctx context.Context, userIds []int64) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const unassignBusinessRole = `-- name: UnassignBusinessRole :exec
+UPDATE memberships SET business_role = NULL
+WHERE tenant_id = $1 AND business_role = $2
+`
+
+type UnassignBusinessRoleParams struct {
+	TenantID     int64   `json:"tenant_id"`
+	BusinessRole *string `json:"business_role"`
+}
+
+// Cabut satu business_role dari SEMUA anggota workspace yang memegangnya —
+// dipanggil SEBELUM menghapus perannya, agar penghapusan peran meng-unassign
+// orang alih-alih (lewat FK) menghapus keanggotaannya. Idempoten.
+func (q *Queries) UnassignBusinessRole(ctx context.Context, arg UnassignBusinessRoleParams) error {
+	_, err := q.db.Exec(ctx, unassignBusinessRole, arg.TenantID, arg.BusinessRole)
+	return err
+}
+
+const updateMemberBusinessRole = `-- name: UpdateMemberBusinessRole :exec
+UPDATE memberships SET business_role = $3 WHERE user_id = $1 AND tenant_id = $2
+`
+
+type UpdateMemberBusinessRoleParams struct {
+	UserID       int64   `json:"user_id"`
+	TenantID     int64   `json:"tenant_id"`
+	BusinessRole *string `json:"business_role"`
+}
+
+// Set/ganti business_role (sumbu CRM F2) satu anggota. Nilai divalidasi tenant-
+// aware di handler (ada di business_roles workspace ini) SEBELUM query — kolom
+// tak lagi punya CHECK sejak 00007. NULL = cabut peran CRM (mis. saat perannya
+// dihapus) — pgtype/pointer NULL diteruskan apa adanya.
+func (q *Queries) UpdateMemberBusinessRole(ctx context.Context, arg UpdateMemberBusinessRoleParams) error {
+	_, err := q.db.Exec(ctx, updateMemberBusinessRole, arg.UserID, arg.TenantID, arg.BusinessRole)
+	return err
 }
 
 const updateMemberRole = `-- name: UpdateMemberRole :exec
