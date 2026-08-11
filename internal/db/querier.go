@@ -108,9 +108,30 @@ type Querier interface {
 	// GUC lewat FK + WITH CHECK). is_primary_contact di-set pemanggil SETELAH
 	// mengosongkan primary lama (ClearAccountPrimaryContact) agar tak melanggar index.
 	CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error)
+	// deals.sql — pipeline Sales (Deal). Isolasi WORKSPACE ditegakkan RLS (GUC
+	// app.tenant_id di WithTenant); isolasi ANTAR-DESA (F3) ditegakkan di layer query
+	// lewat flag ownership di ListDeals/ListDealsForPipeline — lihat ownership.go.
+	// Ownership deal memakai SATU kolom (deal_owner).
+	//
+	// entity_code (DEAL-001) dialokasikan di GenerateEntityCode DALAM tx create.
+	// account_id NN: deal selalu menempel ke satu desa. Deal hasil konversi lead dibuat
+	// di tx konversi (bersama account+contact) — lihat handler.
+	// Buat deal. tenant_id di-set eksplisit (RLS WITH CHECK memverifikasinya = GUC).
+	CreateDeal(ctx context.Context, arg CreateDealParams) (Deal, error)
 	// Undangan bergabung ke workspace. token = rahasia URL (crypto/rand hex via
 	// oauth.NewState). email boleh milik orang yang BELUM punya akun.
 	CreateInvite(ctx context.Context, arg CreateInviteParams) (Invite, error)
+	// leads.sql — funnel Sales (Lead). Isolasi WORKSPACE ditegakkan RLS (GUC
+	// app.tenant_id di WithTenant); isolasi ANTAR-DESA (F3) ditegakkan di layer query
+	// lewat flag ownership di ListLeads — lihat internal/db/ownership.go. Ownership
+	// lead memakai SATU kolom (lead_owner), beda dari accounts yang tiga kolom.
+	//
+	// entity_code (LEAD-001) dialokasikan di GenerateEntityCode DALAM tx create, lalu
+	// dioper ke CreateLead. Field region/kontak mentah (province/mobile_phone/dst)
+	// karena lead belum jadi account — konversi yang memindahkannya.
+	// Buat lead. tenant_id di-set eksplisit (RLS WITH CHECK memverifikasinya = GUC).
+	// entity_code sudah dirakit pemanggil (GenerateEntityCode).
+	CreateLead(ctx context.Context, arg CreateLeadParams) (Lead, error)
 	// Jadikan user anggota workspace dgn role tertentu. Dipakai: register/OAuth (owner
 	// workspace pertama), buat workspace baru (owner), terima invite (admin/member).
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
@@ -130,6 +151,11 @@ type Querier interface {
 	// users = tabel GLOBAL (identitas murni, TANPA tenant/role — keduanya pindah ke
 	// memberships). Keanggotaan dibuat terpisah via CreateMembership dalam tx sama.
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// KPI ringkas pipeline dalam cakupan ownership (satu round-trip, bukan hitung di
+	// Go atas seluruh baris). COALESCE(...)::bigint/::numeric membungkus agregat agar
+	// sqlc tak meng-emit interface{} (gotcha #14). Win rate dihitung di Go dari
+	// won_count/(won_count+lost_count) — pembagian nol ditangani di sana.
+	DealPipelineStats(ctx context.Context, arg DealPipelineStatsParams) (DealPipelineStatsRow, error)
 	// Tolak undangan (sisi PENERIMA). Kunci ganda token + email: penerima tak punya
 	// scope ke workspace pengundang, jadi DeleteInvite (yang butuh tenant_id) tak
 	// bisa dipakai. Mencocokkan email mencegah pemegang token menolak undangan
@@ -168,9 +194,15 @@ type Querier interface {
 	// ter-soft-delete. Tak menerapkan ownership — pemanggil (handler) memutuskan lewat
 	// desa INDUK apakah aktor boleh membukanya (kontak mewarisi kepemilikan desa).
 	GetContact(ctx context.Context, id int64) (Contact, error)
+	// Satu deal hidup. RLS menjamin tenant_id; ownership diputuskan handler
+	// (DealsListFilter.Allows) atas baris.
+	GetDeal(ctx context.Context, id int64) (Deal, error)
 	// Jalur PUBLIK (/invite/{token}) — penerima belum tentu login/anggota. Validasi
 	// kedaluwarsa & sudah-dipakai dilakukan di handler agar pesannya spesifik.
 	GetInviteByToken(ctx context.Context, token string) (GetInviteByTokenRow, error)
+	// Satu lead hidup. RLS menjamin tenant_id; filter deleted_at menyembunyikan yang
+	// ter-soft-delete. Ownership diputuskan handler (LeadsListFilter.Allows) atas baris.
+	GetLead(ctx context.Context, id int64) (Lead, error)
 	// Validasi keanggotaan — dipakai middleware Scope SEBELUM membuka tx ber-tenant
 	// (memastikan tenant aktif di session memang milik user; anti tenant-forcing).
 	GetMembership(ctx context.Context, arg GetMembershipParams) (Membership, error)
@@ -271,11 +303,33 @@ type Querier interface {
 	// memanggil ini). Kontak utama diangkat ke atas agar penanda primary langsung
 	// terlihat tanpa menggeser urutan kronologis baris lainnya.
 	ListContactsByAccount(ctx context.Context, arg ListContactsByAccountParams) ([]Contact, error)
+	// Daftar deal (tampilan Tabel), keyset (created_at DESC, id DESC) + filter
+	// ownership F3 + filter stage opsional. Dua flag ownership (sumber SATU dengan
+	// DealsListFilter): scope_all → semua; is_own → deal_owner = uid; keduanya false
+	// → NOL baris (fail-closed). stage_filter '' → semua stage.
+	ListDeals(ctx context.Context, arg ListDealsParams) ([]Deal, error)
+	// Papan Kanban: seluruh deal hidup dalam cakupan ownership, diurutkan agar kartu
+	// rapi per-stage lalu terbaru dulu. Di-bucket per-stage di handler (bukan N query
+	// per kolom). LIMIT membatasi papan agar tak memuat seluruh tabel (guardrail
+	// pagination); deal di luar batas tetap terlihat lewat tampilan Tabel berkeyset.
+	ListDealsForPipeline(ctx context.Context, arg ListDealsForPipelineParams) ([]Deal, error)
 	// Kandidat purge permanen: terhapus melewati masa tenggang. Dipanggil perintah
 	// terjadwal, TAK PERNAH di jalur request (purge = kerja berat & tak reversibel).
 	ListExpiredTenants(ctx context.Context, deletedAt pgtype.Timestamptz) ([]Tenant, error)
 	// Undangan PENDING satu workspace (panel anggota) — yang sudah diterima disaring.
 	ListInvitesByTenant(ctx context.Context, tenantID int64) ([]Invite, error)
+	// Daftar lead, keyset (created_at DESC, id DESC) + filter ownership F3 + tab.
+	//
+	// Ownership sebagai dua flag boolean (bukan SQL dinamis) supaya query tetap sqlc
+	// murni & ter-scan typed — sumber SATU dengan LeadsListFilter (ownership.go):
+	//   scope_all → lihat semua (Admin/Manager)
+	//   is_own    → hanya lead_owner = uid (Sales)
+	// Keduanya false (Support/role kosong/liar) → NOL baris (fail-closed).
+	//
+	// Tab tambahan (ortogonal dari ownership):
+	//   mine_only  → paksa lead_owner = uid (tab "My Leads", walau aktor scope_all)
+	//   status_filter '' → semua status; selain itu = filter satu status ("Unqualified")
+	ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, error)
 	// Daftar anggota SATU workspace (panel /admin/members). JOIN users untuk data
 	// tampilan — users kini tabel global (tanpa RLS), jadi filter tenant di sini.
 	//
@@ -322,6 +376,11 @@ type Querier interface {
 	ListTenantsForPlatform(ctx context.Context, arg ListTenantsForPlatformParams) ([]ListTenantsForPlatformRow, error)
 	// Panel /dev: keyset pagination, hanya user aktif (belum soft-delete).
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	// Tautkan hasil konversi ke lead + kunci statusnya. Dipanggil DALAM tx konversi
+	// (bersama INSERT account/contact/deal) → gagal-sebagian rollback penuh. Guard
+	// "hanya Qualified & belum converted" ada di WHERE agar konversi ganda idempotent-
+	// aman: baris yang sudah converted tak ter-update lagi.
+	MarkLeadConverted(ctx context.Context, arg MarkLeadConvertedParams) error
 	// Auto-read saat halaman dibuka. Undangan TIDAK tersentuh di sini — memang tak
 	// disimpan di tabel ini (sumber kebenarannya tetap `invites`), sehingga undangan
 	// pending tetap terhitung di badge sampai benar-benar ditindak.
@@ -393,6 +452,12 @@ type Querier interface {
 	// entitas lain tak putus). Idempotent: hanya baris hidup. Kontak utama yang dihapus
 	// membebaskan slot primary (index-nya partial WHERE deleted_at IS NULL).
 	SoftDeleteContact(ctx context.Context, arg SoftDeleteContactParams) error
+	// Soft-delete: baris disembunyikan dari list/get tapi tetap ada (jejak & FK dari
+	// leads.converted_deal_id tak putus). Idempotent: hanya baris hidup.
+	SoftDeleteDeal(ctx context.Context, arg SoftDeleteDealParams) error
+	// Soft-delete: baris disembunyikan dari list/get tapi tetap ada (jejak & FK
+	// converted_* tak putus). Idempotent: hanya baris hidup.
+	SoftDeleteLead(ctx context.Context, arg SoftDeleteLeadParams) error
 	// Owner ATAU platform. Masa tenggang: baris tetap ada, slug TIDAK dilepas.
 	//
 	// `NOT is_primary`: rumah aplikasi tak bisa dihapus dari dalam aplikasi itu
@@ -431,6 +496,19 @@ type Querier interface {
 	// lama (ClearAccountPrimaryContact) bila dinaikkan jadi utama. account_id TIDAK
 	// diubah di sini — memindahkan kontak antar-desa adalah aksi lain (belum ada).
 	UpdateContact(ctx context.Context, arg UpdateContactParams) (Contact, error)
+	// Sunting profil deal. entity_code, stage, dan hasil (win_loss_reason/closed_date)
+	// TAK di sini: stage punya jalur khusus (UpdateDealStage) agar perpindahan pipeline
+	// terlihat sebagai aksi tersendiri, bukan efek samping edit.
+	UpdateDeal(ctx context.Context, arg UpdateDealParams) (Deal, error)
+	// Pindah stage pipeline (aksi tersendiri). closed_date/win_loss_reason/loss_notes
+	// diisi saat Closed Won/Lost — validasi "Closed Lost wajib win_loss_reason" di
+	// handler (bukan constraint DB agar pesan bisa diperbaiki user). closed_date =
+	// CURRENT_DATE bila stage terminal, NULL bila dibuka kembali ke stage aktif.
+	UpdateDealStage(ctx context.Context, arg UpdateDealStageParams) error
+	// Sunting profil & kualifikasi lead. entity_code tak diubah (kode identitas yang
+	// dikutip). converted_* TAK disentuh di sini — itu efek konversi (ConvertLead),
+	// bukan edit biasa.
+	UpdateLead(ctx context.Context, arg UpdateLeadParams) (Lead, error)
 	// Set/ganti business_role (sumbu CRM F2) satu anggota. Nilai divalidasi tenant-
 	// aware di handler (ada di business_roles workspace ini) SEBELUM query — kolom
 	// tak lagi punya CHECK sejak 00007. NULL = cabut peran CRM (mis. saat perannya

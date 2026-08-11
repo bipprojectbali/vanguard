@@ -137,6 +137,35 @@ type Contact struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Deal struct {
+	ID                    int64              `json:"id"`
+	TenantID              int64              `json:"tenant_id"`
+	EntityCode            *string            `json:"entity_code"`
+	DealOwner             *int64             `json:"deal_owner"`
+	AccountID             int64              `json:"account_id"`
+	PrimaryContactID      *int64             `json:"primary_contact_id"`
+	PlanRequestedID       *int64             `json:"plan_requested_id"`
+	DealName              string             `json:"deal_name"`
+	DealType              *string            `json:"deal_type"`
+	Stage                 string             `json:"stage"`
+	Amount                pgtype.Numeric     `json:"amount"`
+	Probability           *int16             `json:"probability"`
+	ExpectedCloseDate     pgtype.Date        `json:"expected_close_date"`
+	ForecastCategory      *string            `json:"forecast_category"`
+	NextStep              *string            `json:"next_step"`
+	ClosedDate            pgtype.Date        `json:"closed_date"`
+	WinLossReason         *string            `json:"win_loss_reason"`
+	Competitor            *string            `json:"competitor"`
+	LossNotes             *string            `json:"loss_notes"`
+	SubscriptionTerm      *string            `json:"subscription_term"`
+	CreatedSubscriptionID *int64             `json:"created_subscription_id"`
+	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy             *int64             `json:"created_by"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy             *int64             `json:"updated_by"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Invite struct {
 	ID         int64              `json:"id"`
 	TenantID   int64              `json:"tenant_id"`
@@ -147,6 +176,37 @@ type Invite struct {
 	AcceptedAt pgtype.Timestamptz `json:"accepted_at"`
 	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type Lead struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	EntityCode         *string            `json:"entity_code"`
+	LeadOwner          *int64             `json:"lead_owner"`
+	LeadName           string             `json:"lead_name"`
+	ContactPerson      *string            `json:"contact_person"`
+	JobTitle           *string            `json:"job_title"`
+	LeadSource         *string            `json:"lead_source"`
+	LeadStatus         string             `json:"lead_status"`
+	Rating             *string            `json:"rating"`
+	UnqualifiedReason  *string            `json:"unqualified_reason"`
+	EstimatedValue     pgtype.Numeric     `json:"estimated_value"`
+	Province           *string            `json:"province"`
+	Regency            *string            `json:"regency"`
+	District           *string            `json:"district"`
+	MobilePhone        *string            `json:"mobile_phone"`
+	Whatsapp           *string            `json:"whatsapp"`
+	Email              *string            `json:"email"`
+	Converted          bool               `json:"converted"`
+	ConvertedAccountID *int64             `json:"converted_account_id"`
+	ConvertedContactID *int64             `json:"converted_contact_id"`
+	ConvertedDealID    *int64             `json:"converted_deal_id"`
+	ConvertedAt        pgtype.Timestamptz `json:"converted_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Membership struct {
