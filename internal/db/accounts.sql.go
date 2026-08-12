@@ -227,8 +227,9 @@ WHERE deleted_at IS NULL
       OR ($4::boolean AND account_owner = $5)
       OR ($6::boolean AND (assigned_csm = $5 OR backup_csm = $5))
   )
+  AND (NOT $7::boolean OR account_owner IS NULL)
 ORDER BY created_at DESC, id DESC
-LIMIT $7
+LIMIT $8
 `
 
 type ListAccountsParams struct {
@@ -238,6 +239,7 @@ type ListAccountsParams struct {
 	IsSales         bool               `json:"is_sales"`
 	Uid             *int64             `json:"uid"`
 	IsCsm           bool               `json:"is_csm"`
+	Unowned         bool               `json:"unowned"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -254,6 +256,12 @@ type ListAccountsParams struct {
 //
 // Ketiganya false (Support/role kosong/liar) → OR selalu false → NOL baris
 // (fail-closed, bukan bocor). uid tetap dioper walau scope_all (diabaikan).
+//
+// unowned = tapis SEJAJAR (tab "Belum ada Owner"): saring account_owner IS NULL
+// DI ATAS blok ownership, bukan menggantinya. false → NOT false = TRUE → tak
+// membatasi; true → hanya desa tanpa pemilik. Inheren cakupan-all: pemakai
+// ber-scope 'own' tak pernah punya baris owner-kosong, jadi handler hanya
+// menyalakannya untuk peran ScopeAll (Manager/Admin).
 func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]Account, error) {
 	rows, err := q.db.Query(ctx, listAccounts,
 		arg.CursorCreatedAt,
@@ -262,6 +270,7 @@ func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]A
 		arg.IsSales,
 		arg.Uid,
 		arg.IsCsm,
+		arg.Unowned,
 		arg.PageSize,
 	)
 	if err != nil {

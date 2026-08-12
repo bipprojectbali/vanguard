@@ -128,6 +128,51 @@ func TestListAccounts_OwnershipFlags(t *testing.T) {
 	}
 }
 
+// TestListAccounts_UnownedFilter: tab "Belum ada Owner". Filter unowned adalah
+// tapis SEJAJAR di atas cakupan — false tak membatasi apa pun; true menyisakan
+// HANYA desa tanpa account_owner. Diuji terpisah dari flag ownership karena ia
+// mengunci sumbu berbeda (ada/tidaknya pemilik, bukan siapa pemiliknya).
+func TestListAccounts_UnownedFilter(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	truncateCRM(t, ctx)
+
+	q := New(pool)
+	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
+	owner, _ := q.CreateUser(ctx, CreateUserParams{Email: "own@x", PassHash: strPtr("x")})
+
+	// Dua ber-owner, satu tanpa owner.
+	seedAccount(t, ctx, pool, ten.ID, "Ber-Owner-A", func(p *CreateAccountParams) { p.AccountOwner = &owner.ID })
+	seedAccount(t, ctx, pool, ten.ID, "Ber-Owner-B", func(p *CreateAccountParams) { p.AccountOwner = &owner.ID })
+	seedAccount(t, ctx, pool, ten.ID, "Tanpa-Owner", nil)
+
+	list := func(unowned bool) []Account {
+		var rows []Account
+		c0, id0 := firstCursor()
+		if err := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
+			var e error
+			rows, e = q.ListAccounts(ctx, ListAccountsParams{
+				CursorCreatedAt: c0, CursorID: id0,
+				ScopeAll: true, Unowned: unowned,
+				PageSize: 50,
+			})
+			return e
+		}); err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		return rows
+	}
+
+	// unowned=false → tak membatasi: ketiga desa tampil (bukti default tak menyaring).
+	if got := list(false); len(got) != 3 {
+		t.Errorf("unowned=false harus 3 desa, got %d %v", len(got), namesOf(got))
+	}
+	// unowned=true → hanya "Tanpa-Owner".
+	if got := list(true); len(got) != 1 || got[0].VillageName != "Tanpa-Owner" {
+		t.Errorf("unowned=true harus 1 (Tanpa-Owner), got %v", namesOf(got))
+	}
+}
+
 // ── Unit (tanpa DB) — perakitan flag & keputusan per-baris ──────────────────
 
 // TestAccountsListFilterFor: data_scope → flag list-query. Satu sumber dengan

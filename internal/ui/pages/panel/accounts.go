@@ -16,6 +16,8 @@ import (
 
 // AccountRow = satu baris daftar desa. Nomor HP TIDAK di sini (PII; hanya di
 // detail). AccountType sudah berupa label Indonesia (accountTypeLabel di handler).
+// OwnerName/CSMName = nama anggota (bukan id) sudah diresolusi handler; "" =
+// belum ditugaskan → dirender "—".
 type AccountRow struct {
 	ID          int64
 	EntityCode  string
@@ -24,15 +26,32 @@ type AccountRow struct {
 	AccountType string
 	Regency     string
 	Province    string
+	OwnerName   string
+	CSMName     string
 }
+
+// Konstanta tab daftar desa — sumber tunggal nama view, dipakai handler
+// (normalisasi ?view=) & view (tautan tab + pager). all = default (semua desa).
+const (
+	AccViewAll     = "all"
+	AccViewMy      = "my"
+	AccViewUnowned = "unowned"
+)
 
 // AccountsListView = data halaman daftar. CanWrite = tombol "Tambah Desa" tampil
 // (F2 write & workspace tak read-only, diputuskan handler). NextCursor "" =
 // halaman terakhir. Err/Msg = alert galat/sukses (dari ?err=/?ok=).
+//
+// ShowTabs = tampilkan bilah tab All/My/Belum-ada-Owner — HANYA untuk peran
+// ber-cakupan 'all' (Manager/Admin); handler yang memutuskan. Untuk peran 'own'
+// (Sales/CSM) All≡My (mereka cuma lihat desanya), jadi tab redundan & disembunyikan.
+// ActiveView = tab aktif (AccView*), menentukan sorotan & param yang diteruskan pager.
 type AccountsListView struct {
 	Base       string
 	Items      []AccountRow
 	CanWrite   bool
+	ShowTabs   bool
+	ActiveView string
 	NextCursor string
 	Err        string
 	Msg        string
@@ -54,6 +73,9 @@ func AccountsList(v AccountsListView) g.Node {
 			)),
 		),
 	}
+	if v.ShowTabs {
+		body = append(body, accountsTabs(v))
+	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "accounts-err", g.Text(v.Err)))
 	}
@@ -69,6 +91,41 @@ func AccountsList(v AccountsListView) g.Node {
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
+// accountsTabs = bilah tab cakupan (All/My/Belum-ada-Owner) untuk peran 'all'.
+// Navigasi tautan <a> biasa (bookmarkable + reload penuh, lolos CSP gotcha #16),
+// BUKAN Datastar. flex-wrap agar tak mendorong lebar di 375px; tiap tab min-h-11
+// (tap target 44px). role="tablist" seperti bilah tab panel lain (a11y).
+//
+// Varian tabs-box (BUKAN tabs-boxed — nama daisyUI v4 yang sudah tak ada di v5,
+// jadi tree-shaken → tak bergaya; gotcha #4): satu-satunya varian yang ikut
+// terkompilasi ke app.css. tabs-box sudah memberi permukaan berkotak sendiri,
+// jadi tak perlu bg/border manual.
+func accountsTabs(v AccountsListView) g.Node {
+	tab := func(label, view string) g.Node {
+		cls := "tab min-h-11"
+		if v.ActiveView == view {
+			cls += " tab-active"
+		}
+		return h.A(h.Href(accountsListHref(v.Base, view)), h.Class(cls), g.Text(label))
+	}
+	return h.Div(
+		h.Role("tablist"),
+		h.Class("tabs tabs-box flex-wrap"),
+		tab("Semua Desa", AccViewAll),
+		tab("Desa Saya", AccViewMy),
+		tab("Belum ada Owner", AccViewUnowned),
+	)
+}
+
+// accountsListHref merakit URL daftar untuk sebuah view. all/"" = tanpa param
+// (URL kanonik daftar); selain itu ?view=<view>.
+func accountsListHref(base, view string) string {
+	if view == "" || view == AccViewAll {
+		return base + "/accounts"
+	}
+	return base + "/accounts?view=" + view
+}
+
 // emptyAccounts = pesan kosong jujur. Halaman pertama benar-benar kosong vs
 // halaman kedua yang kosong (setelah cursor) dibedakan: yang kedua menawarkan
 // jalan kembali alih-alih "belum ada desa" yang berbohong.
@@ -80,7 +137,7 @@ func emptyAccounts(v AccountsListView) g.Node {
 			h.Div(h.Class("card-body items-start"),
 				h.P(h.Class("text-base-content/70"),
 					g.Text("Belum ada desa yang cocok. Tambah desa untuk memulai.")),
-				h.A(h.Href(v.Base+"/accounts"), h.Class("btn btn-ghost btn-sm min-h-11"),
+				h.A(h.Href(accountsListHref(v.Base, v.ActiveView)), h.Class("btn btn-ghost btn-sm min-h-11"),
 					g.Text("« Kembali ke awal")),
 			),
 		)
@@ -111,7 +168,9 @@ func accountsTable(v AccountsListView) g.Node {
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Tipe")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Kab/Kota")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("Provinsi")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Provinsi")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Owner")),
+					h.Th(h.Class("py-2 font-medium"), g.Text("CSM")),
 				)),
 				h.TBody(g.Group(rows)),
 			)),
@@ -135,7 +194,9 @@ func accountRow(base string, a AccountRow) g.Node {
 		)),
 		link(a.AccountType, "py-2 pr-4"),
 		link(orDash(a.Regency), "py-2 pr-4"),
-		link(orDash(a.Province), "py-2"),
+		link(orDash(a.Province), "py-2 pr-4"),
+		link(orDash(a.OwnerName), "py-2 pr-4"),
+		link(orDash(a.CSMName), "py-2"),
 	)
 }
 
@@ -147,12 +208,13 @@ func accountsPager(v AccountsListView) g.Node {
 		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
 			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
 	}
+	href := v.Base + "/accounts?after=" + v.NextCursor
+	if v.ActiveView != "" && v.ActiveView != AccViewAll {
+		href += "&view=" + v.ActiveView
+	}
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(
-			h.Href(v.Base+"/accounts?after="+v.NextCursor),
-			h.Class("btn min-h-11"), g.Text("Berikutnya »"),
-		),
+		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
 	)
 }
 
