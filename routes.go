@@ -346,6 +346,24 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/deals/{id}/stage", h.DealStage)
 		r.Post("/deals/{id}/delete", h.DealDelete)
 
+		// Quote (Sales, CRM Modul 4). Ter-NEST di bawah deal — quote hidup di
+		// bawah deal ({id}) & MEWARISI sumbu bisnis "crm:deals" + ownership deal
+		// (loadOwnedQuote → loadOwnedDeal). Builder = tabel line item ber-SNAPSHOT
+		// harga (unit_price beku dari plan). Semua aksi native POST → 303. Item
+		// ter-nest lagi di bawah quote ({quoteID}). Sidebar "Quotes" tetap
+		// placeholder (tak ada daftar global — keputusan scope).
+		r.Get("/deals/{id}/quotes", h.QuotesList)
+		r.Get("/deals/{id}/quotes/new", h.QuoteNew)
+		r.Post("/deals/{id}/quotes", h.QuoteCreate)
+		r.Get("/deals/{id}/quotes/{quoteID}", h.QuoteDetail)
+		r.Get("/deals/{id}/quotes/{quoteID}/edit", h.QuoteEdit)
+		r.Post("/deals/{id}/quotes/{quoteID}", h.QuoteUpdate)
+		r.Post("/deals/{id}/quotes/{quoteID}/status", h.QuoteStatus)
+		r.Post("/deals/{id}/quotes/{quoteID}/delete", h.QuoteDelete)
+		r.Post("/deals/{id}/quotes/{quoteID}/items", h.QuoteItemAdd)
+		r.Post("/deals/{id}/quotes/{quoteID}/items/{itemID}", h.QuoteItemUpdate)
+		r.Post("/deals/{id}/quotes/{quoteID}/items/{itemID}/delete", h.QuoteItemDelete)
+
 		// Peran CRM per-workspace (sumbu BISNIS, objek "crm:roles"). Gerbang di
 		// HANDLER (canManageRoles), BUKAN role tenant: satu alamat melayani semua
 		// role, izin yang membedakan. Editor matriks izin per-modul + cakupan data

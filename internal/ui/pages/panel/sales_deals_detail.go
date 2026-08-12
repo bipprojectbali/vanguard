@@ -45,6 +45,10 @@ type DealDetailView struct {
 
 	Owner    string
 	CanWrite bool
+
+	// Quotes = pratinjau quote deal ini (Modul 4). Diisi handler via
+	// ListQuotesForDeal (dibatasi); daftar penuh di /deals/{id}/quotes.
+	Quotes []QuoteRow
 }
 
 // DealDetail merender hub detail: header (nama + kode + stage + aksi), stepper
@@ -102,8 +106,68 @@ func DealDetail(v DealDetailView) g.Node {
 			{"Tanggal Tutup", v.ClosedDate},
 			{"Catatan Kekalahan", v.LossNotes},
 		}),
+		dealQuotesCard(v),
 		dealCrossModulePlaceholder(),
 	)
+}
+
+// dealQuotesCard = pratinjau Quote deal ini (Modul 4). Daftar ringkas + tautan
+// ke builder/daftar penuh. Tombol "Buat Quote" hanya bila boleh tulis. Quote
+// hidup DI BAWAH deal (nested) — semua tautan lewat base deal.
+func dealQuotesCard(v DealDetailView) g.Node {
+	idStr := strconv.FormatInt(v.ID, 10)
+	quotesBase := v.Base + "/deals/" + idStr + "/quotes"
+
+	head := h.Div(
+		h.Class("flex flex-wrap items-center justify-between gap-2 mb-2"),
+		h.H2(h.Class("font-semibold"), g.Text("Quote")),
+		ui.When(v.CanWrite, h.A(
+			h.Href(quotesBase+"/new"), h.Class("btn btn-sm btn-primary min-h-11"),
+			g.Text("Buat Quote"))),
+	)
+
+	var content g.Node
+	if len(v.Quotes) == 0 {
+		content = h.P(h.Class("text-sm text-base-content/60"),
+			g.Text("Belum ada quote untuk deal ini."))
+	} else {
+		rows := make([]g.Node, 0, len(v.Quotes))
+		for _, q := range v.Quotes {
+			href := quotesBase + "/" + strconv.FormatInt(q.ID, 10)
+			rows = append(rows, h.A(
+				h.Href(href),
+				h.Class("flex flex-wrap items-center justify-between gap-2 py-2 "+
+					"border-b border-base-300/50 last:border-0 hover:bg-base-200/50"),
+				h.Span(h.Class("min-w-0 truncate font-medium"),
+					g.Text(quoteRowLabel(q))),
+				h.Span(h.Class("flex items-center gap-2 shrink-0"),
+					quoteStatusBadge(q.Status),
+					h.Span(h.Class("text-sm text-base-content/70"), g.Text(orDash(q.GrandTotal)))),
+			))
+		}
+		content = h.Div(h.Class("min-w-0"),
+			h.Div(h.Class("grid"), g.Group(rows)),
+			h.A(h.Href(quotesBase), h.Class("text-sm text-base-content/60 mt-2 inline-block"),
+				g.Text("Lihat semua quote »")),
+		)
+	}
+
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+		h.Div(h.Class("card-body min-w-0"), head, content),
+	)
+}
+
+// quoteRowLabel = label ringkas satu quote di kartu deal: nama bila ada, jatuh ke
+// kode, lalu id.
+func quoteRowLabel(q QuoteRow) string {
+	if q.QuoteName != "" {
+		return q.QuoteName
+	}
+	if q.EntityCode != "" {
+		return q.EntityCode
+	}
+	return "Quote #" + strconv.FormatInt(q.ID, 10)
 }
 
 // dealIdentityCard = kartu inti; nilai Desa dirender sebagai TAUTAN (bukan teks

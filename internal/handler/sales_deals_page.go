@@ -24,6 +24,12 @@ import (
 // terlihat lewat tampilan Tabel berkeyset. Named-const, bukan angka telanjang.
 const dealPipelineLimit = 200
 
+// dealQuotesPreviewLimit membatasi jumlah quote yang ditampilkan di kartu
+// pratinjau pada detail deal. Daftar penuh (berkeyset) ada di
+// /deals/{id}/quotes; kartu ini hanya cuplikan teratas. Named-const, bukan
+// angka telanjang.
+const dealQuotesPreviewLimit = 5
+
 // DealsList — GET /w/{workspace}/deals. Default = pipeline (KPI + Kanban per-stage);
 // ?view=table = tampilan Tabel berkeyset. Bukan pemegang peran CRM → 403 + penjelasan.
 func (h *Handler) DealsList(w http.ResponseWriter, r *http.Request) {
@@ -189,6 +195,28 @@ func (h *Handler) DealDetail(w http.ResponseWriter, r *http.Request) {
 		panel.DealDetail(h.dealDetailView(ctx, base, d, names)))
 }
 
+// dealQuotesPreview memuat cuplikan quote deal ini untuk kartu di detail deal.
+// Best-effort (mirror accountLabel): gagal query → nil + log, detail deal tetap
+// terbaca; daftar penuh berkeyset ada di /deals/{id}/quotes.
+func (h *Handler) dealQuotesPreview(ctx context.Context, dealID int64) []panel.QuoteRow {
+	at, id := firstPageCursor()
+	rows, err := h.q(ctx).ListQuotesForDeal(ctx, db.ListQuotesForDealParams{
+		DealID:          &dealID,
+		CursorCreatedAt: at,
+		CursorID:        id,
+		PageSize:        dealQuotesPreviewLimit,
+	})
+	if err != nil {
+		h.Log.Error("deals: quotes preview", "err", err)
+		return nil
+	}
+	out := make([]panel.QuoteRow, 0, len(rows))
+	for _, q := range rows {
+		out = append(out, quoteRowView(q))
+	}
+	return out
+}
+
 // renderDealsForbidden — 403 + penjelasan bagi anggota tanpa peran CRM.
 func (h *Handler) renderDealsForbidden(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusForbidden)
@@ -243,6 +271,7 @@ func (h *Handler) dealDetailView(ctx context.Context, base string, d db.Deal, na
 		LossNotes:        deref(d.LossNotes),
 		Owner:            ownerName(d.DealOwner, names),
 		CanWrite:         canWriteDeals(ctx),
+		Quotes:           h.dealQuotesPreview(ctx, d.ID),
 	}
 }
 

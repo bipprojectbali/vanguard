@@ -113,6 +113,23 @@ func wsErrMsg(code string) string {
 		return "Desa (account) wajib dipilih untuk deal ini."
 	case "convert_guard":
 		return "Lead ini tak bisa dikonversi — harus berstatus Qualified dan belum pernah dikonversi."
+	// ── Sales: Quote (Modul 4) ──────────────────────────────────────────────
+	case "quote_name":
+		return "Nama quote terlalu panjang (maks 200 karakter)."
+	case "terms":
+		return "Termin/catatan terlalu panjang (maks 2000 karakter)."
+	case "tax":
+		return "Pajak harus berupa angka ≥ 0."
+	case "prepared_by":
+		return "Penyusun yang dipilih tidak valid."
+	case "plan_req":
+		return "Plan wajib dipilih untuk item ini."
+	case "qty":
+		return "Kuantitas harus berupa bilangan bulat lebih dari 0."
+	case "discount":
+		return "Diskon harus berupa angka 0–100."
+	case "status":
+		return "Status quote tidak valid."
 	case "failed":
 		return "Tindakan gagal. Coba lagi."
 	default:

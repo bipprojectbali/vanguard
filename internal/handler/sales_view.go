@@ -88,3 +88,26 @@ func dealsMsg(code string) string {
 		return ""
 	}
 }
+
+// quotesMsg memetakan ?ok= → pesan sukses Quote (header & item). Dipisah agar
+// pesan quote tak tertukar dengan deals.
+func quotesMsg(code string) string {
+	switch code {
+	case "created":
+		return "Quote dibuat."
+	case "saved":
+		return "Perubahan quote disimpan."
+	case "status":
+		return "Status quote diperbarui."
+	case "quote_deleted":
+		return "Quote dihapus."
+	case "item_added":
+		return "Item ditambahkan ke quote."
+	case "item_saved":
+		return "Perubahan item disimpan."
+	case "item_deleted":
+		return "Item dihapus dari quote."
+	default:
+		return ""
+	}
+}
