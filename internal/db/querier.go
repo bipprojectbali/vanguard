@@ -499,6 +499,19 @@ type Querier interface {
 	// Upsell/Downgrade bisa berganti plan — hanya self-FK yang otoritatif sbg tautan
 	// rantai. Termasuk baris ter-soft-delete (riwayat tak boleh berlubang).
 	ListRenewalChain(ctx context.Context, id int64) ([]ListRenewalChainRow, error)
+	// Dasbor Renewals (Menu 5.2, READ-ONLY — aksi perpanjangan ada di detail langganan,
+	// bukan di sini). Langganan yang punya dimensi renewal (end_date terisi), di-scope
+	// ownership (F3) dengan flag yang SAMA dgn ListSubscriptions. Empat JENDELA lewat
+	// window_filter (today dioper handler agar mengikuti zona waktu app & bisa
+	// dideterministikkan test):
+	//   • 'due'     : Active/PendingApproval, end_date ∈ [today, today+30] — jatuh tempo.
+	//   • 'grace'   : Active, end_date < today — lewat tempo tapi masih berjalan.
+	//   • 'renewed' : renewal_status = 'Renewed' — sudah diperpanjang.
+	//   • lainnya   : semua langganan ber-end_date (jendela 'Semua').
+	// Urut created_at DESC + keyset SAMA dgn ListSubscriptions (reuse pageCursor/
+	// splitPage); pengurutan "paling dekat jatuh tempo" ditunda ke slice KPI/agregasi.
+	// previous_value dibawa di s.* untuk kolom "Prev→Current" (tanpa JOIN tambahan).
+	ListRenewals(ctx context.Context, arg ListRenewalsParams) ([]ListRenewalsRow, error)
 	// Semua pengaturan sekaligus — dipakai halaman /dev/settings dan pemuatan cache
 	// saat boot. Jumlahnya sedikit, jadi tak dipaginasi (beda dari daftar user).
 	ListSettings(ctx context.Context) ([]PlatformSetting, error)

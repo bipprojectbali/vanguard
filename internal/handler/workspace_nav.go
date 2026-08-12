@@ -115,8 +115,8 @@ func workspaceSalesGroup(slug string, canLeads, canDeals, canSalesActivity bool)
 // workspaceSubscriptionsGroup merakit grup Subscriptions (wireframe 5). Seperti
 // Sales, SELALU tampil (peta jalan). Active Subscriptions → /subscriptions &
 // Plans & Pricing → /plans enabled per izin (sumber izin SAMA dengan
-// canViewSubscriptions/canViewPlans — nol menu hantu); Renewals/Churn placeholder
-// disabled sampai backend-nya mendarat. Urutan mengikuti nomor menu §4 (crmModules).
+// canViewSubscriptions/canViewPlans — nol menu hantu); Churn placeholder disabled
+// sampai backend-nya mendarat. Urutan mengikuti nomor menu §4 (crmModules).
 func workspaceSubscriptionsGroup(slug string, canPlans, canSubs bool) ui.NavItem {
 	children := make([]ui.NavItem, 0, 4)
 	// Active Subscriptions → /subscriptions (canViewSubscriptions, objek
@@ -128,9 +128,16 @@ func workspaceSubscriptionsGroup(slug string, canPlans, canSubs bool) ui.NavItem
 	} else {
 		active.Disabled = true
 	}
-	children = append(children, active,
-		ui.NavItem{Label: "Renewals", Icon: lucide.CalendarClock(html.Class("size-4")), Disabled: true},
-	)
+	// Renewals → /subscriptions/renewals (dasbor read-only Menu 5.2). Izin SAMA
+	// dengan Active Subscriptions (objek crm:subscriptions read); disabled bila tak
+	// berhak, tetap tampil agar posisi modul di peta jalan terlihat.
+	renewals := ui.NavItem{Label: "Renewals", Icon: lucide.CalendarClock(html.Class("size-4"))}
+	if canSubs {
+		renewals.Href = wsPath(slug, "/subscriptions/renewals")
+	} else {
+		renewals.Disabled = true
+	}
+	children = append(children, active, renewals)
 	// Plans & Pricing → /plans (canViewPlans, objek crm:plans). Berbackend sejak
 	// M5-3a; disabled bila tak berhak, tetap tampil agar posisi modul terlihat.
 	plans := ui.NavItem{Label: "Plans & Pricing", Icon: lucide.Tag(html.Class("size-4"))}

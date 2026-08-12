@@ -73,6 +73,44 @@ WHERE s.deleted_at IS NULL
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListRenewals :many
+-- Dasbor Renewals (Menu 5.2, READ-ONLY — aksi perpanjangan ada di detail langganan,
+-- bukan di sini). Langganan yang punya dimensi renewal (end_date terisi), di-scope
+-- ownership (F3) dengan flag yang SAMA dgn ListSubscriptions. Empat JENDELA lewat
+-- window_filter (today dioper handler agar mengikuti zona waktu app & bisa
+-- dideterministikkan test):
+--   • 'due'     : Active/PendingApproval, end_date ∈ [today, today+30] — jatuh tempo.
+--   • 'grace'   : Active, end_date < today — lewat tempo tapi masih berjalan.
+--   • 'renewed' : renewal_status = 'Renewed' — sudah diperpanjang.
+--   • lainnya   : semua langganan ber-end_date (jendela 'Semua').
+-- Urut created_at DESC + keyset SAMA dgn ListSubscriptions (reuse pageCursor/
+-- splitPage); pengurutan "paling dekat jatuh tempo" ditunda ke slice KPI/agregasi.
+-- previous_value dibawa di s.* untuk kolom "Prev→Current" (tanpa JOIN tambahan).
+SELECT s.*, a.village_name, p.plan_name
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+JOIN plans    p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND s.end_date IS NOT NULL
+  AND (s.created_at, s.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE sqlc.arg(window_filter)::text
+        WHEN 'due'     THEN s.status IN ('Active','PendingApproval')
+                            AND s.end_date >= sqlc.arg(today)::date
+                            AND s.end_date <= (sqlc.arg(today)::date + 30)
+        WHEN 'grace'   THEN s.status = 'Active' AND s.end_date < sqlc.arg(today)::date
+        WHEN 'renewed' THEN s.renewal_status = 'Renewed'
+        ELSE TRUE
+      END
+  )
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: ListSubscriptionsForAccount :many
 -- Daftar langganan satu desa (detail account → langganannya), keyset. Account sudah
 -- ter-scope ownership di handler; di sini cukup filter account_id + baris hidup.

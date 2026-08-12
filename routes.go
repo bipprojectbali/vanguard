@@ -399,6 +399,11 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// (subscription_owner) di layer query + F4 masking ARR untuk non-manager.
 		// Daftar berkeyset + detail dgn riwayat rantai renewal. Renew/churn menyusul.
 		r.Get("/subscriptions", h.SubscriptionsList)
+		// Dasbor Renewals (Menu 5.2, READ-ONLY). Rute statik SEBELUM "/{id}" — chi
+		// memprioritaskan segmen statik, tapi ditaruh eksplisit agar niatnya jelas.
+		// Gerbang sama: crm:subscriptions read + F3 ownership. Aksi perpanjangan
+		// tetap di detail langganan.
+		r.Get("/subscriptions/renewals", h.SubscriptionRenewals)
 		r.Get("/subscriptions/{id}", h.SubscriptionDetail)
 		// Mutasi langganan (M5-3c), native POST → 303 (gotcha #16). Gerbang bisnis
 		// terpisah: renew (crm:renewals write), approve/reject (crm:renewal_mgmt
