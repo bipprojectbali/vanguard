@@ -1,0 +1,18 @@
+# .ignore — ripgrep/agent search-visibility (BUKAN .gitignore).
+#
+# Target di sini TETAP di-commit & ter-embed via embed.FS ke binary.
+# File ini hanya menyembunyikannya dari pencarian ripgrep/agent supaya
+# window context tidak meledak (baris tunggal ratusan-ribu char, nilai baca NOL).
+# JANGAN pindahkan entri ini ke .gitignore — build single-binary akan kehilangan aset.
+# Rujukan: CONTEXT_FIX.md
+
+# CSS generated (make css) — 1 baris ~331k char, tak layak grep
+static/app.css
+
+# Aset vendored minified — baris tunggal ratusan-ribu s/d 1M char
+static/*.min.js
+static/daisyui.js
+static/datastar.js
+
+# Arsip dokumen usang/di-supersede — sejarah, bukan acuan mutakhir
+docs/archive/
