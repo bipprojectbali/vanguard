@@ -15,6 +15,11 @@ type Querier interface {
 	// menghasilkan dua membership (UNIQUE di memberships jadi jaring kedua).
 	AcceptInvite(ctx context.Context, token string) error
 	AddPlatformStaff(ctx context.Context, email string) (PlatformStaff, error)
+	// ── quote_items — baris penawaran (hard-delete, tanpa soft-delete/audit) ──────
+	// Tambah baris item. tenant_id eksplisit (RLS WITH CHECK). unit_price & subtotal =
+	// SNAPSHOT: unit_price disalin dari plans.base_price saat dibuat, subtotal dihitung
+	// app (unit_price * quantity * (1 - discount_pct/100)); keduanya beku sesudahnya.
+	AddQuoteItem(ctx context.Context, arg AddQuoteItemParams) (QuoteItem, error)
 	// OWNER. Workspace jadi READ-ONLY tapi datanya utuh. Guard `status = 'active'`
 	// mencegah archive menimpa SUSPENSI platform — kalau tidak, owner bisa keluar
 	// dari suspensi lewat pintu samping (archive lalu unarchive).
@@ -146,6 +151,16 @@ type Querier interface {
 	// hanya ada satu primer — dua instance yang boot bersamaan, satu akan gagal, dan
 	// itu jauh lebih baik daripada dua "rumah aplikasi".
 	CreatePrimaryTenant(ctx context.Context, arg CreatePrimaryTenantParams) (Tenant, error)
+	// quotes.sql — penawaran (Quote) + baris (quote_item), Modul 4 Sales slice 2.
+	// Isolasi WORKSPACE ditegakkan RLS (GUC app.tenant_id di WithTenant). Ownership
+	// F3 TAK ditegakkan di sini: quote diakses NEST di bawah deal (/deals/{id}/quotes),
+	// handler memuat deal ber-owner dulu (loadOwnedDeal) lalu quote-nya — tak ada kolom
+	// quote_owner. grand_total/tax_amount = SNAPSHOT: dihitung ulang app dari quote_items
+	// tiap item berubah (bukan agregat live saat baca).
+	// entity_code (QUO-001) dialokasikan GenerateEntityCode DALAM tx create.
+	// Buat quote. tenant_id di-set eksplisit (RLS WITH CHECK memverifikasinya = GUC).
+	// deal_id nullable di skema tapi selalu terisi di alur nest; account_id NN = jangkar.
+	CreateQuote(ctx context.Context, arg CreateQuoteParams) (Quote, error)
 	// Buat tenant baru (dipanggil saat register/oauth user baru — 1 user = 1 tenant).
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
 	// users = tabel GLOBAL (identitas murni, TANPA tenant/role — keduanya pindah ke
@@ -175,6 +190,9 @@ type Querier interface {
 	DeleteInvite(ctx context.Context, arg DeleteInviteParams) error
 	// Keluarkan anggota dari workspace (atau user keluar sendiri).
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
+	// Hard-delete satu baris item (tanpa soft-delete). Total quote direkalkulasi app
+	// setelahnya via UpdateQuoteTotals.
+	DeleteQuoteItem(ctx context.Context, id int64) error
 	// Satu desa hidup. RLS menjamin tenant_id; filter deleted_at menyembunyikan yang
 	// ter-soft-delete. Tak menerapkan ownership — pemanggil (handler) yang memutuskan
 	// apakah aktor boleh membuka baris ini (detail bisa dibuka lewat tautan langsung).
@@ -211,6 +229,9 @@ type Querier interface {
 	// perbandingan slug: yang bergantung padanya adalah penolakan arsip/hapus, dan
 	// aturan sepenting itu tak boleh bergantung pada string yang kebetulan cocok.
 	GetPrimaryTenant(ctx context.Context) (Tenant, error)
+	// Satu quote hidup. RLS menjamin tenant_id; kelayakan akses (via deal ber-owner)
+	// diputuskan handler sebelum memanggil ini.
+	GetQuote(ctx context.Context, id int64) (Quote, error)
 	// Baca satu pengaturan platform. Tak ditemukan = keadaan SAH (pemanggil jatuh ke
 	// default bawaan kode), bukan error yang perlu diributkan.
 	GetSetting(ctx context.Context, key string) (PlatformSetting, error)
@@ -367,6 +388,13 @@ type Querier interface {
 	// (pola auth.go/invite.go). Ditopang index partial idx_invites_email.
 	ListPendingInvitesByEmail(ctx context.Context, email string) ([]ListPendingInvitesByEmailRow, error)
 	ListPlatformStaff(ctx context.Context) ([]PlatformStaff, error)
+	// Baris item satu quote, urut tampil (line_no lalu id). Menopang detail quote &
+	// rekalkulasi total. Bounded per-quote (bukan daftar global) → tanpa keyset.
+	ListQuoteItems(ctx context.Context, quoteID int64) ([]QuoteItem, error)
+	// Daftar quote milik satu deal (detail deal → daftar quote-nya), keyset
+	// (created_at DESC, id DESC). Deal sudah ter-scope ownership di handler; di sini
+	// cukup filter deal_id + baris hidup. First page: cursor = (now(), max bigint).
+	ListQuotesForDeal(ctx context.Context, arg ListQuotesForDealParams) ([]Quote, error)
 	// Semua pengaturan sekaligus — dipakai halaman /dev/settings dan pemuatan cache
 	// saat boot. Jumlahnya sedikit, jadi tak dipaginasi (beda dari daftar user).
 	ListSettings(ctx context.Context) ([]PlatformSetting, error)
@@ -432,6 +460,10 @@ type Querier interface {
 	// operasional); audit_logs TIDAK — FK-nya ON DELETE SET NULL sejak migrasi 00010,
 	// sebab bukti tak boleh lenyap bersama yang dibuktikan (0005 §6).
 	PurgeTenant(ctx context.Context, id int64) error
+	// Jumlah subtotal seluruh item satu quote dalam satu round-trip (untuk rekalkulasi
+	// grand_total tanpa memuat semua baris ke Go). COALESCE(...)::numeric membungkus
+	// agregat agar sqlc tak meng-emit interface{} (gotcha #14).
+	QuoteItemsSubtotal(ctx context.Context, quoteID int64) (pgtype.Numeric, error)
 	// Presence bucket 15-menit. bucket_at di-floor SERVER-SIDE ke kelipatan 900 dtk
 	// (jangan hitung di Go — hindari drift clock). Agregasi di level baris: request
 	// berulang dalam bucket sama hanya menaikkan hits, bukan insert baris baru.
@@ -458,6 +490,10 @@ type Querier interface {
 	// Soft-delete: baris disembunyikan dari list/get tapi tetap ada (jejak & FK
 	// converted_* tak putus). Idempotent: hanya baris hidup.
 	SoftDeleteLead(ctx context.Context, arg SoftDeleteLeadParams) error
+	// Soft-delete: quote disembunyikan dari list/get tapi tetap ada. quote_items
+	// anaknya di-hard-delete oleh CASCADE hanya bila quote benar-benar di-DROP —
+	// di sini baris quote hanya ditandai, item tetap tersimpan.
+	SoftDeleteQuote(ctx context.Context, arg SoftDeleteQuoteParams) error
 	// Owner ATAU platform. Masa tenggang: baris tetap ada, slug TIDAK dilepas.
 	//
 	// `NOT is_primary`: rumah aplikasi tak bisa dihapus dari dalam aplikasi itu
@@ -515,6 +551,20 @@ type Querier interface {
 	// dihapus) — pgtype/pointer NULL diteruskan apa adanya.
 	UpdateMemberBusinessRole(ctx context.Context, arg UpdateMemberBusinessRoleParams) error
 	UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) error
+	// Sunting profil quote. quote_status punya jalur khusus (UpdateQuoteStatus) dan
+	// total punya jalur khusus (UpdateQuoteTotals) — keduanya TAK di sini agar
+	// perubahan status & rekalkulasi harga terlihat sebagai aksi tersendiri.
+	UpdateQuote(ctx context.Context, arg UpdateQuoteParams) (Quote, error)
+	// Sunting qty/diskon satu item; subtotal (snapshot) dihitung ulang app dan ditulis
+	// di sini. unit_price TAK diubah (tetap snapshot harga saat item dibuat).
+	UpdateQuoteItem(ctx context.Context, arg UpdateQuoteItemParams) (QuoteItem, error)
+	// Transisi status (Draft→Sent→…). Aturan transisi valid divalidasi handler (bukan
+	// constraint DB) agar pesan bisa diperbaiki user; CHECK di DB hanya membatasi
+	// himpunan nilai legal.
+	UpdateQuoteStatus(ctx context.Context, arg UpdateQuoteStatusParams) error
+	// Rekalkulasi total quote (snapshot) setelah item berubah. grand_total & tax_amount
+	// dihitung app dari quote_items lalu ditulis di sini — bukan agregat live saat baca.
+	UpdateQuoteTotals(ctx context.Context, arg UpdateQuoteTotalsParams) error
 	// Ganti NAMA tampilan workspace (owner-only, di-guard di handler). Slug SENGAJA
 	// tak diubah — immutable setelah dibuat (stabilitas URL; ganti display != ganti URL).
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) error
