@@ -31,6 +31,9 @@ type Querier interface {
 	// Penugasan CSM (binaan + cadangan) — jalur terpisah dari edit profil (§8.1).
 	// NULL = lepas penugasan. updated_by/at ikut agar jejaknya jelas.
 	AssignAccountCSM(ctx context.Context, arg AssignAccountCSMParams) error
+	// Churn (5.4): satu aksi bisnis — set status (Cancelled/Churned) + seluruh kolom
+	// churn sekaligus. Domain churn_reason/churn_type dijaga subs_churn_*_chk.
+	ChurnSubscription(ctx context.Context, arg ChurnSubscriptionParams) error
 	// Lepas penanda utama dari SEMUA kontak hidup satu desa. Dipanggil SEBELUM
 	// memasang primary baru (create/update/set-primary) supaya idx_contacts_primary
 	// (maks 1 utama per desa) tak pernah dilanggar. Idempotent: nol baris bila belum
@@ -161,6 +164,10 @@ type Querier interface {
 	// User baru dari OAuth: tanpa password, email terverifikasi provider, + avatar
 	// & nama tampilan. Keduanya nullable — provider boleh tak mengirimkannya.
 	CreateOAuthUser(ctx context.Context, arg CreateOAuthUserParams) (User, error)
+	// Buat plan katalog. tenant_id eksplisit (RLS WITH CHECK memverifikasinya = GUC).
+	// plan_code unik per tenant (idx_plans_code) → kode kembar ditolak DB. is_active
+	// default true di skema tapi di-set eksplisit agar handler bisa membuat draft pensiun.
+	CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, error)
 	// Dipanggil SEKALI saat boot pertama. Unique partial index di tenants menjamin
 	// hanya ada satu primer — dua instance yang boot bersamaan, satu akan gagal, dan
 	// itu jauh lebih baik daripada dua "rumah aplikasi".
@@ -175,6 +182,31 @@ type Querier interface {
 	// Buat quote. tenant_id di-set eksplisit (RLS WITH CHECK memverifikasinya = GUC).
 	// deal_id nullable di skema tapi selalu terisi di alur nest; account_id NN = jangkar.
 	CreateQuote(ctx context.Context, arg CreateQuoteParams) (Quote, error)
+	// subscriptions.sql — langganan (Subscription), Modul 5 slice 2. Isolasi WORKSPACE
+	// ditegakkan RLS (GUC app.tenant_id di WithTenant); isolasi ANTAR-DESA (F3)
+	// ditegakkan di layer query lewat flag ownership di ListSubscriptions (kolom
+	// subscription_owner) — pola sama dgn deals (lihat ownership.go).
+	//
+	// KEPUTUSAN inti (docs/crm/skema.md §5, migrasi 00012):
+	//   • Renewal = INSERT baris BARU (CreateSubscription dgn previous_subscription_id
+	//     + previous_value), BUKAN update. Handler WAJIB meng-Expired baris lama
+	//     (UpdateSubscriptionStatus 'Expired') SEBELUM CreateSubscription baris aktif,
+	//     dalam SATU tx — kalau tidak, idx_subs_one_active (1 Active per account+plan)
+	//     menolak INSERT kedua. Urutan itu = invarian, ditegakkan test M5-5.
+	//   • Create-from-deal = CreateSubscription (source_deal_id) lalu
+	//     SetDealCreatedSubscription (deals.sql) dalam tx yang sama → tautan dua-arah.
+	//   • Churn = ChurnSubscription (status Cancelled/Churned + kolom churn 5.4 sekali
+	//     tulis; churn adalah SATU aksi bisnis, bukan edit profil).
+	//   • ARR DISIMPAN (bukan MRR×12); field-level masking ARR utk non-manager = urusan
+	//     handler/view (F4), bukan query.
+	// entity_code (SUB-0001) dialokasikan GenerateEntityCode DALAM tx create.
+	// Buat langganan. tenant_id eksplisit (RLS WITH CHECK memverifikasinya = GUC).
+	// Dipakai DUA jalur: (a) create-from-deal (source_deal_id terisi, previous_* NULL);
+	// (b) renewal (previous_subscription_id + previous_value terisi, source_deal_id
+	// opsional). status default 'Trial' di skema tapi di-set eksplisit (renewal lahir
+	// 'Active'). Kolom renewal-action (6.6) & churn (5.4) TIDAK di-set di sini — punya
+	// jalur sendiri.
+	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (Subscription, error)
 	// Buat tenant baru (dipanggil saat register/oauth user baru — 1 user = 1 tenant).
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
 	// users = tabel GLOBAL (identitas murni, TANPA tenant/role — keduanya pindah ke
@@ -256,6 +288,9 @@ type Querier interface {
 	// Baca satu pengaturan platform. Tak ditemukan = keadaan SAH (pemanggil jatuh ke
 	// default bawaan kode), bukan error yang perlu diributkan.
 	GetSetting(ctx context.Context, key string) (PlatformSetting, error)
+	// Satu langganan hidup. RLS menjamin tenant_id; ownership (F3) diputuskan handler
+	// atas baris (SubscriptionsListFilter.Allows), bukan di sini.
+	GetSubscription(ctx context.Context, id int64) (Subscription, error)
 	GetTenant(ctx context.Context, id int64) (Tenant, error)
 	// SENGAJA tanpa filter deleted_at: middleware Scope perlu MEMBEDAKAN "workspace
 	// tak pernah ada" dari "workspace terhapus" (0005) — keduanya berujung 404 bagi
@@ -423,6 +458,14 @@ type Querier interface {
 	// tak boleh dijual baru (tapi quote lama tetap sah lewat snapshot). Bounded katalog
 	// master per-workspace → tanpa keyset.
 	ListPlans(ctx context.Context) ([]Plan, error)
+	// ── Katalog master CRUD (M5-2) — kelola plan di /plans ───────────────────────
+	// plans TANPA soft-delete: is_active=false = pensiun (harga historis aman via
+	// snapshot quote_items). SetPlanActive = pensiunkan/aktifkan; UpdatePlan menyunting
+	// profil (is_active punya jalur sendiri agar pensiun terlihat sebagai aksi khusus).
+	// Seluruh katalog untuk tampilan kelola (TERMASUK yang pensiun) — beda dari
+	// ListPlans (hanya aktif, untuk picker quote). Aktif dulu lalu urut nama. Bounded
+	// katalog master per-workspace → tanpa keyset.
+	ListPlansAll(ctx context.Context) ([]Plan, error)
 	ListPlatformStaff(ctx context.Context) ([]PlatformStaff, error)
 	// Baris item satu quote, urut tampil (line_no lalu id). Menopang detail quote &
 	// rekalkulasi total. Bounded per-quote (bukan daftar global) → tanpa keyset.
@@ -438,9 +481,26 @@ type Querier interface {
 	// (created_at DESC, id DESC). Deal sudah ter-scope ownership di handler; di sini
 	// cukup filter deal_id + baris hidup. First page: cursor = (now(), max bigint).
 	ListQuotesForDeal(ctx context.Context, arg ListQuotesForDealParams) ([]Quote, error)
+	// Riwayat renewal (M5-4): telusuri rantai MUNDUR dari satu langganan lewat
+	// previous_subscription_id (self-FK) sampai periode paling awal, lalu urut kronologis
+	// (lama→baru). Rekursif via self-FK (bukan filter account+plan) karena renewal
+	// Upsell/Downgrade bisa berganti plan — hanya self-FK yang otoritatif sbg tautan
+	// rantai. Termasuk baris ter-soft-delete (riwayat tak boleh berlubang).
+	ListRenewalChain(ctx context.Context, id int64) ([]ListRenewalChainRow, error)
 	// Semua pengaturan sekaligus — dipakai halaman /dev/settings dan pemuatan cache
 	// saat boot. Jumlahnya sedikit, jadi tak dipaginasi (beda dari daftar user).
 	ListSettings(ctx context.Context) ([]PlatformSetting, error)
+	// Daftar langganan (menu /subscriptions), keyset (created_at DESC, id DESC) + filter
+	// ownership F3 + filter status opsional. Dua flag ownership (sumber SATU dgn
+	// SubscriptionsListFilter): scope_all → semua; is_own → subscription_owner = uid;
+	// keduanya false → NOL baris (fail-closed). status_filter '' → semua status.
+	// JOIN accounts+plans membawa nama untuk kolom (hindari N+1, rule 13); INNER JOIN
+	// aman karena account_id/plan_id NOT NULL. accounts di-filter baris hidup.
+	ListSubscriptions(ctx context.Context, arg ListSubscriptionsParams) ([]ListSubscriptionsRow, error)
+	// Daftar langganan satu desa (detail account → langganannya), keyset. Account sudah
+	// ter-scope ownership di handler; di sini cukup filter account_id + baris hidup.
+	// plan_name dibawa untuk kolom "Paket".
+	ListSubscriptionsForAccount(ctx context.Context, arg ListSubscriptionsForAccountParams) ([]ListSubscriptionsForAccountRow, error)
 	// Daftar workspace untuk panel /dev (lintas-workspace — route platform). Termasuk
 	// yang suspended/archived: justru itu yang perlu dilihat operator. Yang TERHAPUS
 	// ikut tampil agar restore masih mungkin selama masa tenggang.
@@ -516,6 +576,13 @@ type Querier interface {
 	// workspace yang dihapus saat ter-arsip pun kembali sebagai aktif — pemulihan
 	// harus meninggalkan keadaan yang bisa langsung dipakai, bukan setengah jalan.
 	RestoreTenant(ctx context.Context, id int64) error
+	// Tautkan deal ke langganan hasil create-from-deal (deals.created_subscription_id;
+	// FK ditutup di migrasi 00012). Dipanggil dalam tx yang SAMA dgn CreateSubscription
+	// agar deal Closed Won selalu menunjuk langganan yang lahir darinya (atomik).
+	SetDealCreatedSubscription(ctx context.Context, arg SetDealCreatedSubscriptionParams) error
+	// Pensiunkan (false) atau aktifkan kembali (true) plan. Plan pensiun hilang dari
+	// ListPlans (picker) tapi quote/langganan lama tetap sah (snapshot harga).
+	SetPlanActive(ctx context.Context, arg SetPlanActiveParams) error
 	// Angkat SATU kontak jadi utama. Pemanggil WAJIB memanggil ClearAccountPrimaryContact
 	// lebih dulu (satu tx) — index memblokir dua utama. account_id ikut di WHERE sebagai
 	// sabuk pengaman: kontak yang bukan milik desa itu tak bisa diangkat lewat jalurnya.
@@ -540,6 +607,9 @@ type Querier interface {
 	// anaknya di-hard-delete oleh CASCADE hanya bila quote benar-benar di-DROP —
 	// di sini baris quote hanya ditandai, item tetap tersimpan.
 	SoftDeleteQuote(ctx context.Context, arg SoftDeleteQuoteParams) error
+	// Soft-delete: baris disembunyikan dari list/get tapi tetap ada (rantai renewal &
+	// FK dari deals.created_subscription_id tak putus). Idempotent: hanya baris hidup.
+	SoftDeleteSubscription(ctx context.Context, arg SoftDeleteSubscriptionParams) error
 	// Owner ATAU platform. Masa tenggang: baris tetap ada, slug TIDAK dilepas.
 	//
 	// `NOT is_primary`: rumah aplikasi tak bisa dihapus dari dalam aplikasi itu
@@ -604,6 +674,10 @@ type Querier interface {
 	// dihapus) — pgtype/pointer NULL diteruskan apa adanya.
 	UpdateMemberBusinessRole(ctx context.Context, arg UpdateMemberBusinessRoleParams) error
 	UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) error
+	// Sunting profil plan. is_active TAK di sini (SetPlanActive) — pensiun/aktifkan
+	// adalah aksi tersendiri, bukan efek samping edit. plan_code boleh diubah (tetap
+	// tunduk idx_plans_code unik).
+	UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error)
 	// Sunting profil quote. quote_status punya jalur khusus (UpdateQuoteStatus) dan
 	// total punya jalur khusus (UpdateQuoteTotals) — keduanya TAK di sini agar
 	// perubahan status & rekalkulasi harga terlihat sebagai aksi tersendiri.
@@ -618,6 +692,15 @@ type Querier interface {
 	// Rekalkulasi total quote (snapshot) setelah item berubah. grand_total & tax_amount
 	// dihitung app dari quote_items lalu ditulis di sini — bukan agregat live saat baca.
 	UpdateQuoteTotals(ctx context.Context, arg UpdateQuoteTotalsParams) error
+	// Sunting profil langganan. status, renewal-action (6.6), dan churn (5.4) punya
+	// jalur sendiri (UpdateSubscriptionStatus/ChurnSubscription) agar transisi status &
+	// churn terlihat sebagai aksi tersendiri, bukan efek samping edit.
+	UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (Subscription, error)
+	// Transisi status (Trial→Active, Active→Expired saat renewal, dst). Aturan transisi
+	// valid divalidasi handler (bukan constraint DB) agar pesan bisa diperbaiki user;
+	// subs_status_chk hanya membatasi himpunan nilai legal. INVARIAN renewal: Expired
+	// baris lama HARUS mendahului CreateSubscription baris aktif dalam tx yang sama.
+	UpdateSubscriptionStatus(ctx context.Context, arg UpdateSubscriptionStatusParams) error
 	// Ganti NAMA tampilan workspace (owner-only, di-guard di handler). Slug SENGAJA
 	// tak diubah — immutable setelah dibuat (stabilitas URL; ganti display != ganti URL).
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) error

@@ -351,6 +351,28 @@ func (q *Queries) ListDealsForPipeline(ctx context.Context, arg ListDealsForPipe
 	return items, nil
 }
 
+const setDealCreatedSubscription = `-- name: SetDealCreatedSubscription :exec
+UPDATE deals SET
+    created_subscription_id = $1,
+    updated_by              = $2,
+    updated_at              = now()
+WHERE id = $3 AND deleted_at IS NULL
+`
+
+type SetDealCreatedSubscriptionParams struct {
+	CreatedSubscriptionID *int64 `json:"created_subscription_id"`
+	UpdatedBy             *int64 `json:"updated_by"`
+	ID                    int64  `json:"id"`
+}
+
+// Tautkan deal ke langganan hasil create-from-deal (deals.created_subscription_id;
+// FK ditutup di migrasi 00012). Dipanggil dalam tx yang SAMA dgn CreateSubscription
+// agar deal Closed Won selalu menunjuk langganan yang lahir darinya (atomik).
+func (q *Queries) SetDealCreatedSubscription(ctx context.Context, arg SetDealCreatedSubscriptionParams) error {
+	_, err := q.db.Exec(ctx, setDealCreatedSubscription, arg.CreatedSubscriptionID, arg.UpdatedBy, arg.ID)
+	return err
+}
+
 const softDeleteDeal = `-- name: SoftDeleteDeal :exec
 UPDATE deals SET deleted_at = now(), updated_by = $1
 WHERE id = $2 AND deleted_at IS NULL

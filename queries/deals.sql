@@ -124,3 +124,13 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 -- leads.converted_deal_id tak putus). Idempotent: hanya baris hidup.
 UPDATE deals SET deleted_at = now(), updated_by = sqlc.narg(updated_by)
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
+
+-- name: SetDealCreatedSubscription :exec
+-- Tautkan deal ke langganan hasil create-from-deal (deals.created_subscription_id;
+-- FK ditutup di migrasi 00012). Dipanggil dalam tx yang SAMA dgn CreateSubscription
+-- agar deal Closed Won selalu menunjuk langganan yang lahir darinya (atomik).
+UPDATE deals SET
+    created_subscription_id = sqlc.arg(created_subscription_id),
+    updated_by              = sqlc.narg(updated_by),
+    updated_at              = now()
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
