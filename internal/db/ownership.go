@@ -222,6 +222,41 @@ func (f DealsListFilter) Allows(uid int64, owner *int64) bool {
 	return false
 }
 
+// ActivitiesListFilter = cakupan kepemilikan → dua flag boolean untuk
+// ListActivities. Bentuk identik LeadsListFilter/DealsListFilter (satu kolom
+// owner_id); tipe terpisah agar call-site jelas modul mana yang disaring dan tak
+// tertukar argumen. Sales Activity Log (4.4) memakainya di atas baris
+// activity_context='sales'.
+type ActivitiesListFilter struct {
+	ScopeAll bool
+	IsOwn    bool
+}
+
+// ActivitiesListFilterFor merakit flag untuk data_scope role. Fail-closed sama:
+// nilai tak dikenal → ScopeNone (semua flag false → nol baris).
+func ActivitiesListFilterFor(dataScope string) ActivitiesListFilter {
+	switch AccountsScopeFor(dataScope) {
+	case ScopeAll:
+		return ActivitiesListFilter{ScopeAll: true}
+	case ScopeOwn:
+		return ActivitiesListFilter{IsOwn: true}
+	default: // ScopeNone
+		return ActivitiesListFilter{}
+	}
+}
+
+// Allows — kembaran per-baris dari ListActivities (owner_id). 404-gate detail
+// aktivitas. owner = kolom nullable (nil = tak diisi).
+func (f ActivitiesListFilter) Allows(uid int64, owner *int64) bool {
+	if f.ScopeAll {
+		return true
+	}
+	if f.IsOwn && owner != nil && *owner == uid {
+		return true
+	}
+	return false
+}
+
 // placeholder membentuk "$N" untuk pgx. Dipisah agar niatnya terbaca dan mudah
 // diuji; strconv sengaja dihindari untuk N kecil yang sangat sering dipanggil.
 func placeholder(n int) string {

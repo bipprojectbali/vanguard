@@ -346,6 +346,20 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/deals/{id}/stage", h.DealStage)
 		r.Post("/deals/{id}/delete", h.DealDelete)
 
+		// Sales Activity Log (Sales, CRM 4.4). VIEW TERFILTER (activity_context=
+		// 'sales') atas tabel polimorfik `activities` (Modul 7). Gerbang di HANDLER
+		// sumbu BISNIS ("crm:sales_activity") + ownership F3 (owner_id). Target
+		// polimorfik (deal/account/contact) diverifikasi dalam cakupan aktor sebelum
+		// insert. Ubah status = aksi tersendiri (native POST → 303).
+		r.Get("/activities", h.ActivitiesList)
+		r.Get("/activities/new", h.ActivityNew)
+		r.Post("/activities", h.ActivityCreate)
+		r.Get("/activities/{id}", h.ActivityDetail)
+		r.Get("/activities/{id}/edit", h.ActivityEdit)
+		r.Post("/activities/{id}", h.ActivityUpdate)
+		r.Post("/activities/{id}/status", h.ActivityStatus)
+		r.Post("/activities/{id}/delete", h.ActivityDelete)
+
 		// Daftar quote LINTAS-deal (menu sidebar "Quotes"). Read-only: ownership F3
 		// DIWARISI dari deal induk (ListQuotes JOIN deals → deal_owner), keyset.
 		// Pembuatan/penyuntingan tetap NEST di bawah deal (blok di bawah).

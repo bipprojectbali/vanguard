@@ -42,6 +42,37 @@ func dateStr(d pgtype.Date) string {
 	return d.Time.Format(dateLayout)
 }
 
+// dateTimeLayout = format <input type="datetime-local"> HTML (tanpa detik & zona).
+// Diperlakukan sebagai UTC saat disimpan (gotcha #14: simpan UTC) — cukup untuk
+// stempel waktu aktivitas v1; agregasi berzona belum diperlukan di sini.
+const dateTimeLayout = "2006-01-02T15:04"
+
+// optDateTime mengurai stempel waktu opsional (mis. activity_at pada Call):
+// kosong → (NULL, ""); terisi & sah → (Timestamptz valid, ""); tak terurai →
+// (zero, "datetime"). Menerima varian berdetik dari beberapa browser.
+func optDateTime(s string) (pgtype.Timestamptz, string) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return pgtype.Timestamptz{Valid: false}, ""
+	}
+	t, err := time.Parse(dateTimeLayout, s)
+	if err != nil {
+		if t, err = time.Parse("2006-01-02T15:04:05", s); err != nil {
+			return pgtype.Timestamptz{}, "datetime"
+		}
+	}
+	return pgtype.Timestamptz{Time: t.UTC(), Valid: true}, ""
+}
+
+// dateTimeStr memformat Timestamptz untuk pengisian ulang <input datetime-local>:
+// NULL → "". Format sama dengan input agar nilai bolak-balik tanpa pergeseran.
+func dateTimeStr(t pgtype.Timestamptz) string {
+	if !t.Valid {
+		return ""
+	}
+	return t.Time.UTC().Format(dateTimeLayout)
+}
+
 // optProbability mengurai probabilitas deal (0–100) opsional: kosong → (nil,
 // "");  terisi wajib bilangan bulat DALAM 0–100 → (&v, ""); di luar itu → (nil,
 // "probability"). Batas dipaksa di sini SEBELUM DB (cermin deals_probability_chk

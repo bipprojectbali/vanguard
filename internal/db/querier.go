@@ -87,6 +87,20 @@ type Querier interface {
 	// entity_code sudah dirakit pemanggil (GenerateEntityCode) — INSERT-nya dijaga
 	// unik oleh idx_accounts_entity_code bila format diubah bertabrakan.
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
+	// activities.sql — aktivitas polimorfik (task/call/note …). Isolasi WORKSPACE
+	// ditegakkan RLS (GUC app.tenant_id di WithTenant); isolasi ANTAR-DESA (F3)
+	// ditegakkan di layer query lewat flag ownership di ListActivities — lihat
+	// ownership.go (ActivitiesListFilter, sumbu tunggal owner_id).
+	//
+	// Nama query JAMAK (Activities) — sengaja beda dari activity.sql (presence,
+	// 00001) agar tak bentrok di querier generated. Tabel TAK punya entity_code
+	// (spec §7a) → tak ada alokasi kode di create.
+	//
+	// activity_context di-set handler ('sales' untuk 4.4); target_id BUKAN FK
+	// (integritas target diverifikasi handler via loadOwned* sebelum insert).
+	// Buat aktivitas. tenant_id di-set eksplisit (RLS WITH CHECK memverifikasinya =
+	// GUC). Kolom per-kind opsional (narg) — hanya yang relevan untuk kind terisi.
+	CreateActivity(ctx context.Context, arg CreateActivityParams) (Activity, error)
 	// Jejak aksi admin. metadata TANPA PII (id saja, bukan email/nama).
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
 	// Buat peran baru (atau seed default). name = subject Casbin & nilai
@@ -197,6 +211,9 @@ type Querier interface {
 	// ter-soft-delete. Tak menerapkan ownership — pemanggil (handler) yang memutuskan
 	// apakah aktor boleh membuka baris ini (detail bisa dibuka lewat tautan langsung).
 	GetAccount(ctx context.Context, id int64) (Account, error)
+	// Satu aktivitas hidup. RLS menjamin tenant_id; ownership diputuskan handler
+	// (ActivitiesListFilter.Allows) atas baris.
+	GetActivity(ctx context.Context, id int64) (Activity, error)
 	// Satu peran (edit/validasi). tenant_id di predikat = pertahanan berlapis di atas
 	// RLS: nama peran datang dari URL, jadi cocokkan eksplisit ke workspace aktif.
 	GetBusinessRole(ctx context.Context, arg GetBusinessRoleParams) (GetBusinessRoleRow, error)
@@ -266,6 +283,12 @@ type Querier interface {
 	// Ketiganya false (Support/role kosong/liar) → OR selalu false → NOL baris
 	// (fail-closed, bukan bocor). uid tetap dioper walau scope_all (diabaikan).
 	ListAccounts(ctx context.Context, arg ListAccountsParams) ([]Account, error)
+	// Daftar aktivitas (tampilan Tabel), keyset (created_at DESC, id DESC) + filter
+	// ownership F3 + filter context. Dua flag ownership (sumber SATU dengan
+	// ActivitiesListFilter): scope_all → semua; is_own → owner_id = uid; keduanya
+	// false → NOL baris (fail-closed). context_filter menyaring view modul
+	// ('sales' untuk 4.4) — pemisah dari CS 6.5 / general M7.
+	ListActivities(ctx context.Context, arg ListActivitiesParams) ([]Activity, error)
 	// Orang yang punya jejak pada rentang ini — isi dropdown "filter per-orang".
 	//
 	// Diturunkan dari DATA, bukan dari daftar user: memilih orang yang tak punya
@@ -500,6 +523,9 @@ type Querier interface {
 	// Soft-delete: baris disembunyikan dari list/get tapi tetap ada (jejak & FK dari
 	// entitas lain — deal/tiket — tak putus). Idempotent: hanya baris hidup.
 	SoftDeleteAccount(ctx context.Context, arg SoftDeleteAccountParams) error
+	// Soft-delete: baris disembunyikan dari list/get tapi tetap ada (jejak aktivitas
+	// bertahan). Idempotent: hanya baris hidup.
+	SoftDeleteActivity(ctx context.Context, arg SoftDeleteActivityParams) error
 	// Soft-delete: baris disembunyikan dari list/get tapi tetap ada (jejak & FK dari
 	// entitas lain tak putus). Idempotent: hanya baris hidup. Kontak utama yang dihapus
 	// membebaskan slot primary (index-nya partial WHERE deleted_at IS NULL).
@@ -544,6 +570,13 @@ type Querier interface {
 	// (owner/CSM) juga TERPISAH (AssignAccountCSM) agar perubahan wewenang terlihat
 	// sebagai aksi tersendiri, bukan efek samping edit profil.
 	UpdateAccount(ctx context.Context, arg UpdateAccountParams) (Account, error)
+	// Sunting aktivitas. kind & target TAK di sini: kind menentukan bentuk form
+	// (immutable saat edit), target ditetapkan saat create. status punya jalur
+	// khusus (UpdateActivityStatus) agar perpindahan terlihat sebagai aksi tersendiri.
+	UpdateActivity(ctx context.Context, arg UpdateActivityParams) (Activity, error)
+	// Ubah status (aksi tersendiri, cermin UpdateDealStage). Validasi enum di handler
+	// (allowlist) + CHECK DB sebagai jaring terakhir.
+	UpdateActivityStatus(ctx context.Context, arg UpdateActivityStatusParams) error
 	// Sunting label, deskripsi & cakupan peran. name (subject Casbin) TAK diubah di
 	// sini — mengganti nama peran memutus assign yang sudah ada; kalau perlu, buat
 	// peran baru. is_system tak bisa disunting (dijaga di handler, bukan di query).

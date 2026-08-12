@@ -56,6 +56,25 @@ func canApproveDeals(ctx context.Context) bool {
 	return authz.CanBusiness(ctx, "crm:deals", "approve")
 }
 
+// canViewSalesActivity = gerbang READ Sales Activity Log (4.4). Objek Casbin
+// crm:sales_activity (BUKAN crm:activities — objek M7 global yang tetap disabled).
+// Sumber tunggal untuk menu sidebar & gate halaman ActivitiesList/ActivityDetail.
+func canViewSalesActivity(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:sales_activity", "read")
+}
+
+// canWriteSalesActivityPerm = izin F2 mentah tulis aktivitas (tanpa cek arsip).
+// Dipakai gate aksi POST; write mencakup read di Casbin.
+func canWriteSalesActivityPerm(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:sales_activity", "write")
+}
+
+// canWriteSalesActivity = tombol tulis di view: izin F2 write DAN workspace tak
+// read-only (arsip). Dihitung di handler, dioper bool — view tak panggil authz.
+func canWriteSalesActivity(ctx context.Context) bool {
+	return canWriteSalesActivityPerm(ctx) && !IsReadOnly(ctx)
+}
+
 // leadsMsg memetakan ?ok= → pesan sukses Leads (dipisah dari wsErrMsg agar alert
 // sukses & galat tak pernah tertukar variannya).
 func leadsMsg(code string) string {
@@ -107,6 +126,23 @@ func quotesMsg(code string) string {
 		return "Perubahan item disimpan."
 	case "item_deleted":
 		return "Item dihapus dari quote."
+	default:
+		return ""
+	}
+}
+
+// activitiesMsg memetakan ?ok= → pesan sukses Sales Activity (4.4). Dipisah agar
+// pesan aktivitas tak tertukar dengan deals/quotes.
+func activitiesMsg(code string) string {
+	switch code {
+	case "created":
+		return "Aktivitas dicatat."
+	case "saved":
+		return "Perubahan aktivitas disimpan."
+	case "status":
+		return "Status aktivitas diperbarui."
+	case "deleted":
+		return "Aktivitas dihapus."
 	default:
 		return ""
 	}

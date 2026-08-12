@@ -130,6 +130,27 @@ func wsErrMsg(code string) string {
 		return "Diskon harus berupa angka 0–100."
 	case "status":
 		return "Status quote tidak valid."
+	// ── Sales: Activity Log (4.4) ───────────────────────────────────────────
+	case "activity_kind":
+		return "Jenis aktivitas tidak valid."
+	case "activity_subject":
+		return "Subjek aktivitas wajib diisi (maks 200 karakter)."
+	case "activity_target":
+		return "Target aktivitas wajib dipilih dan berada dalam cakupan Anda."
+	case "activity_priority":
+		return "Prioritas tugas tidak valid."
+	case "activity_status":
+		return "Status tugas tidak valid."
+	case "activity_direction":
+		return "Arah panggilan tidak valid."
+	case "activity_call_result":
+		return "Hasil panggilan tidak valid."
+	case "activity_contact":
+		return "Kontak yang dipilih tidak valid."
+	case "activity_duration":
+		return "Durasi panggilan harus berupa bilangan bulat ≥ 0."
+	case "datetime":
+		return "Waktu tidak valid (format YYYY-MM-DDTHH:MM)."
 	case "failed":
 		return "Tindakan gagal. Coba lagi."
 	default:

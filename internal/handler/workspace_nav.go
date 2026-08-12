@@ -28,7 +28,7 @@ import (
 // Izin dioper terpisah (bukan satu `canManage`) karena keduanya TIDAK identik —
 // di mode single admin boleh menyunting workspace tapi keanggotaan dinilai
 // sendiri — jadi menyatukannya akan membuat salah satu menu berbohong.
-func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canRoles bool) []ui.NavItem {
+func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canRoles bool) []ui.NavItem {
 	items := []ui.NavItem{
 		{Label: "Dashboard", Href: wsPath(slug, ""), Icon: lucide.House(html.Class("size-4"))},
 	}
@@ -50,7 +50,7 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 	}
 	// Sales jadi GRUP bersarang (wireframe 4): Leads/Deals berbackend (enabled per
 	// izin), Quotes/Activities placeholder. Selalu tampil agar peta jalan terlihat.
-	items = append(items, workspaceSalesGroup(slug, canLeads, canDeals))
+	items = append(items, workspaceSalesGroup(slug, canLeads, canDeals, canSalesActivity))
 	// Modul berwireframe tapi belum berbackend — urutan persis wireframe, disabled.
 	// Ditampilkan agar peta jalan produk terlihat utuh di sidebar sejak awal.
 	items = append(items,
@@ -69,7 +69,7 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 // grup ini SELALU tampil (peta jalan produk terlihat): anak Leads/Deals/Quotes
 // enabled mengikuti izin gerbang halamannya (sumber izin SAMA dengan
 // canViewLeads/canViewDeals — nol menu hantu), Activities placeholder disabled.
-func workspaceSalesGroup(slug string, canLeads, canDeals bool) ui.NavItem {
+func workspaceSalesGroup(slug string, canLeads, canDeals, canSalesActivity bool) ui.NavItem {
 	children := make([]ui.NavItem, 0, 4)
 	// Leads → /leads (canViewLeads, objek crm:leads). Disabled bila tak berhak,
 	// tetap tampil agar posisi modul di peta jalan terlihat.
@@ -94,9 +94,16 @@ func workspaceSalesGroup(slug string, canLeads, canDeals bool) ui.NavItem {
 	} else {
 		quotes.Disabled = true
 	}
-	children = append(children, leads, deals, quotes,
-		ui.NavItem{Label: "Sales Activities", Icon: lucide.Activity(html.Class("size-4")), Disabled: true},
-	)
+	// Sales Activities → /activities (canViewSalesActivity, objek
+	// crm:sales_activity). Berbeda dari "Activities" top-level (objek M7 global,
+	// tetap disabled): ini VIEW TERFILTER Sales (activity_context='sales').
+	salesAct := ui.NavItem{Label: "Sales Activities", Icon: lucide.Activity(html.Class("size-4"))}
+	if canSalesActivity {
+		salesAct.Href = wsPath(slug, "/activities")
+	} else {
+		salesAct.Disabled = true
+	}
+	children = append(children, leads, deals, quotes, salesAct)
 	return ui.NavItem{
 		Label: "Sales", Icon: lucide.TrendingUp(html.Class("size-4")), Children: children,
 	}

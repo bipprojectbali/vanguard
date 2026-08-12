@@ -44,6 +44,46 @@ type Account struct {
 	EntityCode            *string            `json:"entity_code"`
 }
 
+type Activity struct {
+	ID              int64              `json:"id"`
+	TenantID        int64              `json:"tenant_id"`
+	Kind            string             `json:"kind"`
+	Subject         string             `json:"subject"`
+	TargetType      string             `json:"target_type"`
+	TargetID        int64              `json:"target_id"`
+	OwnerID         *int64             `json:"owner_id"`
+	ActivityContext *string            `json:"activity_context"`
+	Status          *string            `json:"status"`
+	Notes           *string            `json:"notes"`
+	DueDate         pgtype.Date        `json:"due_date"`
+	Priority        *string            `json:"priority"`
+	ReminderAt      pgtype.Timestamptz `json:"reminder_at"`
+	StartAt         pgtype.Timestamptz `json:"start_at"`
+	EndAt           pgtype.Timestamptz `json:"end_at"`
+	AllDay          *bool              `json:"all_day"`
+	Location        *string            `json:"location"`
+	MeetingType     *string            `json:"meeting_type"`
+	ContactID       *int64             `json:"contact_id"`
+	Direction       *string            `json:"direction"`
+	ActivityAt      pgtype.Timestamptz `json:"activity_at"`
+	DurationMin     *int32             `json:"duration_min"`
+	CallResult      *string            `json:"call_result"`
+	EmailFrom       *string            `json:"email_from"`
+	EmailTo         *string            `json:"email_to"`
+	EmailStatus     *string            `json:"email_status"`
+	Body            *string            `json:"body"`
+	EngagementType  *string            `json:"engagement_type"`
+	Frequency       *string            `json:"frequency"`
+	Channel         *string            `json:"channel"`
+	ScheduledDate   pgtype.Timestamptz `json:"scheduled_date"`
+	NextDueDate     pgtype.Date        `json:"next_due_date"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy       *int64             `json:"created_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy       *int64             `json:"updated_by"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ActivityPresence struct {
 	UserID     int64              `json:"user_id"`
 	BucketAt   pgtype.Timestamptz `json:"bucket_at"`
