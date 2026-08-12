@@ -225,6 +225,10 @@ type Querier interface {
 	// (memastikan tenant aktif di session memang milik user; anti tenant-forcing).
 	GetMembership(ctx context.Context, arg GetMembershipParams) (Membership, error)
 	GetOAuthAccount(ctx context.Context, arg GetOAuthAccountParams) (OauthAccount, error)
+	// Satu plan (untuk baca base_price yang di-SNAPSHOT ke quote_items.unit_price saat
+	// add item). RLS menjamin tenant_id. Tak filter is_active: handler memutuskan (add
+	// item baru gate ke ListPlans; get by id juga menutup balapan pensiun-saat-submit).
+	GetPlan(ctx context.Context, id int64) (Plan, error)
 	// Workspace PRIMER = rumah aplikasi. Dicari lewat kolom is_primary, BUKAN lewat
 	// perbandingan slug: yang bergantung padanya adalah penolakan arsip/hapus, dan
 	// aturan sepenting itu tak boleh bergantung pada string yang kebetulan cocok.
@@ -387,6 +391,15 @@ type Querier interface {
 	// lower(email) = $1 — pemanggil WAJIB mengirim email yang sudah di-lowercase
 	// (pola auth.go/invite.go). Ditopang index partial idx_invites_email.
 	ListPendingInvitesByEmail(ctx context.Context, email string) ([]ListPendingInvitesByEmailRow, error)
+	// plans.sql — katalog master (plans), dibaca untuk Quote Builder (Modul 4 Sales).
+	// Isolasi WORKSPACE ditegakkan RLS (GUC app.tenant_id di WithTenant); tak ada
+	// filter tenant_id manual. plans TANPA soft-delete: is_active=false = pensiun
+	// (harga historis di quote memakai SNAPSHOT quote_items.unit_price, bukan referensi
+	// hidup ke sini). Query ini menopang picker plan + baca base_price saat add item.
+	// Plan aktif untuk picker item quote, urut nama. Hanya is_active=true: plan pensiun
+	// tak boleh dijual baru (tapi quote lama tetap sah lewat snapshot). Bounded katalog
+	// master per-workspace → tanpa keyset.
+	ListPlans(ctx context.Context) ([]Plan, error)
 	ListPlatformStaff(ctx context.Context) ([]PlatformStaff, error)
 	// Baris item satu quote, urut tampil (line_no lalu id). Menopang detail quote &
 	// rekalkulasi total. Bounded per-quote (bukan daftar global) → tanpa keyset.
