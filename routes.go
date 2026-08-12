@@ -346,12 +346,16 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/deals/{id}/stage", h.DealStage)
 		r.Post("/deals/{id}/delete", h.DealDelete)
 
+		// Daftar quote LINTAS-deal (menu sidebar "Quotes"). Read-only: ownership F3
+		// DIWARISI dari deal induk (ListQuotes JOIN deals → deal_owner), keyset.
+		// Pembuatan/penyuntingan tetap NEST di bawah deal (blok di bawah).
+		r.Get("/quotes", h.QuotesIndex)
+
 		// Quote (Sales, CRM Modul 4). Ter-NEST di bawah deal — quote hidup di
 		// bawah deal ({id}) & MEWARISI sumbu bisnis "crm:deals" + ownership deal
 		// (loadOwnedQuote → loadOwnedDeal). Builder = tabel line item ber-SNAPSHOT
 		// harga (unit_price beku dari plan). Semua aksi native POST → 303. Item
-		// ter-nest lagi di bawah quote ({quoteID}). Sidebar "Quotes" tetap
-		// placeholder (tak ada daftar global — keputusan scope).
+		// ter-nest lagi di bawah quote ({quoteID}).
 		r.Get("/deals/{id}/quotes", h.QuotesList)
 		r.Get("/deals/{id}/quotes/new", h.QuoteNew)
 		r.Post("/deals/{id}/quotes", h.QuoteCreate)

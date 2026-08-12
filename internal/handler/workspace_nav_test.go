@@ -63,10 +63,10 @@ func TestWorkspaceNav_DisabledModules(t *testing.T) {
 }
 
 // TestWorkspaceNav_SalesGroup: Sales = grup bersarang yang SELALU tampil. Anak
-// Leads/Deals enabled mengikuti izin (sumber sama dengan gerbang halaman);
-// Quotes/Sales Activities placeholder disabled.
+// Leads/Deals/Quotes enabled mengikuti izin (Quotes ikut canDeals — quote mewarisi
+// izin baca deal); Sales Activities tetap placeholder disabled.
 func TestWorkspaceNav_SalesGroup(t *testing.T) {
-	// Kedua izin → Leads & Deals enabled dengan href benar.
+	// Izin CRM → Leads, Deals & Quotes enabled dengan href benar.
 	nav := workspaceNav("acme", false, false, false, false, true, true, false)
 	grp, ok := findItem(nav, "Sales")
 	if !ok {
@@ -75,7 +75,11 @@ func TestWorkspaceNav_SalesGroup(t *testing.T) {
 	if grp.Href != "" {
 		t.Errorf("header grup Sales tak boleh jadi link, got Href %q", grp.Href)
 	}
-	want := map[string]string{"Leads": "/w/acme/leads", "Deals": "/w/acme/deals"}
+	want := map[string]string{
+		"Leads":  "/w/acme/leads",
+		"Deals":  "/w/acme/deals",
+		"Quotes": "/w/acme/quotes",
+	}
 	for label, href := range want {
 		ch, ok := findItem(grp.Children, label)
 		if !ok {
@@ -86,11 +90,8 @@ func TestWorkspaceNav_SalesGroup(t *testing.T) {
 			t.Errorf("anak %q harus enabled→%q, got disabled=%v href=%q", label, href, ch.Disabled, ch.Href)
 		}
 	}
-	for _, label := range []string{"Quotes", "Sales Activities"} {
-		ch, ok := findItem(grp.Children, label)
-		if !ok || !ch.Disabled {
-			t.Errorf("placeholder Sales %q harus ada & disabled", label)
-		}
+	if ch, ok := findItem(grp.Children, "Sales Activities"); !ok || !ch.Disabled {
+		t.Error("placeholder Sales \"Sales Activities\" harus ada & disabled")
 	}
 
 	// Tanpa izin → grup tetap tampil, tapi Leads/Deals disabled tanpa href
@@ -100,7 +101,7 @@ func TestWorkspaceNav_SalesGroup(t *testing.T) {
 	if !ok {
 		t.Fatal("grup Sales tetap tampil walau tanpa izin CRM")
 	}
-	for _, label := range []string{"Leads", "Deals"} {
+	for _, label := range []string{"Leads", "Deals", "Quotes"} {
 		ch, ok := findItem(grpNone.Children, label)
 		if !ok {
 			t.Errorf("anak %q harus tetap tampil (disabled)", label)

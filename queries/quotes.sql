@@ -39,6 +39,26 @@ WHERE deleted_at IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListQuotes :many
+-- Daftar quote LINTAS-deal (menu Quotes global), keyset (created_at DESC, id DESC)
+-- + filter ownership F3 DIWARISI dari deal induk (JOIN deals → deal_owner). Dua flag
+-- sama dengan ListDeals: scope_all → semua; is_own → deal_owner = uid; keduanya
+-- false → NOL baris (fail-closed). INNER JOIN deals: quote selalu menempel ke deal
+-- (deal_id di-set saat create); quote tanpa deal hidup TAK tampil di daftar global
+-- (tak punya owner untuk disaring). deal_name dibawa untuk kolom "Deal".
+SELECT q.*, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (q.created_at, q.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND d.deal_owner = sqlc.arg(uid))
+  )
+ORDER BY q.created_at DESC, q.id DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: UpdateQuote :one
 -- Sunting profil quote. quote_status punya jalur khusus (UpdateQuoteStatus) dan
 -- total punya jalur khusus (UpdateQuoteTotals) — keduanya TAK di sini agar

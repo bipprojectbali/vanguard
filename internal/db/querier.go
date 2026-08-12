@@ -404,6 +404,13 @@ type Querier interface {
 	// Baris item satu quote, urut tampil (line_no lalu id). Menopang detail quote &
 	// rekalkulasi total. Bounded per-quote (bukan daftar global) → tanpa keyset.
 	ListQuoteItems(ctx context.Context, quoteID int64) ([]QuoteItem, error)
+	// Daftar quote LINTAS-deal (menu Quotes global), keyset (created_at DESC, id DESC)
+	// + filter ownership F3 DIWARISI dari deal induk (JOIN deals → deal_owner). Dua flag
+	// sama dengan ListDeals: scope_all → semua; is_own → deal_owner = uid; keduanya
+	// false → NOL baris (fail-closed). INNER JOIN deals: quote selalu menempel ke deal
+	// (deal_id di-set saat create); quote tanpa deal hidup TAK tampil di daftar global
+	// (tak punya owner untuk disaring). deal_name dibawa untuk kolom "Deal".
+	ListQuotes(ctx context.Context, arg ListQuotesParams) ([]ListQuotesRow, error)
 	// Daftar quote milik satu deal (detail deal → daftar quote-nya), keyset
 	// (created_at DESC, id DESC). Deal sudah ter-scope ownership di handler; di sini
 	// cukup filter deal_id + baris hidup. First page: cursor = (now(), max bigint).

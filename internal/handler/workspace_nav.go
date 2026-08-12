@@ -66,9 +66,9 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 }
 
 // workspaceSalesGroup merakit grup Sales (wireframe 4). Berbeda dari Settings,
-// grup ini SELALU tampil (peta jalan produk terlihat): anak Leads/Deals enabled
-// mengikuti izin gerbang halamannya (sumber izin SAMA dengan canViewLeads/
-// canViewDeals — nol menu hantu), Quotes & Activities placeholder disabled.
+// grup ini SELALU tampil (peta jalan produk terlihat): anak Leads/Deals/Quotes
+// enabled mengikuti izin gerbang halamannya (sumber izin SAMA dengan
+// canViewLeads/canViewDeals — nol menu hantu), Activities placeholder disabled.
 func workspaceSalesGroup(slug string, canLeads, canDeals bool) ui.NavItem {
 	children := make([]ui.NavItem, 0, 4)
 	// Leads → /leads (canViewLeads, objek crm:leads). Disabled bila tak berhak,
@@ -86,8 +86,15 @@ func workspaceSalesGroup(slug string, canLeads, canDeals bool) ui.NavItem {
 	} else {
 		deals.Disabled = true
 	}
-	children = append(children, leads, deals,
-		ui.NavItem{Label: "Quotes", Icon: lucide.FileText(html.Class("size-4")), Disabled: true},
+	// Quotes → /quotes (daftar lintas-deal). Izin baca SAMA dengan deal (quote
+	// mewarisi ownership F3 dari deal induk) → gate canDeals.
+	quotes := ui.NavItem{Label: "Quotes", Icon: lucide.FileText(html.Class("size-4"))}
+	if canDeals {
+		quotes.Href = wsPath(slug, "/quotes")
+	} else {
+		quotes.Disabled = true
+	}
+	children = append(children, leads, deals, quotes,
 		ui.NavItem{Label: "Sales Activities", Icon: lucide.Activity(html.Class("size-4")), Disabled: true},
 	)
 	return ui.NavItem{

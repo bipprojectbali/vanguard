@@ -226,6 +226,105 @@ func (q *Queries) ListQuoteItems(ctx context.Context, quoteID int64) ([]QuoteIte
 	return items, nil
 }
 
+const listQuotes = `-- name: ListQuotes :many
+SELECT q.id, q.tenant_id, q.entity_code, q.deal_id, q.account_id, q.quote_name, q.quote_status, q.expiration_date, q.payment_terms, q.notes_terms, q.prepared_by, q.grand_total, q.tax_amount, q.deleted_at, q.created_by, q.created_at, q.updated_by, q.updated_at, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (q.created_at, q.id) < ($1::timestamptz, $2::bigint)
+  AND (
+      $3::boolean
+      OR ($4::boolean AND d.deal_owner = $5)
+  )
+ORDER BY q.created_at DESC, q.id DESC
+LIMIT $6
+`
+
+type ListQuotesParams struct {
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	ScopeAll        bool               `json:"scope_all"`
+	IsOwn           bool               `json:"is_own"`
+	Uid             *int64             `json:"uid"`
+	PageSize        int32              `json:"page_size"`
+}
+
+type ListQuotesRow struct {
+	ID             int64              `json:"id"`
+	TenantID       int64              `json:"tenant_id"`
+	EntityCode     *string            `json:"entity_code"`
+	DealID         *int64             `json:"deal_id"`
+	AccountID      int64              `json:"account_id"`
+	QuoteName      *string            `json:"quote_name"`
+	QuoteStatus    string             `json:"quote_status"`
+	ExpirationDate pgtype.Date        `json:"expiration_date"`
+	PaymentTerms   *string            `json:"payment_terms"`
+	NotesTerms     *string            `json:"notes_terms"`
+	PreparedBy     *int64             `json:"prepared_by"`
+	GrandTotal     pgtype.Numeric     `json:"grand_total"`
+	TaxAmount      pgtype.Numeric     `json:"tax_amount"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy      *int64             `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy      *int64             `json:"updated_by"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	DealName       string             `json:"deal_name"`
+}
+
+// Daftar quote LINTAS-deal (menu Quotes global), keyset (created_at DESC, id DESC)
+// + filter ownership F3 DIWARISI dari deal induk (JOIN deals → deal_owner). Dua flag
+// sama dengan ListDeals: scope_all → semua; is_own → deal_owner = uid; keduanya
+// false → NOL baris (fail-closed). INNER JOIN deals: quote selalu menempel ke deal
+// (deal_id di-set saat create); quote tanpa deal hidup TAK tampil di daftar global
+// (tak punya owner untuk disaring). deal_name dibawa untuk kolom "Deal".
+func (q *Queries) ListQuotes(ctx context.Context, arg ListQuotesParams) ([]ListQuotesRow, error) {
+	rows, err := q.db.Query(ctx, listQuotes,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListQuotesRow{}
+	for rows.Next() {
+		var i ListQuotesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealID,
+			&i.AccountID,
+			&i.QuoteName,
+			&i.QuoteStatus,
+			&i.ExpirationDate,
+			&i.PaymentTerms,
+			&i.NotesTerms,
+			&i.PreparedBy,
+			&i.GrandTotal,
+			&i.TaxAmount,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.DealName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listQuotesForDeal = `-- name: ListQuotesForDeal :many
 SELECT id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at FROM quotes
 WHERE deleted_at IS NULL
