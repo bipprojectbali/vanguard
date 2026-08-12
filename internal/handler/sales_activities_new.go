@@ -170,7 +170,7 @@ func (h *Handler) activityTargetOptions(ctx context.Context) ([]panel.ActivityTa
 	for _, c := range contacts {
 		opts = append(opts, panel.ActivityTargetOption{
 			Value: "contact:" + strconv.FormatInt(c.ID, 10),
-			Label: "Kontak · " + contactFullName(c),
+			Label: "Kontak · " + fullName(c.FirstName, c.LastName),
 		})
 	}
 	return opts, nil
@@ -195,7 +195,7 @@ func (h *Handler) activityContactOptions(ctx context.Context, kind string) ([]pa
 	}
 	opts := make([]panel.AccountMemberOption, 0, len(rows))
 	for _, c := range rows {
-		opts = append(opts, panel.AccountMemberOption{ID: c.ID, Label: contactFullName(c)})
+		opts = append(opts, panel.AccountMemberOption{ID: c.ID, Label: fullName(c.FirstName, c.LastName)})
 	}
 	return opts, nil
 }

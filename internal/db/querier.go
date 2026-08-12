@@ -400,7 +400,9 @@ type Querier interface {
 	// is_sales/is_csm identik dengan ListAccounts (AccountsListFilter) — "kontak siapa
 	// yang tampil" diturunkan dari "desa siapa yang tampil", satu kebenaran.
 	// Ketiganya false (Support/role kosong/liar) → NOL baris (fail-closed).
-	ListContacts(ctx context.Context, arg ListContactsParams) ([]Contact, error)
+	// a.village_name dibawa untuk kolom "Desa" di daftar global (di daftar per-desa
+	// redundan — sudah di judul halaman — jadi query per-desa tak mengambilnya).
+	ListContacts(ctx context.Context, arg ListContactsParams) ([]ListContactsRow, error)
 	// Kontak SATU desa, keyset (created_at DESC, id DESC). TANPA filter ownership:
 	// gerbangnya adalah desa induk (handler memvalidasi via loadOwnedAccount sebelum
 	// memanggil ini). Kontak utama diangkat ke atas agar penanda primary langsung

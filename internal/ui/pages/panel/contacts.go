@@ -15,20 +15,35 @@ import (
 // opt-out dirender sebagai badge agar terbaca sekilas (kriteria M3: "opt-out
 // tampil jelas").
 
-// ContactRow = satu baris daftar kontak. Nomor TIDAK di sini (PII; hanya di
-// detail). AccountID untuk menautkan ke desa induk saat di daftar global.
+// ContactRow = satu baris daftar kontak. WhatsApp IKUT (kolom daftar, wireframe M3)
+// tapi SUDAH disamarkan handler (F4) bila penglihatnya bukan Sales — nomor asli tak
+// pernah dioper ke view. Village = nama desa induk (hanya terisi di daftar global,
+// dari JOIN accounts). LastActivity = ringkasan "terakhir dihubungi" — DITUNDA
+// sampai modul Activities; handler mengisi "" → dirender "—". AccountID untuk
+// menautkan ke desa induk saat di daftar global.
 type ContactRow struct {
 	ID               int64
 	AccountID        int64
 	Name             string
-	JobTitle         string
+	Village          string
 	PositionCategory string
 	ContactRole      string
+	Whatsapp         string
+	LastActivity     string
 	IsPrimary        bool
 	IsTechnical      bool
 	EmailOptOut      bool
 	DoNotContact     bool
 }
+
+// Konstanta tab daftar kontak global — sumber tunggal nama view, dipakai handler
+// (normalisasi ?view=) & view (tautan tab + pager). all = default (semua kontak di
+// desa yang dikelola). Kembaran AccView* di accounts, tanpa "unowned" (kontak tak
+// punya kolom owner sendiri — kepemilikan diwarisi desa).
+const (
+	ContactViewAll = "all"
+	ContactViewMy  = "my"
+)
 
 // ContactsListView = data daftar kontak SATU desa. AccountBase = URL desa induk
 // (aksi & tautan kembali). CanWrite = tombol "Tambah Kontak" tampil.
@@ -45,9 +60,16 @@ type ContactsListView struct {
 
 // ContactsAllView = data daftar kontak LINTAS-desa. Baris menautkan ke detail
 // kontak di bawah desa induknya (butuh AccountID per baris).
+//
+// ShowTabs = tampilkan bilah tab Semua/Kontak Saya — HANYA untuk peran ber-cakupan
+// 'all' (Manager/Admin); handler yang memutuskan. Untuk peran 'own' (Sales/CSM)
+// Semua≡Saya (mereka cuma lihat kontak di desanya), jadi tab redundan & disembunyikan.
+// ActiveView = tab aktif (ContactView*), menentukan sorotan & param yang diteruskan pager.
 type ContactsAllView struct {
 	Base       string
 	Items      []ContactRow
+	ShowTabs   bool
+	ActiveView string
 	NextCursor string
 	Err        string
 	Msg        string
@@ -83,8 +105,9 @@ func ContactsList(v ContactsListView) g.Node {
 		body = append(body, emptyContacts(v.AccountBase, v.NextCursor,
 			"Belum ada kontak untuk desa ini."))
 	} else {
-		body = append(body, contactsTable(v.AccountBase, v.Items, true))
-		body = append(body, contactsPager(v.AccountBase+"/contacts", v.NextCursor))
+		// Daftar per-desa: tanpa kolom Desa (redundan — sudah di judul halaman).
+		body = append(body, contactsTable(v.AccountBase, v.Items, false))
+		body = append(body, contactsPager(v.AccountBase+"/contacts", "", v.NextCursor))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
@@ -99,6 +122,9 @@ func ContactsAll(v ContactsAllView) g.Node {
 				g.Text("Semua kontak di desa yang Anda kelola.")),
 		),
 	}
+	if v.ShowTabs {
+		body = append(body, contactsTabs(v))
+	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "contacts-err", g.Text(v.Err)))
 	}
@@ -111,9 +137,38 @@ func ContactsAll(v ContactsAllView) g.Node {
 	} else {
 		// base per-baris = URL desa induk masing-masing (dirakit dari AccountID).
 		body = append(body, contactsGlobalTable(v.Base, v.Items))
-		body = append(body, contactsPager(v.Base+"/contacts", v.NextCursor))
+		body = append(body, contactsPager(v.Base+"/contacts", v.ActiveView, v.NextCursor))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// contactsTabs = bilah tab cakupan (Semua/Kontak Saya) untuk peran 'all'. Navigasi
+// tautan <a> biasa (bookmarkable + reload penuh, lolos CSP gotcha #16), BUKAN
+// Datastar. flex-wrap agar tak mendorong lebar di 375px; tiap tab min-h-11 (tap
+// target 44px). Kembaran accountsTabs (varian tabs-box, lihat gotcha #4).
+func contactsTabs(v ContactsAllView) g.Node {
+	tab := func(label, view string) g.Node {
+		cls := "tab min-h-11"
+		if v.ActiveView == view {
+			cls += " tab-active"
+		}
+		return h.A(h.Href(contactsListHref(v.Base, view)), h.Class(cls), g.Text(label))
+	}
+	return h.Div(
+		h.Role("tablist"),
+		h.Class("tabs tabs-box flex-wrap"),
+		tab("Semua Kontak", ContactViewAll),
+		tab("Kontak Saya", ContactViewMy),
+	)
+}
+
+// contactsListHref merakit URL daftar global untuk sebuah view. all/"" = tanpa
+// param (URL kanonik); selain itu ?view=<view>.
+func contactsListHref(base, view string) string {
+	if view == "" || view == ContactViewAll {
+		return base + "/contacts"
+	}
+	return base + "/contacts?view=" + view
 }
 
 // emptyContacts = pesan kosong jujur. backHref menawarkan jalan kembali bila ini
@@ -137,40 +192,42 @@ func emptyContacts(backHref, nextCursor, msg string) g.Node {
 	)
 }
 
-// contactsTable = tabel kontak satu desa. Dibungkus ui.TableScroll (scroll
-// terkurung; tak mendorong lebar halaman di mobile). Baris tertaut ke detail.
-func contactsTable(accountBase string, items []ContactRow, _ bool) g.Node {
+// contactsTable = tabel kontak satu desa (showVillage=false → tanpa kolom Desa).
+// Dibungkus ui.TableScroll (scroll terkurung; tak mendorong lebar halaman di
+// mobile). Baris tertaut ke detail.
+func contactsTable(accountBase string, items []ContactRow, showVillage bool) g.Node {
 	rows := make([]g.Node, 0, len(items))
 	for _, c := range items {
-		rows = append(rows, contactRow(accountBase, c))
+		rows = append(rows, contactRow(accountBase, c, showVillage))
 	}
-	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body min-w-0"),
-			ui.TableScroll(h.Table(
-				h.Class("w-full text-sm"),
-				h.THead(h.Tr(
-					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Nama")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Jabatan")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Peran")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("Penanda")),
-				)),
-				h.TBody(g.Group(rows)),
-			)),
-		),
-	)
+	return contactsTableCard(showVillage, rows)
 }
 
-// contactsGlobalTable = tabel kontak lintas-desa. Kolom sama, tapi tiap baris
+// contactsGlobalTable = tabel kontak lintas-desa (dengan kolom Desa). Tiap baris
 // menautkan ke desa induknya masing-masing (base per-baris dari AccountID).
 func contactsGlobalTable(wsBase string, items []ContactRow) g.Node {
 	rows := make([]g.Node, 0, len(items))
 	for _, c := range items {
 		accountBase := wsBase + "/accounts/" + strconv.FormatInt(c.AccountID, 10)
-		rows = append(rows, contactRow(accountBase, c))
+		rows = append(rows, contactRow(accountBase, c, true))
 	}
+	return contactsTableCard(true, rows)
+}
+
+// contactsTableCard membungkus header + baris dalam kartu ber-scroll. Kolom Desa
+// (showVillage) hanya di daftar global; "Terakhir" = ringkasan aktivitas (DITUNDA
+// modul Activities, kini "—").
+func contactsTableCard(showVillage bool, rows []g.Node) g.Node {
+	headers := []g.Node{h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Nama"))}
+	headers = append(headers, h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Peran")))
+	if showVillage {
+		headers = append(headers, h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")))
+	}
+	headers = append(headers,
+		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("WhatsApp")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Penanda")),
+		h.Th(h.Class("py-2 font-medium"), g.Text("Terakhir")),
+	)
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
 		h.Div(
@@ -178,11 +235,8 @@ func contactsGlobalTable(wsBase string, items []ContactRow) g.Node {
 			ui.TableScroll(h.Table(
 				h.Class("w-full text-sm"),
 				h.THead(h.Tr(
-					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Nama")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Jabatan")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Peran")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("Penanda")),
+					append([]g.Node{h.Class("border-b border-base-300 text-left text-base-content/70")},
+						headers...)...,
 				)),
 				h.TBody(g.Group(rows)),
 			)),
@@ -190,12 +244,15 @@ func contactsGlobalTable(wsBase string, items []ContactRow) g.Node {
 	)
 }
 
-func contactRow(accountBase string, c ContactRow) g.Node {
+// contactRow = satu baris kontak. Kolom Nama membawa kategori jabatan sebagai
+// sub-teks (menggantikan kolom Jabatan tersendiri, wireframe M3). WhatsApp SUDAH
+// disamarkan handler (F4). showVillage menyisipkan kolom Desa (daftar global).
+func contactRow(accountBase string, c ContactRow, showVillage bool) g.Node {
 	href := accountBase + "/contacts/" + strconv.FormatInt(c.ID, 10)
 	link := func(text, cls string) g.Node {
 		return h.Td(h.Class(cls), h.A(h.Href(href), h.Class("block truncate"), g.Text(text)))
 	}
-	return h.Tr(
+	cells := []g.Node{
 		h.Class("border-b border-base-300/50 hover:bg-base-200/50"),
 		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), h.Class("block min-w-0"),
 			h.Div(h.Class("truncate font-medium"), g.Text(c.Name)),
@@ -203,10 +260,17 @@ func contactRow(accountBase string, c ContactRow) g.Node {
 				h.Class("truncate text-xs text-base-content/60"),
 				g.Text(c.PositionCategory))),
 		)),
-		link(orDash(c.JobTitle), "py-2 pr-4"),
 		link(orDash(c.ContactRole), "py-2 pr-4"),
-		h.Td(h.Class("py-2"), contactBadges(c)),
+	}
+	if showVillage {
+		cells = append(cells, link(orDash(c.Village), "py-2 pr-4"))
+	}
+	cells = append(cells,
+		link(orDash(c.Whatsapp), "py-2 pr-4"),
+		h.Td(h.Class("py-2 pr-4"), contactBadges(c)),
+		link(orDash(c.LastActivity), "py-2 text-base-content/60"),
 	)
+	return h.Tr(cells...)
 }
 
 // contactBadges merender penanda status kontak. Primary & opt-out/do-not-contact
@@ -234,17 +298,20 @@ func contactBadges(c ContactRow) g.Node {
 
 // contactsPager = jalan ke halaman berikutnya (keyset). Link biasa (navigasi:
 // bookmarkable + dimuat ulang, lolos gotcha #16), tap target 44px, flex-wrap 375px.
-func contactsPager(listHref, nextCursor string) g.Node {
+// view (opsional, "" di daftar per-desa) diteruskan agar tab aktif bertahan antar
+// halaman: ?after= lebih dulu, lalu &view= (kembaran accountsPager).
+func contactsPager(listHref, view, nextCursor string) g.Node {
 	if nextCursor == "" {
 		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
 			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
 	}
+	href := listHref + "?after=" + nextCursor
+	if view != "" && view != ContactViewAll {
+		href += "&view=" + view
+	}
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(
-			h.Href(listHref+"?after="+nextCursor),
-			h.Class("btn min-h-11"), g.Text("Berikutnya »"),
-		),
+		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
 	)
 }
 
