@@ -19,8 +19,9 @@ import (
 
 // accountRowView memetakan satu baris daftar. Nomor HP TIDAK ikut di baris
 // daftar (PII; hanya relevan di detail), jadi tak ada yang perlu disamarkan di
-// sini — masking F4 berlaku di detail.
-func accountRowView(a db.Account) panel.AccountRow {
+// sini — masking F4 berlaku di detail. names = peta user_id→nama (dirakit sekali
+// di handler) untuk kolom Owner/CSM; id tak-tertugas / tak-dikenal → "" ("—").
+func accountRowView(a db.Account, names map[int64]string) panel.AccountRow {
 	return panel.AccountRow{
 		ID:          a.ID,
 		EntityCode:  deref(a.EntityCode),
@@ -29,6 +30,8 @@ func accountRowView(a db.Account) panel.AccountRow {
 		AccountType: accountTypeLabel(a.AccountType),
 		Regency:     deref(a.Regency),
 		Province:    deref(a.Province),
+		OwnerName:   memberName(names, a.AccountOwner),
+		CSMName:     memberName(names, a.AssignedCsm),
 	}
 }
 

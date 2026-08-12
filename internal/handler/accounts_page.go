@@ -41,26 +41,30 @@ func (h *Handler) AccountsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := db.AccountsListFilterFor(session.BusinessDataScope(ctx))
+	dataScope := session.BusinessDataScope(ctx)
 	uid := session.UserID(ctx)
+	// Tab (All/My/Belum-ada-Owner) HANYA untuk peran ScopeAll — Sales/CSM (ScopeOwn)
+	// cuma lihat desanya (All≡My), jadi tab redundan & disembunyikan. Nilai view
+	// dinormalkan: showTabs=false → "" (filter cakupan asli); liar → AccViewAll.
+	showTabs := db.AccountsScopeFor(dataScope) == db.ScopeAll
+	view := normalizeAccountsView(r.URL.Query().Get("view"), showTabs)
 
-	cursorAt, cursorID := pageCursor(r)
+	params := accountsListParams(dataScope, view, uid)
+	params.CursorCreatedAt, params.CursorID = pageCursor(r)
 	// Ambil SATU lebih (pageSize+1): kelebihan itulah penanda "masih ada" untuk
 	// splitPage — tanpanya tombol "Berikutnya" muncul di halaman terakhir lalu
 	// berujung kosong.
-	rows, err := h.q(ctx).ListAccounts(ctx, db.ListAccountsParams{
-		CursorCreatedAt: cursorAt,
-		CursorID:        cursorID,
-		ScopeAll:        filter.ScopeAll,
-		// IsOwn = union kepemilikan → KEDUA flag SQL true (account_owner OR
-		// assigned_csm OR backup_csm = uid). Konsepnya tunggal; query-nya dua flag.
-		IsSales:  filter.IsOwn,
-		Uid:      &uid,
-		IsCsm:    filter.IsOwn,
-		PageSize: pageSize + 1,
-	})
+	params.PageSize = pageSize + 1
+	rows, err := h.q(ctx).ListAccounts(ctx, params)
 	if err != nil {
 		h.Log.Error("accounts: list", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	names, err := h.accountMemberNames(ctx)
+	if err != nil {
+		h.Log.Error("accounts: member names", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -71,7 +75,7 @@ func (h *Handler) AccountsList(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]panel.AccountRow, 0, len(shown))
 	for _, a := range shown {
-		items = append(items, accountRowView(a))
+		items = append(items, accountRowView(a, names))
 	}
 
 	base := wsPath(slugFromRequest(r), "")
@@ -79,6 +83,8 @@ func (h *Handler) AccountsList(w http.ResponseWriter, r *http.Request) {
 		Base:       base,
 		Items:      items,
 		CanWrite:   canWriteAccounts(ctx),
+		ShowTabs:   showTabs,
+		ActiveView: view,
 		NextCursor: nextCursor,
 		Err:        wsErrMsg(r.URL.Query().Get("err")),
 		Msg:        accountsMsg(r.URL.Query().Get("ok")),

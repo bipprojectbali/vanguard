@@ -323,6 +323,12 @@ type Querier interface {
 	//   is_csm    → assigned_csm = uid ATAU backup_csm = uid
 	// Ketiganya false (Support/role kosong/liar) → OR selalu false → NOL baris
 	// (fail-closed, bukan bocor). uid tetap dioper walau scope_all (diabaikan).
+	//
+	// unowned = tapis SEJAJAR (tab "Belum ada Owner"): saring account_owner IS NULL
+	// DI ATAS blok ownership, bukan menggantinya. false → NOT false = TRUE → tak
+	// membatasi; true → hanya desa tanpa pemilik. Inheren cakupan-all: pemakai
+	// ber-scope 'own' tak pernah punya baris owner-kosong, jadi handler hanya
+	// menyalakannya untuk peran ScopeAll (Manager/Admin).
 	ListAccounts(ctx context.Context, arg ListAccountsParams) ([]Account, error)
 	// Daftar aktivitas (tampilan Tabel), keyset (created_at DESC, id DESC) + filter
 	// ownership F3 + filter context. Dua flag ownership (sumber SATU dengan
