@@ -53,6 +53,11 @@ func notifText(kind, workspace string, p notifPayload) string {
 			return "Role Anda di " + orDefault(workspace, "workspace") + " diubah menjadi " + p.Role + "."
 		}
 		return "Role Anda di " + orDefault(workspace, "workspace") + " diubah."
+	case "member.business_role.changed":
+		if p.Role != "" {
+			return "Peran CRM Anda di " + orDefault(workspace, "workspace") + " diubah menjadi " + p.Role + "."
+		}
+		return "Peran CRM Anda di " + orDefault(workspace, "workspace") + " dicabut."
 	case "member.removed":
 		return "Anda dikeluarkan dari " + orDefault(workspace, "sebuah workspace") + "."
 	case "workspace.joined":

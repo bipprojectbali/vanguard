@@ -156,7 +156,7 @@ func (q *Queries) ListMembersByBusinessRole(ctx context.Context, arg ListMembers
 }
 
 const listMembersByTenant = `-- name: ListMembersByTenant :many
-SELECT m.id, m.user_id, m.role, m.created_at, u.email, u.name, u.avatar_url, u.status
+SELECT m.id, m.user_id, m.role, m.business_role, m.created_at, u.email, u.name, u.avatar_url, u.status
 FROM memberships m
 JOIN users u ON u.id = m.user_id
 WHERE m.tenant_id = $1 AND u.deleted_at IS NULL
@@ -164,14 +164,15 @@ ORDER BY m.created_at, m.id
 `
 
 type ListMembersByTenantRow struct {
-	ID        int64              `json:"id"`
-	UserID    int64              `json:"user_id"`
-	Role      string             `json:"role"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	Email     string             `json:"email"`
-	Name      *string            `json:"name"`
-	AvatarUrl *string            `json:"avatar_url"`
-	Status    string             `json:"status"`
+	ID           int64              `json:"id"`
+	UserID       int64              `json:"user_id"`
+	Role         string             `json:"role"`
+	BusinessRole *string            `json:"business_role"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Email        string             `json:"email"`
+	Name         *string            `json:"name"`
+	AvatarUrl    *string            `json:"avatar_url"`
+	Status       string             `json:"status"`
 }
 
 // Daftar anggota SATU workspace (panel /admin/members). JOIN users untuk data
@@ -181,6 +182,10 @@ type ListMembersByTenantRow struct {
 // Emailnya tetap dibawa karena pengelola membutuhkannya (mengundang,
 // mencocokkan orang) — yang menahannya dari mata lain adalah handler, yang
 // menyamarkannya sebelum data menyentuh view.
+//
+// m.business_role (sumbu CRM, tegak lurus role tenant) ikut agar kolom "Peran
+// CRM" di /members bisa memilih nilai saat ini tanpa query per-baris (Rule 13);
+// NULL = belum diberi peran CRM.
 func (q *Queries) ListMembersByTenant(ctx context.Context, tenantID int64) ([]ListMembersByTenantRow, error) {
 	rows, err := q.db.Query(ctx, listMembersByTenant, tenantID)
 	if err != nil {
@@ -194,6 +199,7 @@ func (q *Queries) ListMembersByTenant(ctx context.Context, tenantID int64) ([]Li
 			&i.ID,
 			&i.UserID,
 			&i.Role,
+			&i.BusinessRole,
 			&i.CreatedAt,
 			&i.Email,
 			&i.Name,

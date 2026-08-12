@@ -24,6 +24,17 @@ type MemberRow struct {
 	Role      string
 	AvatarURL string
 	Status    string
+	// BusinessRole = peran CRM saat ini (sumbu bisnis, tegak lurus Role tenant);
+	// "" = belum diberi peran CRM. Dipakai memilih nilai awal dropdown "Peran CRM".
+	BusinessRole string
+}
+
+// CRMRoleOption = satu peran CRM yang boleh ditugaskan (sumber ListBusinessRoles).
+// Name = identitas mesin (disimpan di memberships.business_role); Display = label
+// layar. Diputuskan handler, bukan view (view murni-data).
+type CRMRoleOption struct {
+	Name    string
+	Display string
 }
 
 // InviteRow = satu undangan pending. Link ditampilkan untuk DISALIN manual —
@@ -44,7 +55,7 @@ type InviteRow struct {
 // prefix URL workspace ini (mis. "/w/acme"), DIOPER dari handler — view
 // tak boleh merakit path sendiri: sejak 0004 setiap aksi bergantung slug, dan
 // path yang di-hardcode di view akan diam-diam menunjuk workspace yang salah.
-func Members(base string, roles []string, members []MemberRow, invites []InviteRow, canManage bool, selfID int64, errMsg string) g.Node {
+func Members(base string, roles []string, crmRoles []CRMRoleOption, members []MemberRow, invites []InviteRow, canManage bool, selfID int64, errMsg, okMsg string) g.Node {
 	body := []g.Node{
 		h.H1(h.Class("text-xl font-semibold mb-2"), g.Text("Anggota Workspace")),
 		h.P(h.Class("text-base-content/70 mb-4"),
@@ -53,10 +64,13 @@ func Members(base string, roles []string, members []MemberRow, invites []InviteR
 	if errMsg != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "members-err", g.Text(errMsg)))
 	}
+	if okMsg != "" {
+		body = append(body, ui.Alert(ui.VariantDefault, "members-ok", g.Text(okMsg)))
+	}
 	if canManage {
 		body = append(body, inviteForm(base))
 	}
-	body = append(body, memberList(base, roles, members, canManage, selfID))
+	body = append(body, memberList(base, roles, crmRoles, members, canManage, selfID))
 	if canManage && len(invites) > 0 {
 		body = append(body, inviteList(base, invites))
 	}
@@ -85,10 +99,10 @@ func MembersForbidden() g.Node {
 
 // memberList = tabel anggota. Tabel dibungkus ui.TableScroll agar scroll-nya
 // terkurung, tak mendorong lebar halaman di mobile (konvensi mobile-first).
-func memberList(base string, roles []string, members []MemberRow, canManage bool, selfID int64) g.Node {
+func memberList(base string, roles []string, crmRoles []CRMRoleOption, members []MemberRow, canManage bool, selfID int64) g.Node {
 	rows := make([]g.Node, 0, len(members))
 	for _, m := range members {
-		rows = append(rows, memberRow(base, roles, m, canManage, selfID))
+		rows = append(rows, memberRow(base, roles, crmRoles, m, canManage, selfID))
 	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
@@ -111,7 +125,9 @@ func memberList(base string, roles []string, members []MemberRow, canManage bool
 					// "Anggota", bukan "Email": kolomnya kini berisi nama orang, dan
 					// bagi anggota biasa email tak muncul di sana sama sekali.
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Anggota")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Role")),
+					// "Peran" (bukan "Role"): kolom kini memuat DUA sumbu — role
+					// tenant + peran CRM — yang disimpan bersama satu tombol.
+					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Peran")),
 					h.Th(h.Class("py-2 font-medium"), g.Text("")),
 				)),
 				h.TBody(g.Group(rows)),
@@ -120,27 +136,36 @@ func memberList(base string, roles []string, members []MemberRow, canManage bool
 	)
 }
 
-func memberRow(base string, roles []string, m MemberRow, canManage bool, selfID int64) g.Node {
+func memberRow(base string, roles []string, crmRoles []CRMRoleOption, m MemberRow, canManage bool, selfID int64) g.Node {
 	id := strconv.FormatInt(m.UserID, 10)
-	roleCell := g.Node(h.Span(h.Class("badge badge-neutral"), g.Text(m.Role)))
+	roleCell := roleBadges(m)
 	action := g.Node(g.Text(""))
-	// Aksi hanya untuk pengelola, dan tak pernah terhadap diri sendiri (cegah
-	// mengunci diri keluar dari workspace sendiri).
-	if canManage && m.UserID != selfID {
+	if canManage {
+		// SATU form, DUA sumbu: role tenant + peran CRM disimpan sekali klik
+		// (POST .../role menilai tiap sumbu dgn guard-nya sendiri). Sumbu tenant
+		// DISEMBUNYIKAN untuk diri sendiri — cegah menurunkan/mengunci diri, jaga
+		// owner terakhir. Sumbu CRM tetap ADA di baris sendiri: itu opt-in owner
+		// ke CRM (penugasan business_role, gerbang = canManageMembers sumbu tenant).
+		fields := make([]g.Node, 0, 3)
+		if m.UserID != selfID {
+			fields = append(fields, memberRoleSelect("Role", "role", roleOpts(roles, m.Role)))
+		}
+		fields = append(fields, memberRoleSelect("Peran CRM", "business_role", crmRoleOpts(crmRoles, m.BusinessRole)))
+		fields = append(fields, h.Button(h.Type("submit"), h.Class("btn btn-sm self-end"), g.Text("Simpan")))
 		roleCell = h.FormEl(
 			h.Method("post"), h.Action(base+"/members/"+id+"/role"),
-			h.Class("flex items-center gap-2"),
-			h.Select(
-				h.Class("select select-sm"), h.Name("role"),
-				g.Group(roleOpts(roles, m.Role)),
-			),
-			h.Button(h.Type("submit"), h.Class("btn btn-sm"), g.Text("Simpan")),
+			// Mobile-first: tumpuk 1 kolom di ponsel, sejajar+wrap mulai sm.
+			h.Class("flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"),
+			g.Group(fields),
 		)
-		action = h.FormEl(
-			h.Method("post"), h.Action(base+"/members/"+id+"/remove"),
-			h.Button(h.Type("submit"), h.Class("btn btn-sm btn-error btn-outline"),
-				g.Text("Keluarkan")),
-		)
+		// Keluarkan tak pernah terhadap diri sendiri (cegah mengunci diri keluar).
+		if m.UserID != selfID {
+			action = h.FormEl(
+				h.Method("post"), h.Action(base+"/members/"+id+"/remove"),
+				h.Button(h.Type("submit"), h.Class("btn btn-sm btn-error btn-outline"),
+					g.Text("Keluarkan")),
+			)
+		}
 	}
 	return h.Tr(
 		h.Class("border-b border-base-300/50"),
@@ -152,6 +177,49 @@ func memberRow(base string, roles []string, m MemberRow, canManage bool, selfID 
 		h.Td(h.Class("py-2 pr-4"), roleCell),
 		h.Td(h.Class("py-2"), action),
 	)
+}
+
+// roleBadges = tampilan baca-saja dua sumbu (dipakai saat bukan pengelola): role
+// tenant selalu tampil; peran CRM hanya bila diberikan (kosong = tak diberi).
+func roleBadges(m MemberRow) g.Node {
+	badges := []g.Node{h.Span(h.Class("badge badge-neutral"), g.Text(m.Role))}
+	if m.BusinessRole != "" {
+		badges = append(badges, h.Span(h.Class("badge badge-ghost"), g.Text(m.BusinessRole)))
+	}
+	return h.Div(h.Class("flex flex-wrap gap-1"), g.Group(badges))
+}
+
+// memberSelect = label kecil + select mungil dgn opsi SIAP-RENDER, dipakai form
+// dua-sumbu di baris anggota. Beda dari selectField (accounts_form.go) yang
+// merakit opsi dari []string (value==label): opsi CRM di sini punya value≠label
+// (Name mesin vs Display layar), jadi opsinya dibangun pemanggil. Grid agar label
+// menempel di atas select; min-w-0 supaya tak memaksa tabel melebar di mobile.
+func memberRoleSelect(caption, name string, opts []g.Node) g.Node {
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		h.Span(h.Class("text-xs text-base-content/60"), g.Text(caption)),
+		h.Select(h.Class("select select-sm"), h.Name(name), g.Group(opts)),
+	)
+}
+
+// crmRoleOpts = opsi peran CRM. Opsi PERTAMA value="" = "(tak ada)": memilihnya
+// mencabut peran CRM (business_role → NULL di handler). Sisanya dari daftar peran
+// workspace (ListBusinessRoles), Display sebagai label, Name sebagai nilai.
+func crmRoleOpts(crmRoles []CRMRoleOption, current string) []g.Node {
+	out := make([]g.Node, 0, len(crmRoles)+1)
+	out = append(out, crmRoleOpt("", "(tak ada)", current))
+	for _, c := range crmRoles {
+		out = append(out, crmRoleOpt(c.Name, c.Display, current))
+	}
+	return out
+}
+
+func crmRoleOpt(val, label, current string) g.Node {
+	attrs := []g.Node{h.Value(val)}
+	if val == current {
+		attrs = append(attrs, h.Selected())
+	}
+	return h.Option(append(attrs, g.Text(label))...)
 }
 
 // memberIdent merender penanda orang: nama sebagai baris utama, email sebagai

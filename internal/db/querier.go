@@ -440,6 +440,10 @@ type Querier interface {
 	// Emailnya tetap dibawa karena pengelola membutuhkannya (mengundang,
 	// mencocokkan orang) — yang menahannya dari mata lain adalah handler, yang
 	// menyamarkannya sebelum data menyentuh view.
+	//
+	// m.business_role (sumbu CRM, tegak lurus role tenant) ikut agar kolom "Peran
+	// CRM" di /members bisa memilih nilai saat ini tanpa query per-baris (Rule 13);
+	// NULL = belum diberi peran CRM.
 	ListMembersByTenant(ctx context.Context, tenantID int64) ([]ListMembersByTenantRow, error)
 	// Daftar workspace milik user (untuk switcher sidebar). Urut terlama dulu agar
 	// workspace pertama (dari register) jadi default stabil.
