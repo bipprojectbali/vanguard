@@ -382,6 +382,18 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/deals/{id}/quotes/{quoteID}/items/{itemID}", h.QuoteItemUpdate)
 		r.Post("/deals/{id}/quotes/{quoteID}/items/{itemID}/delete", h.QuoteItemDelete)
 
+		// Katalog Plans & Pricing (Subscriptions, CRM Modul 5). Master data milik
+		// WORKSPACE (sumbu BISNIS "crm:plans" read/write; tulis = admin) — TANPA F3
+		// (RLS satu-satunya pengurung). Pensiun/aktifkan = aksi status tersendiri
+		// (bukan efek edit). Semua aksi native POST → 303.
+		r.Get("/plans", h.PlansList)
+		r.Get("/plans/new", h.PlanNew)
+		r.Post("/plans", h.PlanCreate)
+		r.Get("/plans/{id}/edit", h.PlanEdit)
+		r.Post("/plans/{id}", h.PlanUpdate)
+		r.Post("/plans/{id}/retire", h.PlanRetire)
+		r.Post("/plans/{id}/activate", h.PlanActivate)
+
 		// Peran CRM per-workspace (sumbu BISNIS, objek "crm:roles"). Gerbang di
 		// HANDLER (canManageRoles), BUKAN role tenant: satu alamat melayani semua
 		// role, izin yang membedakan. Editor matriks izin per-modul + cakupan data

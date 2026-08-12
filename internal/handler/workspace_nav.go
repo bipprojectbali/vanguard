@@ -28,7 +28,7 @@ import (
 // Izin dioper terpisah (bukan satu `canManage`) karena keduanya TIDAK identik —
 // di mode single admin boleh menyunting workspace tapi keanggotaan dinilai
 // sendiri — jadi menyatukannya akan membuat salah satu menu berbohong.
-func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canRoles bool) []ui.NavItem {
+func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canPlans, canRoles bool) []ui.NavItem {
 	items := []ui.NavItem{
 		{Label: "Dashboard", Href: wsPath(slug, ""), Icon: lucide.House(html.Class("size-4"))},
 	}
@@ -51,10 +51,13 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 	// Sales jadi GRUP bersarang (wireframe 4): Leads/Deals berbackend (enabled per
 	// izin), Quotes/Activities placeholder. Selalu tampil agar peta jalan terlihat.
 	items = append(items, workspaceSalesGroup(slug, canLeads, canDeals, canSalesActivity))
+	// Subscriptions jadi GRUP bersarang (wireframe 5): Plans & Pricing berbackend
+	// (enabled per izin), sisanya (Active Subscriptions/Renewals/Churn) placeholder.
+	// Selalu tampil agar peta jalan terlihat.
+	items = append(items, workspaceSubscriptionsGroup(slug, canPlans))
 	// Modul berwireframe tapi belum berbackend — urutan persis wireframe, disabled.
 	// Ditampilkan agar peta jalan produk terlihat utuh di sidebar sejak awal.
 	items = append(items,
-		ui.NavItem{Label: "Subscriptions", Icon: lucide.RefreshCw(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Customer Success", Icon: lucide.Heart(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Activities", Icon: lucide.Activity(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Reports", Icon: lucide.ChartColumn(html.Class("size-4")), Disabled: true},
@@ -106,6 +109,33 @@ func workspaceSalesGroup(slug string, canLeads, canDeals, canSalesActivity bool)
 	children = append(children, leads, deals, quotes, salesAct)
 	return ui.NavItem{
 		Label: "Sales", Icon: lucide.TrendingUp(html.Class("size-4")), Children: children,
+	}
+}
+
+// workspaceSubscriptionsGroup merakit grup Subscriptions (wireframe 5). Seperti
+// Sales, SELALU tampil (peta jalan). Plans & Pricing → /plans enabled per izin
+// (sumber izin SAMA dengan canViewPlans, objek crm:plans — nol menu hantu); Active
+// Subscriptions/Renewals/Churn placeholder disabled sampai backend-nya mendarat
+// (M5-3b dst). Urutan mengikuti nomor menu §4 (crmModules).
+func workspaceSubscriptionsGroup(slug string, canPlans bool) ui.NavItem {
+	children := make([]ui.NavItem, 0, 4)
+	children = append(children,
+		ui.NavItem{Label: "Active Subscriptions", Icon: lucide.RefreshCw(html.Class("size-4")), Disabled: true},
+		ui.NavItem{Label: "Renewals", Icon: lucide.CalendarClock(html.Class("size-4")), Disabled: true},
+	)
+	// Plans & Pricing → /plans (canViewPlans, objek crm:plans). Berbackend sejak
+	// M5-3a; disabled bila tak berhak, tetap tampil agar posisi modul terlihat.
+	plans := ui.NavItem{Label: "Plans & Pricing", Icon: lucide.Tag(html.Class("size-4"))}
+	if canPlans {
+		plans.Href = wsPath(slug, "/plans")
+	} else {
+		plans.Disabled = true
+	}
+	children = append(children, plans,
+		ui.NavItem{Label: "Churn / Cancellations", Icon: lucide.UserMinus(html.Class("size-4")), Disabled: true},
+	)
+	return ui.NavItem{
+		Label: "Subscriptions", Icon: lucide.RefreshCw(html.Class("size-4")), Children: children,
 	}
 }
 
