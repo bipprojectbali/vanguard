@@ -382,6 +382,41 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/deals/{id}/quotes/{quoteID}/items/{itemID}", h.QuoteItemUpdate)
 		r.Post("/deals/{id}/quotes/{quoteID}/items/{itemID}/delete", h.QuoteItemDelete)
 
+		// Katalog Plans & Pricing (Subscriptions, CRM Modul 5). Master data milik
+		// WORKSPACE (sumbu BISNIS "crm:plans" read/write; tulis = admin) — TANPA F3
+		// (RLS satu-satunya pengurung). Pensiun/aktifkan = aksi status tersendiri
+		// (bukan efek edit). Semua aksi native POST → 303.
+		r.Get("/plans", h.PlansList)
+		r.Get("/plans/new", h.PlanNew)
+		r.Post("/plans", h.PlanCreate)
+		r.Get("/plans/{id}/edit", h.PlanEdit)
+		r.Post("/plans/{id}", h.PlanUpdate)
+		r.Post("/plans/{id}/retire", h.PlanRetire)
+		r.Post("/plans/{id}/activate", h.PlanActivate)
+
+		// Active Subscriptions (CRM Modul 5, M5-3b GET-only). Milik WORKSPACE
+		// (sumbu BISNIS "crm:subscriptions" read) DENGAN F3 ownership
+		// (subscription_owner) di layer query + F4 masking ARR untuk non-manager.
+		// Daftar berkeyset + detail dgn riwayat rantai renewal. Renew/churn menyusul.
+		r.Get("/subscriptions", h.SubscriptionsList)
+		// Dasbor Renewals (Menu 5.2, READ-ONLY). Rute statik SEBELUM "/{id}" — chi
+		// memprioritaskan segmen statik, tapi ditaruh eksplisit agar niatnya jelas.
+		// Gerbang sama: crm:subscriptions read + F3 ownership. Aksi perpanjangan
+		// tetap di detail langganan.
+		r.Get("/subscriptions/renewals", h.SubscriptionRenewals)
+		// Dasbor Churn (Menu 5.2/5.4, READ-ONLY). Rute statik SEBELUM "/{id}" (sama
+		// alasan dgn renewals). Gerbang sama: crm:subscriptions read + F3 ownership.
+		r.Get("/subscriptions/churn", h.SubscriptionChurnList)
+		r.Get("/subscriptions/{id}", h.SubscriptionDetail)
+		// Mutasi langganan (M5-3c), native POST → 303 (gotcha #16). Gerbang bisnis
+		// terpisah: renew (crm:renewals write), approve/reject (crm:renewal_mgmt
+		// approve — hanya manager/admin), churn (crm:churn write). F3 ownership
+		// ditegakkan per-baris di handler (loadOwnedSubscription).
+		r.Post("/subscriptions/{id}/renew", h.SubscriptionRenew)
+		r.Post("/subscriptions/{id}/approve", h.SubscriptionRenewApprove)
+		r.Post("/subscriptions/{id}/reject", h.SubscriptionRenewReject)
+		r.Post("/subscriptions/{id}/churn", h.SubscriptionChurn)
+
 		// Peran CRM per-workspace (sumbu BISNIS, objek "crm:roles"). Gerbang di
 		// HANDLER (canManageRoles), BUKAN role tenant: satu alamat melayani semua
 		// role, izin yang membedakan. Editor matriks izin per-modul + cakupan data

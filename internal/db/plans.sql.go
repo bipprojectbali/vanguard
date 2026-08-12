@@ -7,7 +7,78 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const createPlan = `-- name: CreatePlan :one
+INSERT INTO plans (
+    tenant_id, plan_name, plan_code, description, plan_category,
+    is_active, base_price, billing_frequency, setup_fee, currency,
+    included_features, created_by
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7,
+    $8, $9, $10,
+    $11, $12
+)
+RETURNING id, tenant_id, plan_name, plan_code, description, plan_category, is_active, base_price, billing_frequency, setup_fee, currency, included_features, created_by, created_at, updated_by, updated_at
+`
+
+type CreatePlanParams struct {
+	TenantID         int64          `json:"tenant_id"`
+	PlanName         string         `json:"plan_name"`
+	PlanCode         string         `json:"plan_code"`
+	Description      *string        `json:"description"`
+	PlanCategory     string         `json:"plan_category"`
+	IsActive         bool           `json:"is_active"`
+	BasePrice        pgtype.Numeric `json:"base_price"`
+	BillingFrequency *string        `json:"billing_frequency"`
+	SetupFee         pgtype.Numeric `json:"setup_fee"`
+	Currency         string         `json:"currency"`
+	IncludedFeatures *string        `json:"included_features"`
+	CreatedBy        *int64         `json:"created_by"`
+}
+
+// Buat plan katalog. tenant_id eksplisit (RLS WITH CHECK memverifikasinya = GUC).
+// plan_code unik per tenant (idx_plans_code) → kode kembar ditolak DB. is_active
+// default true di skema tapi di-set eksplisit agar handler bisa membuat draft pensiun.
+func (q *Queries) CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, error) {
+	row := q.db.QueryRow(ctx, createPlan,
+		arg.TenantID,
+		arg.PlanName,
+		arg.PlanCode,
+		arg.Description,
+		arg.PlanCategory,
+		arg.IsActive,
+		arg.BasePrice,
+		arg.BillingFrequency,
+		arg.SetupFee,
+		arg.Currency,
+		arg.IncludedFeatures,
+		arg.CreatedBy,
+	)
+	var i Plan
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.PlanName,
+		&i.PlanCode,
+		&i.Description,
+		&i.PlanCategory,
+		&i.IsActive,
+		&i.BasePrice,
+		&i.BillingFrequency,
+		&i.SetupFee,
+		&i.Currency,
+		&i.IncludedFeatures,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
 
 const getPlan = `-- name: GetPlan :one
 SELECT id, tenant_id, plan_name, plan_code, description, plan_category, is_active, base_price, billing_frequency, setup_fee, currency, included_features, created_by, created_at, updated_by, updated_at FROM plans
@@ -91,4 +162,145 @@ func (q *Queries) ListPlans(ctx context.Context) ([]Plan, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listPlansAll = `-- name: ListPlansAll :many
+
+SELECT id, tenant_id, plan_name, plan_code, description, plan_category, is_active, base_price, billing_frequency, setup_fee, currency, included_features, created_by, created_at, updated_by, updated_at FROM plans
+ORDER BY is_active DESC, plan_name ASC, id ASC
+`
+
+// ── Katalog master CRUD (M5-2) — kelola plan di /plans ───────────────────────
+// plans TANPA soft-delete: is_active=false = pensiun (harga historis aman via
+// snapshot quote_items). SetPlanActive = pensiunkan/aktifkan; UpdatePlan menyunting
+// profil (is_active punya jalur sendiri agar pensiun terlihat sebagai aksi khusus).
+// Seluruh katalog untuk tampilan kelola (TERMASUK yang pensiun) — beda dari
+// ListPlans (hanya aktif, untuk picker quote). Aktif dulu lalu urut nama. Bounded
+// katalog master per-workspace → tanpa keyset.
+func (q *Queries) ListPlansAll(ctx context.Context) ([]Plan, error) {
+	rows, err := q.db.Query(ctx, listPlansAll)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Plan{}
+	for rows.Next() {
+		var i Plan
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.PlanName,
+			&i.PlanCode,
+			&i.Description,
+			&i.PlanCategory,
+			&i.IsActive,
+			&i.BasePrice,
+			&i.BillingFrequency,
+			&i.SetupFee,
+			&i.Currency,
+			&i.IncludedFeatures,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setPlanActive = `-- name: SetPlanActive :exec
+UPDATE plans SET
+    is_active  = $1,
+    updated_by = $2,
+    updated_at = now()
+WHERE id = $3
+`
+
+type SetPlanActiveParams struct {
+	IsActive  bool   `json:"is_active"`
+	UpdatedBy *int64 `json:"updated_by"`
+	ID        int64  `json:"id"`
+}
+
+// Pensiunkan (false) atau aktifkan kembali (true) plan. Plan pensiun hilang dari
+// ListPlans (picker) tapi quote/langganan lama tetap sah (snapshot harga).
+func (q *Queries) SetPlanActive(ctx context.Context, arg SetPlanActiveParams) error {
+	_, err := q.db.Exec(ctx, setPlanActive, arg.IsActive, arg.UpdatedBy, arg.ID)
+	return err
+}
+
+const updatePlan = `-- name: UpdatePlan :one
+UPDATE plans SET
+    plan_name         = $1,
+    plan_code         = $2,
+    description       = $3,
+    plan_category     = $4,
+    base_price        = $5,
+    billing_frequency = $6,
+    setup_fee         = $7,
+    currency          = $8,
+    included_features = $9,
+    updated_by        = $10,
+    updated_at        = now()
+WHERE id = $11
+RETURNING id, tenant_id, plan_name, plan_code, description, plan_category, is_active, base_price, billing_frequency, setup_fee, currency, included_features, created_by, created_at, updated_by, updated_at
+`
+
+type UpdatePlanParams struct {
+	PlanName         string         `json:"plan_name"`
+	PlanCode         string         `json:"plan_code"`
+	Description      *string        `json:"description"`
+	PlanCategory     string         `json:"plan_category"`
+	BasePrice        pgtype.Numeric `json:"base_price"`
+	BillingFrequency *string        `json:"billing_frequency"`
+	SetupFee         pgtype.Numeric `json:"setup_fee"`
+	Currency         string         `json:"currency"`
+	IncludedFeatures *string        `json:"included_features"`
+	UpdatedBy        *int64         `json:"updated_by"`
+	ID               int64          `json:"id"`
+}
+
+// Sunting profil plan. is_active TAK di sini (SetPlanActive) — pensiun/aktifkan
+// adalah aksi tersendiri, bukan efek samping edit. plan_code boleh diubah (tetap
+// tunduk idx_plans_code unik).
+func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error) {
+	row := q.db.QueryRow(ctx, updatePlan,
+		arg.PlanName,
+		arg.PlanCode,
+		arg.Description,
+		arg.PlanCategory,
+		arg.BasePrice,
+		arg.BillingFrequency,
+		arg.SetupFee,
+		arg.Currency,
+		arg.IncludedFeatures,
+		arg.UpdatedBy,
+		arg.ID,
+	)
+	var i Plan
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.PlanName,
+		&i.PlanCode,
+		&i.Description,
+		&i.PlanCategory,
+		&i.IsActive,
+		&i.BasePrice,
+		&i.BillingFrequency,
+		&i.SetupFee,
+		&i.Currency,
+		&i.IncludedFeatures,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

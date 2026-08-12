@@ -84,7 +84,7 @@ func accountsReq(method, target string, form url.Values, id string) *http.Reques
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("slug", "test")
+	rctx.URLParams.Add(slugURLParam, "test") // slug dibaca handler (wsPath/wsRedirect)
 	if id != "" {
 		rctx.URLParams.Add("id", id)
 	}

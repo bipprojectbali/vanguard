@@ -222,6 +222,40 @@ func (f DealsListFilter) Allows(uid int64, owner *int64) bool {
 	return false
 }
 
+// SubscriptionsListFilter = cakupan kepemilikan → dua flag boolean untuk
+// ListSubscriptions. Langganan membawa kolom subscription_owner — sumbu data_scope
+// yang SAMA dengan deals (satu kolom pemilik), jadi bentuknya identik DealsListFilter;
+// tipe terpisah agar call-site jelas modul mana yang disaring dan tak tertukar argumen.
+type SubscriptionsListFilter struct {
+	ScopeAll bool
+	IsOwn    bool
+}
+
+// SubscriptionsListFilterFor merakit flag untuk data_scope role. Fail-closed sama:
+// nilai tak dikenal → ScopeNone (semua flag false → nol baris).
+func SubscriptionsListFilterFor(dataScope string) SubscriptionsListFilter {
+	switch AccountsScopeFor(dataScope) {
+	case ScopeAll:
+		return SubscriptionsListFilter{ScopeAll: true}
+	case ScopeOwn:
+		return SubscriptionsListFilter{IsOwn: true}
+	default: // ScopeNone
+		return SubscriptionsListFilter{}
+	}
+}
+
+// Allows — kembaran per-baris dari ListSubscriptions (subscription_owner). 404-gate
+// detail langganan. owner = kolom nullable (nil = tak diisi).
+func (f SubscriptionsListFilter) Allows(uid int64, owner *int64) bool {
+	if f.ScopeAll {
+		return true
+	}
+	if f.IsOwn && owner != nil && *owner == uid {
+		return true
+	}
+	return false
+}
+
 // ActivitiesListFilter = cakupan kepemilikan → dua flag boolean untuk
 // ListActivities. Bentuk identik LeadsListFilter/DealsListFilter (satu kolom
 // owner_id); tipe terpisah agar call-site jelas modul mana yang disaring dan tak

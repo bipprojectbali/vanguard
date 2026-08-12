@@ -153,6 +153,17 @@ func wsErrMsg(code string) string {
 		return "Durasi panggilan harus berupa bilangan bulat ≥ 0."
 	case "datetime":
 		return "Waktu tidak valid (format YYYY-MM-DDTHH:MM)."
+	// ── Subscriptions: Renewal & Churn (Modul 5) ────────────────────────────
+	case "sub_not_active":
+		return "Langganan harus berstatus Active untuk diperpanjang."
+	case "new_mrr":
+		return "MRR baru harus berupa angka ≥ 0."
+	case "not_pending":
+		return "Renewal ini tidak (lagi) menunggu persetujuan."
+	case "churn_reason":
+		return "Alasan churn tidak valid."
+	case "churn_type":
+		return "Tipe churn tidak valid."
 	case "failed":
 		return "Tindakan gagal. Coba lagi."
 	default:

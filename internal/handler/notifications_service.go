@@ -15,8 +15,9 @@ import (
 // notifPayload = bentuk payload JSONB yang kita tulis. Disimpan sebagai SNAPSHOT
 // (lihat migrasi 00009): pesan lama tetap terbaca walau role/nama berubah lagi.
 type notifPayload struct {
-	Role  string `json:"role,omitempty"`  // role BARU (member.role.changed)
-	Actor string `json:"actor,omitempty"` // yang melakukan, sudah aman ditampilkan
+	Role       string `json:"role,omitempty"`        // role BARU (member.role.changed)
+	Actor      string `json:"actor,omitempty"`       // yang melakukan, sudah aman ditampilkan
+	EntityCode string `json:"entity_code,omitempty"` // kode entitas (mis. SUB-0007); BUKAN PII
 }
 
 // buildNotifRows memetakan peristiwa ke baris view + menyusun kalimatnya.
@@ -61,6 +62,12 @@ func notifText(kind, workspace string, p notifPayload) string {
 		return "Anda dikeluarkan dari " + orDefault(workspace, "sebuah workspace") + "."
 	case "workspace.joined":
 		return "Anda bergabung ke " + orDefault(workspace, "sebuah workspace") + "."
+	case "renewal.upsell.pending":
+		return "Renewal upsell " + orDefault(p.EntityCode, "langganan") + " menunggu persetujuan Anda."
+	case "renewal.approved":
+		return "Renewal " + orDefault(p.EntityCode, "langganan") + " Anda telah disetujui."
+	case "renewal.rejected":
+		return "Renewal " + orDefault(p.EntityCode, "langganan") + " Anda ditolak."
 	default:
 		return "Ada pembaruan pada keanggotaan Anda."
 	}

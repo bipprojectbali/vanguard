@@ -28,7 +28,7 @@ import (
 // Izin dioper terpisah (bukan satu `canManage`) karena keduanya TIDAK identik —
 // di mode single admin boleh menyunting workspace tapi keanggotaan dinilai
 // sendiri — jadi menyatukannya akan membuat salah satu menu berbohong.
-func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canRoles bool) []ui.NavItem {
+func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canPlans, canSubs, canRoles bool) []ui.NavItem {
 	items := []ui.NavItem{
 		{Label: "Dashboard", Href: wsPath(slug, ""), Icon: lucide.House(html.Class("size-4"))},
 	}
@@ -51,10 +51,13 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 	// Sales jadi GRUP bersarang (wireframe 4): Leads/Deals berbackend (enabled per
 	// izin), Quotes/Activities placeholder. Selalu tampil agar peta jalan terlihat.
 	items = append(items, workspaceSalesGroup(slug, canLeads, canDeals, canSalesActivity))
+	// Subscriptions jadi GRUP bersarang (wireframe 5): Plans & Pricing berbackend
+	// (enabled per izin), sisanya (Active Subscriptions/Renewals/Churn) placeholder.
+	// Selalu tampil agar peta jalan terlihat.
+	items = append(items, workspaceSubscriptionsGroup(slug, canPlans, canSubs))
 	// Modul berwireframe tapi belum berbackend — urutan persis wireframe, disabled.
 	// Ditampilkan agar peta jalan produk terlihat utuh di sidebar sejak awal.
 	items = append(items,
-		ui.NavItem{Label: "Subscriptions", Icon: lucide.RefreshCw(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Customer Success", Icon: lucide.Heart(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Activities", Icon: lucide.Activity(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Reports", Icon: lucide.ChartColumn(html.Class("size-4")), Disabled: true},
@@ -106,6 +109,56 @@ func workspaceSalesGroup(slug string, canLeads, canDeals, canSalesActivity bool)
 	children = append(children, leads, deals, quotes, salesAct)
 	return ui.NavItem{
 		Label: "Sales", Icon: lucide.TrendingUp(html.Class("size-4")), Children: children,
+	}
+}
+
+// workspaceSubscriptionsGroup merakit grup Subscriptions (wireframe 5). Seperti
+// Sales, SELALU tampil (peta jalan). Active Subscriptions → /subscriptions &
+// Plans & Pricing → /plans enabled per izin (sumber izin SAMA dengan
+// canViewSubscriptions/canViewPlans — nol menu hantu). Renewals & Churn = dasbor
+// read-only Menu 5.2 (M5-4), enabled mengikuti crm:subscriptions read. Urutan
+// mengikuti nomor menu §4 (crmModules).
+func workspaceSubscriptionsGroup(slug string, canPlans, canSubs bool) ui.NavItem {
+	children := make([]ui.NavItem, 0, 4)
+	// Active Subscriptions → /subscriptions (canViewSubscriptions, objek
+	// crm:subscriptions). Berbackend sejak M5-3b; disabled bila tak berhak, tetap
+	// tampil agar posisi modul di peta jalan terlihat.
+	active := ui.NavItem{Label: "Active Subscriptions", Icon: lucide.RefreshCw(html.Class("size-4"))}
+	if canSubs {
+		active.Href = wsPath(slug, "/subscriptions")
+	} else {
+		active.Disabled = true
+	}
+	// Renewals → /subscriptions/renewals (dasbor read-only Menu 5.2). Izin SAMA
+	// dengan Active Subscriptions (objek crm:subscriptions read); disabled bila tak
+	// berhak, tetap tampil agar posisi modul di peta jalan terlihat.
+	renewals := ui.NavItem{Label: "Renewals", Icon: lucide.CalendarClock(html.Class("size-4"))}
+	if canSubs {
+		renewals.Href = wsPath(slug, "/subscriptions/renewals")
+	} else {
+		renewals.Disabled = true
+	}
+	children = append(children, active, renewals)
+	// Plans & Pricing → /plans (canViewPlans, objek crm:plans). Berbackend sejak
+	// M5-3a; disabled bila tak berhak, tetap tampil agar posisi modul terlihat.
+	plans := ui.NavItem{Label: "Plans & Pricing", Icon: lucide.Tag(html.Class("size-4"))}
+	if canPlans {
+		plans.Href = wsPath(slug, "/plans")
+	} else {
+		plans.Disabled = true
+	}
+	// Churn / Cancellations → /subscriptions/churn (dasbor read-only Menu 5.2/5.4).
+	// Izin SAMA dengan Active Subscriptions (objek crm:subscriptions read); disabled
+	// bila tak berhak, tetap tampil agar posisi modul di peta jalan terlihat.
+	churn := ui.NavItem{Label: "Churn / Cancellations", Icon: lucide.UserMinus(html.Class("size-4"))}
+	if canSubs {
+		churn.Href = wsPath(slug, "/subscriptions/churn")
+	} else {
+		churn.Disabled = true
+	}
+	children = append(children, plans, churn)
+	return ui.NavItem{
+		Label: "Subscriptions", Icon: lucide.RefreshCw(html.Class("size-4")), Children: children,
 	}
 }
 

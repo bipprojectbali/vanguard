@@ -43,9 +43,9 @@ type ActivityFormView struct {
 	Status   string
 
 	// Call
-	ContactID string
-	Contacts  []AccountMemberOption
-	Direction string
+	ContactID  string
+	Contacts   []AccountMemberOption
+	Direction  string
 	ActivityAt string
 	Duration   string
 	CallResult string

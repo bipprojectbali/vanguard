@@ -358,6 +358,51 @@ type SlaPolicy struct {
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Subscription struct {
+	ID                     int64              `json:"id"`
+	TenantID               int64              `json:"tenant_id"`
+	EntityCode             *string            `json:"entity_code"`
+	SubscriptionOwner      *int64             `json:"subscription_owner"`
+	AccountID              int64              `json:"account_id"`
+	PlanID                 int64              `json:"plan_id"`
+	SourceDealID           *int64             `json:"source_deal_id"`
+	PreviousSubscriptionID *int64             `json:"previous_subscription_id"`
+	Status                 string             `json:"status"`
+	StartDate              pgtype.Date        `json:"start_date"`
+	EndDate                pgtype.Date        `json:"end_date"`
+	BillingCycle           *string            `json:"billing_cycle"`
+	AutoRenew              bool               `json:"auto_renew"`
+	ContractTermMonths     *int32             `json:"contract_term_months"`
+	Mrr                    pgtype.Numeric     `json:"mrr"`
+	Arr                    pgtype.Numeric     `json:"arr"`
+	QuantitySeats          *int32             `json:"quantity_seats"`
+	DiscountPct            pgtype.Numeric     `json:"discount_pct"`
+	PaymentStatus          *string            `json:"payment_status"`
+	RenewalStatus          *string            `json:"renewal_status"`
+	RenewalType            *string            `json:"renewal_type"`
+	RenewalOwner           *int64             `json:"renewal_owner"`
+	RenewalQuoteID         *int64             `json:"renewal_quote_id"`
+	PreviousValue          pgtype.Numeric     `json:"previous_value"`
+	RenewalStage           *string            `json:"renewal_stage"`
+	RenewalRisk            *string            `json:"renewal_risk"`
+	RenewalActionPlan      *string            `json:"renewal_action_plan"`
+	RenewalNextActionDate  pgtype.Date        `json:"renewal_next_action_date"`
+	CancellationDate       pgtype.Date        `json:"cancellation_date"`
+	ChurnReason            *string            `json:"churn_reason"`
+	ChurnType              *string            `json:"churn_type"`
+	ChurnNotes             *string            `json:"churn_notes"`
+	LostValueMrr           pgtype.Numeric     `json:"lost_value_mrr"`
+	WinBackEligible        *bool              `json:"win_back_eligible"`
+	DeletedAt              pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy              *int64             `json:"created_by"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy              *int64             `json:"updated_by"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ApprovalStatus         *string            `json:"approval_status"`
+	ApprovedBy             *int64             `json:"approved_by"`
+	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
+}
+
 type Tenant struct {
 	ID            int64              `json:"id"`
 	Name          string             `json:"name"`
