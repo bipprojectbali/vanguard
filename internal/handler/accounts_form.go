@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -129,30 +128,4 @@ func parseAccountForm(fv func(string) string) (accountForm, string) {
 	f.OfficeEmail = optTrim(fv("office_email"))
 
 	return f, ""
-}
-
-// optTrim mem-trim lalu mengembalikan pointer, atau nil bila kosong. Satu tempat
-// aturan "kosong = NULL" agar tiap kolom opsional diperlakukan sama.
-func optTrim(s string) *string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-// optInt32 mengurai angka opsional: kosong → (nil, ""); terisi & sah & ≥0 →
-// (&v, ""); tak terurai/negatif → (nil, "number"). Non-negatif dipaksa di sini
-// karena kolomnya berarti hitungan (penduduk, dusun).
-func optInt32(s string) (*int32, string) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil, ""
-	}
-	n, err := strconv.ParseInt(s, 10, 32)
-	if err != nil || n < 0 {
-		return nil, "number"
-	}
-	v := int32(n)
-	return &v, ""
 }
