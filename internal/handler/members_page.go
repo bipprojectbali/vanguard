@@ -83,10 +83,28 @@ func (h *Handler) MembersPage(w http.ResponseWriter, r *http.Request) {
 				email = maskEmail(email)
 			}
 		}
+		// business_role (sumbu CRM) ikut dari ListMembersByTenant — NULL = belum
+		// diberi peran CRM. Dropdown "Peran CRM" memilih nilai ini.
+		crm := ""
+		if m.BusinessRole != nil {
+			crm = *m.BusinessRole
+		}
 		members = append(members, panel.MemberRow{
 			UserID: m.UserID, Email: email, Name: name, Role: m.Role,
-			AvatarURL: avatar, Status: m.Status,
+			BusinessRole: crm, AvatarURL: avatar, Status: m.Status,
 		})
+	}
+	// Peran CRM yang boleh ditugaskan (sumber sama dgn panel /roles). Fail-soft:
+	// gagal → daftar kosong, dropdown hanya menyisakan "(tak ada)".
+	crmRoles := []panel.CRMRoleOption{}
+	if canManage {
+		if brs, e := h.q(ctx).ListBusinessRoles(ctx, tenantID); e == nil {
+			for _, br := range brs {
+				crmRoles = append(crmRoles, panel.CRMRoleOption{Name: br.Name, Display: br.DisplayName})
+			}
+		} else {
+			h.Log.Error("members: list business roles", "err", e)
+		}
 	}
 	// Undangan pending (fail-soft: gagal → daftar kosong, halaman tetap tampil).
 	invites := []panel.InviteRow{}
@@ -103,8 +121,8 @@ func (h *Handler) MembersPage(w http.ResponseWriter, r *http.Request) {
 
 	h.renderWorkspaceShell(w, r, "Anggota", "/members",
 		panel.Members(wsPath(slugFromRequest(r), ""), authz.AssignableRoles(appmode.IsSingle()),
-			members, invites, canManage,
-			session.UserID(ctx), wsErrMsg(r.URL.Query().Get("err"))))
+			crmRoles, members, invites, canManage, session.UserID(ctx),
+			wsErrMsg(r.URL.Query().Get("err")), membersMsg(r.URL.Query().Get("ok"))))
 }
 
 // renderMembersForbidden menjawab anggota biasa yang membuka halaman ini lewat

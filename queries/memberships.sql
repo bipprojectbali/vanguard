@@ -36,7 +36,11 @@ ORDER BY m.created_at, m.id;
 -- Emailnya tetap dibawa karena pengelola membutuhkannya (mengundang,
 -- mencocokkan orang) — yang menahannya dari mata lain adalah handler, yang
 -- menyamarkannya sebelum data menyentuh view.
-SELECT m.id, m.user_id, m.role, m.created_at, u.email, u.name, u.avatar_url, u.status
+--
+-- m.business_role (sumbu CRM, tegak lurus role tenant) ikut agar kolom "Peran
+-- CRM" di /members bisa memilih nilai saat ini tanpa query per-baris (Rule 13);
+-- NULL = belum diberi peran CRM.
+SELECT m.id, m.user_id, m.role, m.business_role, m.created_at, u.email, u.name, u.avatar_url, u.status
 FROM memberships m
 JOIN users u ON u.id = m.user_id
 WHERE m.tenant_id = $1 AND u.deleted_at IS NULL

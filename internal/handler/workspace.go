@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"go_starter/internal/appmode"
@@ -49,8 +50,18 @@ func canEditWorkspace(ctx context.Context) bool {
 // anggota (member/admin/owner). Menggantikan /admin & /user yang dulu terpisah:
 // keduanya membedakan role, bukan resource (0004).
 func (h *Handler) WorkspaceHome(w http.ResponseWriter, r *http.Request) {
-	h.renderWorkspaceShell(w, r, "Beranda", "",
-		panel.Placeholder("Beranda", "Selamat datang di "+session.TenantName(r.Context())+"."))
+	ctx := r.Context()
+	body := make([]g.Node, 0, 2)
+	// Banner opt-in CRM: pengelola (owner/admin) yang BELUM punya peran CRM
+	// terkunci dari seluruh menu CRM (CanBusiness fail-closed). Tawarkan jalan
+	// keluar satu-klik jadi Admin CRM — menyasar deadlock owner baru (business_role
+	// NULL sejak lahir). Gerbang = sumbu tenant (canManageMembers), bukan CRM.
+	if canManageMembers(ctx) && !IsReadOnly(ctx) && session.BusinessRole(ctx) == "" {
+		self := strconv.FormatInt(session.UserID(ctx), 10)
+		body = append(body, panel.CRMOnboard(wsPathOf(ctx, "/members/"+self+"/role"), authz.BusinessRoleAdmin))
+	}
+	body = append(body, panel.Placeholder("Beranda", "Selamat datang di "+session.TenantName(ctx)+"."))
+	h.renderWorkspaceShell(w, r, "Beranda", "", g.Group(body))
 }
 
 // WorkspaceSettings — GET /w/{workspace}/settings. Form nama workspace (AppShell).
