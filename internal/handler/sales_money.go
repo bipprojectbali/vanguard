@@ -88,3 +88,16 @@ func numericBetween(n pgtype.Numeric, lo, hi int64) bool {
 	r := ratFromNumeric(n)
 	return r.Cmp(big.NewRat(lo, 1)) >= 0 && r.Cmp(big.NewRat(hi, 1)) <= 0
 }
+
+// numericGreater benar bila a > b (perbandingan EKSAK via big.Rat, tanpa galat
+// float). Dipakai deteksi Upsell renewal (MRR baru > previous_value) — batas yang
+// menentukan apakah renewal butuh persetujuan.
+func numericGreater(a, b pgtype.Numeric) bool {
+	return ratFromNumeric(a).Cmp(ratFromNumeric(b)) > 0
+}
+
+// mulNumericInt mengalikan NUMERIC dengan bilangan bulat (EKSAK, lalu dibulatkan ke
+// moneyScale). Dipakai menurunkan ARR = MRR × monthsPerYear saat renewal.
+func mulNumericInt(n pgtype.Numeric, k int64) pgtype.Numeric {
+	return ratToNumeric(new(big.Rat).Mul(ratFromNumeric(n), new(big.Rat).SetInt64(k)))
+}

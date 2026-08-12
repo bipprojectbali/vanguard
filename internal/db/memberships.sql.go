@@ -120,6 +120,41 @@ func (q *Queries) GetMembership(ctx context.Context, arg GetMembershipParams) (M
 	return i, err
 }
 
+const listMembersByBusinessRole = `-- name: ListMembersByBusinessRole :many
+SELECT user_id FROM memberships
+WHERE tenant_id = $1 AND business_role = $2::text
+`
+
+type ListMembersByBusinessRoleParams struct {
+	TenantID     int64  `json:"tenant_id"`
+	BusinessRole string `json:"business_role"`
+}
+
+// user_id anggota workspace dgn business_role tertentu — dipakai menarget
+// notifikasi (mis. semua Manager saat renewal Upsell menunggu persetujuan).
+// memberships SENGAJA tanpa RLS (dibaca untuk MENENTUKAN scope), jadi filter
+// tenant_id EKSPLISIT. Cast ::text pada param → sqlc emit `string` (non-null);
+// baris ber-business_role NULL tak pernah cocok, itu benar (belum berperan CRM).
+func (q *Queries) ListMembersByBusinessRole(ctx context.Context, arg ListMembersByBusinessRoleParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listMembersByBusinessRole, arg.TenantID, arg.BusinessRole)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var user_id int64
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMembersByTenant = `-- name: ListMembersByTenant :many
 SELECT m.id, m.user_id, m.role, m.created_at, u.email, u.name, u.avatar_url, u.status
 FROM memberships m

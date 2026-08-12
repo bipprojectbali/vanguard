@@ -58,8 +58,10 @@ func (h *Handler) SubscriptionDetail(w http.ResponseWriter, r *http.Request) {
 	if title == "" {
 		title = "Langganan #" + strconv.FormatInt(s.ID, 10)
 	}
-	h.renderWorkspaceShell(w, r, title, "/subscriptions",
-		panel.SubDetail(h.subDetailView(ctx, base, s, names)))
+	view := h.subDetailView(ctx, base, s, names)
+	view.Msg = subscriptionsMsg(r.URL.Query().Get("ok"))
+	view.Err = wsErrMsg(r.URL.Query().Get("err"))
+	h.renderWorkspaceShell(w, r, title, "/subscriptions", panel.SubDetail(view))
 }
 
 // subDetailView merakit detail lengkap + F4 (ARR disamarkan) + riwayat rantai
@@ -85,6 +87,13 @@ func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscript
 		PaymentState: deref(s.PaymentStatus),
 		Owner:        ownerName(s.SubscriptionOwner, names),
 		Chain:        h.renewalChainView(ctx, s.ID, br),
+
+		// Flag aksi (M5-3c) diprecompute di sini — view murni-data (tak panggil authz).
+		CanRenew:     canRenewSubscriptions(ctx),
+		CanChurn:     canChurnSubscriptions(ctx),
+		CanApprove:   canApproveRenewal(ctx),
+		ChurnReasons: churnReasonOptions,
+		ChurnTypes:   churnTypeOptions,
 	}
 }
 

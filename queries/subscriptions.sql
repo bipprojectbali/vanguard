@@ -27,7 +27,7 @@
 INSERT INTO subscriptions (
     tenant_id, entity_code, subscription_owner, account_id, plan_id,
     source_deal_id, previous_subscription_id,
-    status, start_date, end_date, billing_cycle, auto_renew, contract_term_months,
+    status, approval_status, start_date, end_date, billing_cycle, auto_renew, contract_term_months,
     mrr, arr, quantity_seats, discount_pct, payment_status,
     renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value,
     created_by
@@ -35,7 +35,7 @@ INSERT INTO subscriptions (
     sqlc.arg(tenant_id), sqlc.narg(entity_code), sqlc.narg(subscription_owner),
     sqlc.arg(account_id), sqlc.arg(plan_id),
     sqlc.narg(source_deal_id), sqlc.narg(previous_subscription_id),
-    sqlc.arg(status), sqlc.narg(start_date), sqlc.narg(end_date),
+    sqlc.arg(status), sqlc.narg(approval_status), sqlc.narg(start_date), sqlc.narg(end_date),
     sqlc.narg(billing_cycle), sqlc.arg(auto_renew), sqlc.narg(contract_term_months),
     sqlc.narg(mrr), sqlc.narg(arr), sqlc.narg(quantity_seats), sqlc.narg(discount_pct),
     sqlc.narg(payment_status),
@@ -152,6 +152,36 @@ UPDATE subscriptions SET
     updated_by        = sqlc.narg(updated_by),
     updated_at        = now()
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
+
+-- name: ApproveRenewal :one
+-- Setujui renewal Upsell yang menunggu (M5-3c): baris 'PendingApproval' → 'Active'.
+-- Handler WAJIB meng-Expired baris lama (previous_subscription_id) SEBELUM query ini
+-- dalam tx yang sama — invarian idx_subs_one_active (1 Active per account+plan).
+-- Filter status='PendingApproval' = penjaga transisi: baris yang sudah diputus tak
+-- bisa disetujui dua kali (0 baris ter-update → handler kabari "tak lagi pending").
+UPDATE subscriptions SET
+    status          = 'Active',
+    approval_status = 'Approved',
+    approved_by     = sqlc.narg(approved_by),
+    approved_at     = now(),
+    updated_by      = sqlc.narg(updated_by),
+    updated_at      = now()
+WHERE id = sqlc.arg(id) AND status = 'PendingApproval' AND deleted_at IS NULL
+RETURNING *;
+
+-- name: RejectRenewal :one
+-- Tolak renewal Upsell yang menunggu (M5-3c): baris 'PendingApproval' → 'Cancelled'.
+-- Baris lama TAK disentuh — ia tetap 'Active' (renewal batal, langganan berjalan).
+-- Filter status='PendingApproval' = penjaga transisi (idem ApproveRenewal).
+UPDATE subscriptions SET
+    status          = 'Cancelled',
+    approval_status = 'Rejected',
+    approved_by     = sqlc.narg(approved_by),
+    approved_at     = now(),
+    updated_by      = sqlc.narg(updated_by),
+    updated_at      = now()
+WHERE id = sqlc.arg(id) AND status = 'PendingApproval' AND deleted_at IS NULL
+RETURNING *;
 
 -- name: SoftDeleteSubscription :exec
 -- Soft-delete: baris disembunyikan dari list/get tapi tetap ada (rantai renewal &

@@ -95,3 +95,12 @@ WHERE m.user_id = $1 AND m.role = 'owner' AND t.deleted_at IS NULL AND NOT t.is_
 -- Jumlah owner di satu workspace — cegah menghapus/menurunkan owner terakhir
 -- (workspace tanpa owner = yatim).
 SELECT count(*)::bigint FROM memberships WHERE tenant_id = $1 AND role = 'owner';
+
+-- name: ListMembersByBusinessRole :many
+-- user_id anggota workspace dgn business_role tertentu — dipakai menarget
+-- notifikasi (mis. semua Manager saat renewal Upsell menunggu persetujuan).
+-- memberships SENGAJA tanpa RLS (dibaca untuk MENENTUKAN scope), jadi filter
+-- tenant_id EKSPLISIT. Cast ::text pada param → sqlc emit `string` (non-null);
+-- baris ber-business_role NULL tak pernah cocok, itu benar (belum berperan CRM).
+SELECT user_id FROM memberships
+WHERE tenant_id = sqlc.arg(tenant_id) AND business_role = sqlc.arg(business_role)::text;

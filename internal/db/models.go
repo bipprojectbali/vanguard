@@ -398,6 +398,9 @@ type Subscription struct {
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedBy              *int64             `json:"updated_by"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ApprovalStatus         *string            `json:"approval_status"`
+	ApprovedBy             *int64             `json:"approved_by"`
+	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
 }
 
 type Tenant struct {

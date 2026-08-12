@@ -11,6 +11,79 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const approveRenewal = `-- name: ApproveRenewal :one
+UPDATE subscriptions SET
+    status          = 'Active',
+    approval_status = 'Approved',
+    approved_by     = $1,
+    approved_at     = now(),
+    updated_by      = $2,
+    updated_at      = now()
+WHERE id = $3 AND status = 'PendingApproval' AND deleted_at IS NULL
+RETURNING id, tenant_id, entity_code, subscription_owner, account_id, plan_id, source_deal_id, previous_subscription_id, status, start_date, end_date, billing_cycle, auto_renew, contract_term_months, mrr, arr, quantity_seats, discount_pct, payment_status, renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value, renewal_stage, renewal_risk, renewal_action_plan, renewal_next_action_date, cancellation_date, churn_reason, churn_type, churn_notes, lost_value_mrr, win_back_eligible, deleted_at, created_by, created_at, updated_by, updated_at, approval_status, approved_by, approved_at
+`
+
+type ApproveRenewalParams struct {
+	ApprovedBy *int64 `json:"approved_by"`
+	UpdatedBy  *int64 `json:"updated_by"`
+	ID         int64  `json:"id"`
+}
+
+// Setujui renewal Upsell yang menunggu (M5-3c): baris 'PendingApproval' → 'Active'.
+// Handler WAJIB meng-Expired baris lama (previous_subscription_id) SEBELUM query ini
+// dalam tx yang sama — invarian idx_subs_one_active (1 Active per account+plan).
+// Filter status='PendingApproval' = penjaga transisi: baris yang sudah diputus tak
+// bisa disetujui dua kali (0 baris ter-update → handler kabari "tak lagi pending").
+func (q *Queries) ApproveRenewal(ctx context.Context, arg ApproveRenewalParams) (Subscription, error) {
+	row := q.db.QueryRow(ctx, approveRenewal, arg.ApprovedBy, arg.UpdatedBy, arg.ID)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.EntityCode,
+		&i.SubscriptionOwner,
+		&i.AccountID,
+		&i.PlanID,
+		&i.SourceDealID,
+		&i.PreviousSubscriptionID,
+		&i.Status,
+		&i.StartDate,
+		&i.EndDate,
+		&i.BillingCycle,
+		&i.AutoRenew,
+		&i.ContractTermMonths,
+		&i.Mrr,
+		&i.Arr,
+		&i.QuantitySeats,
+		&i.DiscountPct,
+		&i.PaymentStatus,
+		&i.RenewalStatus,
+		&i.RenewalType,
+		&i.RenewalOwner,
+		&i.RenewalQuoteID,
+		&i.PreviousValue,
+		&i.RenewalStage,
+		&i.RenewalRisk,
+		&i.RenewalActionPlan,
+		&i.RenewalNextActionDate,
+		&i.CancellationDate,
+		&i.ChurnReason,
+		&i.ChurnType,
+		&i.ChurnNotes,
+		&i.LostValueMrr,
+		&i.WinBackEligible,
+		&i.DeletedAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+		&i.ApprovalStatus,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
+	)
+	return i, err
+}
+
 const churnSubscription = `-- name: ChurnSubscription :exec
 UPDATE subscriptions SET
     status            = $1,
@@ -59,7 +132,7 @@ const createSubscription = `-- name: CreateSubscription :one
 INSERT INTO subscriptions (
     tenant_id, entity_code, subscription_owner, account_id, plan_id,
     source_deal_id, previous_subscription_id,
-    status, start_date, end_date, billing_cycle, auto_renew, contract_term_months,
+    status, approval_status, start_date, end_date, billing_cycle, auto_renew, contract_term_months,
     mrr, arr, quantity_seats, discount_pct, payment_status,
     renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value,
     created_by
@@ -67,15 +140,15 @@ INSERT INTO subscriptions (
     $1, $2, $3,
     $4, $5,
     $6, $7,
-    $8, $9, $10,
-    $11, $12, $13,
-    $14, $15, $16, $17,
-    $18,
-    $19, $20, $21,
-    $22, $23,
-    $24
+    $8, $9, $10, $11,
+    $12, $13, $14,
+    $15, $16, $17, $18,
+    $19,
+    $20, $21, $22,
+    $23, $24,
+    $25
 )
-RETURNING id, tenant_id, entity_code, subscription_owner, account_id, plan_id, source_deal_id, previous_subscription_id, status, start_date, end_date, billing_cycle, auto_renew, contract_term_months, mrr, arr, quantity_seats, discount_pct, payment_status, renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value, renewal_stage, renewal_risk, renewal_action_plan, renewal_next_action_date, cancellation_date, churn_reason, churn_type, churn_notes, lost_value_mrr, win_back_eligible, deleted_at, created_by, created_at, updated_by, updated_at
+RETURNING id, tenant_id, entity_code, subscription_owner, account_id, plan_id, source_deal_id, previous_subscription_id, status, start_date, end_date, billing_cycle, auto_renew, contract_term_months, mrr, arr, quantity_seats, discount_pct, payment_status, renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value, renewal_stage, renewal_risk, renewal_action_plan, renewal_next_action_date, cancellation_date, churn_reason, churn_type, churn_notes, lost_value_mrr, win_back_eligible, deleted_at, created_by, created_at, updated_by, updated_at, approval_status, approved_by, approved_at
 `
 
 type CreateSubscriptionParams struct {
@@ -87,6 +160,7 @@ type CreateSubscriptionParams struct {
 	SourceDealID           *int64         `json:"source_deal_id"`
 	PreviousSubscriptionID *int64         `json:"previous_subscription_id"`
 	Status                 string         `json:"status"`
+	ApprovalStatus         *string        `json:"approval_status"`
 	StartDate              pgtype.Date    `json:"start_date"`
 	EndDate                pgtype.Date    `json:"end_date"`
 	BillingCycle           *string        `json:"billing_cycle"`
@@ -140,6 +214,7 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 		arg.SourceDealID,
 		arg.PreviousSubscriptionID,
 		arg.Status,
+		arg.ApprovalStatus,
 		arg.StartDate,
 		arg.EndDate,
 		arg.BillingCycle,
@@ -198,12 +273,15 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.ApprovalStatus,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
 
 const getSubscription = `-- name: GetSubscription :one
-SELECT id, tenant_id, entity_code, subscription_owner, account_id, plan_id, source_deal_id, previous_subscription_id, status, start_date, end_date, billing_cycle, auto_renew, contract_term_months, mrr, arr, quantity_seats, discount_pct, payment_status, renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value, renewal_stage, renewal_risk, renewal_action_plan, renewal_next_action_date, cancellation_date, churn_reason, churn_type, churn_notes, lost_value_mrr, win_back_eligible, deleted_at, created_by, created_at, updated_by, updated_at FROM subscriptions
+SELECT id, tenant_id, entity_code, subscription_owner, account_id, plan_id, source_deal_id, previous_subscription_id, status, start_date, end_date, billing_cycle, auto_renew, contract_term_months, mrr, arr, quantity_seats, discount_pct, payment_status, renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value, renewal_stage, renewal_risk, renewal_action_plan, renewal_next_action_date, cancellation_date, churn_reason, churn_type, churn_notes, lost_value_mrr, win_back_eligible, deleted_at, created_by, created_at, updated_by, updated_at, approval_status, approved_by, approved_at FROM subscriptions
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -252,18 +330,21 @@ func (q *Queries) GetSubscription(ctx context.Context, id int64) (Subscription, 
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.ApprovalStatus,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
 
 const listRenewalChain = `-- name: ListRenewalChain :many
 WITH RECURSIVE chain AS (
-    SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at FROM subscriptions s WHERE s.id = $1
+    SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at FROM subscriptions s WHERE s.id = $1
     UNION ALL
-    SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at FROM subscriptions s
+    SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at FROM subscriptions s
     JOIN chain c ON s.id = c.previous_subscription_id
 )
-SELECT id, tenant_id, entity_code, subscription_owner, account_id, plan_id, source_deal_id, previous_subscription_id, status, start_date, end_date, billing_cycle, auto_renew, contract_term_months, mrr, arr, quantity_seats, discount_pct, payment_status, renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value, renewal_stage, renewal_risk, renewal_action_plan, renewal_next_action_date, cancellation_date, churn_reason, churn_type, churn_notes, lost_value_mrr, win_back_eligible, deleted_at, created_by, created_at, updated_by, updated_at FROM chain
+SELECT id, tenant_id, entity_code, subscription_owner, account_id, plan_id, source_deal_id, previous_subscription_id, status, start_date, end_date, billing_cycle, auto_renew, contract_term_months, mrr, arr, quantity_seats, discount_pct, payment_status, renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value, renewal_stage, renewal_risk, renewal_action_plan, renewal_next_action_date, cancellation_date, churn_reason, churn_type, churn_notes, lost_value_mrr, win_back_eligible, deleted_at, created_by, created_at, updated_by, updated_at, approval_status, approved_by, approved_at FROM chain
 ORDER BY created_at ASC, id ASC
 `
 
@@ -307,6 +388,9 @@ type ListRenewalChainRow struct {
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedBy              *int64             `json:"updated_by"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ApprovalStatus         *string            `json:"approval_status"`
+	ApprovedBy             *int64             `json:"approved_by"`
+	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
 }
 
 // Riwayat renewal (M5-4): telusuri rantai MUNDUR dari satu langganan lewat
@@ -363,6 +447,9 @@ func (q *Queries) ListRenewalChain(ctx context.Context, id int64) ([]ListRenewal
 			&i.CreatedAt,
 			&i.UpdatedBy,
 			&i.UpdatedAt,
+			&i.ApprovalStatus,
+			&i.ApprovedBy,
+			&i.ApprovedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -375,7 +462,7 @@ func (q *Queries) ListRenewalChain(ctx context.Context, id int64) ([]ListRenewal
 }
 
 const listSubscriptions = `-- name: ListSubscriptions :many
-SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, a.village_name, p.plan_name
+SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, a.village_name, p.plan_name
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
 JOIN plans    p ON p.id = s.plan_id
@@ -441,6 +528,9 @@ type ListSubscriptionsRow struct {
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedBy              *int64             `json:"updated_by"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ApprovalStatus         *string            `json:"approval_status"`
+	ApprovedBy             *int64             `json:"approved_by"`
+	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
 	VillageName            string             `json:"village_name"`
 	PlanName               string             `json:"plan_name"`
 }
@@ -508,6 +598,9 @@ func (q *Queries) ListSubscriptions(ctx context.Context, arg ListSubscriptionsPa
 			&i.CreatedAt,
 			&i.UpdatedBy,
 			&i.UpdatedAt,
+			&i.ApprovalStatus,
+			&i.ApprovedBy,
+			&i.ApprovedAt,
 			&i.VillageName,
 			&i.PlanName,
 		); err != nil {
@@ -522,7 +615,7 @@ func (q *Queries) ListSubscriptions(ctx context.Context, arg ListSubscriptionsPa
 }
 
 const listSubscriptionsForAccount = `-- name: ListSubscriptionsForAccount :many
-SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, p.plan_name
+SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, p.plan_name
 FROM subscriptions s
 JOIN plans p ON p.id = s.plan_id
 WHERE s.deleted_at IS NULL
@@ -579,6 +672,9 @@ type ListSubscriptionsForAccountRow struct {
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedBy              *int64             `json:"updated_by"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ApprovalStatus         *string            `json:"approval_status"`
+	ApprovedBy             *int64             `json:"approved_by"`
+	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
 	PlanName               string             `json:"plan_name"`
 }
 
@@ -639,6 +735,9 @@ func (q *Queries) ListSubscriptionsForAccount(ctx context.Context, arg ListSubsc
 			&i.CreatedAt,
 			&i.UpdatedBy,
 			&i.UpdatedAt,
+			&i.ApprovalStatus,
+			&i.ApprovedBy,
+			&i.ApprovedAt,
 			&i.PlanName,
 		); err != nil {
 			return nil, err
@@ -649,6 +748,77 @@ func (q *Queries) ListSubscriptionsForAccount(ctx context.Context, arg ListSubsc
 		return nil, err
 	}
 	return items, nil
+}
+
+const rejectRenewal = `-- name: RejectRenewal :one
+UPDATE subscriptions SET
+    status          = 'Cancelled',
+    approval_status = 'Rejected',
+    approved_by     = $1,
+    approved_at     = now(),
+    updated_by      = $2,
+    updated_at      = now()
+WHERE id = $3 AND status = 'PendingApproval' AND deleted_at IS NULL
+RETURNING id, tenant_id, entity_code, subscription_owner, account_id, plan_id, source_deal_id, previous_subscription_id, status, start_date, end_date, billing_cycle, auto_renew, contract_term_months, mrr, arr, quantity_seats, discount_pct, payment_status, renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value, renewal_stage, renewal_risk, renewal_action_plan, renewal_next_action_date, cancellation_date, churn_reason, churn_type, churn_notes, lost_value_mrr, win_back_eligible, deleted_at, created_by, created_at, updated_by, updated_at, approval_status, approved_by, approved_at
+`
+
+type RejectRenewalParams struct {
+	ApprovedBy *int64 `json:"approved_by"`
+	UpdatedBy  *int64 `json:"updated_by"`
+	ID         int64  `json:"id"`
+}
+
+// Tolak renewal Upsell yang menunggu (M5-3c): baris 'PendingApproval' → 'Cancelled'.
+// Baris lama TAK disentuh — ia tetap 'Active' (renewal batal, langganan berjalan).
+// Filter status='PendingApproval' = penjaga transisi (idem ApproveRenewal).
+func (q *Queries) RejectRenewal(ctx context.Context, arg RejectRenewalParams) (Subscription, error) {
+	row := q.db.QueryRow(ctx, rejectRenewal, arg.ApprovedBy, arg.UpdatedBy, arg.ID)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.EntityCode,
+		&i.SubscriptionOwner,
+		&i.AccountID,
+		&i.PlanID,
+		&i.SourceDealID,
+		&i.PreviousSubscriptionID,
+		&i.Status,
+		&i.StartDate,
+		&i.EndDate,
+		&i.BillingCycle,
+		&i.AutoRenew,
+		&i.ContractTermMonths,
+		&i.Mrr,
+		&i.Arr,
+		&i.QuantitySeats,
+		&i.DiscountPct,
+		&i.PaymentStatus,
+		&i.RenewalStatus,
+		&i.RenewalType,
+		&i.RenewalOwner,
+		&i.RenewalQuoteID,
+		&i.PreviousValue,
+		&i.RenewalStage,
+		&i.RenewalRisk,
+		&i.RenewalActionPlan,
+		&i.RenewalNextActionDate,
+		&i.CancellationDate,
+		&i.ChurnReason,
+		&i.ChurnType,
+		&i.ChurnNotes,
+		&i.LostValueMrr,
+		&i.WinBackEligible,
+		&i.DeletedAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+		&i.ApprovalStatus,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
+	)
+	return i, err
 }
 
 const softDeleteSubscription = `-- name: SoftDeleteSubscription :exec
@@ -689,7 +859,7 @@ UPDATE subscriptions SET
     updated_by           = $17,
     updated_at           = now()
 WHERE id = $18 AND deleted_at IS NULL
-RETURNING id, tenant_id, entity_code, subscription_owner, account_id, plan_id, source_deal_id, previous_subscription_id, status, start_date, end_date, billing_cycle, auto_renew, contract_term_months, mrr, arr, quantity_seats, discount_pct, payment_status, renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value, renewal_stage, renewal_risk, renewal_action_plan, renewal_next_action_date, cancellation_date, churn_reason, churn_type, churn_notes, lost_value_mrr, win_back_eligible, deleted_at, created_by, created_at, updated_by, updated_at
+RETURNING id, tenant_id, entity_code, subscription_owner, account_id, plan_id, source_deal_id, previous_subscription_id, status, start_date, end_date, billing_cycle, auto_renew, contract_term_months, mrr, arr, quantity_seats, discount_pct, payment_status, renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value, renewal_stage, renewal_risk, renewal_action_plan, renewal_next_action_date, cancellation_date, churn_reason, churn_type, churn_notes, lost_value_mrr, win_back_eligible, deleted_at, created_by, created_at, updated_by, updated_at, approval_status, approved_by, approved_at
 `
 
 type UpdateSubscriptionParams struct {
@@ -778,6 +948,9 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.ApprovalStatus,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }

@@ -42,6 +42,7 @@ func (e *testEnv) seedSubscription(
 		AccountID:         accountID,
 		PlanID:            planID,
 		Status:            status,
+		ApprovalStatus:    nil, // seed langsung: jalur non-approval (approval_status NULL)
 		AutoRenew:         false,
 		Mrr:               numFrom(t, mrr),
 		Arr:               numFrom(t, arr),

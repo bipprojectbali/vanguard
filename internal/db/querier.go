@@ -20,6 +20,12 @@ type Querier interface {
 	// SNAPSHOT: unit_price disalin dari plans.base_price saat dibuat, subtotal dihitung
 	// app (unit_price * quantity * (1 - discount_pct/100)); keduanya beku sesudahnya.
 	AddQuoteItem(ctx context.Context, arg AddQuoteItemParams) (QuoteItem, error)
+	// Setujui renewal Upsell yang menunggu (M5-3c): baris 'PendingApproval' → 'Active'.
+	// Handler WAJIB meng-Expired baris lama (previous_subscription_id) SEBELUM query ini
+	// dalam tx yang sama — invarian idx_subs_one_active (1 Active per account+plan).
+	// Filter status='PendingApproval' = penjaga transisi: baris yang sudah diputus tak
+	// bisa disetujui dua kali (0 baris ter-update → handler kabari "tak lagi pending").
+	ApproveRenewal(ctx context.Context, arg ApproveRenewalParams) (Subscription, error)
 	// OWNER. Workspace jadi READ-ONLY tapi datanya utuh. Guard `status = 'active'`
 	// mencegah archive menimpa SUSPENSI platform — kalau tidak, owner bisa keluar
 	// dari suspensi lewat pintu samping (archive lalu unarchive).
@@ -413,6 +419,12 @@ type Querier interface {
 	//   mine_only  → paksa lead_owner = uid (tab "My Leads", walau aktor scope_all)
 	//   status_filter '' → semua status; selain itu = filter satu status ("Unqualified")
 	ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, error)
+	// user_id anggota workspace dgn business_role tertentu — dipakai menarget
+	// notifikasi (mis. semua Manager saat renewal Upsell menunggu persetujuan).
+	// memberships SENGAJA tanpa RLS (dibaca untuk MENENTUKAN scope), jadi filter
+	// tenant_id EKSPLISIT. Cast ::text pada param → sqlc emit `string` (non-null);
+	// baris ber-business_role NULL tak pernah cocok, itu benar (belum berperan CRM).
+	ListMembersByBusinessRole(ctx context.Context, arg ListMembersByBusinessRoleParams) ([]int64, error)
 	// Daftar anggota SATU workspace (panel /admin/members). JOIN users untuk data
 	// tampilan — users kini tabel global (tanpa RLS), jadi filter tenant di sini.
 	//
@@ -571,6 +583,10 @@ type Querier interface {
 	// (jangan hitung di Go — hindari drift clock). Agregasi di level baris: request
 	// berulang dalam bucket sama hanya menaikkan hits, bukan insert baris baru.
 	RecordPresence(ctx context.Context, arg RecordPresenceParams) error
+	// Tolak renewal Upsell yang menunggu (M5-3c): baris 'PendingApproval' → 'Cancelled'.
+	// Baris lama TAK disentuh — ia tetap 'Active' (renewal batal, langganan berjalan).
+	// Filter status='PendingApproval' = penjaga transisi (idem ApproveRenewal).
+	RejectRenewal(ctx context.Context, arg RejectRenewalParams) (Subscription, error)
 	RemovePlatformStaff(ctx context.Context, email string) error
 	// Batalkan penghapusan dalam masa tenggang. Status dikembalikan ke 'active':
 	// workspace yang dihapus saat ter-arsip pun kembali sebagai aktif — pemulihan

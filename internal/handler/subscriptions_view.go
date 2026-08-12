@@ -18,13 +18,50 @@ import (
 // migrasi 00012). Dipakai HANYA untuk merakit dropdown filter di daftar — bukan
 // validasi transisi (itu urusan slice mutasi berikutnya). Urutan = daur hidup
 // alami (Trial → Active → … → Churned) agar filter terbaca logis.
-var subscriptionStatuses = []string{"Trial", "Active", "Suspended", "Expired", "Cancelled", "Churned"}
+var subscriptionStatuses = []string{"Trial", "Active", "PendingApproval", "Suspended", "Expired", "Cancelled", "Churned"}
 
 // canViewSubscriptions = gerbang READ daftar langganan. Sumber tunggal untuk menu &
 // gate halaman SubscriptionsList/SubscriptionDetail. Admin (glob crm:*), manager,
 // sales, csm punya read; support & "" tidak.
 func canViewSubscriptions(ctx context.Context) bool {
 	return authz.CanBusiness(ctx, "crm:subscriptions", "read")
+}
+
+// canRenewSubscriptions = gerbang WRITE renewal (perpanjang langganan). Admin
+// (glob) & manager punya; sales/csm hanya read (lihat matriks business_defaults).
+func canRenewSubscriptions(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:renewals", "write")
+}
+
+// canChurnSubscriptions = gerbang WRITE churn (tandai langganan berhenti). Admin,
+// manager, csm punya; sales hanya read.
+func canChurnSubscriptions(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:churn", "write")
+}
+
+// canApproveRenewal = gerbang APPROVE renewal Upsell yang menunggu. HANYA admin &
+// manager (aksi approve, bukan write); csm punya write renewal_mgmt tapi TAK approve.
+func canApproveRenewal(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:renewal_mgmt", "approve")
+}
+
+// subscriptionsMsg memetakan kode sukses PRG (`?ok=CODE`) → kalimat konfirmasi di
+// halaman detail langganan. Pasangan positif wsErrMsg; kode tak dikenal → "".
+func subscriptionsMsg(code string) string {
+	switch code {
+	case "renewed":
+		return "Langganan diperpanjang — periode baru aktif."
+	case "renew_pending":
+		return "Renewal upsell dibuat — menunggu persetujuan Manager."
+	case "renew_approved":
+		return "Renewal disetujui — langganan periode baru aktif."
+	case "renew_rejected":
+		return "Renewal ditolak — langganan lama tetap berjalan."
+	case "churned":
+		return "Langganan ditandai churn."
+	default:
+		return ""
+	}
 }
 
 // canSeeSubscriptionARR — ARR (annual recurring revenue) hanya utk pengambil

@@ -162,7 +162,7 @@ func subStatusBadge(status string) g.Node {
 		cls = "badge badge-success"
 	case "Trial":
 		cls = "badge badge-info"
-	case "Suspended":
+	case "Suspended", "PendingApproval":
 		cls = "badge badge-warning"
 	case "Expired", "Cancelled", "Churned":
 		cls = "badge badge-error"

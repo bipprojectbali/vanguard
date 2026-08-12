@@ -400,6 +400,14 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// Daftar berkeyset + detail dgn riwayat rantai renewal. Renew/churn menyusul.
 		r.Get("/subscriptions", h.SubscriptionsList)
 		r.Get("/subscriptions/{id}", h.SubscriptionDetail)
+		// Mutasi langganan (M5-3c), native POST → 303 (gotcha #16). Gerbang bisnis
+		// terpisah: renew (crm:renewals write), approve/reject (crm:renewal_mgmt
+		// approve — hanya manager/admin), churn (crm:churn write). F3 ownership
+		// ditegakkan per-baris di handler (loadOwnedSubscription).
+		r.Post("/subscriptions/{id}/renew", h.SubscriptionRenew)
+		r.Post("/subscriptions/{id}/approve", h.SubscriptionRenewApprove)
+		r.Post("/subscriptions/{id}/reject", h.SubscriptionRenewReject)
+		r.Post("/subscriptions/{id}/churn", h.SubscriptionChurn)
 
 		// Peran CRM per-workspace (sumbu BISNIS, objek "crm:roles"). Gerbang di
 		// HANDLER (canManageRoles), BUKAN role tenant: satu alamat melayani semua
