@@ -80,6 +80,8 @@ func wsErrMsg(code string) string {
 		return "Peran bawaan sistem tak bisa disunting atau dihapus."
 	case "role_notfound":
 		return "Peran tidak ditemukan."
+	case "crm_role":
+		return "Peran CRM yang dipilih tidak ada di workspace ini."
 	case "notfound":
 		return "Desa tidak ditemukan atau di luar cakupan Anda."
 	// ── Sales: Leads & Deals (Modul 4) ──────────────────────────────────────
