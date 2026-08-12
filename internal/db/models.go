@@ -269,6 +269,39 @@ type PlatformStaff struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type Quote struct {
+	ID             int64              `json:"id"`
+	TenantID       int64              `json:"tenant_id"`
+	EntityCode     *string            `json:"entity_code"`
+	DealID         *int64             `json:"deal_id"`
+	AccountID      int64              `json:"account_id"`
+	QuoteName      *string            `json:"quote_name"`
+	QuoteStatus    string             `json:"quote_status"`
+	ExpirationDate pgtype.Date        `json:"expiration_date"`
+	PaymentTerms   *string            `json:"payment_terms"`
+	NotesTerms     *string            `json:"notes_terms"`
+	PreparedBy     *int64             `json:"prepared_by"`
+	GrandTotal     pgtype.Numeric     `json:"grand_total"`
+	TaxAmount      pgtype.Numeric     `json:"tax_amount"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy      *int64             `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy      *int64             `json:"updated_by"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type QuoteItem struct {
+	ID          int64          `json:"id"`
+	QuoteID     int64          `json:"quote_id"`
+	TenantID    int64          `json:"tenant_id"`
+	PlanID      *int64         `json:"plan_id"`
+	Quantity    int32          `json:"quantity"`
+	UnitPrice   pgtype.Numeric `json:"unit_price"`
+	DiscountPct pgtype.Numeric `json:"discount_pct"`
+	Subtotal    pgtype.Numeric `json:"subtotal"`
+	LineNo      *int16         `json:"line_no"`
+}
+
 type SlaPolicy struct {
 	ID                       int64              `json:"id"`
 	TenantID                 int64              `json:"tenant_id"`
