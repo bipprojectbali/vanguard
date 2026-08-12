@@ -28,7 +28,7 @@ import (
 // Izin dioper terpisah (bukan satu `canManage`) karena keduanya TIDAK identik —
 // di mode single admin boleh menyunting workspace tapi keanggotaan dinilai
 // sendiri — jadi menyatukannya akan membuat salah satu menu berbohong.
-func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canPlans, canRoles bool) []ui.NavItem {
+func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canPlans, canSubs, canRoles bool) []ui.NavItem {
 	items := []ui.NavItem{
 		{Label: "Dashboard", Href: wsPath(slug, ""), Icon: lucide.House(html.Class("size-4"))},
 	}
@@ -54,7 +54,7 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 	// Subscriptions jadi GRUP bersarang (wireframe 5): Plans & Pricing berbackend
 	// (enabled per izin), sisanya (Active Subscriptions/Renewals/Churn) placeholder.
 	// Selalu tampil agar peta jalan terlihat.
-	items = append(items, workspaceSubscriptionsGroup(slug, canPlans))
+	items = append(items, workspaceSubscriptionsGroup(slug, canPlans, canSubs))
 	// Modul berwireframe tapi belum berbackend — urutan persis wireframe, disabled.
 	// Ditampilkan agar peta jalan produk terlihat utuh di sidebar sejak awal.
 	items = append(items,
@@ -113,14 +113,22 @@ func workspaceSalesGroup(slug string, canLeads, canDeals, canSalesActivity bool)
 }
 
 // workspaceSubscriptionsGroup merakit grup Subscriptions (wireframe 5). Seperti
-// Sales, SELALU tampil (peta jalan). Plans & Pricing → /plans enabled per izin
-// (sumber izin SAMA dengan canViewPlans, objek crm:plans — nol menu hantu); Active
-// Subscriptions/Renewals/Churn placeholder disabled sampai backend-nya mendarat
-// (M5-3b dst). Urutan mengikuti nomor menu §4 (crmModules).
-func workspaceSubscriptionsGroup(slug string, canPlans bool) ui.NavItem {
+// Sales, SELALU tampil (peta jalan). Active Subscriptions → /subscriptions &
+// Plans & Pricing → /plans enabled per izin (sumber izin SAMA dengan
+// canViewSubscriptions/canViewPlans — nol menu hantu); Renewals/Churn placeholder
+// disabled sampai backend-nya mendarat. Urutan mengikuti nomor menu §4 (crmModules).
+func workspaceSubscriptionsGroup(slug string, canPlans, canSubs bool) ui.NavItem {
 	children := make([]ui.NavItem, 0, 4)
-	children = append(children,
-		ui.NavItem{Label: "Active Subscriptions", Icon: lucide.RefreshCw(html.Class("size-4")), Disabled: true},
+	// Active Subscriptions → /subscriptions (canViewSubscriptions, objek
+	// crm:subscriptions). Berbackend sejak M5-3b; disabled bila tak berhak, tetap
+	// tampil agar posisi modul di peta jalan terlihat.
+	active := ui.NavItem{Label: "Active Subscriptions", Icon: lucide.RefreshCw(html.Class("size-4"))}
+	if canSubs {
+		active.Href = wsPath(slug, "/subscriptions")
+	} else {
+		active.Disabled = true
+	}
+	children = append(children, active,
 		ui.NavItem{Label: "Renewals", Icon: lucide.CalendarClock(html.Class("size-4")), Disabled: true},
 	)
 	// Plans & Pricing → /plans (canViewPlans, objek crm:plans). Berbackend sejak

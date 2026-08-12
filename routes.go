@@ -394,6 +394,13 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/plans/{id}/retire", h.PlanRetire)
 		r.Post("/plans/{id}/activate", h.PlanActivate)
 
+		// Active Subscriptions (CRM Modul 5, M5-3b GET-only). Milik WORKSPACE
+		// (sumbu BISNIS "crm:subscriptions" read) DENGAN F3 ownership
+		// (subscription_owner) di layer query + F4 masking ARR untuk non-manager.
+		// Daftar berkeyset + detail dgn riwayat rantai renewal. Renew/churn menyusul.
+		r.Get("/subscriptions", h.SubscriptionsList)
+		r.Get("/subscriptions/{id}", h.SubscriptionDetail)
+
 		// Peran CRM per-workspace (sumbu BISNIS, objek "crm:roles"). Gerbang di
 		// HANDLER (canManageRoles), BUKAN role tenant: satu alamat melayani semua
 		// role, izin yang membedakan. Editor matriks izin per-modul + cakupan data
