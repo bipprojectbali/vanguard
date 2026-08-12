@@ -378,6 +378,14 @@ type Querier interface {
 	// tanpa pemegang tetap muncul dengan 0. COALESCE ke bigint: sqlc emit int64, bukan
 	// interface{}. GROUP BY br.id (PK) sah — kolom br.* bergantung fungsional padanya.
 	ListBusinessRoles(ctx context.Context, tenantID int64) ([]ListBusinessRolesRow, error)
+	// Dasbor Churn (Menu 5.2/5.4, READ-ONLY). Langganan yang telah berhenti
+	// (status Cancelled/Churned), di-scope ownership (F3) dengan flag yang SAMA dgn
+	// ListSubscriptions (scope_all → semua; is_own → subscription_owner = uid; keduanya
+	// false → NOL baris, fail-closed). Filter tipe churn opsional lewat type_filter
+	// (Voluntary/Involuntary); '' → semua tipe. Kolom churn (lost_value_mrr, churn_reason,
+	// cancellation_date) dibawa di s.* → tanpa JOIN tambahan. Urut created_at DESC +
+	// keyset SAMA dgn ListSubscriptions (reuse pageCursor/splitPage).
+	ListChurned(ctx context.Context, arg ListChurnedParams) ([]ListChurnedRow, error)
 	// Semua format kode workspace, untuk halaman pengaturan. Sedikit barisnya (satu
 	// per entitas), jadi tak dipaginasi. Urut per entity agar tampilannya stabil.
 	ListCodeFormats(ctx context.Context, tenantID int64) ([]CodeFormat, error)

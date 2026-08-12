@@ -404,6 +404,9 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// Gerbang sama: crm:subscriptions read + F3 ownership. Aksi perpanjangan
 		// tetap di detail langganan.
 		r.Get("/subscriptions/renewals", h.SubscriptionRenewals)
+		// Dasbor Churn (Menu 5.2/5.4, READ-ONLY). Rute statik SEBELUM "/{id}" (sama
+		// alasan dgn renewals). Gerbang sama: crm:subscriptions read + F3 ownership.
+		r.Get("/subscriptions/churn", h.SubscriptionChurnList)
 		r.Get("/subscriptions/{id}", h.SubscriptionDetail)
 		// Mutasi langganan (M5-3c), native POST → 303 (gotcha #16). Gerbang bisnis
 		// terpisah: renew (crm:renewals write), approve/reject (crm:renewal_mgmt

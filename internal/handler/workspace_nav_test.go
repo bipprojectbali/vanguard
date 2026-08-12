@@ -117,12 +117,11 @@ func TestWorkspaceNav_SalesGroup(t *testing.T) {
 }
 
 // TestWorkspaceNav_SubscriptionsGroup: Subscriptions = grup bersarang yang SELALU
-// tampil (peta jalan). Anak "Active Subscriptions"/"Renewals" (canSubs, objek
-// crm:subscriptions) & "Plans & Pricing" (canPlans, objek crm:plans) enabled
-// mengikuti izinnya masing-masing; hanya Churn placeholder disabled sampai
-// backend-nya mendarat.
+// tampil (peta jalan). Semua anak berbackend (Active Subscriptions/Renewals/Churn
+// via canSubs objek crm:subscriptions; Plans & Pricing via canPlans objek crm:plans)
+// enabled mengikuti izinnya masing-masing — sejak M5-4 tak ada lagi placeholder.
 func TestWorkspaceNav_SubscriptionsGroup(t *testing.T) {
-	// canPlans & canSubs → grup tampil, ketiga anak berbackend enabled + href benar.
+	// canPlans & canSubs → grup tampil, keempat anak enabled + href benar.
 	nav := workspaceNav("acme", false, false, false, false, false, false, false, true, true, false)
 	grp, ok := findItem(nav, "Subscriptions")
 	if !ok {
@@ -132,9 +131,10 @@ func TestWorkspaceNav_SubscriptionsGroup(t *testing.T) {
 		t.Errorf("header grup Subscriptions tak boleh jadi link, got Href %q", grp.Href)
 	}
 	wantEnabled := map[string]string{
-		"Plans & Pricing":      "/w/acme/plans",
-		"Active Subscriptions": "/w/acme/subscriptions",
-		"Renewals":             "/w/acme/subscriptions/renewals",
+		"Plans & Pricing":       "/w/acme/plans",
+		"Active Subscriptions":  "/w/acme/subscriptions",
+		"Renewals":              "/w/acme/subscriptions/renewals",
+		"Churn / Cancellations": "/w/acme/subscriptions/churn",
 	}
 	for label, href := range wantEnabled {
 		ch, ok := findItem(grp.Children, label)
@@ -146,26 +146,15 @@ func TestWorkspaceNav_SubscriptionsGroup(t *testing.T) {
 			t.Errorf("anak %q harus enabled→%q, got disabled=%v href=%q", label, href, ch.Disabled, ch.Href)
 		}
 	}
-	// Churn tetap placeholder disabled tanpa href (backend belum ada).
-	for _, label := range []string{"Churn / Cancellations"} {
-		ch, ok := findItem(grp.Children, label)
-		if !ok {
-			t.Errorf("grup Subscriptions kurang placeholder %q", label)
-			continue
-		}
-		if !ch.Disabled || ch.Href != "" {
-			t.Errorf("placeholder %q harus disabled tanpa href, got disabled=%v href=%q", label, ch.Disabled, ch.Href)
-		}
-	}
 
-	// Tanpa izin → grup tetap tampil, tapi Plans/Active Subscriptions/Renewals
-	// disabled tanpa href (menu tak menawarkan pintu yang lalu ditolak 403).
+	// Tanpa izin → grup tetap tampil, tapi semua anak berbackend disabled tanpa href
+	// (menu tak menawarkan pintu yang lalu ditolak 403).
 	navNone := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false)
 	grpNone, ok := findItem(navNone, "Subscriptions")
 	if !ok {
 		t.Fatal("grup Subscriptions tetap tampil walau tanpa izin")
 	}
-	for _, label := range []string{"Plans & Pricing", "Active Subscriptions", "Renewals"} {
+	for _, label := range []string{"Plans & Pricing", "Active Subscriptions", "Renewals", "Churn / Cancellations"} {
 		ch, ok := findItem(grpNone.Children, label)
 		if !ok {
 			t.Errorf("anak %q harus tetap tampil (disabled)", label)

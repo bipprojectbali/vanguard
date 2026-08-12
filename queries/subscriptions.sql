@@ -111,6 +111,30 @@ WHERE s.deleted_at IS NULL
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListChurned :many
+-- Dasbor Churn (Menu 5.2/5.4, READ-ONLY). Langganan yang telah berhenti
+-- (status Cancelled/Churned), di-scope ownership (F3) dengan flag yang SAMA dgn
+-- ListSubscriptions (scope_all → semua; is_own → subscription_owner = uid; keduanya
+-- false → NOL baris, fail-closed). Filter tipe churn opsional lewat type_filter
+-- (Voluntary/Involuntary); '' → semua tipe. Kolom churn (lost_value_mrr, churn_reason,
+-- cancellation_date) dibawa di s.* → tanpa JOIN tambahan. Urut created_at DESC +
+-- keyset SAMA dgn ListSubscriptions (reuse pageCursor/splitPage).
+SELECT s.*, a.village_name, p.plan_name
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+JOIN plans    p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND s.status IN ('Cancelled', 'Churned')
+  AND (s.created_at, s.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(type_filter)::text = '' OR s.churn_type = sqlc.arg(type_filter)::text)
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: ListSubscriptionsForAccount :many
 -- Daftar langganan satu desa (detail account → langganannya), keyset. Account sudah
 -- ter-scope ownership di handler; di sini cukup filter account_id + baris hidup.

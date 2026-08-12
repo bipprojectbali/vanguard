@@ -337,6 +337,161 @@ func (q *Queries) GetSubscription(ctx context.Context, id int64) (Subscription, 
 	return i, err
 }
 
+const listChurned = `-- name: ListChurned :many
+SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, a.village_name, p.plan_name
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+JOIN plans    p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND s.status IN ('Cancelled', 'Churned')
+  AND (s.created_at, s.id) < ($1::timestamptz, $2::bigint)
+  AND (
+      $3::boolean
+      OR ($4::boolean AND s.subscription_owner = $5)
+  )
+  AND ($6::text = '' OR s.churn_type = $6::text)
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT $7
+`
+
+type ListChurnedParams struct {
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	ScopeAll        bool               `json:"scope_all"`
+	IsOwn           bool               `json:"is_own"`
+	Uid             *int64             `json:"uid"`
+	TypeFilter      string             `json:"type_filter"`
+	PageSize        int32              `json:"page_size"`
+}
+
+type ListChurnedRow struct {
+	ID                     int64              `json:"id"`
+	TenantID               int64              `json:"tenant_id"`
+	EntityCode             *string            `json:"entity_code"`
+	SubscriptionOwner      *int64             `json:"subscription_owner"`
+	AccountID              int64              `json:"account_id"`
+	PlanID                 int64              `json:"plan_id"`
+	SourceDealID           *int64             `json:"source_deal_id"`
+	PreviousSubscriptionID *int64             `json:"previous_subscription_id"`
+	Status                 string             `json:"status"`
+	StartDate              pgtype.Date        `json:"start_date"`
+	EndDate                pgtype.Date        `json:"end_date"`
+	BillingCycle           *string            `json:"billing_cycle"`
+	AutoRenew              bool               `json:"auto_renew"`
+	ContractTermMonths     *int32             `json:"contract_term_months"`
+	Mrr                    pgtype.Numeric     `json:"mrr"`
+	Arr                    pgtype.Numeric     `json:"arr"`
+	QuantitySeats          *int32             `json:"quantity_seats"`
+	DiscountPct            pgtype.Numeric     `json:"discount_pct"`
+	PaymentStatus          *string            `json:"payment_status"`
+	RenewalStatus          *string            `json:"renewal_status"`
+	RenewalType            *string            `json:"renewal_type"`
+	RenewalOwner           *int64             `json:"renewal_owner"`
+	RenewalQuoteID         *int64             `json:"renewal_quote_id"`
+	PreviousValue          pgtype.Numeric     `json:"previous_value"`
+	RenewalStage           *string            `json:"renewal_stage"`
+	RenewalRisk            *string            `json:"renewal_risk"`
+	RenewalActionPlan      *string            `json:"renewal_action_plan"`
+	RenewalNextActionDate  pgtype.Date        `json:"renewal_next_action_date"`
+	CancellationDate       pgtype.Date        `json:"cancellation_date"`
+	ChurnReason            *string            `json:"churn_reason"`
+	ChurnType              *string            `json:"churn_type"`
+	ChurnNotes             *string            `json:"churn_notes"`
+	LostValueMrr           pgtype.Numeric     `json:"lost_value_mrr"`
+	WinBackEligible        *bool              `json:"win_back_eligible"`
+	DeletedAt              pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy              *int64             `json:"created_by"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy              *int64             `json:"updated_by"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ApprovalStatus         *string            `json:"approval_status"`
+	ApprovedBy             *int64             `json:"approved_by"`
+	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
+	VillageName            string             `json:"village_name"`
+	PlanName               string             `json:"plan_name"`
+}
+
+// Dasbor Churn (Menu 5.2/5.4, READ-ONLY). Langganan yang telah berhenti
+// (status Cancelled/Churned), di-scope ownership (F3) dengan flag yang SAMA dgn
+// ListSubscriptions (scope_all → semua; is_own → subscription_owner = uid; keduanya
+// false → NOL baris, fail-closed). Filter tipe churn opsional lewat type_filter
+// (Voluntary/Involuntary); ” → semua tipe. Kolom churn (lost_value_mrr, churn_reason,
+// cancellation_date) dibawa di s.* → tanpa JOIN tambahan. Urut created_at DESC +
+// keyset SAMA dgn ListSubscriptions (reuse pageCursor/splitPage).
+func (q *Queries) ListChurned(ctx context.Context, arg ListChurnedParams) ([]ListChurnedRow, error) {
+	rows, err := q.db.Query(ctx, listChurned,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.TypeFilter,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChurnedRow{}
+	for rows.Next() {
+		var i ListChurnedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.SubscriptionOwner,
+			&i.AccountID,
+			&i.PlanID,
+			&i.SourceDealID,
+			&i.PreviousSubscriptionID,
+			&i.Status,
+			&i.StartDate,
+			&i.EndDate,
+			&i.BillingCycle,
+			&i.AutoRenew,
+			&i.ContractTermMonths,
+			&i.Mrr,
+			&i.Arr,
+			&i.QuantitySeats,
+			&i.DiscountPct,
+			&i.PaymentStatus,
+			&i.RenewalStatus,
+			&i.RenewalType,
+			&i.RenewalOwner,
+			&i.RenewalQuoteID,
+			&i.PreviousValue,
+			&i.RenewalStage,
+			&i.RenewalRisk,
+			&i.RenewalActionPlan,
+			&i.RenewalNextActionDate,
+			&i.CancellationDate,
+			&i.ChurnReason,
+			&i.ChurnType,
+			&i.ChurnNotes,
+			&i.LostValueMrr,
+			&i.WinBackEligible,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.ApprovalStatus,
+			&i.ApprovedBy,
+			&i.ApprovedAt,
+			&i.VillageName,
+			&i.PlanName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRenewalChain = `-- name: ListRenewalChain :many
 WITH RECURSIVE chain AS (
     SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at FROM subscriptions s WHERE s.id = $1
