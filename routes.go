@@ -320,6 +320,16 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// query (ListContacts JOIN accounts). Alamat sibling accounts.
 		r.Get("/contacts", h.ContactsAll)
 
+		// Customer Success (Modul 6 slice B1): Health Score (6.1) + Journey/
+		// Onboarding (6.2) + Product Adoption (6.4) — SATU baris `customer_success`
+		// per desa, TIGA objek Casbin (crm:health/journey/adoption). F3 DIWARISI
+		// desa induk (loadOwnedAccount), sama pola dengan Kontak. Gerbang F2
+		// PER-SECTION di HANDLER (bukan di sini): baca = boleh buka bila berhak
+		// MINIMAL satu section, tulis = masking per-section saat SAVE.
+		r.Get("/accounts/{id}/customer-success", h.CustomerSuccessDetail)
+		r.Get("/accounts/{id}/customer-success/edit", h.CustomerSuccessEdit)
+		r.Post("/accounts/{id}/customer-success", h.CustomerSuccessSave)
+
 		// Lead (Sales, CRM Modul 4). Gerbang di HANDLER sumbu BISNIS
 		// (CanBusiness "crm:leads") + ownership-filter F3 (lead_owner) +
 		// masking F4. Konversi = halaman review (GET) → 1 TX atomik (POST):

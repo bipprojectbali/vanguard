@@ -81,6 +81,8 @@ func AccountDetail(v AccountDetailView) g.Node {
 				g.Text("« Kembali ke daftar desa")),
 			h.A(h.Href(base+"/contacts"), h.Class("btn btn-sm btn-ghost min-h-11"),
 				g.Text("Kontak »")),
+			h.A(h.Href(base+"/customer-success"), h.Class("btn btn-sm btn-ghost min-h-11"),
+				g.Text("Customer Success »")),
 		),
 		detailCard("Identitas", []detailField{
 			{"Nama Desa", v.VillageName},

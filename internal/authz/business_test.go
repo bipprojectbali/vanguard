@@ -101,6 +101,8 @@ func TestBusinessPolicy_MatrixEnforcement(t *testing.T) {
 		{"csm", "crm:health", "write", true, "csm isi health score (◐✓)"},
 		{"sales", "crm:success_plans", "read", false, "sales nol success plans (✕)"},
 		{"sales", "crm:engagements", "read", false, "sales nol engagements (✕)"},
+		{"sales", "crm:journey", "read", true, "sales lihat journey (👁, docs §4 6.2)"},
+		{"sales", "crm:adoption", "read", false, "sales nol product adoption (✕, docs §4 6.4)"},
 
 		// --- Manager lintas-tim tapi Plans hanya 👁, Settings ✕ ---
 		{"manager", "crm:accounts", "write", true, "manager ✓ accounts"},

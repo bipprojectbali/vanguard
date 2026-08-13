@@ -136,6 +136,10 @@ type Querier interface {
 	// GUC lewat FK + WITH CHECK). is_primary_contact di-set pemanggil SETELAH
 	// mengosongkan primary lama (ClearAccountPrimaryContact) agar tak melanggar index.
 	CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error)
+	// Buat baris pertama kali desa ini disimpan. tenant_id eksplisit (RLS WITH
+	// CHECK memverifikasinya = GUC). usage_data_source TAK dioper (default
+	// 'Manual', v1 tak ada field form untuknya).
+	CreateCustomerSuccess(ctx context.Context, arg CreateCustomerSuccessParams) (CustomerSuccess, error)
 	// deals.sql — pipeline Sales (Deal). Isolasi WORKSPACE ditegakkan RLS (GUC
 	// app.tenant_id di WithTenant); isolasi ANTAR-DESA (F3) ditegakkan di layer query
 	// lewat flag ownership di ListDeals/ListDealsForPipeline — lihat ownership.go.
@@ -279,6 +283,17 @@ type Querier interface {
 	// ter-soft-delete. Tak menerapkan ownership — pemanggil (handler) memutuskan lewat
 	// desa INDUK apakah aktor boleh membukanya (kontak mewarisi kepemilikan desa).
 	GetContact(ctx context.Context, id int64) (Contact, error)
+	// customer_success.sql — snapshot Health/Journey/Onboarding/Adoption SATU
+	// baris per desa (Modul 6 slice B1). Isolasi WORKSPACE ditegakkan RLS (GUC
+	// app.tenant_id di WithTenant); tak ada filter tenant_id manual. TANPA
+	// soft-delete (ikut hidup account, ON DELETE CASCADE).
+	//
+	// TANPA upsert ON CONFLICT — tak ada precedent di codebase; handler baca baris
+	// existing dulu (GetCustomerSuccessByAccountID) untuk masking F2 per-section
+	// sebelum menulis, jadi get-then-branch (Create kalau absen, Update kalau
+	// ada) justru pola yang sudah dibutuhkan, bukan beban tambahan.
+	// Satu baris per desa. pgx.ErrNoRows → belum pernah disimpan (jalur Create).
+	GetCustomerSuccessByAccountID(ctx context.Context, accountID int64) (CustomerSuccess, error)
 	// Satu deal hidup. RLS menjamin tenant_id; ownership diputuskan handler
 	// (DealsListFilter.Allows) atas baris.
 	GetDeal(ctx context.Context, id int64) (Deal, error)
@@ -772,6 +787,11 @@ type Querier interface {
 	// lama (ClearAccountPrimaryContact) bila dinaikkan jadi utama. account_id TIDAK
 	// diubah di sini — memindahkan kontak antar-desa adalah aksi lain (belum ada).
 	UpdateContact(ctx context.Context, arg UpdateContactParams) (Contact, error)
+	// Sunting seluruh snapshot, key by account_id (semua lookup mulai dari {id}
+	// account di URL — bukan surrogate id tabel ini). Section yang aktor tak
+	// berhak tulis WAJIB diisi handler dari baris existing sebelum dioper ke sini
+	// (masking F2 per-section, lihat customer_success.go).
+	UpdateCustomerSuccess(ctx context.Context, arg UpdateCustomerSuccessParams) (CustomerSuccess, error)
 	// Sunting profil deal. entity_code, stage, dan hasil (win_loss_reason/closed_date)
 	// TAK di sini: stage punya jalur khusus (UpdateDealStage) agar perpindahan pipeline
 	// terlihat sebagai aksi tersendiri, bukan efek samping edit.

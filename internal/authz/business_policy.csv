@@ -44,7 +44,8 @@ p, manager, crm:sla, write
 p, manager, crm:activities, write
 p, manager, crm:reports, read
 
-# --- SALES: cari desa → deal → quote. Nol akses Customer Success (kolom Sales ✕) ---
+# --- SALES: cari desa → deal → quote. 👁 Health/Journey (6.1/6.2); ✕ Success
+# Plans/Adoption (6.3/6.4, kolom Sales ✕ untuk keduanya) ---
 p, sales, crm:dashboard, read
 p, sales, crm:accounts, write
 p, sales, crm:contacts, write
@@ -57,6 +58,7 @@ p, sales, crm:renewals, read
 p, sales, crm:plans, read
 p, sales, crm:churn, read
 p, sales, crm:health, read
+p, sales, crm:journey, read
 p, sales, crm:renewal_mgmt, read
 p, sales, crm:tickets, read
 p, sales, crm:kb, read

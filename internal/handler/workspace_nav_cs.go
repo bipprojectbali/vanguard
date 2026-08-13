@@ -11,8 +11,11 @@ import (
 // Selalu tampil (peta jalan produk terlihat, "nol menu hantu"): 10 anak
 // URUT PERSIS wireframe (6.1 → 6.11), SLA Management (A1), Playbooks (A2) &
 // Knowledge Base (A3) berbackend — sisanya placeholder disabled sampai
-// slice-nya sendiri mendarat (B1 Health/Journey/Adoption, C1 Onboarding,
-// C2 Success Plans, C3 Surveys, D1 Tickets).
+// slice-nya sendiri mendarat (C2 Success Plans, C3 Surveys, D1 Tickets).
+// Health Score/Journey/Onboarding/Adoption (B1) TETAP disabled DI SINI —
+// halaman `customer_success` butuh {id} account spesifik, tak punya href
+// workspace-level yang masuk akal; entry point B1 yang benar adalah link
+// "Customer Success »" di dalam AccountDetail (pola sama link "Kontak »").
 
 // workspaceCSGroup merakit grup Customer Success (wireframe 6). canSLA =
 // canViewSLAPolicies (izin SAMA dengan gerbang SLAPoliciesList). canPlaybooks
