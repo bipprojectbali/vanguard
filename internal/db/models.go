@@ -309,6 +309,21 @@ type PlatformStaff struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type Playbook struct {
+	ID               int64              `json:"id"`
+	TenantID         int64              `json:"tenant_id"`
+	PlaybookName     string             `json:"playbook_name"`
+	TriggerScenario  *string            `json:"trigger_scenario"`
+	Description      *string            `json:"description"`
+	Steps            *string            `json:"steps"`
+	RecommendedOwner *string            `json:"recommended_owner"`
+	IsActive         bool               `json:"is_active"`
+	CreatedBy        *int64             `json:"created_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy        *int64             `json:"updated_by"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Quote struct {
 	ID             int64              `json:"id"`
 	TenantID       int64              `json:"tenant_id"`
