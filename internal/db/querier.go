@@ -149,6 +149,10 @@ type Querier interface {
 	// Undangan bergabung ke workspace. token = rahasia URL (crypto/rand hex via
 	// oauth.NewState). email boleh milik orang yang BELUM punya akun.
 	CreateInvite(ctx context.Context, arg CreateInviteParams) (Invite, error)
+	// Buat artikel. tenant_id eksplisit (RLS WITH CHECK memverifikasinya = GUC).
+	// author_id = created_by (penulis awal; slice ini tak sediakan picker
+	// reassign penulis — lihat komentar migrasi 00018).
+	CreateKBArticle(ctx context.Context, arg CreateKBArticleParams) (KbArticle, error)
 	// leads.sql — funnel Sales (Lead). Isolasi WORKSPACE ditegakkan RLS (GUC
 	// app.tenant_id di WithTenant); isolasi ANTAR-DESA (F3) ditegakkan di layer query
 	// lewat flag ownership di ListLeads — lihat internal/db/ownership.go. Ownership
@@ -281,6 +285,8 @@ type Querier interface {
 	// Jalur PUBLIK (/invite/{token}) — penerima belum tentu login/anggota. Validasi
 	// kedaluwarsa & sudah-dipakai dilakukan di handler agar pesannya spesifik.
 	GetInviteByToken(ctx context.Context, token string) (GetInviteByTokenRow, error)
+	// Satu artikel (baca detail/isi). RLS menjamin tenant_id.
+	GetKBArticle(ctx context.Context, id int64) (KbArticle, error)
 	// Satu lead hidup. RLS menjamin tenant_id; filter deleted_at menyembunyikan yang
 	// ter-soft-delete. Ownership diputuskan handler (LeadsListFilter.Allows) atas baris.
 	GetLead(ctx context.Context, id int64) (Lead, error)
@@ -437,6 +443,16 @@ type Querier interface {
 	ListExpiredTenants(ctx context.Context, deletedAt pgtype.Timestamptz) ([]Tenant, error)
 	// Undangan PENDING satu workspace (panel anggota) — yang sudah diterima disaring.
 	ListInvitesByTenant(ctx context.Context, tenantID int64) ([]Invite, error)
+	// kb_articles.sql — katalog master (Knowledge Base), Modul 6 Customer
+	// Success slice A3. Isolasi WORKSPACE ditegakkan RLS (GUC app.tenant_id di
+	// WithTenant); tak ada filter tenant_id manual. kb_articles TANPA
+	// soft-delete: status='Draft' = draf, bukan terhapus. Meniru pola
+	// playbooks.sql (A2), status 3-nilai (bukan is_active boolean) meniru
+	// leads_status_chk/subs_status_chk.
+	// Seluruh katalog untuk tampilan kelola (semua status). Terbaru diperbarui
+	// dulu — perilaku umum KB admin view. Bounded katalog master per-workspace
+	// → tanpa keyset.
+	ListKBArticlesAll(ctx context.Context) ([]KbArticle, error)
 	// Daftar lead, keyset (created_at DESC, id DESC) + filter ownership F3 + tab.
 	//
 	// Ownership sebagai dua flag boolean (bukan SQL dinamis) supaya query tetap sqlc
@@ -672,6 +688,9 @@ type Querier interface {
 	// FK ditutup di migrasi 00012). Dipanggil dalam tx yang SAMA dgn CreateSubscription
 	// agar deal Closed Won selalu menunjuk langganan yang lahir darinya (atomik).
 	SetDealCreatedSubscription(ctx context.Context, arg SetDealCreatedSubscriptionParams) error
+	// Transisi status (Draft/Review/Published — CHECK di DB menegakkan domain
+	// nilai). Handler yang memutuskan transisi mana yang ditawarkan per baris.
+	SetKBArticleStatus(ctx context.Context, arg SetKBArticleStatusParams) error
 	// Pensiunkan (false) atau aktifkan kembali (true) plan. Plan pensiun hilang dari
 	// ListPlans (picker) tapi quote/langganan lama tetap sah (snapshot harga).
 	SetPlanActive(ctx context.Context, arg SetPlanActiveParams) error
@@ -762,6 +781,9 @@ type Querier interface {
 	// handler (bukan constraint DB agar pesan bisa diperbaiki user). closed_date =
 	// CURRENT_DATE bila stage terminal, NULL bila dibuka kembali ke stage aktif.
 	UpdateDealStage(ctx context.Context, arg UpdateDealStageParams) error
+	// Sunting profil/isi artikel. status TAK di sini (SetKBArticleStatus) —
+	// transisi status adalah aksi tersendiri, bukan efek samping edit.
+	UpdateKBArticle(ctx context.Context, arg UpdateKBArticleParams) (KbArticle, error)
 	// Sunting profil & kualifikasi lead. entity_code tak diubah (kode identitas yang
 	// dikutip). converted_* TAK disentuh di sini — itu efek konversi (ConvertLead),
 	// bukan edit biasa.

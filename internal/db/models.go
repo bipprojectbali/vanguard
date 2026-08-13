@@ -218,6 +218,24 @@ type Invite struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
+type KbArticle struct {
+	ID           int64              `json:"id"`
+	TenantID     int64              `json:"tenant_id"`
+	ArticleTitle string             `json:"article_title"`
+	ArticleBody  *string            `json:"article_body"`
+	Category     *string            `json:"category"`
+	Keywords     *string            `json:"keywords"`
+	Status       string             `json:"status"`
+	Visibility   string             `json:"visibility"`
+	AuthorID     *int64             `json:"author_id"`
+	ViewCount    int32              `json:"view_count"`
+	HelpfulVotes int32              `json:"helpful_votes"`
+	CreatedBy    *int64             `json:"created_by"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy    *int64             `json:"updated_by"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Lead struct {
 	ID                 int64              `json:"id"`
 	TenantID           int64              `json:"tenant_id"`
