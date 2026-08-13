@@ -130,8 +130,20 @@ func TableScroll(table g.Node) g.Node {
 // Input adalah field teks daisyUI. `.input` daisyUI sudah punya border + tinggi;
 // tambahkan w-full agar field mengisi lebar kontainer (default daisyUI = auto).
 // attrs untuk data-bind, placeholder, dll.
+//
+// Default Class/Type WAJIB di-append SETELAH attrs (bukan sebelum): gomponents
+// menulis tiap Node atribut apa adanya tanpa dedup, jadi dua `class="..."`/
+// `type="..."` di HTML akhir jadi duplikat — parser HTML browser HANYA
+// mempertahankan kemunculan PERTAMA, sisanya dibuang diam-diam. Dulu default
+// ditaruh DULUAN → h.Class/h.Type custom dari caller (mis. field() typ="number"/
+// "date"/"tel", ukuran/tema kustom) selalu kalah tanpa galat compile ATAUPUN
+// runtime — ketahuan hanya lewat inspeksi HTML mentah di browser (ego-browser,
+// Modul 6 CS: input number/date render 14px krn text-base custom terbuang,
+// type="number" jadi type="text"). Taruh attrs LEBIH DULU: bila caller mengirim
+// Class/Type sendiri, itu yang menang (muncul pertama); bila tidak, default ini
+// jadi satu-satunya kemunculan sehingga tetap berlaku.
 func Input(attrs ...g.Node) g.Node {
-	return h.Input(append([]g.Node{h.Class("input w-full"), h.Type("text")}, attrs...)...)
+	return h.Input(append(attrs, h.Class("input w-full"), h.Type("text"))...)
 }
 
 // Label untuk field form. daisyUI `.label` = inline-flex wrapper; untuk teks

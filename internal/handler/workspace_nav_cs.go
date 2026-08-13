@@ -9,16 +9,19 @@ import (
 
 // workspace_nav_cs.go — grup nav Customer Success (wireframe 6, Modul 6).
 // Selalu tampil (peta jalan produk terlihat, "nol menu hantu"): 10 anak
-// URUT PERSIS wireframe (6.1 → 6.11), SLA Management (A1), Playbooks (A2) &
-// Knowledge Base (A3) berbackend — sisanya placeholder disabled sampai
-// slice-nya sendiri mendarat (B1 Health/Journey/Adoption, C1 Onboarding,
-// C2 Success Plans, C3 Surveys, D1 Tickets).
+// URUT PERSIS wireframe (6.1 → 6.11), SLA Management (A1), Playbooks (A2),
+// Knowledge Base (A3) & Tickets/Cases (B2) berbackend — sisanya placeholder
+// disabled sampai slice-nya sendiri mendarat (C2 Success Plans, C3 Surveys).
+// Health Score/Journey/Onboarding/Adoption (B1) TETAP disabled DI SINI —
+// halaman `customer_success` butuh {id} account spesifik, tak punya href
+// workspace-level yang masuk akal; entry point B1 yang benar adalah link
+// "Customer Success »" di dalam AccountDetail (pola sama link "Kontak »").
 
 // workspaceCSGroup merakit grup Customer Success (wireframe 6). canSLA =
 // canViewSLAPolicies (izin SAMA dengan gerbang SLAPoliciesList). canPlaybooks
-// = canViewPlaybooks (izin SAMA dengan gerbang PlaybooksList). canKB =
-// canViewKBArticles (izin SAMA dengan gerbang KBArticlesList).
-func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB bool) ui.NavItem {
+// = canViewPlaybooks. canKB = canViewKBArticles. canTickets = canViewTickets
+// (izin SAMA dengan gerbang TicketsList, objek crm:tickets read).
+func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets bool) ui.NavItem {
 	children := make([]ui.NavItem, 0, 11)
 	children = append(children,
 		ui.NavItem{Label: "Health Score", Icon: lucide.HeartPulse(html.Class("size-4")), Disabled: true},
@@ -31,8 +34,7 @@ func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB bool) ui.NavItem 
 	// Playbooks → /playbooks (canViewPlaybooks, objek crm:playbooks).
 	// Berbackend sejak slice A2; disabled bila tak berhak, tetap tampil agar
 	// posisi modul di peta jalan terlihat. Posisi TETAP di urutan wireframe
-	// (6.7, antara Renewal Management & Voice of Customer) — bukan ditambah
-	// di akhir daftar.
+	// (6.7, antara Renewal Management & Voice of Customer).
 	playbooks := ui.NavItem{Label: "Playbooks", Icon: lucide.BookOpen(html.Class("size-4"))}
 	if canPlaybooks {
 		playbooks.Href = wsPath(slug, "/playbooks")
@@ -42,8 +44,18 @@ func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB bool) ui.NavItem 
 	children = append(children, playbooks)
 	children = append(children,
 		ui.NavItem{Label: "Voice of Customer", Icon: lucide.MessageCircle(html.Class("size-4")), Disabled: true},
-		ui.NavItem{Label: "Tickets / Cases", Icon: lucide.Ticket(html.Class("size-4")), Disabled: true},
 	)
+	// Tickets / Cases → /tickets (canViewTickets, objek crm:tickets read).
+	// Berbackend sejak slice B2; disabled bila tak berhak, tetap tampil agar
+	// posisi modul di peta jalan terlihat. Posisi TETAP di urutan wireframe
+	// (6.9, antara Voice of Customer & Knowledge Base).
+	tickets := ui.NavItem{Label: "Tickets / Cases", Icon: lucide.Ticket(html.Class("size-4"))}
+	if canTickets {
+		tickets.Href = wsPath(slug, "/tickets")
+	} else {
+		tickets.Disabled = true
+	}
+	children = append(children, tickets)
 	// Knowledge Base → /kb-articles (canViewKBArticles, objek crm:kb).
 	// Berbackend sejak slice A3; disabled bila tak berhak, tetap tampil agar
 	// posisi modul di peta jalan terlihat. Posisi TETAP di urutan wireframe

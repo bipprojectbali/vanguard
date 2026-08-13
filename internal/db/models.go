@@ -177,6 +177,38 @@ type Contact struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CustomerSuccess struct {
+	ID                   int64              `json:"id"`
+	TenantID             int64              `json:"tenant_id"`
+	AccountID            int64              `json:"account_id"`
+	OverallHealthScore   *int16             `json:"overall_health_score"`
+	HealthStatus         *string            `json:"health_status"`
+	AdoptionScore        *int16             `json:"adoption_score"`
+	EngagementScore      *int16             `json:"engagement_score"`
+	SupportScore         *int16             `json:"support_score"`
+	SentimentScore       *int16             `json:"sentiment_score"`
+	ScoreTrend           *string            `json:"score_trend"`
+	HealthLastCalculated pgtype.Timestamptz `json:"health_last_calculated"`
+	LifecycleStage       *string            `json:"lifecycle_stage"`
+	StageEntryDate       pgtype.Date        `json:"stage_entry_date"`
+	OnboardingStatus     *string            `json:"onboarding_status"`
+	KickoffDate          pgtype.Date        `json:"kickoff_date"`
+	TargetGoLiveDate     pgtype.Date        `json:"target_go_live_date"`
+	ActualGoLiveDate     pgtype.Date        `json:"actual_go_live_date"`
+	OnboardingProgress   *int16             `json:"onboarding_progress"`
+	LastLoginDate        pgtype.Date        `json:"last_login_date"`
+	ActiveUsers          *int32             `json:"active_users"`
+	LoginFrequency       *string            `json:"login_frequency"`
+	FeatureAdoptionRate  pgtype.Numeric     `json:"feature_adoption_rate"`
+	KeyFeaturesUsed      *string            `json:"key_features_used"`
+	UsageTrend           *string            `json:"usage_trend"`
+	UsageDataSource      string             `json:"usage_data_source"`
+	CreatedBy            *int64             `json:"created_by"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy            *int64             `json:"updated_by"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Deal struct {
 	ID                    int64              `json:"id"`
 	TenantID              int64              `json:"tenant_id"`
@@ -448,6 +480,24 @@ type Tenant struct {
 	SuspendReason *string            `json:"suspend_reason"`
 	ArchivedAt    pgtype.Timestamptz `json:"archived_at"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type Ticket struct {
+	ID            int64              `json:"id"`
+	TenantID      int64              `json:"tenant_id"`
+	AccountID     int64              `json:"account_id"`
+	Subject       string             `json:"subject"`
+	Description   *string            `json:"description"`
+	Priority      string             `json:"priority"`
+	Status        string             `json:"status"`
+	AssignedTo    *int64             `json:"assigned_to"`
+	SlaPolicyID   *int64             `json:"sla_policy_id"`
+	SlaDeadlineAt pgtype.Timestamptz `json:"sla_deadline_at"`
+	ResolvedAt    pgtype.Timestamptz `json:"resolved_at"`
+	CreatedBy     *int64             `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy     *int64             `json:"updated_by"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {

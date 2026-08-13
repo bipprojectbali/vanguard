@@ -291,6 +291,59 @@ func (f ActivitiesListFilter) Allows(uid int64, owner *int64) bool {
 	return false
 }
 
+// ── Tickets (F3, dengan override Support) ──────────────────────────────────
+//
+// Tiket berbeda dari entitas lain: Support punya data_scope='none' (di daftar
+// desa mereka lihat 0 baris) tapi HARUS lihat semua tiket workspace (wireframe
+// 6.9: "Support menangani"). Override dikodekan di sini agar satu sumber
+// kebenaran — tak ada cabang logika tersembunyi di handler.
+
+// TicketsListFilter = cakupan kepemilikan → dua flag boolean untuk ListTickets.
+// Paralel dengan AccountsListFilter, tapi punya jalur override Support.
+type TicketsListFilter struct {
+	ScopeAll bool
+	IsOwn    bool
+}
+
+// TicketsListFilterFor merakit flag untuk data_scope role + override Support.
+// canWrite = canWriteTickets(ctx): support (data_scope='none' + write) → ScopeAll.
+// Fail-closed: nilai tak dikenal & !canWrite → semua flag false → nol baris.
+func TicketsListFilterFor(dataScope string, canWrite bool) TicketsListFilter {
+	switch AccountsScopeFor(dataScope) {
+	case ScopeAll:
+		return TicketsListFilter{ScopeAll: true}
+	case ScopeOwn:
+		return TicketsListFilter{IsOwn: true}
+	default: // ScopeNone (Support: data_scope='none' tapi lihat semua tiket)
+		if canWrite {
+			return TicketsListFilter{ScopeAll: true}
+		}
+		return TicketsListFilter{} // fail-closed: nol baris
+	}
+}
+
+// Allows melaporkan apakah aktor (uid) boleh MELIHAT satu tiket — kembaran
+// per-baris dari ListTickets. Dipakai UpdateTicketStatus untuk memilih 404
+// (menyangkal keberadaan) atas tiket di luar cakupan.
+// accountOwner/assignedCSM/backupCSM = kolom nullable dari accounts (nil = tak diisi).
+func (f TicketsListFilter) Allows(uid int64, accountOwner, assignedCSM, backupCSM *int64) bool {
+	if f.ScopeAll {
+		return true
+	}
+	if f.IsOwn {
+		if accountOwner != nil && *accountOwner == uid {
+			return true
+		}
+		if assignedCSM != nil && *assignedCSM == uid {
+			return true
+		}
+		if backupCSM != nil && *backupCSM == uid {
+			return true
+		}
+	}
+	return false
+}
+
 // placeholder membentuk "$N" untuk pgx. Dipisah agar niatnya terbaca dan mudah
 // diuji; strconv sengaja dihindari untuk N kecil yang sangat sering dipanggil.
 func placeholder(n int) string {
