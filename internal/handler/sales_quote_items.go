@@ -10,11 +10,13 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// sales_quote_items.go — AKSI atas baris quote (quote_items), ter-NEST di bawah
-// quote (/deals/{id}/quotes/{quoteID}/items...). Gerbang & ownership SAMA dgn quote
-// (requireDealWrite + loadOwnedQuote). Tiap perubahan item memicu recomputeTotals
-// (snapshot grand_total). unit_price = SNAPSHOT plans.base_price saat item DIBUAT;
-// sunting hanya qty/diskon → unit_price tak berubah (harga beku, acceptance M4).
+// sales_quote_items.go — AKSI TAMBAH baris quote (quote_items) + loader,
+// ter-NEST di bawah quote (/deals/{id}/quotes/{quoteID}/items...). Sunting/hapus
+// ada di sales_quote_items_update.go (dipecah semata untuk file health, package
+// sama). Gerbang & ownership SAMA dgn quote (requireDealWrite + loadOwnedQuote).
+// Tiap perubahan item memicu recomputeTotals (snapshot grand_total). unit_price =
+// SNAPSHOT plans.base_price saat item DIBUAT; sunting hanya qty/diskon → unit_price
+// tak berubah (harga beku, acceptance M4).
 
 // QuoteItemAdd — POST /w/{workspace}/deals/{id}/quotes/{quoteID}/items. Menyalin
 // plans.base_price → unit_price (SNAPSHOT), menghitung subtotal, lalu rekalkulasi
@@ -80,95 +82,6 @@ func (h *Handler) QuoteItemAdd(w http.ResponseWriter, r *http.Request) {
 		"quote_id": strconv.FormatInt(quoteID, 10), "plan_id": strconv.FormatInt(form.PlanID, 10),
 	})
 	wsRedirectOK(w, r, quoteSub(dealID, quoteID), "item_added")
-}
-
-// QuoteItemUpdate — POST .../items/{itemID}. Sunting qty/diskon; subtotal dihitung
-// ulang dari unit_price SNAPSHOT (tak berubah). Total quote direkalkulasi.
-func (h *Handler) QuoteItemUpdate(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDealWrite(w, r) {
-		return
-	}
-	ctx := r.Context()
-	dealID, quoteID, ok := h.parseQuoteRef(w, r)
-	if !ok {
-		return
-	}
-	q, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
-	if !ok {
-		return
-	}
-	item, ok := h.loadQuoteItem(w, r, quoteID)
-	if !ok {
-		return
-	}
-	form, errCode := parseQuoteItemEditForm(r.FormValue)
-	if errCode != "" {
-		wsRedirect(w, r, quoteSub(dealID, quoteID), errCode)
-		return
-	}
-
-	// unit_price SNAPSHOT tetap; subtotal ikut qty/diskon baru.
-	subtotal := itemSubtotal(item.UnitPrice, form.Quantity, form.DiscountPct)
-	uid := session.UserID(ctx)
-	if _, err := h.q(ctx).UpdateQuoteItem(ctx, db.UpdateQuoteItemParams{
-		Quantity:    form.Quantity,
-		DiscountPct: form.DiscountPct,
-		Subtotal:    subtotal,
-		LineNo:      item.LineNo, // pertahankan urutan
-		ID:          item.ID,
-	}); err != nil {
-		h.Log.Error("quotes: update item", "err", err)
-		wsRedirect(w, r, quoteSub(dealID, quoteID), "failed")
-		return
-	}
-	if err := h.recomputeTotals(ctx, quoteID, q.TaxAmount, uid); err != nil {
-		h.Log.Error("quotes: recompute", "err", err)
-		wsRedirect(w, r, quoteSub(dealID, quoteID), "failed")
-		return
-	}
-
-	h.auditWorkspace(ctx, uid, "quote.item.update", session.TenantID(ctx), map[string]string{
-		"quote_id": strconv.FormatInt(quoteID, 10), "item_id": strconv.FormatInt(item.ID, 10),
-	})
-	wsRedirectOK(w, r, quoteSub(dealID, quoteID), "item_saved")
-}
-
-// QuoteItemDelete — POST .../items/{itemID}/delete. Hard-delete satu baris (tanpa
-// soft-delete), lalu rekalkulasi total quote.
-func (h *Handler) QuoteItemDelete(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDealWrite(w, r) {
-		return
-	}
-	ctx := r.Context()
-	dealID, quoteID, ok := h.parseQuoteRef(w, r)
-	if !ok {
-		return
-	}
-	q, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
-	if !ok {
-		return
-	}
-	item, ok := h.loadQuoteItem(w, r, quoteID)
-	if !ok {
-		return
-	}
-
-	uid := session.UserID(ctx)
-	if err := h.q(ctx).DeleteQuoteItem(ctx, item.ID); err != nil {
-		h.Log.Error("quotes: delete item", "err", err)
-		wsRedirect(w, r, quoteSub(dealID, quoteID), "failed")
-		return
-	}
-	if err := h.recomputeTotals(ctx, quoteID, q.TaxAmount, uid); err != nil {
-		h.Log.Error("quotes: recompute", "err", err)
-		wsRedirect(w, r, quoteSub(dealID, quoteID), "failed")
-		return
-	}
-
-	h.auditWorkspace(ctx, uid, "quote.item.delete", session.TenantID(ctx), map[string]string{
-		"quote_id": strconv.FormatInt(quoteID, 10), "item_id": strconv.FormatInt(item.ID, 10),
-	})
-	wsRedirectOK(w, r, quoteSub(dealID, quoteID), "item_deleted")
 }
 
 // loadQuoteItem membaca {itemID} & memuat baris yang BENAR milik quoteID (verifikasi
