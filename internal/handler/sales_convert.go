@@ -130,6 +130,7 @@ func (h *Handler) LeadConvertPage(w http.ResponseWriter, r *http.Request) {
 		PhoneEditable: phoneEditable,
 		AccountTypes:  accountTypeOptions,
 		Fields:        convertPrefill(l, phoneEditable),
+		Duplicates:    h.findDuplicateVillages(ctx, session.TenantID(ctx), l.LeadName, deref(l.Regency)),
 	}
 	h.renderWorkspaceShell(w, r, "Konversi Lead", "/leads", panel.LeadConvert(v))
 }

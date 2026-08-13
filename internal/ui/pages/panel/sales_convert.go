@@ -1,6 +1,8 @@
 package panel
 
 import (
+	"strconv"
+
 	"go_starter/internal/ui"
 
 	g "maragu.dev/gomponents"
@@ -36,8 +38,20 @@ type ConvertFormFields struct {
 	Amount   string
 }
 
+// DuplicateCandidate = satu desa lain di tenant yang sama dgn nama yang mirip
+// (case-insensitive) dgn desa yang akan dibuat oleh konversi ini. Ditautkan ke
+// account yang sudah ada agar pengguna bisa memeriksa sebelum lanjut.
+type DuplicateCandidate struct {
+	AccountID   int64
+	EntityCode  string
+	VillageName string
+	Regency     string
+}
+
 // LeadConvertView = data halaman review. Action = URL POST konversi. BackURL =
-// kembali ke detail lead. LeadName/LeadCode untuk header konteks.
+// kembali ke detail lead. LeadName/LeadCode untuk header konteks. Duplicates =
+// kandidat desa duplikat (soft-warning, non-blocking — lihat sales_convert.go
+// handler & docs/crm/tasks.md M4-6).
 type LeadConvertView struct {
 	Base    string
 	Action  string
@@ -50,6 +64,7 @@ type LeadConvertView struct {
 	PhoneEditable bool
 	AccountTypes  []string
 	Fields        ConvertFormFields
+	Duplicates    []DuplicateCandidate
 }
 
 // LeadConvert merender halaman review lengkap: header konteks, banner penjelasan,
@@ -79,6 +94,9 @@ func LeadConvert(v LeadConvertView) g.Node {
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "convert-err", g.Text(v.Err)))
+	}
+	if len(v.Duplicates) > 0 {
+		body = append(body, duplicateWarning(v.Base, v.Duplicates))
 	}
 
 	body = append(body, h.FormEl(
@@ -114,6 +132,38 @@ func LeadConvert(v LeadConvertView) g.Node {
 	))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// duplicateWarning merender banner SOFT-WARNING (bukan hard block — nama desa
+// sama bisa valid beda dusun/kabupaten): daftar desa lain dgn nama serupa,
+// masing-masing ditautkan ke detail account agar bisa diperiksa sebelum lanjut.
+func duplicateWarning(base string, dupes []DuplicateCandidate) g.Node {
+	items := make([]g.Node, 0, len(dupes))
+	for _, d := range dupes {
+		items = append(items, h.Li(
+			h.A(
+				h.Href(base+"/accounts/"+strconv.FormatInt(d.AccountID, 10)),
+				h.Class("link link-hover font-medium"),
+				g.Text(d.VillageName),
+			),
+			ui.When(d.EntityCode != "", g.Group([]g.Node{
+				g.Text(" ("),
+				h.Span(h.Class("font-mono"), g.Text(d.EntityCode)),
+				g.Text(")"),
+			})),
+			ui.When(d.Regency != "", g.Group([]g.Node{
+				g.Text(" — " + d.Regency),
+			})),
+		))
+	}
+	return ui.Alert(ui.VariantWarning, "convert-dupe-warn",
+		h.Div(
+			h.P(h.Class("font-semibold"),
+				g.Text("Ada desa dgn nama serupa di workspace ini. Periksa dulu — "+
+					"mungkin desa yang sama, atau memang beda dusun/kabupaten:")),
+			h.Ul(h.Class("list-disc list-inside text-sm"), g.Group(items)),
+		),
+	)
 }
 
 // convertPhoneField = input telepon yang menghormati F4. Editable (Sales) →

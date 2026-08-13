@@ -257,6 +257,13 @@ type Querier interface {
 	// Hard-delete satu baris item (tanpa soft-delete). Total quote direkalkulasi app
 	// setelahnya via UpdateQuoteTotals.
 	DeleteQuoteItem(ctx context.Context, id int64) error
+	// Kandidat desa dgn nama sama (case-insensitive, trim) di tenant yang sama — dipakai
+	// sbg soft-warning di halaman review konversi lead (M4-6, follow-up), BUKAN hard
+	// block: nama desa yang sama bisa valid beda dusun/kabupaten. regency opsional:
+	// diisi → ikut menyaring; kosong → cukup cocokkan nama. Ditopang index functional
+	// idx_accounts_village_name_ci (00020). Dibatasi 5 kandidat, cukup utk peringatan,
+	// bukan daftar lengkap.
+	FindDuplicateAccountsByNameRegion(ctx context.Context, arg FindDuplicateAccountsByNameRegionParams) ([]FindDuplicateAccountsByNameRegionRow, error)
 	// Satu desa hidup. RLS menjamin tenant_id; filter deleted_at menyembunyikan yang
 	// ter-soft-delete. Tak menerapkan ownership — pemanggil (handler) yang memutuskan
 	// apakah aktor boleh membuka baris ini (detail bisa dibuka lewat tautan langsung).

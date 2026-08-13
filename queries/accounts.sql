@@ -113,3 +113,22 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 -- entitas lain — deal/tiket — tak putus). Idempotent: hanya baris hidup.
 UPDATE accounts SET deleted_at = now(), updated_by = sqlc.narg(updated_by)
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
+
+-- name: FindDuplicateAccountsByNameRegion :many
+-- Kandidat desa dgn nama sama (case-insensitive, trim) di tenant yang sama — dipakai
+-- sbg soft-warning di halaman review konversi lead (M4-6, follow-up), BUKAN hard
+-- block: nama desa yang sama bisa valid beda dusun/kabupaten. regency opsional:
+-- diisi → ikut menyaring; kosong → cukup cocokkan nama. Ditopang index functional
+-- idx_accounts_village_name_ci (00020). Dibatasi 5 kandidat, cukup utk peringatan,
+-- bukan daftar lengkap.
+SELECT id, entity_code, village_name, regency
+FROM accounts
+WHERE tenant_id = sqlc.arg(tenant_id)
+  AND deleted_at IS NULL
+  AND lower(trim(village_name)) = lower(trim(sqlc.arg(village_name)))
+  AND (
+      sqlc.narg(regency)::text IS NULL
+      OR lower(trim(COALESCE(regency, ''))) = lower(trim(sqlc.narg(regency)))
+  )
+ORDER BY created_at DESC
+LIMIT 5;

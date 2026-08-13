@@ -79,6 +79,7 @@ const (
 	VariantDestructive
 	VariantOutline
 	VariantGhost
+	VariantWarning
 )
 
 // btnVariant memetakan varian ke class modifier daisyUI. daisyUI memakai class
@@ -91,6 +92,7 @@ var btnVariant = [...]string{
 	VariantDestructive: "btn-error",
 	VariantOutline:     "btn-outline",
 	VariantGhost:       "btn-ghost",
+	VariantWarning:     "btn-warning",
 }
 
 // Button merender tombol daisyUI: class "btn" + modifier varian. Atribut
@@ -146,13 +148,18 @@ func AlertSlot(id string) g.Node {
 	return h.Div(h.ID(id))
 }
 
-// Alert menampilkan pesan (mis. error validasi). daisyUI: class "alert" +
-// modifier warna (alert-error untuk destructive). Punya id (sama dengan slot)
-// agar patch outer menggantikan slot kosong dengan alert berisi.
+// Alert menampilkan pesan (mis. error validasi, atau peringatan non-blocking
+// spt kandidat desa duplikat). daisyUI: class "alert" + modifier warna
+// (alert-error untuk destructive, alert-warning untuk peringatan lunak). Punya
+// id (sama dengan slot) agar patch outer menggantikan slot kosong dgn alert
+// berisi.
 func Alert(variant Variant, id string, children ...g.Node) g.Node {
 	cls := "alert"
-	if variant == VariantDestructive {
+	switch variant {
+	case VariantDestructive:
 		cls = "alert alert-error"
+	case VariantWarning:
+		cls = "alert alert-warning"
 	}
 	attrs := []g.Node{h.ID(id), h.Class(cls), h.Role("alert")}
 	return h.Div(append(attrs, g.Group(children))...)

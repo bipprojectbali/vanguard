@@ -253,6 +253,84 @@ func TestCreateAccount_VillageCodeUniquePerTenant(t *testing.T) {
 	}
 }
 
+// TestFindDuplicateAccountsByNameRegion — kandidat duplikat desa (M4-6 follow-
+// up, soft-warning saat konversi). Empat perilaku yang bila rusak bikin
+// peringatan salah/bocor lintas-tenant:
+//
+//	(1) match case-insensitive + trim ("SUKAMAJU " ketemu "Sukamaju")
+//	(2) regency kosong (NULL) → tak menyaring; regency terisi → ikut menyaring
+//	(3) isolasi tenant: desa nama sama di tenant lain tak pernah muncul
+//	(4) desa ter-soft-delete dikecualikan
+func TestFindDuplicateAccountsByNameRegion(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	truncateCRM(t, ctx)
+
+	q := New(pool)
+	tenA, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "A", Slug: "a"})
+	tenB, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "B", Slug: "b"})
+
+	regBandung := "Bandung"
+	regBogor := "Bogor"
+	seedAccount(t, ctx, pool, tenA.ID, "Sukamaju", func(p *CreateAccountParams) {
+		p.Regency = &regBandung
+	})
+	seedAccount(t, ctx, pool, tenA.ID, "Sukamaju", func(p *CreateAccountParams) {
+		p.Regency = &regBogor
+	})
+	deleted := seedAccount(t, ctx, pool, tenA.ID, "Sukamaju", nil)
+	if e := WithTenant(ctx, pool, tenA.ID, func(q *Queries) error {
+		return q.SoftDeleteAccount(ctx, SoftDeleteAccountParams{ID: deleted.ID})
+	}); e != nil {
+		t.Fatalf("soft-delete: %v", e)
+	}
+	seedAccount(t, ctx, pool, tenB.ID, "Sukamaju", nil) // tenant lain, harus TAK terlihat.
+
+	// (1)+(2): nama beda kapitalisasi/spasi, tanpa filter regency → dua kandidat
+	// hidup (Bandung & Bogor), soft-deleted TAK ikut (4).
+	var rows []FindDuplicateAccountsByNameRegionRow
+	if e := WithTenant(ctx, pool, tenA.ID, func(q *Queries) error {
+		var e error
+		rows, e = q.FindDuplicateAccountsByNameRegion(ctx, FindDuplicateAccountsByNameRegionParams{
+			TenantID: tenA.ID, VillageName: "  SUKAMAJU  ",
+		})
+		return e
+	}); e != nil {
+		t.Fatalf("find (tanpa regency): %v", e)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("harus 2 kandidat hidup (soft-deleted dikecualikan), got %d", len(rows))
+	}
+
+	// (2) regency terisi → hanya menyaring ke Bandung.
+	if e := WithTenant(ctx, pool, tenA.ID, func(q *Queries) error {
+		var e error
+		rows, e = q.FindDuplicateAccountsByNameRegion(ctx, FindDuplicateAccountsByNameRegionParams{
+			TenantID: tenA.ID, VillageName: "Sukamaju", Regency: &regBandung,
+		})
+		return e
+	}); e != nil {
+		t.Fatalf("find (regency Bandung): %v", e)
+	}
+	if len(rows) != 1 || rows[0].Regency == nil || *rows[0].Regency != regBandung {
+		t.Errorf("regency terisi harus menyaring ke Bandung saja, got %d baris", len(rows))
+	}
+
+	// (3) isolasi tenant: query di tenant B tak boleh melihat baris tenant A.
+	if e := WithTenant(ctx, pool, tenB.ID, func(q *Queries) error {
+		var e error
+		rows, e = q.FindDuplicateAccountsByNameRegion(ctx, FindDuplicateAccountsByNameRegionParams{
+			TenantID: tenB.ID, VillageName: "Sukamaju",
+		})
+		return e
+	}); e != nil {
+		t.Fatalf("find (tenant B): %v", e)
+	}
+	if len(rows) != 1 {
+		t.Errorf("tenant B harus hanya lihat desanya sendiri (1 baris), got %d", len(rows))
+	}
+}
+
 // getAcc = GetAccount ringkas untuk test.
 func getAcc(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenantID, id int64) Account {
 	t.Helper()

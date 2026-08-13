@@ -169,6 +169,64 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (A
 	return i, err
 }
 
+const findDuplicateAccountsByNameRegion = `-- name: FindDuplicateAccountsByNameRegion :many
+SELECT id, entity_code, village_name, regency
+FROM accounts
+WHERE tenant_id = $1
+  AND deleted_at IS NULL
+  AND lower(trim(village_name)) = lower(trim($2))
+  AND (
+      $3::text IS NULL
+      OR lower(trim(COALESCE(regency, ''))) = lower(trim($3))
+  )
+ORDER BY created_at DESC
+LIMIT 5
+`
+
+type FindDuplicateAccountsByNameRegionParams struct {
+	TenantID    int64   `json:"tenant_id"`
+	VillageName string  `json:"village_name"`
+	Regency     *string `json:"regency"`
+}
+
+type FindDuplicateAccountsByNameRegionRow struct {
+	ID          int64   `json:"id"`
+	EntityCode  *string `json:"entity_code"`
+	VillageName string  `json:"village_name"`
+	Regency     *string `json:"regency"`
+}
+
+// Kandidat desa dgn nama sama (case-insensitive, trim) di tenant yang sama — dipakai
+// sbg soft-warning di halaman review konversi lead (M4-6, follow-up), BUKAN hard
+// block: nama desa yang sama bisa valid beda dusun/kabupaten. regency opsional:
+// diisi → ikut menyaring; kosong → cukup cocokkan nama. Ditopang index functional
+// idx_accounts_village_name_ci (00020). Dibatasi 5 kandidat, cukup utk peringatan,
+// bukan daftar lengkap.
+func (q *Queries) FindDuplicateAccountsByNameRegion(ctx context.Context, arg FindDuplicateAccountsByNameRegionParams) ([]FindDuplicateAccountsByNameRegionRow, error) {
+	rows, err := q.db.Query(ctx, findDuplicateAccountsByNameRegion, arg.TenantID, arg.VillageName, arg.Regency)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FindDuplicateAccountsByNameRegionRow{}
+	for rows.Next() {
+		var i FindDuplicateAccountsByNameRegionRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EntityCode,
+			&i.VillageName,
+			&i.Regency,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAccount = `-- name: GetAccount :one
 SELECT id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province, regency, district, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code FROM accounts
 WHERE id = $1 AND deleted_at IS NULL
