@@ -82,6 +82,14 @@ type Querier interface {
 	// (workspace tanpa owner = yatim).
 	CountTenantOwners(ctx context.Context, tenantID int64) (int64, error)
 	CountTenantsForPlatform(ctx context.Context) (int64, error)
+	// Agregat KPI header halaman /tickets. Cakupan scope sama persis ListTickets.
+	// COUNT ... FILTER = PostgreSQL aggregate filter clause (SQL:2003, native pg).
+	// uid dioper walau scope_all=true (diabaikan dalam kasus itu).
+	//
+	// resolved_today menggunakan date_trunc('day', now()) — UTC day boundary; cukup
+	// untuk monitoring operasional. Timezone workspace (gotcha #14) tidak diterapkan
+	// di v1 untuk menjaga query tetap sederhana.
+	CountTicketKPIs(ctx context.Context, arg CountTicketKPIsParams) (CountTicketKPIsRow, error)
 	// Badge sidebar — dirender di SETIAP halaman, ditopang index partial
 	// idx_notif_unread agar tak menyentuh baris yang sudah terbaca.
 	CountUnreadNotifications(ctx context.Context, userID int64) (int64, error)
@@ -231,6 +239,19 @@ type Querier interface {
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (Subscription, error)
 	// Buat tenant baru (dipanggil saat register/oauth user baru — 1 user = 1 tenant).
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
+	// tickets.sql — Query tiket layanan desa (CRM Modul 6 slice B2). RLS
+	// mengisolasi workspace; F3 ownership ditegakkan lewat flag boolean (scope_all,
+	// is_own) — satu sumber kebenaran dengan TicketsListFilterFor (ownership.go).
+	//
+	// SLA deadline disimpan saat create (snapshot), bukan dihitung JOIN sla_policies
+	// — karena target dapat berubah setelah tiket dibuat (prinsip snapshot, catatan
+	// same di 00020_crm_cs_tickets.sql).
+	//
+	// Nomor tiket (#TK-{id}) diformat di layer aplikasi (ticketNumber), bukan kolom.
+	// Buat tiket baru. sla_deadline_at dihitung HANDLER (created_at + menit), bukan
+	// dihitung SQL, karena memerlukan nilai SLA policy yang di-fetch lebih dulu.
+	// assigned_to NULL = belum ditugaskan (status 'baru').
+	CreateTicket(ctx context.Context, arg CreateTicketParams) (Ticket, error)
 	// users = tabel GLOBAL (identitas murni, TANPA tenant/role — keduanya pindah ke
 	// memberships). Keanggotaan dibuat terpisah via CreateMembership dalam tx sama.
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
@@ -337,6 +358,9 @@ type Querier interface {
 	// tak pernah ada" dari "workspace terhapus" (0005) — keduanya berujung 404 bagi
 	// user, tapi jalur restore/purge platform butuh barisnya tetap terbaca.
 	GetTenantBySlug(ctx context.Context, slug string) (Tenant, error)
+	// Satu tiket + nama desa. Dipakai handler UpdateTicketStatus sebelum update
+	// untuk validasi keberadaan + F3 (handler memanggil TicketsListFilter.Allows).
+	GetTicket(ctx context.Context, id int64) (GetTicketRow, error)
 	GetUser(ctx context.Context, id int64) (User, error)
 	// Soft-delete gotcha: user terhapus tak boleh login.
 	GetUserByEmail(ctx context.Context, email string) (User, error)
@@ -624,6 +648,20 @@ type Querier interface {
 	// yang suspended/archived: justru itu yang perlu dilihat operator. Yang TERHAPUS
 	// ikut tampil agar restore masih mungkin selama masa tenggang.
 	ListTenantsForPlatform(ctx context.Context, arg ListTenantsForPlatformParams) ([]ListTenantsForPlatformRow, error)
+	// Daftar tiket, keyset (created_at DESC, id DESC) + F3 ownership + filter tab.
+	//
+	// Ownership dikodekan sebagai dua flag boolean (scope_all / is_own) agar query
+	// tetap sqlc murni. is_own = UNION kepemilikan desa: account_owner ATAU
+	// assigned_csm ATAU backup_csm — satu makna "desa yang ditugaskan padaku".
+	//   scope_all → lihat semua tiket workspace (Admin, Manager, Support)
+	//   is_own    → hanya tiket desa yang ditugaskan (Sales, CSM)
+	// Keduanya false → OR selalu false → NOL baris (fail-closed).
+	//
+	// Filter tab (flag boolean eksklusif, cukup satu true per request):
+	//   filter_status '' → semua status; non-'' → cocokkan persis.
+	//   filter_sla_breached → deadline < now() DAN status bukan selesai.
+	//   filter_sla_at_risk  → deadline dalam 4 jam ke depan DAN status bukan selesai.
+	ListTickets(ctx context.Context, arg ListTicketsParams) ([]ListTicketsRow, error)
 	// Panel /dev: keyset pagination, hanya user aktif (belum soft-delete).
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// Tautkan hasil konversi ke lead + kunci statusnya. Dipanggil DALAM tx konversi
@@ -850,6 +888,11 @@ type Querier interface {
 	// Ganti NAMA tampilan workspace (owner-only, di-guard di handler). Slug SENGAJA
 	// tak diubah — immutable setelah dibuat (stabilitas URL; ganti display != ganti URL).
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) error
+	// Ubah status tiket. resolved_at diisi otomatis saat status = 'selesai'; dibiarkan
+	// saat status lain (nilai lama dipertahankan agar tak terhapus bila di-eskalasi
+	// lalu diselesaikan ulang — v1 biarkan nil pada eskalasi, selesai saja yang mengisi).
+	// assigned_to dapat berubah bersamaan (mis. Support menugaskan dirinya saat terima).
+	UpdateTicketStatus(ctx context.Context, arg UpdateTicketStatusParams) (Ticket, error)
 	// Profil dari provider (avatar + nama tampilan) di-refresh TIAP LOGIN: keduanya
 	// berubah di sisi Google tanpa memberi tahu kita, dan login adalah satu-satunya
 	// saat kita mendengar kabar terbaru.

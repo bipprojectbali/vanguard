@@ -482,6 +482,24 @@ type Tenant struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
+type Ticket struct {
+	ID            int64              `json:"id"`
+	TenantID      int64              `json:"tenant_id"`
+	AccountID     int64              `json:"account_id"`
+	Subject       string             `json:"subject"`
+	Description   *string            `json:"description"`
+	Priority      string             `json:"priority"`
+	Status        string             `json:"status"`
+	AssignedTo    *int64             `json:"assigned_to"`
+	SlaPolicyID   *int64             `json:"sla_policy_id"`
+	SlaDeadlineAt pgtype.Timestamptz `json:"sla_deadline_at"`
+	ResolvedAt    pgtype.Timestamptz `json:"resolved_at"`
+	CreatedBy     *int64             `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy     *int64             `json:"updated_by"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 type User struct {
 	ID             int64              `json:"id"`
 	Email          string             `json:"email"`

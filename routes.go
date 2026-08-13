@@ -468,6 +468,17 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/kb-articles/{id}/publish", h.KBArticlePublish)
 		r.Post("/kb-articles/{id}/return-to-draft", h.KBArticleReturnToDraft)
 
+		// Tickets / Cases (Customer Success, CRM Modul 6 slice B2, wireframe 6.9).
+		// F2 gerbang di HANDLER (canViewTickets/canWriteTickets); "crm:tickets"
+		// read = semua peran CRM, write = Support/Manager/Admin. F3 ownership lewat
+		// TicketsListFilterFor (ownership.go); Support override ScopeNone→ScopeAll
+		// saat canWrite=true. SLA deadline di-snapshot saat create (bukan JOIN live).
+		// Semua aksi native POST → 303 (gotcha #16).
+		r.Get("/tickets", h.TicketsList)
+		r.Get("/tickets/new", h.TicketNew)
+		r.Post("/tickets", h.TicketCreate)
+		r.Post("/tickets/{id}/status", h.TicketUpdateStatus)
+
 		// Peran CRM per-workspace (sumbu BISNIS, objek "crm:roles"). Gerbang di
 		// HANDLER (canManageRoles), BUKAN role tenant: satu alamat melayani semua
 		// role, izin yang membedakan. Editor matriks izin per-modul + cakupan data
