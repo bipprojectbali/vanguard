@@ -443,6 +443,21 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/playbooks/{id}/draft", h.PlaybookDraft)
 		r.Post("/playbooks/{id}/activate", h.PlaybookActivate)
 
+		// Knowledge Base (Customer Success, CRM Modul 6 slice A3). Master data
+		// milik WORKSPACE (sumbu BISNIS "crm:kb" read/write; tulis =
+		// admin/manager/support) — TANPA F3 (RLS satu-satunya pengurung, pola
+		// sama dgn Playbooks). Transisi status (submit-review/publish/return-
+		// to-draft) = aksi tersendiri (bukan efek edit). Semua aksi native
+		// POST → 303.
+		r.Get("/kb-articles", h.KBArticlesList)
+		r.Get("/kb-articles/new", h.KBArticleNew)
+		r.Post("/kb-articles", h.KBArticleCreate)
+		r.Get("/kb-articles/{id}/edit", h.KBArticleEdit)
+		r.Post("/kb-articles/{id}", h.KBArticleUpdate)
+		r.Post("/kb-articles/{id}/submit-review", h.KBArticleSubmitReview)
+		r.Post("/kb-articles/{id}/publish", h.KBArticlePublish)
+		r.Post("/kb-articles/{id}/return-to-draft", h.KBArticleReturnToDraft)
+
 		// Peran CRM per-workspace (sumbu BISNIS, objek "crm:roles"). Gerbang di
 		// HANDLER (canManageRoles), BUKAN role tenant: satu alamat melayani semua
 		// role, izin yang membedakan. Editor matriks izin per-modul + cakupan data
