@@ -417,6 +417,19 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/subscriptions/{id}/reject", h.SubscriptionRenewReject)
 		r.Post("/subscriptions/{id}/churn", h.SubscriptionChurn)
 
+		// Kebijakan SLA (Customer Success, CRM Modul 6 slice A1). Master data milik
+		// WORKSPACE (sumbu BISNIS "crm:sla" read/write; tulis = manager/admin) —
+		// TANPA F3 (RLS satu-satunya pengurung, pola sama dgn Plans). Target respon/
+		// selesai satuan MENIT (migrasi 00016). Pensiun/aktifkan = aksi status
+		// tersendiri (bukan efek edit). Semua aksi native POST → 303.
+		r.Get("/sla-policies", h.SLAPoliciesList)
+		r.Get("/sla-policies/new", h.SLAPolicyNew)
+		r.Post("/sla-policies", h.SLAPolicyCreate)
+		r.Get("/sla-policies/{id}/edit", h.SLAPolicyEdit)
+		r.Post("/sla-policies/{id}", h.SLAPolicyUpdate)
+		r.Post("/sla-policies/{id}/retire", h.SLAPolicyRetire)
+		r.Post("/sla-policies/{id}/activate", h.SLAPolicyActivate)
+
 		// Peran CRM per-workspace (sumbu BISNIS, objek "crm:roles"). Gerbang di
 		// HANDLER (canManageRoles), BUKAN role tenant: satu alamat melayani semua
 		// role, izin yang membedakan. Editor matriks izin per-modul + cakupan data

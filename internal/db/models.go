@@ -343,19 +343,19 @@ type QuoteItem struct {
 }
 
 type SlaPolicy struct {
-	ID                       int64              `json:"id"`
-	TenantID                 int64              `json:"tenant_id"`
-	SlaName                  string             `json:"sla_name"`
-	AppliesToPriority        *string            `json:"applies_to_priority"`
-	FirstResponseTargetHours *int32             `json:"first_response_target_hours"`
-	ResolutionTargetHours    *int32             `json:"resolution_target_hours"`
-	BusinessHours            *string            `json:"business_hours"`
-	EscalationRule           *string            `json:"escalation_rule"`
-	IsActive                 bool               `json:"is_active"`
-	CreatedBy                *int64             `json:"created_by"`
-	CreatedAt                pgtype.Timestamptz `json:"created_at"`
-	UpdatedBy                *int64             `json:"updated_by"`
-	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	ID                         int64              `json:"id"`
+	TenantID                   int64              `json:"tenant_id"`
+	SlaName                    string             `json:"sla_name"`
+	AppliesToPriority          *string            `json:"applies_to_priority"`
+	FirstResponseTargetMinutes *int32             `json:"first_response_target_minutes"`
+	ResolutionTargetMinutes    *int32             `json:"resolution_target_minutes"`
+	BusinessHours              *string            `json:"business_hours"`
+	EscalationRule             *string            `json:"escalation_rule"`
+	IsActive                   bool               `json:"is_active"`
+	CreatedBy                  *int64             `json:"created_by"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy                  *int64             `json:"updated_by"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Subscription struct {

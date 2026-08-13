@@ -553,11 +553,12 @@ Index: `(tenant_id, status)`; `(tenant_id, category)`. Attachment/rich media dit
 
 ### 6i. `sla_policies` — master (6.11)
 
-| id, tenant_id · sla_name TEXT · applies_to_priority TEXT · first_response_target_hours
-INTEGER · resolution_target_hours INTEGER · business_hours TEXT · escalation_rule
+| id, tenant_id · sla_name TEXT · applies_to_priority TEXT · first_response_target_minutes
+INTEGER · resolution_target_minutes INTEGER · business_hours TEXT · escalation_rule
 TEXT · is_active BOOLEAN · audit |
 
-Index: `(tenant_id, is_active)`.
+Index: `(tenant_id, is_active)`. Target SLA satuan **menit** (bukan jam, sejak migrasi
+`00016`) — prioritas Kritis butuh granularitas di bawah 1 jam (mis. 15 menit).
 
 ---
 

@@ -188,6 +188,10 @@ type Querier interface {
 	// Buat quote. tenant_id di-set eksplisit (RLS WITH CHECK memverifikasinya = GUC).
 	// deal_id nullable di skema tapi selalu terisi di alur nest; account_id NN = jangkar.
 	CreateQuote(ctx context.Context, arg CreateQuoteParams) (Quote, error)
+	// Buat kebijakan SLA. tenant_id eksplisit (RLS WITH CHECK memverifikasinya =
+	// GUC). is_active default true di skema tapi di-set eksplisit agar handler
+	// bisa membuat draft pensiun bila diperlukan nanti.
+	CreateSLAPolicy(ctx context.Context, arg CreateSLAPolicyParams) (SlaPolicy, error)
 	// subscriptions.sql — langganan (Subscription), Modul 5 slice 2. Isolasi WORKSPACE
 	// ditegakkan RLS (GUC app.tenant_id di WithTenant); isolasi ANTAR-DESA (F3)
 	// ditegakkan di layer query lewat flag ownership di ListSubscriptions (kolom
@@ -291,6 +295,9 @@ type Querier interface {
 	// Satu quote hidup. RLS menjamin tenant_id; kelayakan akses (via deal ber-owner)
 	// diputuskan handler sebelum memanggil ini.
 	GetQuote(ctx context.Context, id int64) (Quote, error)
+	// Satu kebijakan (untuk baca target saat dipakai D1/D2). RLS menjamin
+	// tenant_id. Tak filter is_active: handler memutuskan.
+	GetSLAPolicy(ctx context.Context, id int64) (SlaPolicy, error)
 	// Baca satu pengaturan platform. Tak ditemukan = keadaan SAH (pemanggil jatuh ke
 	// default bawaan kode), bukan error yang perlu diributkan.
 	GetSetting(ctx context.Context, key string) (PlatformSetting, error)
@@ -532,6 +539,21 @@ type Querier interface {
 	// splitPage); pengurutan "paling dekat jatuh tempo" ditunda ke slice KPI/agregasi.
 	// previous_value dibawa di s.* untuk kolom "Prev→Current" (tanpa JOIN tambahan).
 	ListRenewals(ctx context.Context, arg ListRenewalsParams) ([]ListRenewalsRow, error)
+	// sla_policies.sql — katalog master (SLA Policies), Modul 6 Customer Success
+	// slice A1. Isolasi WORKSPACE ditegakkan RLS (GUC app.tenant_id di WithTenant);
+	// tak ada filter tenant_id manual. sla_policies TANPA soft-delete: is_active=
+	// false = pensiun (kebijakan lama tak dipakai lagi, tapi riwayat tiket lama
+	// yang sudah memakainya tetap sah — D1/D2 menyalin target saat tiket dibuat,
+	// bukan referensi hidup ke sini). Target respon/selesai satuan MENIT (migrasi
+	// 00016). Meniru pola plans.sql.
+	// Kebijakan aktif untuk picker (dipakai D1/D2 saat menentukan target tiket
+	// baru per prioritas). Hanya is_active=true. Bounded katalog master
+	// per-workspace → tanpa keyset.
+	ListSLAPolicies(ctx context.Context) ([]SlaPolicy, error)
+	// Seluruh katalog untuk tampilan kelola (TERMASUK yang pensiun) — beda dari
+	// ListSLAPolicies (hanya aktif). Aktif dulu lalu urut nama. Bounded katalog
+	// master per-workspace → tanpa keyset.
+	ListSLAPoliciesAll(ctx context.Context) ([]SlaPolicy, error)
 	// Semua pengaturan sekaligus — dipakai halaman /dev/settings dan pemuatan cache
 	// saat boot. Jumlahnya sedikit, jadi tak dipaginasi (beda dari daftar user).
 	ListSettings(ctx context.Context) ([]PlatformSetting, error)
@@ -636,6 +658,9 @@ type Querier interface {
 	// lebih dulu (satu tx) — index memblokir dua utama. account_id ikut di WHERE sebagai
 	// sabuk pengaman: kontak yang bukan milik desa itu tak bisa diangkat lewat jalurnya.
 	SetPrimaryContact(ctx context.Context, arg SetPrimaryContactParams) error
+	// Pensiunkan (false) atau aktifkan kembali (true) kebijakan. Kebijakan
+	// pensiun hilang dari ListSLAPolicies (picker) tapi tetap tampil di kelola.
+	SetSLAPolicyActive(ctx context.Context, arg SetSLAPolicyActiveParams) error
 	// Soft-delete: baris disembunyikan dari list/get tapi tetap ada (jejak & FK dari
 	// entitas lain — deal/tiket — tak putus). Idempotent: hanya baris hidup.
 	SoftDeleteAccount(ctx context.Context, arg SoftDeleteAccountParams) error
@@ -741,6 +766,9 @@ type Querier interface {
 	// Rekalkulasi total quote (snapshot) setelah item berubah. grand_total & tax_amount
 	// dihitung app dari quote_items lalu ditulis di sini — bukan agregat live saat baca.
 	UpdateQuoteTotals(ctx context.Context, arg UpdateQuoteTotalsParams) error
+	// Sunting profil kebijakan. is_active TAK di sini (SetSLAPolicyActive) —
+	// pensiun/aktifkan adalah aksi tersendiri, bukan efek samping edit.
+	UpdateSLAPolicy(ctx context.Context, arg UpdateSLAPolicyParams) (SlaPolicy, error)
 	// Sunting profil langganan. status, renewal-action (6.6), dan churn (5.4) punya
 	// jalur sendiri (UpdateSubscriptionStatus/ChurnSubscription) agar transisi status &
 	// churn terlihat sebagai aksi tersendiri, bukan efek samping edit.
