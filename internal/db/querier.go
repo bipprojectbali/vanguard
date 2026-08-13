@@ -174,6 +174,10 @@ type Querier interface {
 	// plan_code unik per tenant (idx_plans_code) → kode kembar ditolak DB. is_active
 	// default true di skema tapi di-set eksplisit agar handler bisa membuat draft pensiun.
 	CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, error)
+	// Buat playbook. tenant_id eksplisit (RLS WITH CHECK memverifikasinya = GUC).
+	// is_active default true di skema tapi di-set eksplisit agar handler bisa
+	// membuat draf nonaktif bila diperlukan nanti.
+	CreatePlaybook(ctx context.Context, arg CreatePlaybookParams) (Playbook, error)
 	// Dipanggil SEKALI saat boot pertama. Unique partial index di tenants menjamin
 	// hanya ada satu primer — dua instance yang boot bersamaan, satu akan gagal, dan
 	// itu jauh lebih baik daripada dua "rumah aplikasi".
@@ -288,6 +292,9 @@ type Querier interface {
 	// add item). RLS menjamin tenant_id. Tak filter is_active: handler memutuskan (add
 	// item baru gate ke ListPlans; get by id juga menutup balapan pensiun-saat-submit).
 	GetPlan(ctx context.Context, id int64) (Plan, error)
+	// Satu playbook (baca detail/langkah). RLS menjamin tenant_id. Tak filter
+	// is_active: handler memutuskan.
+	GetPlaybook(ctx context.Context, id int64) (Playbook, error)
 	// Workspace PRIMER = rumah aplikasi. Dicari lewat kolom is_primary, BUKAN lewat
 	// perbandingan slug: yang bergantung padanya adalah penolakan arsip/hapus, dan
 	// aturan sepenting itu tak boleh bergantung pada string yang kebetulan cocok.
@@ -506,6 +513,20 @@ type Querier interface {
 	// katalog master per-workspace → tanpa keyset.
 	ListPlansAll(ctx context.Context) ([]Plan, error)
 	ListPlatformStaff(ctx context.Context) ([]PlatformStaff, error)
+	// playbooks.sql — katalog master (Playbooks), Modul 6 Customer Success
+	// slice A2. Isolasi WORKSPACE ditegakkan RLS (GUC app.tenant_id di
+	// WithTenant); tak ada filter tenant_id manual. playbooks TANPA soft-delete:
+	// is_active=false = draf/nonaktif (playbook lama tetap terbaca meski tak
+	// direkomendasikan lagi, riwayat penerapannya kalau ada tetap sah). Meniru
+	// pola sla_policies.sql (A1).
+	// Playbook aktif untuk picker (dipakai saat CSM memilih playbook untuk
+	// health event/journey — belum ada di slice ini, disiapkan untuk B1+). Hanya
+	// is_active=true. Bounded katalog master per-workspace → tanpa keyset.
+	ListPlaybooks(ctx context.Context) ([]Playbook, error)
+	// Seluruh katalog untuk tampilan kelola (TERMASUK draf) — beda dari
+	// ListPlaybooks (hanya aktif). Aktif dulu lalu urut nama. Bounded katalog
+	// master per-workspace → tanpa keyset.
+	ListPlaybooksAll(ctx context.Context) ([]Playbook, error)
 	// Baris item satu quote, urut tampil (line_no lalu id). Menopang detail quote &
 	// rekalkulasi total. Bounded per-quote (bukan daftar global) → tanpa keyset.
 	ListQuoteItems(ctx context.Context, quoteID int64) ([]QuoteItem, error)
@@ -654,6 +675,9 @@ type Querier interface {
 	// Pensiunkan (false) atau aktifkan kembali (true) plan. Plan pensiun hilang dari
 	// ListPlans (picker) tapi quote/langganan lama tetap sah (snapshot harga).
 	SetPlanActive(ctx context.Context, arg SetPlanActiveParams) error
+	// Jadikan draf (false) atau aktifkan kembali (true) playbook. Playbook draf
+	// hilang dari ListPlaybooks (picker) tapi tetap tampil di kelola.
+	SetPlaybookActive(ctx context.Context, arg SetPlaybookActiveParams) error
 	// Angkat SATU kontak jadi utama. Pemanggil WAJIB memanggil ClearAccountPrimaryContact
 	// lebih dulu (satu tx) — index memblokir dua utama. account_id ikut di WHERE sebagai
 	// sabuk pengaman: kontak yang bukan milik desa itu tak bisa diangkat lewat jalurnya.
@@ -752,6 +776,9 @@ type Querier interface {
 	// adalah aksi tersendiri, bukan efek samping edit. plan_code boleh diubah (tetap
 	// tunduk idx_plans_code unik).
 	UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error)
+	// Sunting profil playbook. is_active TAK di sini (SetPlaybookActive) —
+	// draf/aktifkan adalah aksi tersendiri, bukan efek samping edit.
+	UpdatePlaybook(ctx context.Context, arg UpdatePlaybookParams) (Playbook, error)
 	// Sunting profil quote. quote_status punya jalur khusus (UpdateQuoteStatus) dan
 	// total punya jalur khusus (UpdateQuoteTotals) — keduanya TAK di sini agar
 	// perubahan status & rekalkulasi harga terlihat sebagai aksi tersendiri.
