@@ -62,7 +62,7 @@ func (h *Handler) ContactsList(w http.ResponseWriter, r *http.Request) {
 	})
 	items := make([]panel.ContactRow, 0, len(shown))
 	for _, c := range shown {
-		items = append(items, contactRowView(c))
+		items = append(items, contactRowView(ctx, c))
 	}
 
 	base := wsPath(slugFromRequest(r), "")
@@ -90,33 +90,29 @@ func (h *Handler) ContactsAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := db.AccountsListFilterFor(session.BusinessDataScope(ctx))
+	dataScope := session.BusinessDataScope(ctx)
 	uid := session.UserID(ctx)
+	// Tab (Semua/Kontak Saya) HANYA untuk peran ScopeAll — Sales/CSM (ScopeOwn) cuma
+	// lihat kontak di desanya (Semua≡Saya), jadi tab redundan & disembunyikan.
+	showTabs := db.AccountsScopeFor(dataScope) == db.ScopeAll
+	view := normalizeContactsView(r.URL.Query().Get("view"), showTabs)
 
-	cursorAt, cursorID := pageCursor(r)
-	rows, err := h.q(ctx).ListContacts(ctx, db.ListContactsParams{
-		CursorCreatedAt: cursorAt,
-		CursorID:        cursorID,
-		ScopeAll:        filter.ScopeAll,
-		// IsOwn = union kepemilikan desa induk → KEDUA flag SQL true (identik
-		// ListAccounts): "kontak siapa yang tampil" = "desa siapa yang tampil".
-		IsSales:  filter.IsOwn,
-		Uid:      &uid,
-		IsCsm:    filter.IsOwn,
-		PageSize: pageSize + 1,
-	})
+	params := contactsListParams(dataScope, view, uid)
+	params.CursorCreatedAt, params.CursorID = pageCursor(r)
+	params.PageSize = pageSize + 1
+	rows, err := h.q(ctx).ListContacts(ctx, params)
 	if err != nil {
 		h.Log.Error("contacts: list all", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	shown, nextCursor := splitPage(rows, func(c db.Contact) (pgtype.Timestamptz, int64) {
+	shown, nextCursor := splitPage(rows, func(c db.ListContactsRow) (pgtype.Timestamptz, int64) {
 		return c.CreatedAt, c.ID
 	})
 	items := make([]panel.ContactRow, 0, len(shown))
 	for _, c := range shown {
-		items = append(items, contactRowView(c))
+		items = append(items, contactRowViewGlobal(ctx, c))
 	}
 
 	base := wsPath(slugFromRequest(r), "")
@@ -124,6 +120,8 @@ func (h *Handler) ContactsAll(w http.ResponseWriter, r *http.Request) {
 		panel.ContactsAll(panel.ContactsAllView{
 			Base:       base,
 			Items:      items,
+			ShowTabs:   showTabs,
+			ActiveView: view,
 			NextCursor: nextCursor,
 			Err:        wsErrMsg(r.URL.Query().Get("err")),
 			Msg:        contactsMsg(r.URL.Query().Get("ok")),

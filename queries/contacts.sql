@@ -64,7 +64,9 @@ LIMIT sqlc.arg(page_size);
 -- is_sales/is_csm identik dengan ListAccounts (AccountsListFilter) — "kontak siapa
 -- yang tampil" diturunkan dari "desa siapa yang tampil", satu kebenaran.
 -- Ketiganya false (Support/role kosong/liar) → NOL baris (fail-closed).
-SELECT c.* FROM contacts c
+-- a.village_name dibawa untuk kolom "Desa" di daftar global (di daftar per-desa
+-- redundan — sudah di judul halaman — jadi query per-desa tak mengambilnya).
+SELECT c.*, a.village_name FROM contacts c
 JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
 WHERE c.deleted_at IS NULL
   AND (c.created_at, c.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)

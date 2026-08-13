@@ -221,7 +221,7 @@ func (q *Queries) GetContact(ctx context.Context, id int64) (Contact, error) {
 }
 
 const listContacts = `-- name: ListContacts :many
-SELECT c.id, c.tenant_id, c.account_id, c.contact_owner, c.reports_to_id, c.first_name, c.last_name, c.salutation, c.job_title, c.position_category, c.contact_role, c.is_primary_contact, c.is_technical_contact, c.term_period, c.mobile_phone, c.whatsapp_number, c.office_phone, c.email, c.preferred_channel, c.mailing_address, c.city, c.postal_code, c.email_opt_out, c.do_not_contact, c.deleted_at, c.created_by, c.created_at, c.updated_by, c.updated_at FROM contacts c
+SELECT c.id, c.tenant_id, c.account_id, c.contact_owner, c.reports_to_id, c.first_name, c.last_name, c.salutation, c.job_title, c.position_category, c.contact_role, c.is_primary_contact, c.is_technical_contact, c.term_period, c.mobile_phone, c.whatsapp_number, c.office_phone, c.email, c.preferred_channel, c.mailing_address, c.city, c.postal_code, c.email_opt_out, c.do_not_contact, c.deleted_at, c.created_by, c.created_at, c.updated_by, c.updated_at, a.village_name FROM contacts c
 JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
 WHERE c.deleted_at IS NULL
   AND (c.created_at, c.id) < ($1::timestamptz, $2::bigint)
@@ -244,12 +244,47 @@ type ListContactsParams struct {
 	PageSize        int32              `json:"page_size"`
 }
 
+type ListContactsRow struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	AccountID          int64              `json:"account_id"`
+	ContactOwner       *int64             `json:"contact_owner"`
+	ReportsToID        *int64             `json:"reports_to_id"`
+	FirstName          string             `json:"first_name"`
+	LastName           *string            `json:"last_name"`
+	Salutation         *string            `json:"salutation"`
+	JobTitle           *string            `json:"job_title"`
+	PositionCategory   *string            `json:"position_category"`
+	ContactRole        *string            `json:"contact_role"`
+	IsPrimaryContact   bool               `json:"is_primary_contact"`
+	IsTechnicalContact bool               `json:"is_technical_contact"`
+	TermPeriod         *string            `json:"term_period"`
+	MobilePhone        *string            `json:"mobile_phone"`
+	WhatsappNumber     *string            `json:"whatsapp_number"`
+	OfficePhone        *string            `json:"office_phone"`
+	Email              *string            `json:"email"`
+	PreferredChannel   *string            `json:"preferred_channel"`
+	MailingAddress     *string            `json:"mailing_address"`
+	City               *string            `json:"city"`
+	PostalCode         *string            `json:"postal_code"`
+	EmailOptOut        bool               `json:"email_opt_out"`
+	DoNotContact       bool               `json:"do_not_contact"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	VillageName        string             `json:"village_name"`
+}
+
 // Daftar kontak LINTAS-desa, keyset + filter kepemilikan DESA INDUK (bukan filter
 // kontak sendiri). JOIN accounts membawa kolom ownership desa; flag scope_all/
 // is_sales/is_csm identik dengan ListAccounts (AccountsListFilter) — "kontak siapa
 // yang tampil" diturunkan dari "desa siapa yang tampil", satu kebenaran.
 // Ketiganya false (Support/role kosong/liar) → NOL baris (fail-closed).
-func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]Contact, error) {
+// a.village_name dibawa untuk kolom "Desa" di daftar global (di daftar per-desa
+// redundan — sudah di judul halaman — jadi query per-desa tak mengambilnya).
+func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]ListContactsRow, error) {
 	rows, err := q.db.Query(ctx, listContacts,
 		arg.CursorCreatedAt,
 		arg.CursorID,
@@ -263,9 +298,9 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]C
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Contact{}
+	items := []ListContactsRow{}
 	for rows.Next() {
-		var i Contact
+		var i ListContactsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
@@ -296,6 +331,7 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]C
 			&i.CreatedAt,
 			&i.UpdatedBy,
 			&i.UpdatedAt,
+			&i.VillageName,
 		); err != nil {
 			return nil, err
 		}
