@@ -474,6 +474,16 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// is_sales). Gate di handler (canViewHealthScore = crm:health read).
 		r.Get("/health-scores", h.HealthScoreList)
 
+		// Engagements / Check-ins (Customer Success, CRM Modul 6 slice 6.5).
+		// F2 gerbang di HANDLER (canViewEngagements/canWriteEngagements);
+		// "crm:engagements" read/write = Admin/Manager/CSM. F3 ownership lewat
+		// EngagementsListFilterFor (ownership.go): ScopeAll (Admin/Manager) atau
+		// ScopeOwn (CSM, desa binarannya). Semua aksi native POST → 303 (gotcha #16).
+		r.Get("/engagements", h.EngagementsList)
+		r.Get("/engagements/new", h.EngagementNew)
+		r.Post("/engagements", h.EngagementCreate)
+		r.Post("/engagements/{id}/status", h.EngagementUpdateStatus)
+
 		// Tickets / Cases (Customer Success, CRM Modul 6 slice B2, wireframe 6.9).
 		// F2 gerbang di HANDLER (canViewTickets/canWriteTickets); "crm:tickets"
 		// read = semua peran CRM, write = Support/Manager/Admin. F3 ownership lewat

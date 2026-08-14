@@ -238,6 +238,25 @@ type Deal struct {
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Engagement struct {
+	ID             int64              `json:"id"`
+	TenantID       int64              `json:"tenant_id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	EngagementType string             `json:"engagement_type"`
+	Frequency      *string            `json:"frequency"`
+	ScheduledAt    pgtype.Timestamptz `json:"scheduled_at"`
+	Status         string             `json:"status"`
+	Channel        *string            `json:"channel"`
+	Outcome        *string            `json:"outcome"`
+	NextDueDate    pgtype.Date        `json:"next_due_date"`
+	OwnerID        *int64             `json:"owner_id"`
+	CreatedBy      *int64             `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy      *int64             `json:"updated_by"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Invite struct {
 	ID         int64              `json:"id"`
 	TenantID   int64              `json:"tenant_id"`
