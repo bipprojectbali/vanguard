@@ -344,6 +344,35 @@ func (f TicketsListFilter) Allows(uid int64, accountOwner, assignedCSM, backupCS
 	return false
 }
 
+// ── Engagements (F3, via accounts) ───────────────────────────────────────────
+//
+// Engagement dikaitkan ke desa (account_id); kepemilikan mengikuti kolom
+// accounts (account_owner / assigned_csm / backup_csm). Bentuk identik dengan
+// AccountsListFilter — "desa yang aku bina" → "engagement untuk desa itu".
+// Admin/Manager (ScopeAll) lihat semua; CSM (ScopeOwn) lihat engagement desa
+// binarannya. Sales tidak punya crm:engagements di policy → fail F2 sebelum
+// sampai ke filter F3 ini. Support juga tidak punya → sama.
+
+// EngagementsListFilter = cakupan kepemilikan → dua flag boolean untuk
+// ListEngagements. Paralel dengan AccountsListFilter.
+type EngagementsListFilter struct {
+	ScopeAll bool
+	IsOwn    bool
+}
+
+// EngagementsListFilterFor merakit flag untuk data_scope role. Fail-closed:
+// nilai tak dikenal → ScopeNone (semua flag false → nol baris).
+func EngagementsListFilterFor(dataScope string) EngagementsListFilter {
+	switch AccountsScopeFor(dataScope) {
+	case ScopeAll:
+		return EngagementsListFilter{ScopeAll: true}
+	case ScopeOwn:
+		return EngagementsListFilter{IsOwn: true}
+	default: // ScopeNone
+		return EngagementsListFilter{}
+	}
+}
+
 // placeholder membentuk "$N" untuk pgx. Dipisah agar niatnya terbaca dan mudah
 // diuji; strconv sengaja dihindari untuk N kecil yang sangat sering dipanggil.
 func placeholder(n int) string {

@@ -56,6 +56,9 @@ type Querier interface {
 	// Jumlah kontak hidup satu desa — untuk badge/ringkasan di detail desa. Murah:
 	// idx_contacts_account (partial WHERE deleted_at IS NULL) melayaninya langsung.
 	CountContactsByAccount(ctx context.Context, accountID int64) (int64, error)
+	// Agregat KPI header halaman /engagements. Cakupan scope sama persis ListEngagements.
+	// uid dioper walau scope_all=true (diabaikan dalam kasus itu).
+	CountEngagementKPIs(ctx context.Context, arg CountEngagementKPIsParams) (CountEngagementKPIsRow, error)
 	// KPI agregat untuk header: total desa (dalam scope), sehat/berisiko/kritis,
 	// dan rata-rata skor (NULL bila semua skor belum diisi).
 	// Ownership clause SAMA PERSIS dengan ListHealthScores agar konsisten.
@@ -162,6 +165,16 @@ type Querier interface {
 	// di tx konversi (bersama account+contact) — lihat handler.
 	// Buat deal. tenant_id di-set eksplisit (RLS WITH CHECK memverifikasinya = GUC).
 	CreateDeal(ctx context.Context, arg CreateDealParams) (Deal, error)
+	// engagements.sql — Query Engagements / Check-ins (CRM Modul 6 slice 6.5).
+	// RLS mengisolasi workspace; F3 ownership ditegakkan lewat flag boolean
+	// (scope_all, is_own) — satu sumber kebenaran dengan EngagementsListFilterFor
+	// (ownership.go).
+	//
+	// Keyset: (scheduled_at DESC, id DESC) — beda dari tickets (created_at DESC)
+	// karena daftar engagement lebih bermakna diurutkan kapan dijadwalkan, bukan
+	// kapan dibuat.
+	// Buat engagement baru. next_due_date dan outcome opsional.
+	CreateEngagement(ctx context.Context, arg CreateEngagementParams) (Engagement, error)
 	// Undangan bergabung ke workspace. token = rahasia URL (crypto/rand hex via
 	// oauth.NewState). email boleh milik orang yang BELUM punya akun.
 	CreateInvite(ctx context.Context, arg CreateInviteParams) (Invite, error)
@@ -329,6 +342,10 @@ type Querier interface {
 	// Satu deal hidup. RLS menjamin tenant_id; ownership diputuskan handler
 	// (DealsListFilter.Allows) atas baris.
 	GetDeal(ctx context.Context, id int64) (Deal, error)
+	// Satu engagement + nama desa + nama owner. Dipakai handler UpdateEngagementStatus
+	// sebelum update untuk validasi keberadaan + F3 (handler memanggil
+	// EngagementsListFilter.Allows).
+	GetEngagement(ctx context.Context, id int64) (GetEngagementRow, error)
 	// Jalur PUBLIK (/invite/{token}) — penerima belum tentu login/anggota. Validasi
 	// kedaluwarsa & sudah-dipakai dilakukan di handler agar pesannya spesifik.
 	GetInviteByToken(ctx context.Context, token string) (GetInviteByTokenRow, error)
@@ -488,6 +505,17 @@ type Querier interface {
 	// per kolom). LIMIT membatasi papan agar tak memuat seluruh tabel (guardrail
 	// pagination); deal di luar batas tetap terlihat lewat tampilan Tabel berkeyset.
 	ListDealsForPipeline(ctx context.Context, arg ListDealsForPipelineParams) ([]Deal, error)
+	// Daftar engagement, keyset (scheduled_at DESC, id DESC) + F3 ownership + filter tab.
+	//
+	// Ownership dikodekan sebagai dua flag boolean (scope_all / is_own):
+	//   scope_all → lihat semua engagement workspace (Admin, Manager)
+	//   is_own    → hanya engagement desa yang ditugaskan (CSM)
+	//              = union kepemilikan: account_owner ATAU assigned_csm ATAU backup_csm
+	// Keduanya false → OR selalu false → NOL baris (fail-closed).
+	//
+	// filter_status '' → semua status; non-'' → cocokkan persis.
+	// filter_type '' → semua tipe engagement; non-'' → cocokkan persis.
+	ListEngagements(ctx context.Context, arg ListEngagementsParams) ([]ListEngagementsRow, error)
 	// Kandidat purge permanen: terhapus melewati masa tenggang. Dipanggil perintah
 	// terjadwal, TAK PERNAH di jalur request (purge = kerja berat & tak reversibel).
 	ListExpiredTenants(ctx context.Context, deletedAt pgtype.Timestamptz) ([]Tenant, error)
@@ -859,6 +887,10 @@ type Querier interface {
 	// handler (bukan constraint DB agar pesan bisa diperbaiki user). closed_date =
 	// CURRENT_DATE bila stage terminal, NULL bila dibuka kembali ke stage aktif.
 	UpdateDealStage(ctx context.Context, arg UpdateDealStageParams) error
+	// Ubah status engagement. outcome diperbarui bersamaan (CSM mengisi ringkasan
+	// setelah engagement selesai). next_due_date dapat diperbarui (khususnya saat
+	// status = rescheduled).
+	UpdateEngagementStatus(ctx context.Context, arg UpdateEngagementStatusParams) (Engagement, error)
 	// Sunting profil/isi artikel. status TAK di sini (SetKBArticleStatus) —
 	// transisi status adalah aksi tersendiri, bukan efek samping edit.
 	UpdateKBArticle(ctx context.Context, arg UpdateKBArticleParams) (KbArticle, error)
