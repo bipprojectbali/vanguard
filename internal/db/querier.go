@@ -471,6 +471,18 @@ type Querier interface {
 	// tanpa pemegang tetap muncul dengan 0. COALESCE ke bigint: sqlc emit int64, bukan
 	// interface{}. GROUP BY br.id (PK) sah — kolom br.* bergantung fungsional padanya.
 	ListBusinessRoles(ctx context.Context, tenantID int64) ([]ListBusinessRolesRow, error)
+	// Daftar Renewal Management CS (Menu 6.6). Menampilkan langganan yang punya
+	// dimensi renewal (end_date terisi), berikut field AKSI CS (renewal_stage,
+	// renewal_risk, renewal_action_plan, renewal_next_action_date, renewal_owner).
+	// Data sumber tetap di subscriptions (keputusan "Renewal Dua-Rumah").
+	//
+	// F3 ownership via akun (assigned_csm/backup_csm/account_owner = uid) — identik
+	// dengan TicketsListFilter/EngagementsListFilter, BUKAN subscription_owner,
+	// karena CS melihat semua desa binaan terlepas siapa sales-owner langganannya.
+	//
+	// filter_stage '' → semua stage; non-'' → cocokkan persis.
+	// Keyset (created_at DESC, id DESC) — reuse pageCursor/splitPage standar.
+	ListCSRenewals(ctx context.Context, arg ListCSRenewalsParams) ([]ListCSRenewalsRow, error)
 	// Dasbor Churn (Menu 5.2/5.4, READ-ONLY). Langganan yang telah berhenti
 	// (status Cancelled/Churned), di-scope ownership (F3) dengan flag yang SAMA dgn
 	// ListSubscriptions (scope_all → semua; is_own → subscription_owner = uid; keduanya
@@ -869,6 +881,10 @@ type Querier interface {
 	// sini — mengganti nama peran memutus assign yang sudah ada; kalau perlu, buat
 	// peran baru. is_system tak bisa disunting (dijaga di handler, bukan di query).
 	UpdateBusinessRole(ctx context.Context, arg UpdateBusinessRoleParams) error
+	// Perbarui field AKSI CS renewal (6.6 "Renewal Dua-Rumah"). Hanya empat field
+	// milik CS yang disentuh; field inti langganan (status, MRR, dsb.) tidak berubah.
+	// Handler menegakkan F3 (loadCSRenewal) sebelum memanggil query ini.
+	UpdateCSRenewalAction(ctx context.Context, arg UpdateCSRenewalActionParams) (UpdateCSRenewalActionRow, error)
 	// Sunting kontak. is_primary_contact di-set pemanggil setelah mengosongkan primary
 	// lama (ClearAccountPrimaryContact) bila dinaikkan jadi utama. account_id TIDAK
 	// diubah di sini — memindahkan kontak antar-desa adalah aksi lain (belum ada).

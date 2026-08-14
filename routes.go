@@ -484,6 +484,18 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/engagements", h.EngagementCreate)
 		r.Post("/engagements/{id}/status", h.EngagementUpdateStatus)
 
+		// Renewal Management — AKSI CS pada langganan (Modul 6 slice 6.6).
+		// "Renewal Dua-Rumah": DATA renewal tetap di subscriptions (Modul 5.2);
+		// halaman ini MENAMPILKAN data tersebut dan MENULIS field aksi CS
+		// (renewal_stage/risk/action_plan/next_action_date/owner).
+		// F2 gerbang di HANDLER (canViewCSRenewals/canWriteCSRenewalsPerm);
+		// "crm:renewal_mgmt" read = Admin/Manager/CSM/Sales, write = Admin/Manager/CSM.
+		// F3 ownership lewat CSRenewalsListFilterFor (ownership.go): ScopeAll atau
+		// ScopeOwn (assigned_csm/backup_csm/account_owner). PRG: POST → 303 (gotcha #16).
+		r.Get("/renewal-management", h.CSRenewalsList)
+		r.Get("/renewal-management/{id}/edit", h.CSRenewalEdit)
+		r.Post("/renewal-management/{id}", h.CSRenewalUpdate)
+
 		// Tickets / Cases (Customer Success, CRM Modul 6 slice B2, wireframe 6.9).
 		// F2 gerbang di HANDLER (canViewTickets/canWriteTickets); "crm:tickets"
 		// read = semua peran CRM, write = Support/Manager/Admin. F3 ownership lewat
