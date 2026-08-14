@@ -50,7 +50,10 @@ ALTER TABLE tickets FORCE  ROW LEVEL SECURITY;
 
 -- Pola dua GUC (is_super + tenant_id) sama persis dengan tabel CRM lain (accounts,
 -- customer_success, dll). is_super memungkinkan WithSuper bypass untuk audit dan
--- maintenance.
+-- maintenance. DROP IF EXISTS: migration ini di-rename dari 00020 ke 00021
+-- (duplikat nomor dengan 00020_crm_accounts_dupe_index); policy mungkin sudah
+-- ada di DB dev yang sebelumnya menjalankannya sebagai v20.
+DROP POLICY IF EXISTS tenant_isolation ON tickets;
 CREATE POLICY tenant_isolation ON tickets
     USING (
         COALESCE(current_setting('app.is_super', true), 'off') = 'on'
