@@ -63,8 +63,7 @@ func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canH
 	children = append(children, renewal)
 	// Playbooks → /playbooks (canViewPlaybooks, objek crm:playbooks).
 	// Berbackend sejak slice A2; disabled bila tak berhak, tetap tampil agar
-	// posisi modul di peta jalan terlihat. Posisi TETAP di urutan wireframe
-	// (6.7, antara Renewal Management & Voice of Customer).
+	// posisi modul di peta jalan terlihat.
 	playbooks := ui.NavItem{Label: "Playbooks", Icon: lucide.BookOpen(html.Class("size-4"))}
 	if canPlaybooks {
 		playbooks.Href = wsPath(slug, "/playbooks")
@@ -72,13 +71,9 @@ func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canH
 		playbooks.Disabled = true
 	}
 	children = append(children, playbooks)
-	children = append(children,
-		ui.NavItem{Label: "Voice of Customer", Icon: lucide.MessageCircle(html.Class("size-4")), Disabled: true},
-	)
 	// Tickets / Cases → /tickets (canViewTickets, objek crm:tickets read).
 	// Berbackend sejak slice B2; disabled bila tak berhak, tetap tampil agar
-	// posisi modul di peta jalan terlihat. Posisi TETAP di urutan wireframe
-	// (6.9, antara Voice of Customer & Knowledge Base).
+	// posisi modul di peta jalan terlihat.
 	tickets := ui.NavItem{Label: "Tickets / Cases", Icon: lucide.Ticket(html.Class("size-4"))}
 	if canTickets {
 		tickets.Href = wsPath(slug, "/tickets")

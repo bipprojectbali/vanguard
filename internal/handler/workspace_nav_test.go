@@ -173,11 +173,9 @@ func TestWorkspaceNav_SubscriptionsGroup(t *testing.T) {
 // (peta jalan Modul 6). "Health Score" (C1), "Success Plans" (6.3), "Engagements"
 // (6.5), "Renewal Management" (6.6), "SLA Management" (A1), "Playbooks" (A2),
 // "Knowledge Base" (A3) & "Tickets / Cases" (B2) berbackend — masing-masing
-// enabled mengikuti izinnya. 1 anak SELALU disabled (Voice of Customer).
+// enabled mengikuti izinnya. Tidak ada anak yang selalu disabled.
 func TestWorkspaceNav_CSGroup(t *testing.T) {
-	placeholders := []string{
-		"Voice of Customer",
-	}
+	placeholders := []string{}
 
 	// canSLA=true & canPlaybooks=true & canKB=true & canTickets=true &
 	// canHealthScore=true & canSuccessPlans=true & canEngagements=true &
