@@ -152,7 +152,7 @@ func quickLinksFor(ctx context.Context) []ui.NavItem {
 func (h *Handler) renderWorkspaceShell(w http.ResponseWriter, r *http.Request, title, sub string, body g.Node) {
 	ctx := r.Context()
 	slug := slugFromRequest(r)
-	nav := workspaceNav(slug, canManageMembers(ctx), canEditWorkspace(ctx), canViewAccounts(ctx), canViewContacts(ctx), canViewLeads(ctx), canViewDeals(ctx), canViewSalesActivity(ctx), canViewPlans(ctx), canViewSubscriptions(ctx), canViewSLAPolicies(ctx), canViewPlaybooks(ctx), canViewKBArticles(ctx), canManageRoles(ctx), canViewTickets(ctx))
+	nav := workspaceNav(slug, canManageMembers(ctx), canEditWorkspace(ctx), canViewAccounts(ctx), canViewContacts(ctx), canViewLeads(ctx), canViewDeals(ctx), canViewSalesActivity(ctx), canViewPlans(ctx), canViewSubscriptions(ctx), canViewSLAPolicies(ctx), canViewPlaybooks(ctx), canViewKBArticles(ctx), canManageRoles(ctx), canViewTickets(ctx), canViewHealthScore(ctx))
 	h.renderShell(w, r, title, session.TenantName(ctx), wsPath(slug, sub), nav, body)
 }
 

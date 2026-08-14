@@ -468,6 +468,12 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/kb-articles/{id}/publish", h.KBArticlePublish)
 		r.Post("/kb-articles/{id}/return-to-draft", h.KBArticleReturnToDraft)
 
+		// Health Score (Customer Success, CRM Modul 6 slice C1, wireframe 6.1).
+		// Workspace-level listing health score semua desa. Data dari customer_success
+		// (1:1 accounts, B1). F3 ownership pola AccountsListFilter (scope_all/is_csm/
+		// is_sales). Gate di handler (canViewHealthScore = crm:health read).
+		r.Get("/health-scores", h.HealthScoreList)
+
 		// Tickets / Cases (Customer Success, CRM Modul 6 slice B2, wireframe 6.9).
 		// F2 gerbang di HANDLER (canViewTickets/canWriteTickets); "crm:tickets"
 		// read = semua peran CRM, write = Support/Manager/Admin. F3 ownership lewat

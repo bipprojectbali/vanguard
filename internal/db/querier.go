@@ -56,6 +56,10 @@ type Querier interface {
 	// Jumlah kontak hidup satu desa — untuk badge/ringkasan di detail desa. Murah:
 	// idx_contacts_account (partial WHERE deleted_at IS NULL) melayaninya langsung.
 	CountContactsByAccount(ctx context.Context, accountID int64) (int64, error)
+	// KPI agregat untuk header: total desa (dalam scope), sehat/berisiko/kritis,
+	// dan rata-rata skor (NULL bila semua skor belum diisi).
+	// Ownership clause SAMA PERSIS dengan ListHealthScores agar konsisten.
+	CountHealthScoreKPIs(ctx context.Context, arg CountHealthScoreKPIsParams) (CountHealthScoreKPIsRow, error)
 	// Berapa workspace yang DIMILIKI user (role owner) — untuk cek kuota sebelum
 	// membuat workspace baru. Diundang jadi member/admin TIDAK memakan kuota.
 	//
@@ -487,6 +491,15 @@ type Querier interface {
 	// Kandidat purge permanen: terhapus melewati masa tenggang. Dipanggil perintah
 	// terjadwal, TAK PERNAH di jalur request (purge = kerja berat & tak reversibel).
 	ListExpiredTenants(ctx context.Context, deletedAt pgtype.Timestamptz) ([]Tenant, error)
+	// health_score.sql — workspace-level Health Score listing (Modul 6 slice C1).
+	// Data sumber: customer_success (1:1 dengan accounts). Tidak ada tabel baru.
+	// F3 ownership: scope_all (admin/manager) / is_csm / is_sales — pola SAMA
+	// dengan ListAccounts agar tidak divergen. Support (ScopeNone) → semua flag
+	// false → 0 baris (fail-closed, bukan error).
+	// Workspace-level listing akun + data health score.
+	// Keyset (created_at DESC, id DESC), filter_status '' = semua.
+	// uid dioper walau scope_all (diabaikan di klausa).
+	ListHealthScores(ctx context.Context, arg ListHealthScoresParams) ([]ListHealthScoresRow, error)
 	// Undangan PENDING satu workspace (panel anggota) — yang sudah diterima disaring.
 	ListInvitesByTenant(ctx context.Context, tenantID int64) ([]Invite, error)
 	// kb_articles.sql — katalog master (Knowledge Base), Modul 6 Customer

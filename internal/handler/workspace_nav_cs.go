@@ -8,26 +8,30 @@ import (
 )
 
 // workspace_nav_cs.go — grup nav Customer Success (wireframe 6, Modul 6).
-// Selalu tampil (peta jalan produk terlihat, "nol menu hantu"): 10 anak
-// URUT PERSIS wireframe (6.1 → 6.11), SLA Management (A1), Playbooks (A2),
-// Knowledge Base (A3) & Tickets/Cases (B2) berbackend — sisanya placeholder
-// disabled sampai slice-nya sendiri mendarat (C2 Success Plans, C3 Surveys).
-// Health Score/Journey/Onboarding/Adoption (B1) TETAP disabled DI SINI —
-// halaman `customer_success` butuh {id} account spesifik, tak punya href
-// workspace-level yang masuk akal; entry point B1 yang benar adalah link
-// "Customer Success »" di dalam AccountDetail (pola sama link "Kontak »").
+// Selalu tampil (peta jalan produk terlihat, "nol menu hantu"): Health Score
+// (C1), SLA Management (A1), Playbooks (A2), Knowledge Base (A3) & Tickets/Cases
+// (B2) berbackend — sisanya placeholder disabled sampai slice-nya mendarat.
 
 // workspaceCSGroup merakit grup Customer Success (wireframe 6). canSLA =
 // canViewSLAPolicies (izin SAMA dengan gerbang SLAPoliciesList). canPlaybooks
 // = canViewPlaybooks. canKB = canViewKBArticles. canTickets = canViewTickets
 // (izin SAMA dengan gerbang TicketsList, objek crm:tickets read).
-func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets bool) ui.NavItem {
-	children := make([]ui.NavItem, 0, 11)
+// canHealthScore = canViewHealthScore (izin SAMA dengan gerbang HealthScoreList,
+// objek crm:health read).
+func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canHealthScore bool) ui.NavItem {
+	children := make([]ui.NavItem, 0, 9)
+	// Health Score → /health-scores (canViewHealthScore, objek crm:health read).
+	// Berbackend sejak slice C1; disabled bila tak berhak, tetap tampil agar
+	// posisi modul di peta jalan terlihat.
+	healthScore := ui.NavItem{Label: "Health Score", Icon: lucide.HeartPulse(html.Class("size-4"))}
+	if canHealthScore {
+		healthScore.Href = wsPath(slug, "/health-scores")
+	} else {
+		healthScore.Disabled = true
+	}
+	children = append(children, healthScore)
 	children = append(children,
-		ui.NavItem{Label: "Health Score", Icon: lucide.HeartPulse(html.Class("size-4")), Disabled: true},
-		ui.NavItem{Label: "Journey / Onboarding", Icon: lucide.Milestone(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Success Plans", Icon: lucide.ClipboardList(html.Class("size-4")), Disabled: true},
-		ui.NavItem{Label: "Product Adoption", Icon: lucide.ChartPie(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Engagements", Icon: lucide.MessageSquare(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Renewal Management", Icon: lucide.CalendarClock(html.Class("size-4")), Disabled: true},
 	)

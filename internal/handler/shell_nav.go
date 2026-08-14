@@ -28,7 +28,7 @@ func navFor(ctx context.Context) []ui.NavItem {
 	// Role tenant → menu ruang kerja AKTIF (dari session: halaman ini tak punya
 	// slug di path-nya sendiri). Item "Pengaturan" mengikuti izin yang sama
 	// dengan halaman ber-slug agar menu tak berubah-ubah antar halaman.
-	return workspaceNav(session.TenantSlug(ctx), canManageMembers(ctx), canEditWorkspace(ctx), canViewAccounts(ctx), canViewContacts(ctx), canViewLeads(ctx), canViewDeals(ctx), canViewSalesActivity(ctx), canViewPlans(ctx), canViewSubscriptions(ctx), canViewSLAPolicies(ctx), canViewPlaybooks(ctx), canViewKBArticles(ctx), canManageRoles(ctx), canViewTickets(ctx))
+	return workspaceNav(session.TenantSlug(ctx), canManageMembers(ctx), canEditWorkspace(ctx), canViewAccounts(ctx), canViewContacts(ctx), canViewLeads(ctx), canViewDeals(ctx), canViewSalesActivity(ctx), canViewPlans(ctx), canViewSubscriptions(ctx), canViewSLAPolicies(ctx), canViewPlaybooks(ctx), canViewKBArticles(ctx), canManageRoles(ctx), canViewTickets(ctx), canViewHealthScore(ctx))
 }
 
 // brandFor = sub-label panel, dipasangkan dengan navFor agar konteks di sidebar
