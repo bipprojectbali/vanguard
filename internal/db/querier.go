@@ -254,6 +254,15 @@ type Querier interface {
 	// 'Active'). Kolom renewal-action (6.6) & churn (5.4) TIDAK di-set di sini — punya
 	// jalur sendiri.
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (Subscription, error)
+	// success_plans.sql — Query Success Plans (CRM Modul 6 slice 6.3).
+	// RLS mengisolasi workspace; F3 ownership ditegakkan lewat flag boolean
+	// (scope_all, is_own) — satu sumber kebenaran dengan SuccessPlansListFilterFor
+	// (ownership.go).
+	//
+	// Keyset: (created_at DESC, id DESC) — baris terbaru di atas; cursor dari
+	// splitPage. Filter plan_status opsional ('' = semua).
+	// Buat success plan baru. objective, success_metric, target_date, owner_csm opsional.
+	CreateSuccessPlan(ctx context.Context, arg CreateSuccessPlanParams) (SuccessPlan, error)
 	// Buat tenant baru (dipanggil saat register/oauth user baru — 1 user = 1 tenant).
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
 	// tickets.sql — Query tiket layanan desa (CRM Modul 6 slice B2). RLS
@@ -381,6 +390,9 @@ type Querier interface {
 	// Satu langganan hidup. RLS menjamin tenant_id; ownership (F3) diputuskan handler
 	// atas baris (SubscriptionsListFilter.Allows), bukan di sini.
 	GetSubscription(ctx context.Context, id int64) (Subscription, error)
+	// Satu success plan + nama desa + nama owner. Dipakai handler sebelum Edit/Update
+	// untuk validasi keberadaan + F3 (handler memanggil SuccessPlansListFilter.Allows).
+	GetSuccessPlan(ctx context.Context, id int64) (GetSuccessPlanRow, error)
 	GetTenant(ctx context.Context, id int64) (Tenant, error)
 	// SENGAJA tanpa filter deleted_at: middleware Scope perlu MEMBEDAKAN "workspace
 	// tak pernah ada" dari "workspace terhapus" (0005) — keduanya berujung 404 bagi
@@ -704,6 +716,17 @@ type Querier interface {
 	// ter-scope ownership di handler; di sini cukup filter account_id + baris hidup.
 	// plan_name dibawa untuk kolom "Paket".
 	ListSubscriptionsForAccount(ctx context.Context, arg ListSubscriptionsForAccountParams) ([]ListSubscriptionsForAccountRow, error)
+	// Daftar success plan, keyset (created_at DESC, id DESC) + F3 ownership + filter tab.
+	//
+	// Ownership dikodekan sebagai dua flag boolean (scope_all / is_own):
+	//   scope_all → lihat semua plan workspace (Admin, Manager)
+	//   is_own    → hanya plan untuk desa yang ditugaskan (CSM)
+	//              = union kepemilikan akun: account_owner ATAU assigned_csm ATAU backup_csm
+	//              ATAU owner_csm plan = uid (CSM pemilik plan, walau desa berpindah)
+	// Keduanya false → OR selalu false → NOL baris (fail-closed).
+	//
+	// filter_status '' → semua status; non-'' → cocokkan persis.
+	ListSuccessPlans(ctx context.Context, arg ListSuccessPlansParams) ([]ListSuccessPlansRow, error)
 	// Daftar workspace untuk panel /dev (lintas-workspace — route platform). Termasuk
 	// yang suspended/archived: justru itu yang perlu dilihat operator. Yang TERHAPUS
 	// ikut tampil agar restore masih mungkin selama masa tenggang.
@@ -840,6 +863,8 @@ type Querier interface {
 	// Soft-delete: baris disembunyikan dari list/get tapi tetap ada (rantai renewal &
 	// FK dari deals.created_subscription_id tak putus). Idempotent: hanya baris hidup.
 	SoftDeleteSubscription(ctx context.Context, arg SoftDeleteSubscriptionParams) error
+	// Hapus lunak success plan (tandai deleted_at). Fail jika sudah dihapus.
+	SoftDeleteSuccessPlan(ctx context.Context, arg SoftDeleteSuccessPlanParams) error
 	// Owner ATAU platform. Masa tenggang: baris tetap ada, slug TIDAK dilepas.
 	//
 	// `NOT is_primary`: rumah aplikasi tak bisa dihapus dari dalam aplikasi itu
@@ -953,6 +978,8 @@ type Querier interface {
 	// subs_status_chk hanya membatasi himpunan nilai legal. INVARIAN renewal: Expired
 	// baris lama HARUS mendahului CreateSubscription baris aktif dalam tx yang sama.
 	UpdateSubscriptionStatus(ctx context.Context, arg UpdateSubscriptionStatusParams) error
+	// Perbarui semua field editable success plan.
+	UpdateSuccessPlan(ctx context.Context, arg UpdateSuccessPlanParams) (SuccessPlan, error)
 	// Ganti NAMA tampilan workspace (owner-only, di-guard di handler). Slug SENGAJA
 	// tak diubah — immutable setelah dibuat (stabilitas URL; ganti display != ganti URL).
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) error

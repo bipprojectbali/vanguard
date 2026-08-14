@@ -474,6 +474,18 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// is_sales). Gate di handler (canViewHealthScore = crm:health read).
 		r.Get("/health-scores", h.HealthScoreList)
 
+		// Success Plans (Customer Success, CRM Modul 6 slice 6.3, wireframe 6.2).
+		// Plan sukses per-desa: nama, objektif, metrik, target, status, progres %.
+		// F2 gerbang di HANDLER (canViewSuccessPlans/canWriteSuccessPlans);
+		// "crm:success_plans" read/write = Admin/Manager/CSM.
+		// F3 ownership lewat SuccessPlansListFilterFor (ownership.go): ScopeAll (Admin/Manager)
+		// atau ScopeOwn (CSM — desa binaan atau plan milik CSM itu). PRG: POST → 303 (gotcha #16).
+		r.Get("/success-plans", h.SuccessPlansList)
+		r.Get("/success-plans/new", h.SuccessPlanNew)
+		r.Post("/success-plans", h.SuccessPlanCreate)
+		r.Get("/success-plans/{id}/edit", h.SuccessPlanEdit)
+		r.Post("/success-plans/{id}", h.SuccessPlanUpdate)
+
 		// Engagements / Check-ins (Customer Success, CRM Modul 6 slice 6.5).
 		// F2 gerbang di HANDLER (canViewEngagements/canWriteEngagements);
 		// "crm:engagements" read/write = Admin/Manager/CSM. F3 ownership lewat

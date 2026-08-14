@@ -17,10 +17,10 @@ import (
 // = canViewPlaybooks. canKB = canViewKBArticles. canTickets = canViewTickets
 // (izin SAMA dengan gerbang TicketsList, objek crm:tickets read).
 // canHealthScore = canViewHealthScore (izin SAMA dengan gerbang HealthScoreList,
-// objek crm:health read). canEngagements = canViewEngagements (izin SAMA dengan
-// gerbang EngagementsList, objek crm:engagements read). canRenewals =
-// canViewCSRenewals (crm:renewal_mgmt read).
-func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canEngagements, canRenewals bool) ui.NavItem {
+// objek crm:health read). canSuccessPlans = canViewSuccessPlans (crm:success_plans read).
+// canEngagements = canViewEngagements (izin SAMA dengan gerbang EngagementsList,
+// objek crm:engagements read). canRenewals = canViewCSRenewals (crm:renewal_mgmt read).
+func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals bool) ui.NavItem {
 	children := make([]ui.NavItem, 0, 9)
 	// Health Score → /health-scores (canViewHealthScore, objek crm:health read).
 	// Berbackend sejak slice C1; disabled bila tak berhak, tetap tampil agar
@@ -32,9 +32,16 @@ func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canH
 		healthScore.Disabled = true
 	}
 	children = append(children, healthScore)
-	children = append(children,
-		ui.NavItem{Label: "Success Plans", Icon: lucide.ClipboardList(html.Class("size-4")), Disabled: true},
-	)
+	// Success Plans → /success-plans (canViewSuccessPlans, objek crm:success_plans read).
+	// Berbackend sejak slice 6.3; disabled bila tak berhak, tetap tampil agar
+	// posisi modul di peta jalan terlihat.
+	successPlans := ui.NavItem{Label: "Success Plans", Icon: lucide.ClipboardList(html.Class("size-4"))}
+	if canSuccessPlans {
+		successPlans.Href = wsPath(slug, "/success-plans")
+	} else {
+		successPlans.Disabled = true
+	}
+	children = append(children, successPlans)
 	// Engagements → /engagements (canViewEngagements, objek crm:engagements read).
 	// Berbackend sejak slice 6.5; disabled bila tak berhak, tetap tampil agar
 	// posisi modul di peta jalan terlihat.
