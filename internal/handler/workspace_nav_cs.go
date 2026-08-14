@@ -18,8 +18,9 @@ import (
 // (izin SAMA dengan gerbang TicketsList, objek crm:tickets read).
 // canHealthScore = canViewHealthScore (izin SAMA dengan gerbang HealthScoreList,
 // objek crm:health read). canEngagements = canViewEngagements (izin SAMA dengan
-// gerbang EngagementsList, objek crm:engagements read).
-func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canEngagements bool) ui.NavItem {
+// gerbang EngagementsList, objek crm:engagements read). canRenewals =
+// canViewCSRenewals (crm:renewal_mgmt read).
+func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canEngagements, canRenewals bool) ui.NavItem {
 	children := make([]ui.NavItem, 0, 9)
 	// Health Score → /health-scores (canViewHealthScore, objek crm:health read).
 	// Berbackend sejak slice C1; disabled bila tak berhak, tetap tampil agar
@@ -44,9 +45,15 @@ func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canH
 		engagements.Disabled = true
 	}
 	children = append(children, engagements)
-	children = append(children,
-		ui.NavItem{Label: "Renewal Management", Icon: lucide.CalendarClock(html.Class("size-4")), Disabled: true},
-	)
+	// Renewal Management → /renewal-management (canViewCSRenewals, crm:renewal_mgmt read).
+	// Berbackend sejak slice 6.6; disabled bila tak berhak, tetap tampil.
+	renewal := ui.NavItem{Label: "Renewal Management", Icon: lucide.CalendarClock(html.Class("size-4"))}
+	if canRenewals {
+		renewal.Href = wsPath(slug, "/renewal-management")
+	} else {
+		renewal.Disabled = true
+	}
+	children = append(children, renewal)
 	// Playbooks → /playbooks (canViewPlaybooks, objek crm:playbooks).
 	// Berbackend sejak slice A2; disabled bila tak berhak, tetap tampil agar
 	// posisi modul di peta jalan terlihat. Posisi TETAP di urutan wireframe

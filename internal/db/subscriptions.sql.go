@@ -337,6 +337,123 @@ func (q *Queries) GetSubscription(ctx context.Context, id int64) (Subscription, 
 	return i, err
 }
 
+const listCSRenewals = `-- name: ListCSRenewals :many
+SELECT
+    s.id,
+    s.account_id,
+    s.status,
+    s.end_date,
+    s.renewal_status,
+    s.renewal_stage,
+    s.renewal_risk,
+    s.renewal_action_plan,
+    s.renewal_next_action_date,
+    s.renewal_owner,
+    s.created_at,
+    a.village_name,
+    p.plan_name,
+    u.name AS renewal_owner_name
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id AND a.deleted_at IS NULL
+JOIN plans    p ON p.id = s.plan_id
+LEFT JOIN users u ON u.id = s.renewal_owner
+WHERE s.deleted_at IS NULL
+  AND s.end_date IS NOT NULL
+  AND (s.created_at, s.id) < ($1::timestamptz, $2::bigint)
+  AND (
+      $3::boolean
+      OR ($4::boolean AND (
+          a.account_owner = $5
+          OR a.assigned_csm = $5
+          OR a.backup_csm  = $5
+      ))
+  )
+  AND ($6::text = '' OR s.renewal_stage = $6::text)
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT $7
+`
+
+type ListCSRenewalsParams struct {
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	ScopeAll        bool               `json:"scope_all"`
+	IsOwn           bool               `json:"is_own"`
+	Uid             *int64             `json:"uid"`
+	FilterStage     string             `json:"filter_stage"`
+	PageSize        int32              `json:"page_size"`
+}
+
+type ListCSRenewalsRow struct {
+	ID                    int64              `json:"id"`
+	AccountID             int64              `json:"account_id"`
+	Status                string             `json:"status"`
+	EndDate               pgtype.Date        `json:"end_date"`
+	RenewalStatus         *string            `json:"renewal_status"`
+	RenewalStage          *string            `json:"renewal_stage"`
+	RenewalRisk           *string            `json:"renewal_risk"`
+	RenewalActionPlan     *string            `json:"renewal_action_plan"`
+	RenewalNextActionDate pgtype.Date        `json:"renewal_next_action_date"`
+	RenewalOwner          *int64             `json:"renewal_owner"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	VillageName           string             `json:"village_name"`
+	PlanName              string             `json:"plan_name"`
+	RenewalOwnerName      *string            `json:"renewal_owner_name"`
+}
+
+// Daftar Renewal Management CS (Menu 6.6). Menampilkan langganan yang punya
+// dimensi renewal (end_date terisi), berikut field AKSI CS (renewal_stage,
+// renewal_risk, renewal_action_plan, renewal_next_action_date, renewal_owner).
+// Data sumber tetap di subscriptions (keputusan "Renewal Dua-Rumah").
+//
+// F3 ownership via akun (assigned_csm/backup_csm/account_owner = uid) — identik
+// dengan TicketsListFilter/EngagementsListFilter, BUKAN subscription_owner,
+// karena CS melihat semua desa binaan terlepas siapa sales-owner langganannya.
+//
+// filter_stage ” → semua stage; non-” → cocokkan persis.
+// Keyset (created_at DESC, id DESC) — reuse pageCursor/splitPage standar.
+func (q *Queries) ListCSRenewals(ctx context.Context, arg ListCSRenewalsParams) ([]ListCSRenewalsRow, error) {
+	rows, err := q.db.Query(ctx, listCSRenewals,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.FilterStage,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCSRenewalsRow{}
+	for rows.Next() {
+		var i ListCSRenewalsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Status,
+			&i.EndDate,
+			&i.RenewalStatus,
+			&i.RenewalStage,
+			&i.RenewalRisk,
+			&i.RenewalActionPlan,
+			&i.RenewalNextActionDate,
+			&i.RenewalOwner,
+			&i.CreatedAt,
+			&i.VillageName,
+			&i.PlanName,
+			&i.RenewalOwnerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChurned = `-- name: ListChurned :many
 SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, a.village_name, p.plan_name
 FROM subscriptions s
@@ -1163,6 +1280,66 @@ type SoftDeleteSubscriptionParams struct {
 func (q *Queries) SoftDeleteSubscription(ctx context.Context, arg SoftDeleteSubscriptionParams) error {
 	_, err := q.db.Exec(ctx, softDeleteSubscription, arg.UpdatedBy, arg.ID)
 	return err
+}
+
+const updateCSRenewalAction = `-- name: UpdateCSRenewalAction :one
+UPDATE subscriptions SET
+    renewal_stage            = $1,
+    renewal_risk             = $2,
+    renewal_action_plan      = $3,
+    renewal_next_action_date = $4,
+    renewal_owner            = $5,
+    updated_by               = $6,
+    updated_at               = now()
+WHERE id = $7 AND deleted_at IS NULL
+RETURNING id, renewal_stage, renewal_risk, renewal_action_plan,
+          renewal_next_action_date, renewal_owner, updated_at
+`
+
+type UpdateCSRenewalActionParams struct {
+	RenewalStage          *string     `json:"renewal_stage"`
+	RenewalRisk           *string     `json:"renewal_risk"`
+	RenewalActionPlan     *string     `json:"renewal_action_plan"`
+	RenewalNextActionDate pgtype.Date `json:"renewal_next_action_date"`
+	RenewalOwner          *int64      `json:"renewal_owner"`
+	UpdatedBy             *int64      `json:"updated_by"`
+	ID                    int64       `json:"id"`
+}
+
+type UpdateCSRenewalActionRow struct {
+	ID                    int64              `json:"id"`
+	RenewalStage          *string            `json:"renewal_stage"`
+	RenewalRisk           *string            `json:"renewal_risk"`
+	RenewalActionPlan     *string            `json:"renewal_action_plan"`
+	RenewalNextActionDate pgtype.Date        `json:"renewal_next_action_date"`
+	RenewalOwner          *int64             `json:"renewal_owner"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Perbarui field AKSI CS renewal (6.6 "Renewal Dua-Rumah"). Hanya empat field
+// milik CS yang disentuh; field inti langganan (status, MRR, dsb.) tidak berubah.
+// Handler menegakkan F3 (loadCSRenewal) sebelum memanggil query ini.
+func (q *Queries) UpdateCSRenewalAction(ctx context.Context, arg UpdateCSRenewalActionParams) (UpdateCSRenewalActionRow, error) {
+	row := q.db.QueryRow(ctx, updateCSRenewalAction,
+		arg.RenewalStage,
+		arg.RenewalRisk,
+		arg.RenewalActionPlan,
+		arg.RenewalNextActionDate,
+		arg.RenewalOwner,
+		arg.UpdatedBy,
+		arg.ID,
+	)
+	var i UpdateCSRenewalActionRow
+	err := row.Scan(
+		&i.ID,
+		&i.RenewalStage,
+		&i.RenewalRisk,
+		&i.RenewalActionPlan,
+		&i.RenewalNextActionDate,
+		&i.RenewalOwner,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateSubscription = `-- name: UpdateSubscription :one

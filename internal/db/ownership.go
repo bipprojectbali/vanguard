@@ -373,6 +373,50 @@ func EngagementsListFilterFor(dataScope string) EngagementsListFilter {
 	}
 }
 
+// CSRenewalsListFilter = cakupan kepemilikan → dua flag boolean untuk
+// ListCSRenewals. Ownership via AKUN (assigned_csm/backup_csm/account_owner),
+// bukan subscription_owner — CSM harus melihat renewal desa binaannya terlepas
+// siapa sales-owner langganannya. Identik dengan TicketsListFilter (minus
+// SupportOverride) dan EngagementsListFilter.
+type CSRenewalsListFilter struct {
+	ScopeAll bool
+	IsOwn    bool
+}
+
+// CSRenewalsListFilterFor merakit flag untuk data_scope role. Fail-closed:
+// nilai tak dikenal → ScopeNone (semua flag false → nol baris).
+func CSRenewalsListFilterFor(dataScope string) CSRenewalsListFilter {
+	switch AccountsScopeFor(dataScope) {
+	case ScopeAll:
+		return CSRenewalsListFilter{ScopeAll: true}
+	case ScopeOwn:
+		return CSRenewalsListFilter{IsOwn: true}
+	default: // ScopeNone
+		return CSRenewalsListFilter{}
+	}
+}
+
+// Allows melaporkan apakah aktor (uid) boleh MELIHAT satu baris renewal —
+// kembaran per-baris dari ListCSRenewals. 404-gate detail renewal.
+// accountOwner/assignedCSM/backupCSM = kolom nullable dari accounts.
+func (f CSRenewalsListFilter) Allows(uid int64, accountOwner, assignedCSM, backupCSM *int64) bool {
+	if f.ScopeAll {
+		return true
+	}
+	if f.IsOwn {
+		if accountOwner != nil && *accountOwner == uid {
+			return true
+		}
+		if assignedCSM != nil && *assignedCSM == uid {
+			return true
+		}
+		if backupCSM != nil && *backupCSM == uid {
+			return true
+		}
+	}
+	return false
+}
+
 // placeholder membentuk "$N" untuk pgx. Dipisah agar niatnya terbaca dan mudah
 // diuji; strconv sengaja dihindari untuk N kecil yang sangat sering dipanggil.
 func placeholder(n int) string {

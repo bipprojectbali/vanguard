@@ -245,6 +245,68 @@ UPDATE subscriptions SET
 WHERE id = sqlc.arg(id) AND status = 'PendingApproval' AND deleted_at IS NULL
 RETURNING *;
 
+-- name: ListCSRenewals :many
+-- Daftar Renewal Management CS (Menu 6.6). Menampilkan langganan yang punya
+-- dimensi renewal (end_date terisi), berikut field AKSI CS (renewal_stage,
+-- renewal_risk, renewal_action_plan, renewal_next_action_date, renewal_owner).
+-- Data sumber tetap di subscriptions (keputusan "Renewal Dua-Rumah").
+--
+-- F3 ownership via akun (assigned_csm/backup_csm/account_owner = uid) — identik
+-- dengan TicketsListFilter/EngagementsListFilter, BUKAN subscription_owner,
+-- karena CS melihat semua desa binaan terlepas siapa sales-owner langganannya.
+--
+-- filter_stage '' → semua stage; non-'' → cocokkan persis.
+-- Keyset (created_at DESC, id DESC) — reuse pageCursor/splitPage standar.
+SELECT
+    s.id,
+    s.account_id,
+    s.status,
+    s.end_date,
+    s.renewal_status,
+    s.renewal_stage,
+    s.renewal_risk,
+    s.renewal_action_plan,
+    s.renewal_next_action_date,
+    s.renewal_owner,
+    s.created_at,
+    a.village_name,
+    p.plan_name,
+    u.name AS renewal_owner_name
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id AND a.deleted_at IS NULL
+JOIN plans    p ON p.id = s.plan_id
+LEFT JOIN users u ON u.id = s.renewal_owner
+WHERE s.deleted_at IS NULL
+  AND s.end_date IS NOT NULL
+  AND (s.created_at, s.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm  = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(filter_stage)::text = '' OR s.renewal_stage = sqlc.arg(filter_stage)::text)
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: UpdateCSRenewalAction :one
+-- Perbarui field AKSI CS renewal (6.6 "Renewal Dua-Rumah"). Hanya empat field
+-- milik CS yang disentuh; field inti langganan (status, MRR, dsb.) tidak berubah.
+-- Handler menegakkan F3 (loadCSRenewal) sebelum memanggil query ini.
+UPDATE subscriptions SET
+    renewal_stage            = sqlc.narg(renewal_stage),
+    renewal_risk             = sqlc.narg(renewal_risk),
+    renewal_action_plan      = sqlc.narg(renewal_action_plan),
+    renewal_next_action_date = sqlc.narg(renewal_next_action_date),
+    renewal_owner            = sqlc.narg(renewal_owner),
+    updated_by               = sqlc.narg(updated_by),
+    updated_at               = now()
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL
+RETURNING id, renewal_stage, renewal_risk, renewal_action_plan,
+          renewal_next_action_date, renewal_owner, updated_at;
+
 -- name: SoftDeleteSubscription :exec
 -- Soft-delete: baris disembunyikan dari list/get tapi tetap ada (rantai renewal &
 -- FK dari deals.created_subscription_id tak putus). Idempotent: hanya baris hidup.
