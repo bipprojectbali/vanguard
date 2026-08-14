@@ -487,6 +487,24 @@ type Subscription struct {
 	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
 }
 
+type SuccessPlan struct {
+	ID            int64              `json:"id"`
+	TenantID      int64              `json:"tenant_id"`
+	AccountID     int64              `json:"account_id"`
+	PlanName      string             `json:"plan_name"`
+	Objective     *string            `json:"objective"`
+	SuccessMetric *string            `json:"success_metric"`
+	TargetDate    pgtype.Date        `json:"target_date"`
+	PlanStatus    string             `json:"plan_status"`
+	Progress      int16              `json:"progress"`
+	OwnerCsm      *int64             `json:"owner_csm"`
+	CreatedBy     *int64             `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy     *int64             `json:"updated_by"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type Tenant struct {
 	ID            int64              `json:"id"`
 	Name          string             `json:"name"`

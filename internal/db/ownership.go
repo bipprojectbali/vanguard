@@ -417,6 +417,59 @@ func (f CSRenewalsListFilter) Allows(uid int64, accountOwner, assignedCSM, backu
 	return false
 }
 
+// ── Success Plans (F3, via accounts) ────────────────────────────────────────
+//
+// Success Plan dikaitkan ke desa (account_id); kepemilikan mengikuti kolom
+// accounts (account_owner / assigned_csm / backup_csm) PLUS kolom owner_csm
+// pada plan itu sendiri — CSM pemilik plan tetap bisa mengelolanya walau desa
+// berpindah tangan. Admin/Manager (ScopeAll) lihat semua. Sales tidak punya
+// crm:success_plans di policy → fail F2 sebelum sampai ke filter F3 ini.
+
+// SuccessPlansListFilter = cakupan kepemilikan → dua flag boolean untuk
+// ListSuccessPlans. Paralel dengan EngagementsListFilter / CSRenewalsListFilter.
+type SuccessPlansListFilter struct {
+	ScopeAll bool
+	IsOwn    bool
+}
+
+// SuccessPlansListFilterFor merakit flag untuk data_scope role. Fail-closed:
+// nilai tak dikenal → ScopeNone (semua flag false → nol baris).
+func SuccessPlansListFilterFor(dataScope string) SuccessPlansListFilter {
+	switch AccountsScopeFor(dataScope) {
+	case ScopeAll:
+		return SuccessPlansListFilter{ScopeAll: true}
+	case ScopeOwn:
+		return SuccessPlansListFilter{IsOwn: true}
+	default: // ScopeNone
+		return SuccessPlansListFilter{}
+	}
+}
+
+// Allows melaporkan apakah aktor (uid) boleh MELIHAT/MENGUBAH satu success plan —
+// kembaran per-baris dari ListSuccessPlans. Memeriksa kepemilikan AKUN
+// (account_owner / assigned_csm / backup_csm) SERTA owner_csm plan sendiri,
+// sehingga CSM yang membuat plan tetap bisa mengelolanya walau desa dipindahkan.
+func (f SuccessPlansListFilter) Allows(uid int64, accountOwner, assignedCSM, backupCSM, ownerCSM *int64) bool {
+	if f.ScopeAll {
+		return true
+	}
+	if f.IsOwn {
+		if accountOwner != nil && *accountOwner == uid {
+			return true
+		}
+		if assignedCSM != nil && *assignedCSM == uid {
+			return true
+		}
+		if backupCSM != nil && *backupCSM == uid {
+			return true
+		}
+		if ownerCSM != nil && *ownerCSM == uid {
+			return true
+		}
+	}
+	return false
+}
+
 // placeholder membentuk "$N" untuk pgx. Dipisah agar niatnya terbaca dan mudah
 // diuji; strconv sengaja dihindari untuk N kecil yang sangat sering dipanggil.
 func placeholder(n int) string {
