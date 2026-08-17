@@ -12,9 +12,11 @@ import (
 // (target polimorfik & kontak) di sales_activities_options.go. Aksi POST di
 // sales_activities.go dkk. Dipisah agar tiap file di bawah ambang file-health.
 
-// ActivityNew — GET /w/{workspace}/activities/new?kind=task|call|note. Form buat
-// kosong untuk satu kind. kind tak sah / kosong → default "task" (form tetap
-// terbuka, bukan 404 — tautan nav mengarah dengan kind valid).
+// ActivityNew — GET /w/{workspace}/activities/new?kind=task|call|note&target=type:id.
+// Form buat kosong untuk satu kind. kind tak sah / kosong → default "task". target
+// opsional (dari tombol "+ Log Aktivitas" di timeline entitas): pre-seleksi dropdown
+// target bila nilainya ada di opsi; target tak ada / sudah terhapus → dropdown
+// kosong (bukan error — target_id bukan FK, entitas bisa terhapus).
 func (h *Handler) ActivityNew(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !canWriteSalesActivity(ctx) {
@@ -24,6 +26,13 @@ func (h *Handler) ActivityNew(w http.ResponseWriter, r *http.Request) {
 	kind := strings.TrimSpace(r.URL.Query().Get("kind"))
 	if _, ok := validActivityKinds[kind]; !ok {
 		kind = "task"
+	}
+
+	// Baca ?target= dari timeline: "type:id" (e.g. "account:42"). Tak sah / kosong
+	// → "" (dropdown target tampil tanpa pilihan awal, bukan error).
+	preTarget := strings.TrimSpace(r.URL.Query().Get("target"))
+	if _, _, ok := parseActivityTarget(preTarget); !ok {
+		preTarget = ""
 	}
 
 	targets, err := h.activityTargetOptions(ctx)
@@ -47,6 +56,7 @@ func (h *Handler) ActivityNew(w http.ResponseWriter, r *http.Request) {
 			IsEdit:      false,
 			Err:         wsErrMsg(r.URL.Query().Get("err")),
 			Kind:        kind,
+			TargetValue: preTarget,
 			Targets:     targets,
 			Contacts:    contacts,
 			Priorities:  activityPriorityOptions,

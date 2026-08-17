@@ -44,11 +44,14 @@ type ActivityTimelineView struct {
 // ActivityTimeline merender kartu timeline aktivitas.
 // - Header: judul "Aktivitas" + tombol "+ Log Aktivitas" (bila CanWrite).
 // - Body: daftar item atau pesan kosong.
-// - Footer: tautan "Lihat semua" bila masih ada halaman berikutnya.
+// - Footer: tautan "Lihat semua" bila masih ada halaman berikutnya (terfilter per-entitas).
 func ActivityTimeline(v ActivityTimelineView) g.Node {
 	newLink := fmt.Sprintf("%s/activities/new?target=%s:%d",
 		v.Base, v.TargetType, v.TargetID)
-	allLink := v.Base + "/activities"
+	// allLink = daftar aktivitas ter-filter entitas ini (?target=type:id).
+	// Membawa pengguna ke /activities dengan hanya baris entitas ini, bukan semua.
+	allLink := fmt.Sprintf("%s/activities?target=%s:%d",
+		v.Base, v.TargetType, v.TargetID)
 
 	header := h.Div(
 		h.Class("flex flex-wrap items-center justify-between gap-2 mb-3"),
