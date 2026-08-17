@@ -45,12 +45,29 @@
     return chart;
   }
 
+  // Temukan tiap kontainer chart lewat elemen data-nya (auto-discovery, bukan
+  // daftar ID tertulis-tangan): tiap halaman yang menanam <script type=
+  // application/json id="X-data"> + <div id="X"> otomatis ke-render tanpa
+  // menyentuh file ini lagi (mis. Beranda M1 menambah chart-pipeline/-health
+  // tanpa mengubah baris di bawah).
+  function discoverChartIds() {
+    var nodes = document.querySelectorAll('script[type="application/json"][id$="-data"]');
+    var ids = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var dataId = nodes[i].id;
+      ids.push(dataId.slice(0, -5)); // buang akhiran "-data"
+    }
+    return ids;
+  }
+
   ready(function () {
     var dark = isDarkTheme();
-    var charts = [
-      renderChart("chart-activity", "chart-activity-data", dark),
-      renderChart("chart-trend", "chart-trend-data", dark),
-    ].filter(Boolean);
+    var ids = discoverChartIds();
+    var charts = [];
+    for (var i = 0; i < ids.length; i++) {
+      var c = renderChart(ids[i], ids[i] + "-data", dark);
+      if (c) charts.push(c);
+    }
     if (charts.length === 0) return;
     // Resize responsif (debounce sederhana).
     var t;

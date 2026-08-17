@@ -60,7 +60,7 @@ func (h *Handler) WorkspaceHome(w http.ResponseWriter, r *http.Request) {
 		self := strconv.FormatInt(session.UserID(ctx), 10)
 		body = append(body, panel.CRMOnboard(wsPathOf(ctx, "/members/"+self+"/role"), authz.BusinessRoleAdmin))
 	}
-	body = append(body, panel.Placeholder("Beranda", "Selamat datang di "+session.TenantName(ctx)+"."))
+	body = append(body, h.dashboardHome(ctx))
 	h.renderWorkspaceShell(w, r, "Beranda", "", g.Group(body))
 }
 
