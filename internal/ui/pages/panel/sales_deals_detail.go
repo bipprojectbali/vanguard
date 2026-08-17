@@ -267,7 +267,6 @@ func dealStageControl(v DealDetailView, base string) g.Node {
 	)
 }
 
-
 // deleteDealForm = tombol hapus (soft-delete). Form NATIVE POST → 303 (gotcha #16).
 func deleteDealForm(base string) g.Node {
 	return h.FormEl(
