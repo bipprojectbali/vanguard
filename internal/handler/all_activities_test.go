@@ -126,3 +126,21 @@ func TestAllActivitiesList_ForbiddenWithoutPerm(t *testing.T) {
 		t.Fatalf("tanpa crm:sales_activity harus 403, got %d", rec.Code)
 	}
 }
+
+// TestAllActivitiesList_PlatformBypass: super_admin (platform role) tanpa
+// business_role tetap bisa mengakses /activity-log dengan ScopeAll — platform
+// operator butuh visibilitas sistem tanpa harus diberi peran CRM.
+func TestAllActivitiesList_PlatformBypass(t *testing.T) {
+	env, uid := setupAccounts(t)
+	env.seedAllActivity(t, "note", "sales", "Aktivitas-Super", &uid)
+
+	req := accountsReq(http.MethodGet, "/activity-log", nil, "")
+	rec := env.runAccount(uid, "super_admin", "" /* tanpa business_role */, req, env.h.AllActivitiesList)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("super_admin harus bisa akses /activity-log, got %d\n%s", rec.Code, rec.Body.String())
+	}
+	// super_admin dengan ScopeAll melihat semua aktivitas.
+	if !strings.Contains(rec.Body.String(), "Aktivitas-Super") {
+		t.Errorf("super_admin harus melihat semua aktivitas (ScopeAll bypass)")
+	}
+}

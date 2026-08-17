@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go_starter/internal/authz"
+	"go_starter/internal/session"
 )
 
 // sales_view.go — gerbang F2 (Casbin bisnis) modul Sales: Leads & Deals. Satu
@@ -57,10 +58,19 @@ func canApproveDeals(ctx context.Context) bool {
 }
 
 // canViewSalesActivity = gerbang READ Sales Activity Log (4.4). Objek Casbin
-// crm:sales_activity (BUKAN crm:activities — objek M7 global yang tetap disabled).
-// Sumber tunggal untuk menu sidebar & gate halaman ActivitiesList/ActivityDetail.
+// crm:sales_activity. Sumber tunggal untuk menu & gate ActivitiesList/ActivityDetail.
 func canViewSalesActivity(ctx context.Context) bool {
 	return authz.CanBusiness(ctx, "crm:sales_activity", "read")
+}
+
+// canViewAllActivities = gerbang halaman Activities lintas-context (M7, /activity-log).
+// Platform roles (super_admin/staff) BYPASS sumbu bisnis: mereka operator sistem &
+// butuh visibilitas semua aktivitas tanpa harus diberi business_role. Aktor CRM
+// biasa ikut canViewSalesActivity (crm:sales_activity read — gate paling dekat
+// sampai permission pass M9 membuat objek crm:activities tersendiri).
+// TODO(activities): ganti ke crm:activities read saat permission pass M9.
+func canViewAllActivities(ctx context.Context) bool {
+	return canViewSalesActivity(ctx) || isPlatformRole(session.Role(ctx))
 }
 
 // canWriteSalesActivityPerm = izin F2 mentah tulis aktivitas (tanpa cek arsip).

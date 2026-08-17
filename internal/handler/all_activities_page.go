@@ -20,15 +20,22 @@ import (
 // TODO(activities): ganti ke crm:activities read saat permission pass M9 dijalankan.
 
 // AllActivitiesList — GET /w/{workspace}/activity-log. Daftar semua aktivitas
-// (lintas-context) berkeyset + F3 ownership.
+// (lintas-context) berkeyset + F3 ownership. Gate: canViewAllActivities (CRM role
+// ATAU platform role — super_admin/staff butuh visibilitas tanpa business_role).
 func (h *Handler) AllActivitiesList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !canViewSalesActivity(ctx) {
+	if !canViewAllActivities(ctx) {
 		h.renderAllActivitiesForbidden(w, r)
 		return
 	}
 
-	filter := db.ActivitiesListFilterFor(session.BusinessDataScope(ctx))
+	// Platform role tidak punya business_role → pakai ScopeAll agar tidak nol baris.
+	var filter db.ActivitiesListFilter
+	if isPlatformRole(session.Role(ctx)) {
+		filter = db.ActivitiesListFilter{ScopeAll: true}
+	} else {
+		filter = db.ActivitiesListFilterFor(session.BusinessDataScope(ctx))
+	}
 	uid := session.UserID(ctx)
 	cursorAt, cursorID := pageCursor(r)
 
@@ -71,7 +78,8 @@ func (h *Handler) AllActivitiesList(w http.ResponseWriter, r *http.Request) {
 		}))
 }
 
-// renderAllActivitiesForbidden — 403 + penjelasan bagi anggota tanpa izin.
+// renderAllActivitiesForbidden — 403 + penjelasan bagi anggota tanpa izin
+// (bukan platform role, dan tidak punya crm:sales_activity read).
 func (h *Handler) renderAllActivitiesForbidden(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusForbidden)
 	h.renderWorkspaceShell(w, r, "Aktivitas", "/activity-log",

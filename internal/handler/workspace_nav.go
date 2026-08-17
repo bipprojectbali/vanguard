@@ -32,7 +32,11 @@ import (
 // Izin dioper terpisah (bukan satu `canManage`) karena keduanya TIDAK identik —
 // di mode single admin boleh menyunting workspace tapi keanggotaan dinilai
 // sendiri — jadi menyatukannya akan membuat salah satu menu berbohong.
-func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canPlans, canSubs, canSLA, canPlaybooks, canKB, canRoles, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals bool) []ui.NavItem {
+// workspaceNav membangun menu ruang kerja. canSalesActivity = gate CRM bisnis
+// (crm:sales_activity) — untuk "Sales Activities" dalam grup Sales.
+// canAllActivities = gate halaman lintas-context (/activity-log) — LEBIH LUAS:
+// CRM role ATAU platform role (super_admin/staff butuh visibilitas sistem).
+func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canAllActivities, canPlans, canSubs, canSLA, canPlaybooks, canKB, canRoles, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals bool) []ui.NavItem {
 	items := []ui.NavItem{
 		{Label: "Dashboard", Href: wsPath(slug, ""), Icon: lucide.House(html.Class("size-4"))},
 	}
@@ -65,10 +69,10 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 	// agar peta jalan terlihat.
 	items = append(items, workspaceCSGroup(slug, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals))
 	// Activities top-level = daftar lintas-context (sales+cs+general), M7.
-	// Gate sama dengan Sales Activities (canViewSalesActivity). Reports masih
-	// placeholder wireframe.
-	// TODO(activities): ganti ke canViewAllActivities saat permission pass M9.
-	if canSalesActivity {
+	// Gate LEBIH LUAS dari Sales Activities: CRM role ATAU platform role
+	// (super_admin/staff butuh visibilitas sistem tanpa harus diberi business_role).
+	// TODO(activities): ganti ke canViewActivities (objek crm:activities) saat M9.
+	if canAllActivities {
 		items = append(items, ui.NavItem{
 			Label: "Activities",
 			Icon:  lucide.Activity(html.Class("size-4")),
