@@ -68,7 +68,8 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 		OfficePhone:  deref(a.OfficePhone),
 		OfficeEmail:  deref(a.OfficeEmail),
 
-		CanWrite: canWriteAccounts(ctx),
+		CanWrite:   canWriteAccounts(ctx),
+		Activities: h.activitiesTimelineFor(ctx, base, "account", a.ID, canWriteSalesActivityPerm(ctx)),
 	}
 }
 

@@ -108,7 +108,8 @@ func (h *Handler) contactDetailView(ctx context.Context, base, accountBase, vill
 		UpdatedByName: memberName(names, c.UpdatedBy),
 		UpdatedAt:     fmtDateTime(c.UpdatedAt),
 
-		CanWrite: canWriteContacts(ctx),
+		CanWrite:   canWriteContacts(ctx),
+		Activities: h.activitiesTimelineFor(ctx, base, "contact", c.ID, canWriteSalesActivityPerm(ctx)),
 	}
 }
 
