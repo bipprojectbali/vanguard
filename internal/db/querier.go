@@ -281,6 +281,27 @@ type Querier interface {
 	// users = tabel GLOBAL (identitas murni, TANPA tenant/role — keduanya pindah ke
 	// memberships). Keanggotaan dibuat terpisah via CreateMembership dalam tx sama.
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// dashboard.sql — agregasi Beranda ruang kerja (Modul 1, tasks.md M1-1). Empat
+	// kartu: ARR total, pipeline per-stage, distribusi health, renewal jatuh tempo.
+	// Distribusi health TIDAK dituliskan ulang di sini — reuse CountHealthScoreKPIs
+	// (health_score.sql), sudah tepat bentuknya. Ownership (F3) pakai flag SAMA
+	// dengan modul asal tiap tabel: deals → DealsListFilter (deal_owner), subscriptions
+	// → SubscriptionsListFilter (subscription_owner) — sumber SATU, bukan duplikat
+	// logic scope. COALESCE(...)::bigint/::numeric membungkus tiap agregat agar sqlc
+	// tak meng-emit interface{} (gotcha #14).
+	// ARR total dari langganan AKTIF dalam cakupan ownership. ARR disimpan (bukan
+	// MRR×12, keputusan skema §5); F4 (masking non-manager) urusan handler/view,
+	// bukan query — nilai mentah selalu dihitung, disembunyikan di lapis tampilan.
+	DashboardARRTotal(ctx context.Context, arg DashboardARRTotalParams) (pgtype.Numeric, error)
+	// Pipeline per-stage (bukan agregat open/won/lost seperti DealPipelineStats) —
+	// satu baris per stage TERBUKA (exclude Closed Won/Lost, sama seperti kanban),
+	// diurutkan CASE mengikuti urutan alami dealStageOptions (sales_deals_form.go)
+	// agar chart bar x-axis-nya berurutan tanpa re-sort di Go.
+	DashboardPipelineByStage(ctx context.Context, arg DashboardPipelineByStageParams) ([]DashboardPipelineByStageRow, error)
+	// Langganan jatuh tempo 30 hari ke depan (jendela SAMA dgn ListRenewals window
+	// "due": status Active/PendingApproval, end_date antara today..today+30) + ARR
+	// yang mengambang di dalamnya (masking F4 di handler, bukan di sini).
+	DashboardRenewalsDue(ctx context.Context, arg DashboardRenewalsDueParams) (DashboardRenewalsDueRow, error)
 	// KPI ringkas pipeline dalam cakupan ownership (satu round-trip, bukan hitung di
 	// Go atas seluruh baris). COALESCE(...)::bigint/::numeric membungkus agregat agar
 	// sqlc tak meng-emit interface{} (gotcha #14). Win rate dihitung di Go dari
