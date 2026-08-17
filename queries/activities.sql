@@ -68,6 +68,20 @@ WHERE deleted_at IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListAllActivities :many
+-- Daftar SEMUA aktivitas lintas-context (sales+cs+general) — untuk halaman
+-- "Activities" top-level (M7). Ownership F3 sama dengan ListActivities (scope_all
+-- atau is_own); tanpa context_filter agar semua modul terwakili. Keyset identik.
+SELECT * FROM activities
+WHERE deleted_at IS NULL
+  AND (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND owner_id = sqlc.arg(uid))
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: UpdateActivity :one
 -- Sunting aktivitas. kind & target TAK di sini: kind menentukan bentuk form
 -- (immutable saat edit), target ditetapkan saat create. status punya jalur

@@ -244,10 +244,10 @@ func engagementRowView(r db.ListEngagementsRow, slug string, tz *time.Location) 
 // engagementKPIView memetakan CountEngagementKPIs → EngagementKPIs view.
 func engagementKPIView(k db.CountEngagementKPIsRow) panel.EngagementKPIs {
 	return panel.EngagementKPIs{
-		Total:    int(k.TotalCount),
-		Planned:  int(k.PlannedCount),
-		Done:     int(k.DoneCount),
-		Missed:   int(k.MissedCount),
-		DueSoon:  int(k.DueSoonCount),
+		Total:   int(k.TotalCount),
+		Planned: int(k.PlannedCount),
+		Done:    int(k.DoneCount),
+		Missed:  int(k.MissedCount),
+		DueSoon: int(k.DueSoonCount),
 	}
 }
