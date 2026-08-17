@@ -29,28 +29,47 @@ type ActivityRow struct {
 }
 
 // ActivitiesListView = data halaman daftar. Items = satu halaman keyset;
-// NextCursor kosong = ujung daftar.
+// NextCursor kosong = ujung daftar. TargetFilter "type:id" (e.g. "account:42")
+// mengaktifkan mode filter: hanya aktivitas entitas itu yang ditampilkan;
+// TargetLabel = nama entitas untuk header ("Desa Maju Jaya"). Kosong = tanpa filter.
 type ActivitiesListView struct {
-	Base       string
-	CanWrite   bool
-	Err        string
-	Msg        string
-	Items      []ActivityRow
-	NextCursor string
+	Base         string
+	CanWrite     bool
+	Err          string
+	Msg          string
+	Items        []ActivityRow
+	NextCursor   string
+	TargetFilter string // "type:id" saat difilter per-entitas; "" = semua
+	TargetLabel  string // nama entitas yang di-resolve handler (best-effort)
 }
 
 // ActivitiesList merender halaman: header + tombol buat per-kind + alert + tabel
-// (atau keadaan kosong) + pager.
+// (atau keadaan kosong) + pager. Saat TargetFilter terisi, header menampilkan
+// nama entitas dan ada tautan "Kembali ke semua" untuk lepas filter.
 func ActivitiesList(v ActivitiesListView) g.Node {
+	title := "Sales Activities"
+	subtitle := "Catatan aktivitas penjualan — tugas, panggilan, dan catatan."
+	var backLink g.Node
+	if v.TargetFilter != "" {
+		if v.TargetLabel != "" {
+			title = "Aktivitas — " + v.TargetLabel
+		}
+		subtitle = "Menampilkan aktivitas untuk entitas ini saja."
+		backLink = h.A(
+			h.Href(v.Base+"/activities"),
+			h.Class("text-sm text-base-content/60 link link-hover"),
+			g.Text("« Semua aktivitas"),
+		)
+	}
 	body := []g.Node{
 		h.Div(
 			h.Class("flex flex-wrap items-center justify-between gap-2 mb-2"),
 			h.Div(
-				h.H1(h.Class("text-xl font-semibold"), g.Text("Sales Activities")),
-				h.P(h.Class("text-base-content/70"),
-					g.Text("Catatan aktivitas penjualan — tugas, panggilan, dan catatan.")),
+				backLink,
+				h.H1(h.Class("text-xl font-semibold"), g.Text(title)),
+				h.P(h.Class("text-base-content/70"), g.Text(subtitle)),
 			),
-			ui.When(v.CanWrite, activityNewButtons(v.Base)),
+			ui.When(v.CanWrite, activityNewButtons(v.Base, v.TargetFilter)),
 		),
 	}
 	if v.Err != "" {
@@ -68,14 +87,17 @@ func ActivitiesList(v ActivitiesListView) g.Node {
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
-// activityNewButtons = tiga tautan buat (satu per kind). kind tetap per form
-// (immutable) → tiap form ramping & no-JS. Baris flex-wrap agar tak mendorong di
-// mobile 375px.
-func activityNewButtons(base string) g.Node {
+// activityNewButtons = tiga tautan buat (satu per kind). Saat targetFilter terisi
+// (mode filter per-entitas), link menyertakan ?target= agar form langsung
+// pre-seleksi target tersebut. kind tetap per form (immutable) → tiap form
+// ramping & no-JS. Baris flex-wrap agar tak mendorong di mobile 375px.
+func activityNewButtons(base, targetFilter string) g.Node {
 	btn := func(label, kind string) g.Node {
-		return h.A(
-			h.Href(base+"/activities/new?kind="+kind),
-			h.Class("btn btn-sm btn-primary min-h-11"), g.Text(label))
+		href := base + "/activities/new?kind=" + kind
+		if targetFilter != "" {
+			href += "&target=" + targetFilter
+		}
+		return h.A(h.Href(href), h.Class("btn btn-sm btn-primary min-h-11"), g.Text(label))
 	}
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
@@ -214,10 +236,14 @@ func activityTargetParts(targetType string, id int64) (seg, label string) {
 
 func emptyActivities(v ActivitiesListView) g.Node {
 	if v.NextCursor == "" {
+		msg := "Belum ada aktivitas."
+		if v.TargetFilter != "" {
+			msg = "Belum ada aktivitas untuk entitas ini."
+		}
 		return h.Div(
 			h.Class("card bg-base-100 border border-base-300"),
 			h.Div(h.Class("card-body"),
-				h.P(h.Class("text-base-content/70"), g.Text("Belum ada aktivitas."))),
+				h.P(h.Class("text-base-content/70"), g.Text(msg))),
 		)
 	}
 	return h.Div(
@@ -231,14 +257,19 @@ func emptyActivities(v ActivitiesListView) g.Node {
 	)
 }
 
+// activitiesPager = navigasi halaman berikutnya. Saat TargetFilter aktif,
+// menyertakan ?target= agar halaman berikut tetap terfilter entitas yang sama.
 func activitiesPager(v ActivitiesListView) g.Node {
 	if v.NextCursor == "" {
 		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
 			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
 	}
+	href := v.Base + "/activities?after=" + v.NextCursor
+	if v.TargetFilter != "" {
+		href += "&target=" + v.TargetFilter
+	}
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(v.Base+"/activities?after="+v.NextCursor), h.Class("btn min-h-11"),
-			g.Text("Berikutnya »")),
+		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
 	)
 }

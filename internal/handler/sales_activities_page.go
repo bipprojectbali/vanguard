@@ -16,32 +16,64 @@ import (
 // Dipisah karena daftar & detail tumbuh dengan aturannya sendiri. Meniru
 // sales_deals_page.go.
 
-// ActivitiesList — GET /w/{workspace}/activities. Daftar aktivitas Sales berkeyset
-// (F3 owner_id). Bukan pemegang izin lihat → 403 + penjelasan.
+// ActivitiesList — GET /w/{workspace}/activities[?target=type:id]. Daftar aktivitas
+// Sales berkeyset (F3 owner_id). Jika ?target= valid, filter ke entitas itu saja
+// (pakai ListActivitiesByTarget, tanpa F3 — konsisten dengan timeline di detail).
+// Bukan pemegang izin lihat → 403 + penjelasan.
 func (h *Handler) ActivitiesList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !canViewSalesActivity(ctx) {
 		h.renderActivitiesForbidden(w, r)
 		return
 	}
-	filter := db.ActivitiesListFilterFor(session.BusinessDataScope(ctx))
-	uid := session.UserID(ctx)
 
 	cursorAt, cursorID := pageCursor(r)
-	rows, err := h.q(ctx).ListActivities(ctx, db.ListActivitiesParams{
-		ContextFilter:   activityContextSales,
-		CursorCreatedAt: cursorAt,
-		CursorID:        cursorID,
-		ScopeAll:        filter.ScopeAll,
-		IsOwn:           filter.IsOwn,
-		Uid:             &uid,
-		PageSize:        pageSize + 1,
-	})
-	if err != nil {
-		h.Log.Error("activities: list", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+	base := wsPath(slugFromRequest(r), "")
+
+	// Cek ?target=type:id — dari tautan "Lihat semua" di kartu timeline entitas.
+	rawTarget := r.URL.Query().Get("target")
+	targetType, targetID, hasTarget := parseActivityTarget(rawTarget)
+
+	var rows []db.Activity
+	var targetLabel string
+	var err error
+
+	if hasTarget {
+		// Mode filter per-entitas: tampilkan semua aktivitas target ini lintas-context.
+		rows, err = h.q(ctx).ListActivitiesByTarget(ctx, db.ListActivitiesByTargetParams{
+			TargetType:      targetType,
+			TargetID:        targetID,
+			CursorCreatedAt: cursorAt,
+			CursorID:        cursorID,
+			PageSize:        pageSize + 1,
+		})
+		if err != nil {
+			h.Log.Error("activities: list by target", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		// Label best-effort: gagal lookup → nama fallback "Tipe #id".
+		targetLabel = h.targetLabel(ctx, targetType, targetID)
+	} else {
+		// Mode normal: daftar Sales Activities ber-F3 ownership.
+		filter := db.ActivitiesListFilterFor(session.BusinessDataScope(ctx))
+		uid := session.UserID(ctx)
+		rows, err = h.q(ctx).ListActivities(ctx, db.ListActivitiesParams{
+			ContextFilter:   activityContextSales,
+			CursorCreatedAt: cursorAt,
+			CursorID:        cursorID,
+			ScopeAll:        filter.ScopeAll,
+			IsOwn:           filter.IsOwn,
+			Uid:             &uid,
+			PageSize:        pageSize + 1,
+		})
+		if err != nil {
+			h.Log.Error("activities: list", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 	}
+
 	shown, nextCursor := splitPage(rows, func(a db.Activity) (pgtype.Timestamptz, int64) {
 		return a.CreatedAt, a.ID
 	})
@@ -56,15 +88,25 @@ func (h *Handler) ActivitiesList(w http.ResponseWriter, r *http.Request) {
 		items = append(items, activityRowView(a, names))
 	}
 
-	base := wsPath(slugFromRequest(r), "")
-	h.renderWorkspaceShell(w, r, "Sales Activities", "/activities",
+	// targetFilter dikirim ke view apa adanya (string "type:id") untuk propagasi URL.
+	targetFilter := ""
+	if hasTarget {
+		targetFilter = rawTarget
+	}
+	title := "Sales Activities"
+	if targetLabel != "" {
+		title = "Aktivitas — " + targetLabel
+	}
+	h.renderWorkspaceShell(w, r, title, "/activities",
 		panel.ActivitiesList(panel.ActivitiesListView{
-			Base:       base,
-			CanWrite:   canWriteSalesActivity(ctx),
-			Err:        wsErrMsg(r.URL.Query().Get("err")),
-			Msg:        activitiesMsg(r.URL.Query().Get("ok")),
-			Items:      items,
-			NextCursor: nextCursor,
+			Base:         base,
+			CanWrite:     canWriteSalesActivity(ctx),
+			Err:          wsErrMsg(r.URL.Query().Get("err")),
+			Msg:          activitiesMsg(r.URL.Query().Get("ok")),
+			Items:        items,
+			NextCursor:   nextCursor,
+			TargetFilter: targetFilter,
+			TargetLabel:  targetLabel,
 		}))
 }
 
