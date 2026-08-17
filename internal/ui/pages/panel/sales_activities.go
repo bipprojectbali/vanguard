@@ -129,13 +129,18 @@ func activityTableRow(base string, a ActivityRow) g.Node {
 }
 
 // activityKindBadge = badge jenis berwarna token semantik daisyUI (bukan absolut).
+// Mencakup seluruh 5 kind yang dibangun M7 (task/meeting/call/chat/note).
 func activityKindBadge(kind string) g.Node {
 	cls, label := "badge badge-ghost", activityKindLabel(kind)
 	switch kind {
 	case "task":
 		cls = "badge badge-info"
+	case "meeting":
+		cls = "badge badge-secondary"
 	case "call":
 		cls = "badge badge-success"
+	case "chat":
+		cls = "badge badge-accent"
 	case "note":
 		cls = "badge badge-ghost"
 	}
@@ -143,12 +148,17 @@ func activityKindBadge(kind string) g.Node {
 }
 
 // activityKindLabel memetakan enum kind → label Indonesia.
+// Mencakup seluruh 5 kind M7 (email sengaja dikecualikan iterasi ini).
 func activityKindLabel(kind string) string {
 	switch kind {
 	case "task":
 		return "Tugas"
+	case "meeting":
+		return "Pertemuan"
 	case "call":
 		return "Panggilan"
+	case "chat":
+		return "Chat"
 	case "note":
 		return "Catatan"
 	default:
