@@ -36,7 +36,7 @@ import (
 // (crm:sales_activity) — untuk "Sales Activities" dalam grup Sales.
 // canAllActivities = gate halaman lintas-context (/activity-log) — LEBIH LUAS:
 // CRM role ATAU platform role (super_admin/staff butuh visibilitas sistem).
-func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canAllActivities, canPlans, canSubs, canSLA, canPlaybooks, canKB, canRoles, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals bool) []ui.NavItem {
+func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canAllActivities, canPlans, canSubs, canSLA, canPlaybooks, canKB, canRoles, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canReports bool) []ui.NavItem {
 	items := []ui.NavItem{
 		{Label: "Dashboard", Href: wsPath(slug, ""), Icon: lucide.House(html.Class("size-4"))},
 	}
@@ -82,9 +82,10 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 		items = append(items,
 			ui.NavItem{Label: "Activities", Icon: lucide.Activity(html.Class("size-4")), Disabled: true})
 	}
-	items = append(items,
-		ui.NavItem{Label: "Reports", Icon: lucide.ChartColumn(html.Class("size-4")), Disabled: true},
-	)
+	// Reports jadi GRUP bersarang (wireframe 8): Sales Reports & Subscription
+	// Reports berbackend (enabled per izin, M8-1), sisanya placeholder. Selalu
+	// tampil agar peta jalan terlihat.
+	items = append(items, workspaceReportsGroup(slug, canReports))
 	if grp := workspaceSettingsGroup(slug, canMembers, canRoles, canSettings); grp != nil {
 		items = append(items, *grp)
 	}
