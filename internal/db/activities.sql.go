@@ -279,6 +279,92 @@ func (q *Queries) ListActivities(ctx context.Context, arg ListActivitiesParams) 
 	return items, nil
 }
 
+const listActivitiesByTarget = `-- name: ListActivitiesByTarget :many
+SELECT id, tenant_id, kind, subject, target_type, target_id, owner_id, activity_context, status, notes, due_date, priority, reminder_at, start_at, end_at, all_day, location, meeting_type, contact_id, direction, activity_at, duration_min, call_result, email_from, email_to, email_status, body, engagement_type, frequency, channel, scheduled_date, next_due_date, deleted_at, created_by, created_at, updated_by, updated_at FROM activities
+WHERE deleted_at IS NULL
+  AND target_type = $1::text
+  AND target_id   = $2::bigint
+  AND (created_at, id) < ($3::timestamptz, $4::bigint)
+ORDER BY created_at DESC, id DESC
+LIMIT $5
+`
+
+type ListActivitiesByTargetParams struct {
+	TargetType      string             `json:"target_type"`
+	TargetID        int64              `json:"target_id"`
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	PageSize        int32              `json:"page_size"`
+}
+
+// Timeline satu entitas: semua aktivitas yang terkait ke target_type+target_id ini,
+// keyset (created_at DESC, id DESC). Tanpa filter context (lintas sales/cs/general)
+// dan tanpa F3 ownership — siapa pun yang boleh lihat entitasnya boleh lihat
+// timelinenya (gate ada di handler detail entitas masing-masing).
+func (q *Queries) ListActivitiesByTarget(ctx context.Context, arg ListActivitiesByTargetParams) ([]Activity, error) {
+	rows, err := q.db.Query(ctx, listActivitiesByTarget,
+		arg.TargetType,
+		arg.TargetID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Activity{}
+	for rows.Next() {
+		var i Activity
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Kind,
+			&i.Subject,
+			&i.TargetType,
+			&i.TargetID,
+			&i.OwnerID,
+			&i.ActivityContext,
+			&i.Status,
+			&i.Notes,
+			&i.DueDate,
+			&i.Priority,
+			&i.ReminderAt,
+			&i.StartAt,
+			&i.EndAt,
+			&i.AllDay,
+			&i.Location,
+			&i.MeetingType,
+			&i.ContactID,
+			&i.Direction,
+			&i.ActivityAt,
+			&i.DurationMin,
+			&i.CallResult,
+			&i.EmailFrom,
+			&i.EmailTo,
+			&i.EmailStatus,
+			&i.Body,
+			&i.EngagementType,
+			&i.Frequency,
+			&i.Channel,
+			&i.ScheduledDate,
+			&i.NextDueDate,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeleteActivity = `-- name: SoftDeleteActivity :exec
 UPDATE activities SET deleted_at = now(), updated_by = $1
 WHERE id = $2 AND deleted_at IS NULL

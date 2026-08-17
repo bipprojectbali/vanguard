@@ -49,6 +49,10 @@ type DealDetailView struct {
 	// Quotes = pratinjau quote deal ini (Modul 4). Diisi handler via
 	// ListQuotesForDeal (dibatasi); daftar penuh di /deals/{id}/quotes.
 	Quotes []QuoteRow
+
+	// Activities = timeline aktivitas deal ini (M7-A). Diisi handler via
+	// activitiesTimelineFor (dibatasi activityTimelineLimit baris terbaru).
+	Activities ActivityTimelineView
 }
 
 // DealDetail merender hub detail: header (nama + kode + stage + aksi), stepper
@@ -107,7 +111,7 @@ func DealDetail(v DealDetailView) g.Node {
 			{"Catatan Kekalahan", v.LossNotes},
 		}),
 		dealQuotesCard(v),
-		dealCrossModulePlaceholder(),
+		ActivityTimeline(v.Activities),
 	)
 }
 
@@ -259,22 +263,6 @@ func dealStageControl(v DealDetailView, base string) g.Node {
 						g.Text("Simpan Tahap")),
 				),
 			),
-		),
-	)
-}
-
-// dealCrossModulePlaceholder = keterangan jujur untuk kaitan lintas-modul yang
-// belum ada (Activities, Quotes/Subscription Modul 5) — bukan tombol mati yang
-// menyesatkan. Dihapus saat modul terkait tiba.
-func dealCrossModulePlaceholder() g.Node {
-	return h.Div(
-		h.Class("card bg-base-100 border border-dashed border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body min-w-0"),
-			h.H2(h.Class("font-semibold mb-1 text-base-content/70"), g.Text("Terkait")),
-			h.P(h.Class("text-sm text-base-content/50"),
-				g.Text("Aktivitas penjualan, Quote, dan Subscription akan tampil di sini "+
-					"setelah modul terkait tersedia.")),
 		),
 	)
 }

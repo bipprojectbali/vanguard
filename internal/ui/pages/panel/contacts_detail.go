@@ -65,12 +65,16 @@ type ContactDetailView struct {
 	UpdatedAt     string
 
 	CanWrite bool
+
+	// Activities = timeline aktivitas kontak ini (M7-A). Diisi handler via
+	// activitiesTimelineFor (dibatasi activityTimelineLimit baris terbaru).
+	Activities ActivityTimelineView
 }
 
 // ContactDetail merender hub detail kontak: header (breadcrumb + nama + penanda +
 // subjudul + aksi), lalu ENAM kartu di grid dua kolom (mobile: satu kolom):
-// Identitas, Peran & Otoritas, Komunikasi, Alamat, Ringkasan Keterlibatan (kolom
-// aktivitas ditunda modul Activities), dan Sistem & Audit (read-only).
+// Identitas, Peran & Otoritas, Komunikasi, Alamat, Ringkasan Keterlibatan, dan
+// Sistem & Audit, diikuti kartu timeline aktivitas (M7-A) penuh-lebar.
 func ContactDetail(v ContactDetailView) g.Node {
 	base := v.AccountBase + "/contacts/" + strconv.FormatInt(v.ID, 10)
 
@@ -118,6 +122,7 @@ func ContactDetail(v ContactDetailView) g.Node {
 		crumb,
 		header,
 		contactDetailCards(v),
+		ActivityTimeline(v.Activities),
 	)
 }
 

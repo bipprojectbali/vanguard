@@ -55,6 +55,19 @@ WHERE deleted_at IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListActivitiesByTarget :many
+-- Timeline satu entitas: semua aktivitas yang terkait ke target_type+target_id ini,
+-- keyset (created_at DESC, id DESC). Tanpa filter context (lintas sales/cs/general)
+-- dan tanpa F3 ownership — siapa pun yang boleh lihat entitasnya boleh lihat
+-- timelinenya (gate ada di handler detail entitas masing-masing).
+SELECT * FROM activities
+WHERE deleted_at IS NULL
+  AND target_type = sqlc.arg(target_type)::text
+  AND target_id   = sqlc.arg(target_id)::bigint
+  AND (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: UpdateActivity :one
 -- Sunting aktivitas. kind & target TAK di sini: kind menentukan bentuk form
 -- (immutable saat edit), target ditetapkan saat create. status punya jalur

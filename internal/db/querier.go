@@ -435,6 +435,11 @@ type Querier interface {
 	// false → NOL baris (fail-closed). context_filter menyaring view modul
 	// ('sales' untuk 4.4) — pemisah dari CS 6.5 / general M7.
 	ListActivities(ctx context.Context, arg ListActivitiesParams) ([]Activity, error)
+	// Timeline satu entitas: semua aktivitas yang terkait ke target_type+target_id ini,
+	// keyset (created_at DESC, id DESC). Tanpa filter context (lintas sales/cs/general)
+	// dan tanpa F3 ownership — siapa pun yang boleh lihat entitasnya boleh lihat
+	// timelinenya (gate ada di handler detail entitas masing-masing).
+	ListActivitiesByTarget(ctx context.Context, arg ListActivitiesByTargetParams) ([]Activity, error)
 	// Orang yang punya jejak pada rentang ini — isi dropdown "filter per-orang".
 	//
 	// Diturunkan dari DATA, bukan dari daftar user: memilih orang yang tak punya

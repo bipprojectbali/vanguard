@@ -119,6 +119,7 @@ func (h *Handler) dealDetailView(ctx context.Context, base string, d db.Deal, na
 		Owner:            ownerName(d.DealOwner, names),
 		CanWrite:         canWriteDeals(ctx),
 		Quotes:           h.dealQuotesPreview(ctx, d.ID),
+		Activities:       h.activitiesTimelineFor(ctx, base, "deal", d.ID, canWriteDeals(ctx)),
 	}
 }
 

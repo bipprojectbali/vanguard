@@ -45,6 +45,10 @@ type AccountDetailView struct {
 	OfficeEmail  string
 
 	CanWrite bool
+
+	// Activities = timeline aktivitas desa ini (M7-A). Diisi handler via
+	// activitiesTimelineFor (dibatasi activityTimelineLimit baris terbaru).
+	Activities ActivityTimelineView
 }
 
 // AccountDetail merender hub detail: header (nama + kode + aksi), lalu kartu
@@ -111,6 +115,7 @@ func AccountDetail(v AccountDetailView) g.Node {
 			{"Telepon Kantor", v.OfficePhone},
 			{"Email Kantor", v.OfficeEmail},
 		}),
+		ActivityTimeline(v.Activities),
 	)
 }
 
