@@ -171,6 +171,73 @@ func TestActivityCreate_RejectsTargetOutOfScope(t *testing.T) {
 	}
 }
 
+// ── M7-B: Target filter ──────────────────────────────────────────────────────
+
+// TestActivitiesList_TargetFilter: ?target=account:<id> memfilter daftar ke
+// aktivitas entitas itu saja — lintas-context (sales/general) — tanpa F3
+// ownership. Membuktikan ActivitiesListView.TargetFilter + ListActivitiesByTarget.
+func TestActivitiesList_TargetFilter(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc1 := env.seedAccount(t, "Desa Filter", &uid, nil, nil)
+	acc2 := env.seedAccount(t, "Desa Lain", &uid, nil, nil)
+
+	env.seedSalesActivity(t, "note", "account", acc1.ID, "Aktivitas-Acc1", &uid)
+	env.seedSalesActivity(t, "call", "account", acc2.ID, "Aktivitas-Acc2", &uid)
+
+	// Request dengan ?target=account:<acc1.ID> — filter ke Desa Filter.
+	req := accountsReq(http.MethodGet, "/activities?target=account:"+itoa(acc1.ID), nil, "")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.ActivitiesList)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ActivitiesList[target] status %d\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Aktivitas-Acc1") {
+		t.Errorf("aktivitas acc1 harus tampil saat filter ?target=account:acc1")
+	}
+	if strings.Contains(body, "Aktivitas-Acc2") {
+		t.Errorf("aktivitas acc2 tidak boleh tampil saat filter hanya acc1")
+	}
+}
+
+// TestActivitiesList_TargetFilter_BadTarget: ?target= tak valid (malformed)
+// → jatuh ke daftar normal (semua aktivitas aktor); bukan error/crash.
+func TestActivitiesList_TargetFilter_BadTarget(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa Normal", &uid, nil, nil)
+	env.seedSalesActivity(t, "note", "account", acc.ID, "Aktivitas-Normal", &uid)
+
+	req := accountsReq(http.MethodGet, "/activities?target=invalid", nil, "")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.ActivitiesList)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ActivitiesList[bad target] status %d", rec.Code)
+	}
+	// Tanpa filter → aktivitas milik uid tampil (ScopeAll admin).
+	body := rec.Body.String()
+	if !strings.Contains(body, "Aktivitas-Normal") {
+		t.Errorf("daftar normal harus tampil saat target tak valid")
+	}
+}
+
+// TestActivityNew_PreFillsTarget: GET /activities/new?target=account:<id> →
+// form terbuka dengan TargetValue pre-seleksi target tersebut.
+// Membuktikan handler membaca ?target= dan meneruskan ke ActivityFormView.
+func TestActivityNew_PreFillsTarget(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa PreFill", &uid, nil, nil)
+
+	req := accountsReq(http.MethodGet, "/activities/new?kind=task&target=account:"+itoa(acc.ID), nil, "")
+	rec := env.runAccount(uid, "member", "sales", req, env.h.ActivityNew)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ActivityNew[prefill] status %d\n%s", rec.Code, rec.Body.String())
+	}
+	// Form mengeluarkan value="account:<id>" sebagai option terpilih (selected).
+	// Cukup verifikasi targetValue hadir di output HTML sebagai value pada option.
+	body := rec.Body.String()
+	if !strings.Contains(body, "account:"+itoa(acc.ID)) {
+		t.Errorf("form harus mengandung account:%d sebagai nilai target pre-fill", acc.ID)
+	}
+}
+
 // ── Unit (tanpa DB) ─────────────────────────────────────────────────────────
 
 // TestParseActivityTarget: picker "type:id" diurai & divalidasi bentuk+enum di
