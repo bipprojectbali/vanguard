@@ -15,8 +15,12 @@ import (
 // jalan). Sales Reports (8.1) & Subscription Reports (8.4) berbackend sejak
 // M8-1, enabled mengikuti canReports (objek crm:reports read, SATU gerbang utk
 // kedua preset). Customer Success Reports (8.2), Support Reports (8.3), Custom
-// Reports (8.5) tetap disabled — 8.2/8.3 bergantung slice Modul 6 lain, 8.5
-// (Report Builder) ditunda eksplisit v1.1 (skema.md §10).
+// Reports (8.5) tetap disabled — BUKAN karena data belum ada (Modul 6 Customer
+// Success sudah tuntas & ter-merge: health/journey, tickets+SLA, playbooks,
+// KB, engagements, renewal management, success plans), tapi karena query+view
+// report-nya sendiri belum ditulis — di luar scope M8-1 (cuma preset Sales +
+// Subscription). Custom Reports (8.5, Report Builder) beda kasus: ditunda
+// eksplisit v1.1 (skema.md §10), terlepas modul lain sudah siap atau belum.
 func workspaceReportsGroup(slug string, canReports bool) ui.NavItem {
 	sales := ui.NavItem{Label: "Sales Reports", Icon: lucide.TrendingUp(html.Class("size-4"))}
 	if canReports {
