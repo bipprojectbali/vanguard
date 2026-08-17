@@ -64,10 +64,21 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 	// (slice B2) berbackend (enabled per izin), sisanya placeholder. Selalu tampil
 	// agar peta jalan terlihat.
 	items = append(items, workspaceCSGroup(slug, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals))
-	// Modul berwireframe tapi belum berbackend — urutan persis wireframe, disabled.
-	// Ditampilkan agar peta jalan produk terlihat utuh di sidebar sejak awal.
+	// Activities top-level = daftar lintas-context (sales+cs+general), M7.
+	// Gate sama dengan Sales Activities (canViewSalesActivity). Reports masih
+	// placeholder wireframe.
+	// TODO(activities): ganti ke canViewAllActivities saat permission pass M9.
+	if canSalesActivity {
+		items = append(items, ui.NavItem{
+			Label: "Activities",
+			Icon:  lucide.Activity(html.Class("size-4")),
+			Href:  wsPath(slug, "/activity-log"),
+		})
+	} else {
+		items = append(items,
+			ui.NavItem{Label: "Activities", Icon: lucide.Activity(html.Class("size-4")), Disabled: true})
+	}
 	items = append(items,
-		ui.NavItem{Label: "Activities", Icon: lucide.Activity(html.Class("size-4")), Disabled: true},
 		ui.NavItem{Label: "Reports", Icon: lucide.ChartColumn(html.Class("size-4")), Disabled: true},
 	)
 	if grp := workspaceSettingsGroup(slug, canMembers, canRoles, canSettings); grp != nil {

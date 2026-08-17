@@ -121,6 +121,8 @@ func (h *Handler) renderActivitiesForbidden(w http.ResponseWriter, r *http.Reque
 // activityRowView memetakan satu aktivitas → baris tabel. Target = tipe+id (tanpa
 // lookup nama → hindari N+1, rule 13). Status hanya untuk Task ("" untuk call/note
 // → badge "—"). Tanggal = created_at lokal (gotcha #14: simpan UTC, tampil lokal).
+// Context diisi agar AllActivitiesList dapat menampilkan kolom Konteks;
+// diabaikan di Sales Activities (kolom tak ada di tabel itu).
 func activityRowView(a db.Activity, names map[int64]string) panel.ActivityRow {
 	return panel.ActivityRow{
 		ID:         a.ID,
@@ -131,5 +133,6 @@ func activityRowView(a db.Activity, names map[int64]string) panel.ActivityRow {
 		Owner:      ownerName(a.OwnerID, names),
 		Status:     deref(a.Status),
 		Created:    fmtLocal(a.CreatedAt),
+		Context:    deref(a.ActivityContext),
 	}
 }

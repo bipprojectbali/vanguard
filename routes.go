@@ -370,6 +370,11 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/activities/{id}/status", h.ActivityStatus)
 		r.Post("/activities/{id}/delete", h.ActivityDelete)
 
+		// Daftar aktivitas LINTAS-CONTEXT (menu "Activities" top-level, M7). Reuse
+		// gate canViewSalesActivity; query ListAllActivities (tanpa context_filter).
+		// TODO(activities): ganti ke crm:activities saat permission pass M9.
+		r.Get("/activity-log", h.AllActivitiesList)
+
 		// Daftar quote LINTAS-deal (menu sidebar "Quotes"). Read-only: ownership F3
 		// DIWARISI dari deal induk (ListQuotes JOIN deals → deal_owner), keyset.
 		// Pembuatan/penyuntingan tetap NEST di bawah deal (blok di bawah).

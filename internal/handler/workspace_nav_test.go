@@ -49,12 +49,14 @@ func TestWorkspaceNav_EnglishTopLevel(t *testing.T) {
 
 // TestWorkspaceNav_DisabledModules: modul berwireframe tapi belum berbackend
 // tampil TAPI mati — Disabled=true & tanpa Href (bukan link yang lalu 404).
+// Activities sudah berbackend (M7) — hanya Reports yang masih disabled.
 func TestWorkspaceNav_DisabledModules(t *testing.T) {
 	nav := workspaceNav("acme", true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true)
 	// Sales & Subscriptions & Customer Success BUKAN lagi item flat disabled —
 	// kini grup bersarang (diuji terpisah di
 	// TestWorkspaceNav_SalesGroup/SubscriptionsGroup/CSGroup).
-	for _, label := range []string{"Activities", "Reports"} {
+	// Activities sudah berbackend (M7) — dikecualikan dari list ini.
+	for _, label := range []string{"Reports"} {
 		it, ok := findItem(nav, label)
 		if !ok {
 			t.Errorf("modul %q harus tampil (disabled), bukan hilang", label)
@@ -66,6 +68,36 @@ func TestWorkspaceNav_DisabledModules(t *testing.T) {
 		if it.Href != "" {
 			t.Errorf("modul disabled %q tak boleh punya Href, got %q", label, it.Href)
 		}
+	}
+}
+
+// TestWorkspaceNav_ActivitiesTopLevel: Activities top-level enabled (→ /activity-log)
+// saat canSalesActivity=true; disabled (tanpa Href) saat false. Backend M7.
+func TestWorkspaceNav_ActivitiesTopLevel(t *testing.T) {
+	// Dengan izin: Activities enabled → /activity-log.
+	navWith := workspaceNav("acme", false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false)
+	it, ok := findItem(navWith, "Activities")
+	if !ok {
+		t.Fatal("Activities harus tampil saat canSalesActivity=true")
+	}
+	if it.Disabled {
+		t.Errorf("Activities harus enabled saat canSalesActivity=true")
+	}
+	if it.Href != "/w/acme/activity-log" {
+		t.Errorf("Activities href %q, want /w/acme/activity-log", it.Href)
+	}
+
+	// Tanpa izin: Activities disabled, tanpa href.
+	navNone := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false)
+	itNone, ok := findItem(navNone, "Activities")
+	if !ok {
+		t.Fatal("Activities harus tetap tampil walau tanpa izin (peta jalan)")
+	}
+	if !itNone.Disabled {
+		t.Errorf("Activities harus disabled saat canSalesActivity=false")
+	}
+	if itNone.Href != "" {
+		t.Errorf("Activities disabled tak boleh punya Href, got %q", itNone.Href)
 	}
 }
 

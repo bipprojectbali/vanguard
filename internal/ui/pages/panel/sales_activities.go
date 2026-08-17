@@ -17,6 +17,8 @@ import (
 
 // ActivityRow = satu aktivitas untuk baris Tabel. TargetType/TargetID mentah agar
 // view merakit tautan; Status kosong ("") untuk kind tanpa status (call/note).
+// Context = activity_context ("sales"/"cs"/"general") — dipakai kolom Konteks
+// di halaman lintas-context (AllActivitiesList); diabaikan di Sales Activities.
 type ActivityRow struct {
 	ID         int64
 	Kind       string
@@ -26,6 +28,7 @@ type ActivityRow struct {
 	Owner      string
 	Status     string
 	Created    string
+	Context    string // activity_context; "" di Sales Activities (tak ditampilkan)
 }
 
 // ActivitiesListView = data halaman daftar. Items = satu halaman keyset;
