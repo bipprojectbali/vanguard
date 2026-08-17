@@ -438,6 +438,11 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// (bukan ?format=csv) — handler tetap kecil, data via helper privat.
 		r.Get("/reports/sales", h.ReportsSales)
 		r.Get("/reports/sales/export", h.ReportsSalesExport)
+		// Subscription Report (M8-1 slice 3): tab renewal-forecast (jendela
+		// TETAP "due") + churn, ?section= (gotcha #16). Export loop SEMUA
+		// halaman keyset (rule "no silent caps").
+		r.Get("/reports/subscriptions", h.ReportsSubscriptions)
+		r.Get("/reports/subscriptions/export", h.ReportsSubscriptionsExport)
 
 		// Kebijakan SLA (Customer Success, CRM Modul 6 slice A1). Master data milik
 		// WORKSPACE (sumbu BISNIS "crm:sla" read/write; tulis = manager/admin) —
