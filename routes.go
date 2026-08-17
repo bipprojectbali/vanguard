@@ -432,6 +432,13 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/subscriptions/{id}/reject", h.SubscriptionRenewReject)
 		r.Post("/subscriptions/{id}/churn", h.SubscriptionChurn)
 
+		// Preset Report read-only (CRM Modul 8, M8-1). Milik WORKSPACE (sumbu
+		// BISNIS "crm:reports" read) DENGAN F3 ownership (sumber SAMA dgn
+		// modul asal: deals → DealsListFilter). Export CSV route TERPISAH
+		// (bukan ?format=csv) — handler tetap kecil, data via helper privat.
+		r.Get("/reports/sales", h.ReportsSales)
+		r.Get("/reports/sales/export", h.ReportsSalesExport)
+
 		// Kebijakan SLA (Customer Success, CRM Modul 6 slice A1). Master data milik
 		// WORKSPACE (sumbu BISNIS "crm:sla" read/write; tulis = manager/admin) —
 		// TANPA F3 (RLS satu-satunya pengurung, pola sama dgn Plans). Target respon/

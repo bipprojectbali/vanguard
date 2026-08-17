@@ -846,6 +846,14 @@ type Querier interface {
 	// Filter status='PendingApproval' = penjaga transisi (idem ApproveRenewal).
 	RejectRenewal(ctx context.Context, arg RejectRenewalParams) (Subscription, error)
 	RemovePlatformStaff(ctx context.Context, email string) error
+	// reports.sql — preset report read-only Modul 8 (tasks.md M8-1). "Report bukan
+	// objek data" (skema.md §8): nol tabel baru, query agregasi murni atas tabel yang
+	// sudah ada. Ownership (F3) pakai flag SAMA dengan modul asal tabel — sumber SATU,
+	// bukan duplikat logic scope (pola sama dengan dashboard.sql).
+	// Sales Report (wireframe 8.1): SEMUA stage TERMASUK Closed Won/Lost — beda
+	// sengaja dari DashboardPipelineByStage (yang exclude keduanya untuk chart
+	// funnel). Report butuh gambaran penuh pipeline+hasil, bukan cuma yang terbuka.
+	ReportPipelineByStage(ctx context.Context, arg ReportPipelineByStageParams) ([]ReportPipelineByStageRow, error)
 	// Batalkan penghapusan dalam masa tenggang. Status dikembalikan ke 'active':
 	// workspace yang dihapus saat ter-arsip pun kembali sebagai aktif — pemulihan
 	// harus meninggalkan keadaan yang bisa langsung dipakai, bukan setengah jalan.
