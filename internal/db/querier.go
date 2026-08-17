@@ -469,6 +469,10 @@ type Querier interface {
 	// melayani semua kombinasi — dua query terpisah akan berbeda diam-diam begitu
 	// salah satunya diubah.
 	ListActivityTrail(ctx context.Context, arg ListActivityTrailParams) ([]ListActivityTrailRow, error)
+	// Daftar SEMUA aktivitas lintas-context (sales+cs+general) — untuk halaman
+	// "Activities" top-level (M7). Ownership F3 sama dengan ListActivities (scope_all
+	// atau is_own); tanpa context_filter agar semua modul terwakili. Keyset identik.
+	ListAllActivities(ctx context.Context, arg ListAllActivitiesParams) ([]Activity, error)
 	// Query sumbu RBAC bisnis (F2/F3) yang bisa diedit per-workspace. Dua tabel:
 	// business_roles (definisi peran + data_scope) & business_role_permissions
 	// (matriks obj/act). Enforcer Casbin di-load dari permissions; data_scope dibaca

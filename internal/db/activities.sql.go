@@ -365,6 +365,95 @@ func (q *Queries) ListActivitiesByTarget(ctx context.Context, arg ListActivities
 	return items, nil
 }
 
+const listAllActivities = `-- name: ListAllActivities :many
+SELECT id, tenant_id, kind, subject, target_type, target_id, owner_id, activity_context, status, notes, due_date, priority, reminder_at, start_at, end_at, all_day, location, meeting_type, contact_id, direction, activity_at, duration_min, call_result, email_from, email_to, email_status, body, engagement_type, frequency, channel, scheduled_date, next_due_date, deleted_at, created_by, created_at, updated_by, updated_at FROM activities
+WHERE deleted_at IS NULL
+  AND (created_at, id) < ($1::timestamptz, $2::bigint)
+  AND (
+      $3::boolean
+      OR ($4::boolean AND owner_id = $5)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $6
+`
+
+type ListAllActivitiesParams struct {
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	ScopeAll        bool               `json:"scope_all"`
+	IsOwn           bool               `json:"is_own"`
+	Uid             *int64             `json:"uid"`
+	PageSize        int32              `json:"page_size"`
+}
+
+// Daftar SEMUA aktivitas lintas-context (sales+cs+general) — untuk halaman
+// "Activities" top-level (M7). Ownership F3 sama dengan ListActivities (scope_all
+// atau is_own); tanpa context_filter agar semua modul terwakili. Keyset identik.
+func (q *Queries) ListAllActivities(ctx context.Context, arg ListAllActivitiesParams) ([]Activity, error) {
+	rows, err := q.db.Query(ctx, listAllActivities,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Activity{}
+	for rows.Next() {
+		var i Activity
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Kind,
+			&i.Subject,
+			&i.TargetType,
+			&i.TargetID,
+			&i.OwnerID,
+			&i.ActivityContext,
+			&i.Status,
+			&i.Notes,
+			&i.DueDate,
+			&i.Priority,
+			&i.ReminderAt,
+			&i.StartAt,
+			&i.EndAt,
+			&i.AllDay,
+			&i.Location,
+			&i.MeetingType,
+			&i.ContactID,
+			&i.Direction,
+			&i.ActivityAt,
+			&i.DurationMin,
+			&i.CallResult,
+			&i.EmailFrom,
+			&i.EmailTo,
+			&i.EmailStatus,
+			&i.Body,
+			&i.EngagementType,
+			&i.Frequency,
+			&i.Channel,
+			&i.ScheduledDate,
+			&i.NextDueDate,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeleteActivity = `-- name: SoftDeleteActivity :exec
 UPDATE activities SET deleted_at = now(), updated_by = $1
 WHERE id = $2 AND deleted_at IS NULL
