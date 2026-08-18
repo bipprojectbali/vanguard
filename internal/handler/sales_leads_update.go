@@ -34,7 +34,7 @@ func (h *Handler) LeadEdit(w http.ResponseWriter, r *http.Request) {
 		Action:   base + "/leads/" + idStr,
 		IsEdit:   true,
 		Err:      wsErrMsg(r.URL.Query().Get("err")),
-		Fields:   leadFormFields(l),
+		Fields:   leadFormFields(l, canEditPhone(r.Context())),
 		Statuses: leadStatusOptions,
 		Ratings:  leadRatingOptions,
 	}
@@ -64,6 +64,17 @@ func (h *Handler) LeadUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// F4: nomor HP/WhatsApp dipertahankan (bukan diambil dari form) bila role tak
+	// berhak sunting (!canEditPhone) — form GET (LeadEdit) sudah menyamarkan
+	// field ini (leadFormFields) buat role itu, jadi POST-nya selalu berisi mask.
+	// Tanpa penjagaan ini, save oleh Manager akan menimpa nomor asli dgn literal
+	// flsHidden — kebocoran F4 lewat jalur tulis. Diperbaiki audit FLS M9-1
+	// (simetris dgn ActivityUpdate/Notes & AccountUpdate/ContactPhone).
+	mobile, whatsapp := form.MobilePhone, form.Whatsapp
+	if !canEditPhone(ctx) {
+		mobile, whatsapp = l.MobilePhone, l.Whatsapp
+	}
+
 	uid := session.UserID(ctx)
 	if _, err := h.q(ctx).UpdateLead(ctx, db.UpdateLeadParams{
 		LeadName:          form.LeadName,
@@ -78,8 +89,8 @@ func (h *Handler) LeadUpdate(w http.ResponseWriter, r *http.Request) {
 		Province:          form.Province,
 		Regency:           form.Regency,
 		District:          form.District,
-		MobilePhone:       form.MobilePhone,
-		Whatsapp:          form.Whatsapp,
+		MobilePhone:       mobile,
+		Whatsapp:          whatsapp,
 		Email:             form.Email,
 		UpdatedBy:         &uid,
 		ID:                id,
