@@ -177,6 +177,36 @@ type Contact struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CsImplTask struct {
+	ID         int64              `json:"id"`
+	TenantID   int64              `json:"tenant_id"`
+	AccountID  int64              `json:"account_id"`
+	TaskName   string             `json:"task_name"`
+	TaskStatus string             `json:"task_status"`
+	OwnerID    *int64             `json:"owner_id"`
+	DueDate    pgtype.Date        `json:"due_date"`
+	CreatedBy  *int64             `json:"created_by"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy  *int64             `json:"updated_by"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CsTraining struct {
+	ID             int64              `json:"id"`
+	TenantID       int64              `json:"tenant_id"`
+	AccountID      int64              `json:"account_id"`
+	TrainingTopic  string             `json:"training_topic"`
+	TrainingDate   pgtype.Timestamptz `json:"training_date"`
+	TrainerID      *int64             `json:"trainer_id"`
+	Participants   *int32             `json:"participants"`
+	TrainingStatus string             `json:"training_status"`
+	Attendance     pgtype.Numeric     `json:"attendance"`
+	CreatedBy      *int64             `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy      *int64             `json:"updated_by"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CustomerSuccess struct {
 	ID                   int64              `json:"id"`
 	TenantID             int64              `json:"tenant_id"`
