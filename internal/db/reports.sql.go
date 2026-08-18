@@ -11,6 +11,75 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const reportHealthByStatus = `-- name: ReportHealthByStatus :many
+SELECT
+    COALESCE(cs.health_status, 'Belum Dinilai')     AS health_status,
+    COUNT(*)::bigint                                AS account_count,
+    ROUND(AVG(cs.overall_health_score)::numeric, 1) AS avg_health_score
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+WHERE a.deleted_at IS NULL
+  AND (
+      $1::boolean
+      OR ($2::boolean
+          AND (a.assigned_csm = $3 OR a.backup_csm = $3))
+      OR ($4::boolean
+          AND a.account_owner = $3)
+  )
+GROUP BY COALESCE(cs.health_status, 'Belum Dinilai')
+ORDER BY CASE COALESCE(cs.health_status, 'Belum Dinilai')
+    WHEN 'Healthy'  THEN 1
+    WHEN 'At-Risk'  THEN 2
+    WHEN 'Critical' THEN 3
+    ELSE 4
+END
+`
+
+type ReportHealthByStatusParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsCsm    bool   `json:"is_csm"`
+	Uid      *int64 `json:"uid"`
+	IsSales  bool   `json:"is_sales"`
+}
+
+type ReportHealthByStatusRow struct {
+	HealthStatus   string         `json:"health_status"`
+	AccountCount   int64          `json:"account_count"`
+	AvgHealthScore pgtype.Numeric `json:"avg_health_score"`
+}
+
+// Customer Success Report (wireframe 8.2): breakdown Health/Adoption per
+// status. NPS/CSAT (skema.md §8, sumber kedua 8.2) TIDAK termasuk — tabel
+// survei belum ada di skema mana pun (lihat doc comment reports_cs.go
+// handler); scope 8.2 di sini sengaja dipersempit ke Health/Adoption saja.
+// F3 ownership PERSIS ListHealthScores/CountHealthScoreKPIs (health_score.sql)
+// agar tak divergen dari halaman /health-scores.
+func (q *Queries) ReportHealthByStatus(ctx context.Context, arg ReportHealthByStatusParams) ([]ReportHealthByStatusRow, error) {
+	rows, err := q.db.Query(ctx, reportHealthByStatus,
+		arg.ScopeAll,
+		arg.IsCsm,
+		arg.Uid,
+		arg.IsSales,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReportHealthByStatusRow{}
+	for rows.Next() {
+		var i ReportHealthByStatusRow
+		if err := rows.Scan(&i.HealthStatus, &i.AccountCount, &i.AvgHealthScore); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reportPipelineByStage = `-- name: ReportPipelineByStage :many
 
 SELECT
@@ -65,6 +134,79 @@ func (q *Queries) ReportPipelineByStage(ctx context.Context, arg ReportPipelineB
 	for rows.Next() {
 		var i ReportPipelineByStageRow
 		if err := rows.Scan(&i.Stage, &i.DealCount, &i.StageValue); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reportTicketsByStatus = `-- name: ReportTicketsByStatus :many
+SELECT
+    t.status          AS status,
+    COUNT(*)::bigint  AS ticket_count,
+    COUNT(*) FILTER (WHERE t.sla_deadline_at IS NOT NULL
+                       AND t.sla_deadline_at < now()
+                       AND t.status <> 'selesai')::bigint AS breached_count,
+    ROUND((AVG(EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 3600.0)
+           FILTER (WHERE t.status = 'selesai' AND t.resolved_at IS NOT NULL))::numeric, 1)
+                      AS avg_resolution_hours
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+WHERE (
+    $1::boolean
+    OR ($2::boolean AND (
+        a.account_owner = $3
+        OR a.assigned_csm = $3
+        OR a.backup_csm = $3
+    ))
+)
+GROUP BY t.status
+ORDER BY CASE t.status
+    WHEN 'baru'       THEN 1
+    WHEN 'ditugaskan' THEN 2
+    WHEN 'eskalasi'   THEN 3
+    WHEN 'selesai'    THEN 4
+    ELSE 5
+END
+`
+
+type ReportTicketsByStatusParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsOwn    bool   `json:"is_own"`
+	Uid      *int64 `json:"uid"`
+}
+
+type ReportTicketsByStatusRow struct {
+	Status             string         `json:"status"`
+	TicketCount        int64          `json:"ticket_count"`
+	BreachedCount      int64          `json:"breached_count"`
+	AvgResolutionHours pgtype.Numeric `json:"avg_resolution_hours"`
+}
+
+// Support Report (wireframe 8.3): breakdown tiket per status + jumlah
+// terlanggar SLA + rata-rata jam resolusi (hanya tiket 'selesai'). F3
+// ownership PERSIS ListTickets/CountTicketKPIs (tickets.sql) — TERMASUK
+// override Support (TicketsListFilterFor: data_scope='none' + canWrite →
+// ScopeAll). avg_resolution_hours NULL bila belum ada tiket selesai di grup.
+func (q *Queries) ReportTicketsByStatus(ctx context.Context, arg ReportTicketsByStatusParams) ([]ReportTicketsByStatusRow, error) {
+	rows, err := q.db.Query(ctx, reportTicketsByStatus, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReportTicketsByStatusRow{}
+	for rows.Next() {
+		var i ReportTicketsByStatusRow
+		if err := rows.Scan(
+			&i.Status,
+			&i.TicketCount,
+			&i.BreachedCount,
+			&i.AvgResolutionHours,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

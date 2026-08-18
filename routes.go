@@ -438,6 +438,15 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// (bukan ?format=csv) — handler tetap kecil, data via helper privat.
 		r.Get("/reports/sales", h.ReportsSales)
 		r.Get("/reports/sales/export", h.ReportsSalesExport)
+		// Customer Success Report (8.2): Health/Adoption breakdown per status
+		// (customer_success). NPS/CSAT ditunda — tabel survei belum ada
+		// (lihat doc comment reports_cs.go).
+		r.Get("/reports/customer-success", h.ReportsCS)
+		r.Get("/reports/customer-success/export", h.ReportsCSExport)
+		// Support Report (8.3): ticket volume/SLA/resolution breakdown per
+		// status (tickets + sla_policies).
+		r.Get("/reports/support", h.ReportsSupport)
+		r.Get("/reports/support/export", h.ReportsSupportExport)
 		// Subscription Report (M8-1 slice 3): tab renewal-forecast (jendela
 		// TETAP "due") + churn, ?section= (gotcha #16). Export loop SEMUA
 		// halaman keyset (rule "no silent caps").

@@ -846,6 +846,13 @@ type Querier interface {
 	// Filter status='PendingApproval' = penjaga transisi (idem ApproveRenewal).
 	RejectRenewal(ctx context.Context, arg RejectRenewalParams) (Subscription, error)
 	RemovePlatformStaff(ctx context.Context, email string) error
+	// Customer Success Report (wireframe 8.2): breakdown Health/Adoption per
+	// status. NPS/CSAT (skema.md §8, sumber kedua 8.2) TIDAK termasuk — tabel
+	// survei belum ada di skema mana pun (lihat doc comment reports_cs.go
+	// handler); scope 8.2 di sini sengaja dipersempit ke Health/Adoption saja.
+	// F3 ownership PERSIS ListHealthScores/CountHealthScoreKPIs (health_score.sql)
+	// agar tak divergen dari halaman /health-scores.
+	ReportHealthByStatus(ctx context.Context, arg ReportHealthByStatusParams) ([]ReportHealthByStatusRow, error)
 	// reports.sql — preset report read-only Modul 8 (tasks.md M8-1). "Report bukan
 	// objek data" (skema.md §8): nol tabel baru, query agregasi murni atas tabel yang
 	// sudah ada. Ownership (F3) pakai flag SAMA dengan modul asal tabel — sumber SATU,
@@ -854,6 +861,12 @@ type Querier interface {
 	// sengaja dari DashboardPipelineByStage (yang exclude keduanya untuk chart
 	// funnel). Report butuh gambaran penuh pipeline+hasil, bukan cuma yang terbuka.
 	ReportPipelineByStage(ctx context.Context, arg ReportPipelineByStageParams) ([]ReportPipelineByStageRow, error)
+	// Support Report (wireframe 8.3): breakdown tiket per status + jumlah
+	// terlanggar SLA + rata-rata jam resolusi (hanya tiket 'selesai'). F3
+	// ownership PERSIS ListTickets/CountTicketKPIs (tickets.sql) — TERMASUK
+	// override Support (TicketsListFilterFor: data_scope='none' + canWrite →
+	// ScopeAll). avg_resolution_hours NULL bila belum ada tiket selesai di grup.
+	ReportTicketsByStatus(ctx context.Context, arg ReportTicketsByStatusParams) ([]ReportTicketsByStatusRow, error)
 	// Batalkan penghapusan dalam masa tenggang. Status dikembalikan ke 'active':
 	// workspace yang dihapus saat ter-arsip pun kembali sebagai aktif — pemulihan
 	// harus meninggalkan keadaan yang bisa langsung dipakai, bukan setengah jalan.
