@@ -8,9 +8,11 @@
 >
 > **⚠️ Catatan realistis:** 9 modul dalam 17 hari kerja itu sangat padat. Tanggal di
 > bawah JUJUR (tidak dipadatkan agar "muat"). Titik luber ada di **Modul 6 (Customer
-> Success, 9 tabel)** — lihat penanda 🔴. Modul 1/8/9 kemungkinan besar geser ke
+> Success, 9 tabel)** — lihat penanda 🔴. Modul 1/9 kemungkinan besar geser ke
 > setelah 1 Sep. Ini fitur, bukan bug: lebih baik lihat luber di rencana daripada di
-> hari-H.
+> hari-H. **Modul 8 (Reports) sudah selesai** (17–18 Agu) — dikerjakan lebih awal
+> dari urutan karena tiap preset langsung menyaring tabel sumbernya (F3 filter yang
+> sudah ada), bukan menunggu agregasi Modul 1.
 
 ## Konvensi & aturan wajib (berlaku di SEMUA task)
 
@@ -164,12 +166,22 @@ Rollup dihitung di query (tak disimpan). Timezone: simpan UTC, agregasi `AT TIME
 
 ## MODUL 8 — Reports
 
-Report Builder & Scheduled Export **ditunda v1** (§10 skema). Sisakan report read-only preset.
+Report Builder & Scheduled Export (8.5) **ditunda v1** (§10 skema) — item nav-nya
+DIHAPUS dari sidebar (bukan disabled). Preset read-only 8.1–8.4 selesai lebih awal
+dari rencana (bukan menunggu M1-1/dashboard — pipeline/churn/renewal-forecast tak
+bergantung agregasi dashboard).
 
 | ID | Task | Layer | Est | Depends | Rencana |
 |----|------|-------|-----|---------|---------|
-| M8-1 | Preset report read-only (pipeline, churn, renewal-forecast) — query + view tabel export-CSV manual | repo+view | 1.5d | M1-1 | 🔴 geser >1 Sep |
-| M8-2 | Test preset + verifikasi 3-lebar | test+qa | 0.5d | M8-1 | 🔴 geser >1 Sep |
+| M8-1 | Preset report read-only: Sales (8.1, pipeline/win-loss), Subscription (8.4, renewal-forecast/churn), Customer Success (8.2, Health/Adoption — NPS/CSAT ditunda, `surveys` belum ada), Support (8.3, ticket volume/SLA/resolution) — query + view tabel + export-CSV manual | repo+view | 1.5d | F2 | ✅ 17–18 Agu |
+| M8-2 | Test preset (F2 gate + F3 ownership + agregasi) + verifikasi 3-lebar; 8.5 (Custom Reports) dihapus dari nav, bukan placeholder | test+qa | 0.5d | M8-1 | ✅ 18 Agu |
+
+**Catatan:** dikerjakan di luar urutan dependensi rencana awal (F2 langsung, tak
+menunggu M1-1/M5-2/M6-2 seperti draf semula) karena tiap preset menyaring langsung
+tabel sumbernya (`deals`, `subscriptions`, `customer_success`, `tickets`) via F3
+ownership filter yang sudah ada, bukan lewat agregasi dashboard M1. Branch
+`feature/crm-reports-m8` (8.1+8.4) lalu `feature/crm-reports-cs-support` (8.2+8.3
++ hapus nav 8.5), keduanya sudah merge ke `main`.
 
 ---
 
@@ -194,6 +206,7 @@ FLS sudah dianyam di F4 + tiap handler. Task ini = audit menyeluruh + test linta
 | 19–24 Agu | **Modul 4 Sales** | ✅ muat (mepet) |
 | 25–27 Agu | **Modul 5 Subscriptions** | ✅ muat (mepet) |
 | 28 Agu–1 Sep | **Modul 6 Customer Success** | 🟡 sebagian; view/test luber |
-| >1 Sep | Modul 7, 1, 8, 9 | 🔴 luber ke September |
+| 17–18 Agu | **Modul 8 Reports** | ✅ selesai lebih awal, di luar urutan (langsung dari F2, tak menunggu M1/M6 tuntas) |
+| >1 Sep | Modul 7, 1, 9 | 🔴 luber ke September |
 
-**Rekomendasi:** kunci komitmen 1 Sep pada **Modul 2–5 tuntas + Modul 6 sebagian**. Modul 7/1/8/9 ditandai "carry-over" sejak awal, bukan diklaim selesai lalu meleset. Kalau kamu mau semua benar-benar masuk sebelum 1 Sep, satu-satunya tuas jujur adalah mengurangi kedalaman (mis. Modul 6 hanya `customer_success`+`tickets`, sisanya v1.1) — bukan menambah jam.
+**Rekomendasi:** kunci komitmen 1 Sep pada **Modul 2–5 tuntas + Modul 6 sebagian + Modul 8 tuntas**. Modul 7/1/9 ditandai "carry-over" sejak awal, bukan diklaim selesai lalu meleset. Kalau kamu mau semua benar-benar masuk sebelum 1 Sep, satu-satunya tuas jujur adalah mengurangi kedalaman (mis. Modul 6 hanya `customer_success`+`tickets`, sisanya v1.1) — bukan menambah jam.
