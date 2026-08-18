@@ -8,11 +8,12 @@
 >
 > **⚠️ Catatan realistis:** 9 modul dalam 17 hari kerja itu sangat padat. Tanggal di
 > bawah JUJUR (tidak dipadatkan agar "muat"). Titik luber ada di **Modul 6 (Customer
-> Success, 9 tabel)** — lihat penanda 🔴. Modul 1/9 kemungkinan besar geser ke
-> setelah 1 Sep. Ini fitur, bukan bug: lebih baik lihat luber di rencana daripada di
-> hari-H. **Modul 8 (Reports) sudah selesai** (17–18 Agu) — dikerjakan lebih awal
-> dari urutan karena tiap preset langsung menyaring tabel sumbernya (F3 filter yang
-> sudah ada), bukan menunggu agregasi Modul 1.
+> Success, 9 tabel — 6/9 selesai, sisa `cs_impl_tasks`/`cs_trainings`/`surveys`)**
+> dan **Modul 9 (FLS, audit menyeluruh belum dikerjakan sebagai pass tersendiri)** —
+> lihat penanda 🔴. Ini fitur, bukan bug: lebih baik lihat luber di rencana daripada
+> di hari-H. **Modul 1 (Dashboard), 7 (Activities), dan 8 (Reports) sudah selesai**
+> (17–18 Agu) — ketiganya dikerjakan lebih awal & di luar urutan rencana, karena tak
+> benar-benar butuh Modul 6 tuntas (cukup tabel yang sudah ada saat itu).
 
 ## Konvensi & aturan wajib (berlaku di SEMUA task)
 
@@ -143,12 +144,12 @@ Renewal = INSERT baris baru (`previous_subscription_id` self-FK + `previous_valu
 
 | ID | Task | Layer | Est | Depends | Rencana |
 |----|------|-------|-----|---------|---------|
-| M7-1 | Migrasi `activities`,`activity_attendees` (00006) + index (target_type,target_id) + `sqlc generate` | migrasi | 0.5d | M6-1 | 🔴 geser >1 Sep |
-| M7-2 | Query: log activity polymorphic + list-by-target + attendees (meeting) | repo | 1d | M7-1 | 🔴 geser >1 Sep |
-| M7-3 | Handler + view: timeline aktivitas di detail desa/deal/tiket (reusable component) | handler+view | 1d | M7-2 | 🔴 geser >1 Sep |
-| M7-4 | Test: polymorphic target bertahan setelah target hard-delete + attendees | test | 0.5d | M7-2 | 🔴 geser >1 Sep |
+| M7-1 | Migrasi `activities`,`activity_attendees` (00011) + index (target_type,target_id) + `sqlc generate` | migrasi | 0.5d | M6-1 | ✅ 17 Agu |
+| M7-2 | Query: log activity polymorphic + list-by-target + attendees (meeting) | repo | 1d | M7-1 | ✅ 17 Agu |
+| M7-3 | Handler + view: timeline aktivitas di detail desa/deal/tiket (reusable component) + halaman lintas-context `/activity-log` | handler+view | 1d | M7-2 | ✅ 17 Agu |
+| M7-4 | Test: polymorphic target bertahan setelah target hard-delete + attendees | test | 0.5d | M7-2 | ✅ 17 Agu |
 
-**Acceptance modul:** timeline muncul di semua entity; baris activity tetap terbaca walau target dihapus.
+**Acceptance modul:** timeline muncul di semua entity; baris activity tetap terbaca walau target dihapus. Branch `feature/crm-activities-timeline` (M7-A) → `feature/crm-activities-part-b` (M7-B, target filter + pre-fill) → `feature/crm-activities-all` (halaman lintas-context), semuanya sudah merge ke `main`.
 
 ---
 
@@ -158,9 +159,13 @@ Rollup dihitung di query (tak disimpan). Timezone: simpan UTC, agregasi `AT TIME
 
 | ID | Task | Layer | Est | Depends | Rencana |
 |----|------|-------|-----|---------|---------|
-| M1-1 | Query agregasi: ARR total, pipeline per-stage, health distribution, renewal due (COALESCE::bigint) | repo | 1d | M5-2,M6-2 | 🔴 geser >1 Sep |
-| M1-2 | Handler + view dashboard (kartu KPI + chart ECharts vendored, CSP-safe via `<script type=json>`) | handler+view | 1.5d | M1-1 | 🔴 geser >1 Sep |
-| M1-3 | Test agregasi + FLS (manager cross-team, ARR terbatas) + verifikasi 3-lebar | test+qa | 1d | M1-2 | 🔴 geser >1 Sep |
+| M1-1 | Query agregasi: ARR total, pipeline per-stage, health distribution, renewal due (COALESCE::bigint) | repo | 1d | M5-2,M6-2 | ✅ 17 Agu |
+| M1-2 | Handler + view dashboard (kartu KPI + chart ECharts vendored, CSP-safe via `<script type=json>`) | handler+view | 1.5d | M1-1 | ✅ 17 Agu |
+| M1-3 | Test agregasi + FLS (manager cross-team, ARR terbatas) + verifikasi 3-lebar | test+qa | 1d | M1-2 | ✅ 17 Agu |
+
+**Catatan:** sama seperti Modul 8, dikerjakan di luar urutan rencana awal — cukup
+memakai `customer_success`/`tickets` yang sudah ada saat itu (M6 baru sebagian),
+bukan menunggu Modul 6 tuntas. Branch `feature/crm-dashboard`, sudah merge ke `main`.
 
 ---
 
@@ -205,8 +210,10 @@ FLS sudah dianyam di F4 + tiap handler. Task ini = audit menyeluruh + test linta
 | 17–19 Agu | **Modul 3 Contacts** | ✅ muat (build entry point 2+3 selesai) |
 | 19–24 Agu | **Modul 4 Sales** | ✅ muat (mepet) |
 | 25–27 Agu | **Modul 5 Subscriptions** | ✅ muat (mepet) |
-| 28 Agu–1 Sep | **Modul 6 Customer Success** | 🟡 sebagian; view/test luber |
+| 28 Agu–1 Sep | **Modul 6 Customer Success** | 🟡 sebagian (6/9 tabel); sisa `cs_impl_tasks`/`cs_trainings`/`surveys` |
+| 17 Agu | **Modul 7 Activities** | ✅ selesai lebih awal, di luar urutan (tak menunggu Modul 6 tuntas) |
+| 17 Agu | **Modul 1 Dashboard** | ✅ selesai lebih awal, di luar urutan (cukup tabel M6 yang sudah ada saat itu) |
 | 17–18 Agu | **Modul 8 Reports** | ✅ selesai lebih awal, di luar urutan (langsung dari F2, tak menunggu M1/M6 tuntas) |
-| >1 Sep | Modul 7, 1, 9 | 🔴 luber ke September |
+| >1 Sep | Modul 9 (FLS) + sisa Modul 6 | 🔴 luber ke September |
 
-**Rekomendasi:** kunci komitmen 1 Sep pada **Modul 2–5 tuntas + Modul 6 sebagian + Modul 8 tuntas**. Modul 7/1/9 ditandai "carry-over" sejak awal, bukan diklaim selesai lalu meleset. Kalau kamu mau semua benar-benar masuk sebelum 1 Sep, satu-satunya tuas jujur adalah mengurangi kedalaman (mis. Modul 6 hanya `customer_success`+`tickets`, sisanya v1.1) — bukan menambah jam.
+**Rekomendasi:** kunci komitmen 1 Sep pada **Modul 2–5, 1, 7, 8 tuntas + Modul 6 sebagian**. Modul 9 (FLS) ditandai "carry-over" sejak awal, bukan diklaim selesai lalu meleset. Kalau kamu mau Modul 6 benar-benar tuntas sebelum 1 Sep, satu-satunya tuas jujur adalah mengurangi kedalaman (mis. `customer_success`+`tickets` cukup, `cs_impl_tasks`/`cs_trainings`/`surveys` jadi v1.1) — bukan menambah jam.
