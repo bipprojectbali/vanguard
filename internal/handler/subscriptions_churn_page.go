@@ -16,8 +16,9 @@ import (
 // churn.go); dasbor ini hanya baca (sejalan wireframe 5.2/5.4).
 //
 // Gerbang sama dengan daftar langganan: F2 crm:subscriptions read + F3 ownership
-// (subscription_owner) di layer query. Tanpa ARR → tanpa F4 (MRR Hilang = lost_value_
-// mrr, terlihat semua viewer). Keyset created_at DESC (reuse pageCursor/splitPage).
+// (subscription_owner) di layer query. MRR Hilang = lost_value_mrr, nilai komersial
+// → maskARR (F4, diperbaiki audit FLS M9-1). Keyset created_at DESC (reuse
+// pageCursor/splitPage).
 
 // churnTypeTab = satu tab tipe churn (key untuk query + label tampilan). Sumber SATU
 // untuk tab view & normalisasi handler; key ” = semua tipe (mencerminkan
@@ -41,6 +42,7 @@ func (h *Handler) SubscriptionChurnList(w http.ResponseWriter, r *http.Request) 
 	typeFilter := normalizeChurnTypeFilter(r.URL.Query().Get("type"))
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
+	br := session.BusinessRole(ctx)
 
 	cursorAt, cursorID := pageCursor(r)
 	rows, err := h.q(ctx).ListChurned(ctx, db.ListChurnedParams{
@@ -68,7 +70,7 @@ func (h *Handler) SubscriptionChurnList(w http.ResponseWriter, r *http.Request) 
 	}
 	items := make([]panel.ChurnRow, 0, len(shown))
 	for _, s := range shown {
-		items = append(items, churnRowView(s, names))
+		items = append(items, churnRowView(s, names, br))
 	}
 
 	base := wsPath(slugFromRequest(r), "")
@@ -103,15 +105,15 @@ func churnTypeFilterOptions() []panel.ChurnType {
 	return out
 }
 
-// churnRowView memetakan satu baris → baris tabel Churn. MRR Hilang = lost_value_mrr
-// (bukan ARR → tanpa masking F4). CSM = nama pemilik langganan dari peta anggota.
-// Kolom mengikuti wireframe 5.2/5.4.
-func churnRowView(s db.ListChurnedRow, names map[int64]string) panel.ChurnRow {
+// churnRowView memetakan satu baris → baris tabel Churn. MRR Hilang = lost_value_
+// mrr, nilai komersial → maskARR (F4). CSM = nama pemilik langganan dari peta
+// anggota. Kolom mengikuti wireframe 5.2/5.4.
+func churnRowView(s db.ListChurnedRow, names map[int64]string, businessRole string) panel.ChurnRow {
 	return panel.ChurnRow{
 		ID:        s.ID,
 		Village:   s.VillageName,
 		Plan:      s.PlanName,
-		LostMRR:   formatRupiah(s.LostValueMrr),
+		LostMRR:   maskARR(formatRupiah(s.LostValueMrr), businessRole),
 		Reason:    deref(s.ChurnReason),
 		Type:      deref(s.ChurnType),
 		ChurnDate: dateStr(s.CancellationDate),

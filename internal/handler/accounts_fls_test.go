@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"go_starter/internal/codes"
+	"go_starter/internal/db"
 )
 
 // accounts_fls_test.go — dua sumbu izin di-level baris & field untuk Desa:
@@ -151,5 +154,51 @@ func TestAccounts_F4_NonSalesTakBisaTimpaPhone(t *testing.T) {
 	got, _ := env.q.GetAccount(t.Context(), a.ID)
 	if got.ContactPhone == nil || *got.ContactPhone != phone {
 		t.Errorf("nomor asli harus dipertahankan, got %v (mask menimpa = F4 bocor)", got.ContactPhone)
+	}
+}
+
+// TestAccountDetailView_VillageBudgetMasked: anggaran desa tersamar utk
+// Support, tampil apa adanya utk role lain (sales/csm/admin/manager).
+// Diperbaiki audit FLS M9-1. Diuji LANGSUNG atas accountDetailView (bukan lewat
+// HTTP AccountDetail) — Support ScopeNone (TestAccounts_F3_SupportNolBaris)
+// membuat filter.Allows di AccountDetail SELALU menolak Support (404) sebelum
+// accountDetailView pernah dipanggil, jadi tak ada jalur HTTP nyata utk body
+// "Support melihat anggaran". Ini wiring/pertahanan-berlapis, pola sama dgn
+// subscriptions_fls_test.go.
+func TestAccountDetailView_VillageBudgetMasked(t *testing.T) {
+	env, uid := setupAccounts(t)
+	code, err := env.q.GenerateEntityCode(t.Context(), env.tenantID, codes.EntityAccount)
+	if err != nil {
+		t.Fatalf("generate code: %v", err)
+	}
+	a, err := env.q.CreateAccount(t.Context(), db.CreateAccountParams{
+		TenantID:      env.tenantID,
+		EntityCode:    &code,
+		VillageName:   "Desa Anggaran",
+		AccountType:   "prospect",
+		AccountOwner:  &uid,
+		VillageBudget: numFrom(t, "750000000"),
+	})
+	if err != nil {
+		t.Fatalf("seed account: %v", err)
+	}
+	const wantBudget = "750000000.00" // NUMERIC(15,2) — numericStr formats dgn skala kolom
+
+	view := func(role string) string {
+		req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID), nil, itoa(a.ID))
+		var got string
+		env.runAccount(uid, "owner", role, req, func(w http.ResponseWriter, r *http.Request) {
+			got = env.h.accountDetailView(r.Context(), "", a).VillageBudget
+		})
+		return got
+	}
+
+	if got := view("support"); got != flsHidden {
+		t.Errorf("support: VillageBudget harus tersamar (%s), got %q", flsHidden, got)
+	}
+	for _, role := range []string{"sales", "csm", "admin", "manager"} {
+		if got := view(role); got != wantBudget {
+			t.Errorf("role %q: VillageBudget harus %q, got %q", role, wantBudget, got)
+		}
 	}
 }

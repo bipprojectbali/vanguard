@@ -74,7 +74,8 @@ func canSeeSubscriptionARR(businessRole string) bool {
 
 // maskSubscriptionARR mengembalikan ARR siap-tampil (string SUDAH diformat) bila
 // berhak, atau penanda tersembunyi (flsHidden) bila tidak. Nilai asli tak pernah
-// keluar saat tersembunyi. MRR TIDAK disamarkan (terlihat semua viewer).
+// keluar saat tersembunyi. MRR pakai kebijakan terpisah (maskARR, kebijakan umum
+// kecuali Support) — diperbaiki audit FLS M9-1, sebelumnya sengaja tanpa masking.
 func maskSubscriptionARR(formatted, businessRole string) string {
 	if canSeeSubscriptionARR(businessRole) {
 		return formatted

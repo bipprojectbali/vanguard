@@ -60,7 +60,11 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 		VillageClassification: deref(a.VillageClassification),
 		Population:            int32Str(a.Population),
 		HamletsCount:          int32Str(a.HamletsCount),
-		VillageBudget:         numericStr(a.VillageBudget),
+		// F4: anggaran desa = nilai komersial/sensitif setingkat ARR → maskARR
+		// (kebijakan umum kecuali Support, skema.md §9). Diperbaiki audit FLS M9-1
+		// (sebelumnya mentah; laten krn F3 sudah nol-baris utk Support — defense
+		// in depth bila F3 pernah berubah).
+		VillageBudget: maskARR(numericStr(a.VillageBudget), br),
 
 		// F4: nomor HP kontak utuh HANYA Sales; lainnya tersamar. Office phone/
 		// email = data kelembagaan (bukan PII pribadi kepala desa) → tak disamar.

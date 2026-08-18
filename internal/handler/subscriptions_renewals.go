@@ -19,9 +19,10 @@ import (
 // renew.go/approve.go); dasbor ini hanya baca (sejalan wireframe 5.2).
 //
 // Gerbang sama dengan daftar langganan: F2 crm:subscriptions read + F3 ownership
-// (subscription_owner) di layer query. Tanpa ARR → tanpa F4 (Prev→Current pakai
-// previous_value/MRR yang terlihat semua viewer). Keyset created_at DESC (reuse
-// pageCursor/splitPage) — pengurutan "paling dekat jatuh tempo" ditunda ke slice KPI.
+// (subscription_owner) di layer query. Tanpa ARR di sini, tapi Prev→Current
+// (previous_value/MRR) tetap nilai komersial — dimasking F4 (maskARR, kebijakan
+// umum kecuali Support, skema.md §9) sejak audit FLS M9-1. Keyset created_at DESC
+// (reuse pageCursor/splitPage) — pengurutan "paling dekat jatuh tempo" ditunda ke slice KPI.
 
 // renewalWindow = satu tab jendela renewal (key untuk query + label tampilan).
 // Sumber SATU untuk tab view & validasi handler (view tak memutuskan enum).
@@ -47,6 +48,7 @@ func (h *Handler) SubscriptionRenewals(w http.ResponseWriter, r *http.Request) {
 	window := normalizeRenewalWindow(r.URL.Query().Get("window"))
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
+	br := session.BusinessRole(ctx)
 
 	cursorAt, cursorID := pageCursor(r)
 	now := time.Now().In(appTZ)
@@ -74,7 +76,7 @@ func (h *Handler) SubscriptionRenewals(w http.ResponseWriter, r *http.Request) {
 	})
 	items := make([]panel.RenewalRow, 0, len(shown))
 	for _, s := range shown {
-		items = append(items, renewalRowView(s, now))
+		items = append(items, renewalRowView(s, now, br))
 	}
 
 	base := wsPath(slugFromRequest(r), "")
@@ -110,9 +112,10 @@ func renewalWindowOptions() []panel.RenewalWindow {
 }
 
 // renewalRowView memetakan satu baris → baris tabel Renewals. Days Left dihitung
-// relatif "hari ini" (zona waktu app). Prev→Current = previous_value → MRR (bukan
-// ARR → tanpa masking F4). Kolom mengikuti wireframe 5.2 (tanpa kolom pemilik).
-func renewalRowView(s db.ListRenewalsRow, now time.Time) panel.RenewalRow {
+// relatif "hari ini" (zona waktu app). Prev→Current = previous_value → MRR,
+// keduanya nilai komersial → maskARR (F4, diperbaiki audit FLS M9-1). Kolom
+// mengikuti wireframe 5.2 (tanpa kolom pemilik).
+func renewalRowView(s db.ListRenewalsRow, now time.Time, businessRole string) panel.RenewalRow {
 	return panel.RenewalRow{
 		ID:          s.ID,
 		Village:     s.VillageName,
@@ -121,8 +124,8 @@ func renewalRowView(s db.ListRenewalsRow, now time.Time) panel.RenewalRow {
 		DaysLeft:    daysLeftLabel(now, s.EndDate),
 		Type:        deref(s.RenewalType),
 		Status:      s.Status,
-		PrevValue:   formatRupiah(s.PreviousValue),
-		CurrentMRR:  formatRupiah(s.Mrr),
+		PrevValue:   maskARR(formatRupiah(s.PreviousValue), businessRole),
+		CurrentMRR:  maskARR(formatRupiah(s.Mrr), businessRole),
 	}
 }
 

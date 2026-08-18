@@ -78,9 +78,12 @@ func (h *Handler) renderSubscriptionsForbidden(w http.ResponseWriter, r *http.Re
 		panel.SalesForbidden("Active Subscriptions"))
 }
 
-// subRowView memetakan satu baris daftar → baris tabel + F4 (ARR disamarkan untuk
-// non-manager). MRR terlihat semua viewer; ARR hanya admin/manager. Owner
-// diresolusi dari peta anggota.
+// subRowView memetakan satu baris daftar → baris tabel + F4. ARR: hanya
+// admin/manager (maskSubscriptionARR, spec M5-4). MRR: kebijakan umum
+// canSeeARR/maskARR (skema.md §9, "MRR/ARR/amount disembunyikan dari Support")
+// — SEMUA role kecuali Support, beda dari ARR yang juga mengecualikan
+// sales/csm. Diperbaiki audit FLS M9-1 (sebelumnya MRR sengaja tanpa masking,
+// kontra skema.md §9). Owner diresolusi dari peta anggota.
 func subRowView(s db.ListSubscriptionsRow, names map[int64]string, businessRole string) panel.SubRow {
 	return panel.SubRow{
 		ID:         s.ID,
@@ -88,7 +91,7 @@ func subRowView(s db.ListSubscriptionsRow, names map[int64]string, businessRole 
 		Village:    s.VillageName,
 		Plan:       s.PlanName,
 		Status:     s.Status,
-		MRR:        formatRupiah(s.Mrr),
+		MRR:        maskARR(formatRupiah(s.Mrr), businessRole),
 		ARR:        maskSubscriptionARR(formatRupiah(s.Arr), businessRole),
 		Start:      dateStr(s.StartDate),
 		End:        dateStr(s.EndDate),

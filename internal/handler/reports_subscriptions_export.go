@@ -51,6 +51,7 @@ func paginateAll[T any](
 func (h *Handler) reportsSubscriptionsExportRows(ctx context.Context, section string) ([]string, [][]string, error) {
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
+	br := session.BusinessRole(ctx)
 	q := h.q(ctx)
 
 	if section == reportSectionChurn {
@@ -74,7 +75,7 @@ func (h *Handler) reportsSubscriptionsExportRows(ctx context.Context, section st
 		header := []string{"Desa", "Paket", "MRR Hilang", "Alasan", "Tipe", "Tgl Churn", "CSM"}
 		rows := make([][]string, 0, len(all))
 		for _, s := range all {
-			v := churnRowView(s, names)
+			v := churnRowView(s, names, br)
 			rows = append(rows, []string{v.Village, v.Plan, v.LostMRR, v.Reason, v.Type, v.ChurnDate, v.CSM})
 		}
 		return header, rows, nil
@@ -98,7 +99,7 @@ func (h *Handler) reportsSubscriptionsExportRows(ctx context.Context, section st
 	header := []string{"Desa", "Paket", "Tgl Perpanjang", "Sisa Hari", "Jenis", "Status", "Prev", "Kini"}
 	rows := make([][]string, 0, len(all))
 	for _, s := range all {
-		v := renewalRowView(s, now)
+		v := renewalRowView(s, now, br)
 		rows = append(rows, []string{v.Village, v.Plan, v.RenewalDate, v.DaysLeft, v.Type, v.Status, v.PrevValue, v.CurrentMRR})
 	}
 	return header, rows, nil

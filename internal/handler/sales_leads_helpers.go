@@ -70,7 +70,21 @@ func (h *Handler) loadOwnedLead(w http.ResponseWriter, r *http.Request, id int64
 }
 
 // leadFormFields memetakan Lead → nilai prefill form (semua string; nil → "").
-func leadFormFields(l db.Lead) panel.LeadFormFields {
+// F4: nomor HP/WhatsApp disamarkan bila phoneEditable=false (canEditPhone,
+// sales-only) — persis pola accountFormFields. Tanpa ini, Manager (pemegang
+// crm:leads write tapi di luar allow-list canSeeFullPhone) menerima nomor asli
+// mentah di form sunting. Diperbaiki audit FLS M9-1 (gap live, simetris dgn
+// ActivityUpdate/Notes — lihat guard tulis di LeadUpdate, sales_leads_update.go).
+func leadFormFields(l db.Lead, phoneEditable bool) panel.LeadFormFields {
+	mobile, whatsapp := deref(l.MobilePhone), deref(l.Whatsapp)
+	if !phoneEditable {
+		if mobile != "" {
+			mobile = flsHidden
+		}
+		if whatsapp != "" {
+			whatsapp = flsHidden
+		}
+	}
 	return panel.LeadFormFields{
 		LeadName:          l.LeadName,
 		ContactPerson:     deref(l.ContactPerson),
@@ -83,8 +97,8 @@ func leadFormFields(l db.Lead) panel.LeadFormFields {
 		Province:          deref(l.Province),
 		Regency:           deref(l.Regency),
 		District:          deref(l.District),
-		MobilePhone:       deref(l.MobilePhone),
-		Whatsapp:          deref(l.Whatsapp),
+		MobilePhone:       mobile,
+		Whatsapp:          whatsapp,
 		Email:             deref(l.Email),
 	}
 }

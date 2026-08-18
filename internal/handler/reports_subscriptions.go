@@ -59,6 +59,7 @@ func (h *Handler) ReportsSubscriptions(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) reportsSubscriptionsPage(ctx context.Context, r *http.Request, section string) (panel.ReportsSubscriptionsView, error) {
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
+	br := session.BusinessRole(ctx)
 	cursorAt, cursorID := pageCursor(r)
 	q := h.q(ctx)
 	view := panel.ReportsSubscriptionsView{Section: section}
@@ -79,7 +80,7 @@ func (h *Handler) reportsSubscriptionsPage(ctx context.Context, r *http.Request,
 		}
 		items := make([]panel.ChurnRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, churnRowView(s, names))
+			items = append(items, churnRowView(s, names, br))
 		}
 		view.ChurnItems, view.NextCursor = items, next
 		return view, nil
@@ -98,7 +99,7 @@ func (h *Handler) reportsSubscriptionsPage(ctx context.Context, r *http.Request,
 	shown, next := splitPage(rows, func(s db.ListRenewalsRow) (pgtype.Timestamptz, int64) { return s.CreatedAt, s.ID })
 	items := make([]panel.RenewalRow, 0, len(shown))
 	for _, s := range shown {
-		items = append(items, renewalRowView(s, now))
+		items = append(items, renewalRowView(s, now, br))
 	}
 	view.RenewalItems, view.NextCursor = items, next
 	return view, nil
