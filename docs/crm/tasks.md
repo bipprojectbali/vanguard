@@ -196,7 +196,7 @@ FLS sudah dianyam di F4 + tiap handler. Task ini = audit menyeluruh + test linta
 
 | ID | Task | Layer | Est | Depends | Rencana |
 |----|------|-------|-----|---------|---------|
-| M9-1 | Audit tiap view: pastikan field sensitif di-mask di HANDLER (bukan view), lintas 5 business_role | audit | 1d | semua modul | 🔴 geser >1 Sep |
+| M9-1 | Audit tiap view: pastikan field sensitif di-mask di HANDLER (bukan view), lintas 5 business_role | audit | 1d | semua modul | ✅ 18 Agu |
 | M9-2 | Test matriks FLS: tiap role × tiap field sensitif (ARR, budget, PII kontak) | test | 1d | M9-1 | 🔴 geser >1 Sep |
 
 ---
@@ -214,6 +214,7 @@ FLS sudah dianyam di F4 + tiap handler. Task ini = audit menyeluruh + test linta
 | 17 Agu | **Modul 7 Activities** | ✅ selesai lebih awal, di luar urutan (tak menunggu Modul 6 tuntas) |
 | 17 Agu | **Modul 1 Dashboard** | ✅ selesai lebih awal, di luar urutan (cukup tabel M6 yang sudah ada saat itu) |
 | 17–18 Agu | **Modul 8 Reports** | ✅ selesai lebih awal, di luar urutan (langsung dari F2, tak menunggu M1/M6 tuntas) |
-| >1 Sep | Modul 9 (FLS) + sisa Modul 6 | 🔴 luber ke September |
+| 18 Agu | **Modul 9 M9-1 (Audit FLS)** | ✅ selesai lebih awal, di luar urutan (1 gap live + 3 gap laten diperbaiki) |
+| >1 Sep | Modul 9 M9-2 (Test matriks FLS) + sisa Modul 6 | 🔴 luber ke September |
 
-**Rekomendasi:** kunci komitmen 1 Sep pada **Modul 2–5, 1, 7, 8 tuntas + Modul 6 sebagian**. Modul 9 (FLS) ditandai "carry-over" sejak awal, bukan diklaim selesai lalu meleset. Kalau kamu mau Modul 6 benar-benar tuntas sebelum 1 Sep, satu-satunya tuas jujur adalah mengurangi kedalaman (mis. `customer_success`+`tickets` cukup, `cs_impl_tasks`/`cs_trainings`/`surveys` jadi v1.1) — bukan menambah jam.
+**Rekomendasi:** kunci komitmen 1 Sep pada **Modul 2–5, 1, 7, 8 tuntas + Modul 6 sebagian**. Modul 9 M9-2 (test matriks) ditandai "carry-over" sejak awal, bukan diklaim selesai lalu meleset. Kalau kamu mau Modul 6 benar-benar tuntas sebelum 1 Sep, satu-satunya tuas jujur adalah mengurangi kedalaman (mis. `customer_success`+`tickets` cukup, `cs_impl_tasks`/`cs_trainings`/`surveys` jadi v1.1) — bukan menambah jam.
