@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"go_starter/internal/ui/pages/panel"
 )
 
 // contacts_fls_test.go — dua sumbu keamanan kontak yang bekerja tegak lurus F2:
@@ -141,6 +143,35 @@ func TestContacts_F4_PhoneMasking(t *testing.T) {
 				t.Errorf("role %q: telepon kantor tak boleh disamarkan", tc.role)
 			}
 		})
+	}
+}
+
+// TestContactDetailView_PhoneMasked_Support: HP & WhatsApp tersamar utk
+// Support — melengkapi matriks F4_PhoneMasking di atas (yang tak bisa
+// mencakup Support: F3 ScopeNone, TestContacts_F3_SupportNolBaris, warisan
+// desa induk membuat Support tak pernah lolos ke detail kontak lewat HTTP
+// nyata). Diuji LANGSUNG atas contactDetailView, pola sama
+// TestAccountDetailView_VillageBudgetMasked. Gap M9-2.
+func TestContactDetailView_PhoneMasked_Support(t *testing.T) {
+	env, uid := setupAccounts(t)
+	mobile, whatsapp, office := "0812-3456-7890", "0813-0000-1111", "021-555-0000"
+	a := env.seedAccount(t, "Desa Kontak Support", &uid, nil, nil)
+	c := env.seedContactPhone(t, a.ID, "Budi", mobile, whatsapp, office)
+
+	var got panel.ContactDetailView
+	req := contactsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/contacts/"+itoa(c.ID),
+		nil, itoa(a.ID), itoa(c.ID))
+	env.runAccount(uid, "owner", "support", req, func(w http.ResponseWriter, r *http.Request) {
+		got = env.h.contactDetailView(r.Context(), "", "", a.VillageName, c, nil, "")
+	})
+	if got.MobilePhone != flsHidden || got.WhatsappNumber != flsHidden {
+		t.Errorf("support: HP/WhatsApp harus tersamar (%s), got %q/%q", flsHidden, got.MobilePhone, got.WhatsappNumber)
+	}
+	if got.MobilePhone == mobile || got.WhatsappNumber == whatsapp {
+		t.Errorf("support: nomor pribadi mentah BOCOR")
+	}
+	if got.OfficePhone != office {
+		t.Errorf("support: telepon kantor tak boleh disamarkan, got %q", got.OfficePhone)
 	}
 }
 

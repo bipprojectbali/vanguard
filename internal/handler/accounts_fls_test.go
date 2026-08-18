@@ -135,6 +135,30 @@ func TestAccounts_F4_PhoneMasking(t *testing.T) {
 	}
 }
 
+// TestAccountDetailView_PhoneMasked_Support: nomor HP kontak tersamar utk
+// Support — melengkapi matriks F4_PhoneMasking di atas (yang tak bisa
+// mencakup Support: F3 ScopeNone, TestAccounts_F3_SupportNolBaris, membuat
+// filter.Allows di AccountDetail SELALU menolak Support (404) sebelum
+// accountDetailView pernah dipanggil). Diuji LANGSUNG atas accountDetailView,
+// pola sama TestAccountDetailView_VillageBudgetMasked. Gap M9-2.
+func TestAccountDetailView_PhoneMasked_Support(t *testing.T) {
+	env, uid := setupAccounts(t)
+	phone := "0812-3456-7890"
+	a := env.seedAccountWithPhone(t, "Desa Kontak Support", uid, phone)
+
+	var got string
+	req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID), nil, itoa(a.ID))
+	env.runAccount(uid, "owner", "support", req, func(w http.ResponseWriter, r *http.Request) {
+		got = env.h.accountDetailView(r.Context(), "", a).ContactPhone
+	})
+	if got != flsHidden {
+		t.Errorf("support: ContactPhone harus tersamar (%s), got %q", flsHidden, got)
+	}
+	if got == phone {
+		t.Errorf("support: ContactPhone mentah %q BOCOR", phone)
+	}
+}
+
 // TestAccounts_F4_NonSalesTakBisaTimpaPhone: editor non-Sales mengirim mask
 // (field terkunci), tapi handler mempertahankan nomor ASLI — mask tak boleh
 // menimpa nilai tersimpan.
