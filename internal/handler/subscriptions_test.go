@@ -173,8 +173,13 @@ func TestSubscriptions_DetailNotFoundWhenOutOfScope(t *testing.T) {
 // --- F4: masking ARR -------------------------------------------------------
 
 // TestSubscriptions_ARRMaskedForNonManager: ARR disamarkan (flsHidden) untuk
-// sales & csm, tampil apa adanya untuk manager. MRR terlihat di KEDUA kasus.
-// Diuji di detail (satu halaman memuat MRR & ARR sekaligus).
+// sales & csm, tampil apa adanya untuk admin & manager (canSeeSubscriptionARR
+// = admin OR manager, subscriptions_view.go). MRR terlihat di SEMUA kasus.
+// Diuji di detail (satu halaman memuat MRR & ARR sekaligus). Matriks 4-role
+// via HTTP; Support tak diuji di sini — F2 (crm:subscriptions) memblokirnya
+// total sebelum halaman ini terbuka (lihat TestSubscriptions_GateRead di atas
+// & comment file baris 19-22), wiring ARR utk Support diuji langsung lewat
+// predikat di fls_test.go:TestFLS_SubscriptionARR.
 func TestSubscriptions_ARRMaskedForNonManager(t *testing.T) {
 	env, uid := setupAccounts(t)
 	planID := env.seedPlan(t, "Paket Nilai", "PLAN-VAL", "1000000")
@@ -184,7 +189,8 @@ func TestSubscriptions_ARRMaskedForNonManager(t *testing.T) {
 	const wantMRR = "Rp 5.000.000"
 	const wantARR = "Rp 60.000.000"
 
-	openDetail := func(role string) string {
+	openDetail := func(t *testing.T, role string) string {
+		t.Helper()
 		req := accountsReq(http.MethodGet, "/w/test/subscriptions/"+itoa(sub.ID), nil, itoa(sub.ID))
 		rec := env.runAccount(uid, "owner", role, req, env.h.SubscriptionDetail)
 		if rec.Code != http.StatusOK {
@@ -193,26 +199,33 @@ func TestSubscriptions_ARRMaskedForNonManager(t *testing.T) {
 		return rec.Body.String()
 	}
 
-	// Non-manager (sales & csm): ARR tersamar, MRR terlihat.
-	for _, role := range []string{"sales", "csm"} {
-		body := openDetail(role)
-		if !strings.Contains(body, flsHidden) {
-			t.Errorf("role %q: ARR harus tersamar (%s)", role, flsHidden)
-		}
-		if strings.Contains(body, wantARR) {
-			t.Errorf("role %q: ARR mentah %q tak boleh bocor", role, wantARR)
-		}
-		if !strings.Contains(body, wantMRR) {
-			t.Errorf("role %q: MRR %q harus terlihat", role, wantMRR)
-		}
+	cases := []struct {
+		role   string
+		seeARR bool
+	}{
+		{"sales", false},
+		{"csm", false},
+		{"admin", true},
+		{"manager", true},
 	}
-
-	// Manager: ARR & MRR keduanya terlihat.
-	bodyM := openDetail("manager")
-	if !strings.Contains(bodyM, wantARR) {
-		t.Errorf("manager: ARR %q harus terlihat", wantARR)
-	}
-	if !strings.Contains(bodyM, wantMRR) {
-		t.Errorf("manager: MRR %q harus terlihat", wantMRR)
+	for _, c := range cases {
+		t.Run("role="+c.role, func(t *testing.T) {
+			body := openDetail(t, c.role)
+			if !strings.Contains(body, wantMRR) {
+				t.Errorf("role %q: MRR %q harus terlihat", c.role, wantMRR)
+			}
+			if c.seeARR {
+				if !strings.Contains(body, wantARR) {
+					t.Errorf("role %q: ARR %q harus terlihat", c.role, wantARR)
+				}
+			} else {
+				if !strings.Contains(body, flsHidden) {
+					t.Errorf("role %q: ARR harus tersamar (%s)", c.role, flsHidden)
+				}
+				if strings.Contains(body, wantARR) {
+					t.Errorf("role %q: ARR mentah %q tak boleh bocor", c.role, wantARR)
+				}
+			}
+		})
 	}
 }

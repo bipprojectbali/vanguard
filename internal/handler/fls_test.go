@@ -110,6 +110,40 @@ func TestFLS_InternalNotes(t *testing.T) {
 	}
 }
 
+// TestFLS_SubscriptionARR — kebijakan KHUSUS subscriptions (spec M5-4,
+// subscriptions_view.go): ARR hanya admin+manager, BEDA dari canSeeARR umum
+// (yang meloloskan sales & csm juga). Sales/CSM tetap lihat MRR (canSeeARR)
+// tapi TIDAK ARR subscription — dua kebijakan berlainan pada dua field yang
+// terlihat mirip. Predikat ini sebelumnya tanpa test predikat langsung (hanya
+// tersentuh lewat test HTTP di dashboard_test.go/subscriptions_test.go);
+// gap M9-2.
+func TestFLS_SubscriptionARR(t *testing.T) {
+	cases := []struct {
+		role string
+		see  bool
+	}{
+		{"admin", true},
+		{"manager", true},
+		{"sales", false}, // BEDA dari canSeeARR umum: sales lihat MRR, bukan ARR
+		{"csm", false},   // BEDA dari canSeeARR umum: csm lihat MRR, bukan ARR
+		{"support", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		gotCan := canSeeSubscriptionARR(c.role)
+		if gotCan != c.see {
+			t.Errorf("canSeeSubscriptionARR(%q) = %v, want %v", c.role, gotCan, c.see)
+		}
+		got := maskSubscriptionARR(arrValue, c.role)
+		if c.see && got != arrValue {
+			t.Errorf("ARR subscription utk %q harus tampil utuh, got %q", c.role, got)
+		}
+		if !c.see && got == arrValue {
+			t.Errorf("ARR subscription utk %q BOCOR — nilai asli lolos ke yang tak berhak", c.role)
+		}
+	}
+}
+
 // TestFLS_TegakLurusRolePlatform: FLS memakai business_role, BUKAN role tenant/
 // platform. super_admin/owner yang bukan pemegang peran CRM ("") tak lolos apa
 // pun — wewenang platform ≠ melihat field komersial/PII (§3).

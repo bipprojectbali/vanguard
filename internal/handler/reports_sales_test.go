@@ -118,34 +118,48 @@ func TestReportsSales_IncludesClosedStages(t *testing.T) {
 
 // --- F4: masking (fls.go) -----------------------------------------------------
 
-// TestReportsSales_ARRMasked_Support: Support (crm:reports read, tapi DI LUAR
-// allow-list canSeeARR) melihat PipelineValue & Value per-stage tersamar
-// flsHidden — bukan angka mentah. Regresi audit FLS M9 gap 1.
-func TestReportsSales_ARRMasked_Support(t *testing.T) {
-	env, uid := setupAccounts(t)
-	acc := env.seedAccount(t, "Desa Masking", &uid, nil, nil)
-	env.seedReportDeal(t, acc.ID, &uid, "Prospecting", "9000000")
-
-	_, body := env.reportsSalesBody(t, uid, "owner", "support")
-	if !strings.Contains(body, flsHidden) {
-		t.Errorf("support harus melihat penanda tersamar %q, body:\n%s", flsHidden, body)
+// TestReportsSales_ARRMatrix: PipelineValue & Value per-stage — kebijakan umum
+// canSeeARR (semua role KECUALI Support). Matriks 5-role: admin/manager/sales/
+// csm melihat nilai apa adanya (menutup gap M9-2 — sebelumnya hanya sales yang
+// diuji di sisi "visible"), Support (crm:reports read, tapi DI LUAR allow-list
+// canSeeARR) melihat penanda tersamar flsHidden — bukan angka mentah. Regresi
+// audit FLS M9 gap 1.
+func TestReportsSales_ARRMatrix(t *testing.T) {
+	cases := []struct {
+		role string
+		see  bool
+	}{
+		{"admin", true},
+		{"manager", true},
+		{"sales", true},
+		{"csm", true},
+		{"support", false},
 	}
-	if strings.Contains(body, "Rp 9.000.000") {
-		t.Errorf("support TAK BOLEH melihat nilai ARR mentah, body:\n%s", body)
-	}
-}
+	for _, c := range cases {
+		t.Run("role="+c.role, func(t *testing.T) {
+			// setupAccounts BARU per-subtest (bukan dipakai bersama): PipelineValue
+			// men-SUM seluruh deal stage yang sama; env bersama antar-role akan
+			// mengakumulasi nilai lintas subtest (admin lolos, manager dst gagal
+			// krn melihat SUM deal admin+manager) — bukan gap F4, tapi kontaminasi
+			// data test.
+			env, uid := setupAccounts(t)
+			acc := env.seedAccount(t, "Desa Masking "+c.role, &uid, nil, nil)
+			env.seedReportDeal(t, acc.ID, &uid, "Prospecting", "9000000")
 
-// TestReportsSales_ARRVisible_Sales: sales (di dalam allow-list canSeeARR)
-// tetap melihat nilai apa adanya — memastikan fix F4 tak over-masking role
-// yang memang berhak.
-func TestReportsSales_ARRVisible_Sales(t *testing.T) {
-	env, uid := setupAccounts(t)
-	acc := env.seedAccount(t, "Desa Masking Sales", &uid, nil, nil)
-	env.seedReportDeal(t, acc.ID, &uid, "Prospecting", "4000000")
-
-	_, body := env.reportsSalesBody(t, uid, "owner", "sales")
-	if !strings.Contains(body, "Rp 4.000.000") {
-		t.Errorf("sales harus melihat nilai ARR apa adanya, body:\n%s", body)
+			_, body := env.reportsSalesBody(t, uid, "owner", c.role)
+			if c.see {
+				if !strings.Contains(body, "Rp 9.000.000") {
+					t.Errorf("role %q: harus melihat nilai ARR apa adanya, body:\n%s", c.role, body)
+				}
+			} else {
+				if !strings.Contains(body, flsHidden) {
+					t.Errorf("role %q: harus melihat penanda tersamar %q, body:\n%s", c.role, flsHidden, body)
+				}
+				if strings.Contains(body, "Rp 9.000.000") {
+					t.Errorf("role %q: TAK BOLEH melihat nilai ARR mentah, body:\n%s", c.role, body)
+				}
+			}
+		})
 	}
 }
 
