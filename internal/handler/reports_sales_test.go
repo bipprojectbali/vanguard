@@ -18,8 +18,12 @@ import (
 //     Won/Lost (beda sengaja dari chart Beranda yang mengecualikan keduanya).
 //   - F3 (ownership): sales own-scope hanya menghitung deal miliknya sendiri;
 //     manager all-scope lintas-owner. Dibuktikan lewat OpenCount (deal biasa,
-//     tak ada masking F4 di Sales Report — nilai apa adanya bagi siapa saja
-//     yang lolos F2).
+//     tanpa keterkaitan F4 — hitungan bukan nilai rupiah).
+//   - F4 (masking): PipelineValue & Value per-stage (HTML & CSV) disamarkan
+//     `flsHidden` bagi role di luar allow-list `canSeeARR` (mis. Support, satu-
+//     satunya pemegang crm:reports read yang bukan admin/manager/sales/csm) —
+//     diperbaiki audit FLS M9 (sebelumnya sengaja TANPA masking, kontra
+//     skema.md §9).
 //
 // Koneksi test = superuser (bypass RLS) → uji LOGIKA handler; isolasi RLS
 // sesungguhnya diuji di rls_test.go. Setup/helper reuse accounts_test.go.
@@ -73,11 +77,13 @@ func TestReportsSales_GateRead(t *testing.T) {
 	}
 }
 
-// TestReportsSales_GateRead_AllowedRoles: sales/manager/admin (pemegang
-// crm:reports read) → 200.
+// TestReportsSales_GateRead_AllowedRoles: sales/manager/admin/support (semua
+// pemegang crm:reports read, business_policy.csv) → 200. Support TERMASUK di
+// sini justru alasan gap F4 (lihat TestReportsSales_ARRMasked_Support) — 200
+// bukan berarti nilai mentah ikut lolos.
 func TestReportsSales_GateRead_AllowedRoles(t *testing.T) {
 	env, uid := setupAccounts(t)
-	for _, role := range []string{"sales", "manager", "admin"} {
+	for _, role := range []string{"sales", "manager", "admin", "support"} {
 		t.Run("role="+role, func(t *testing.T) {
 			code, _ := env.reportsSalesBody(t, uid, "owner", role)
 			if code != http.StatusOK {
@@ -107,6 +113,67 @@ func TestReportsSales_IncludesClosedStages(t *testing.T) {
 	}
 	if !strings.Contains(body, "Rp 2.000.000") {
 		t.Errorf("nilai stage Closed Won harus tampil, body:\n%s", body)
+	}
+}
+
+// --- F4: masking (fls.go) -----------------------------------------------------
+
+// TestReportsSales_ARRMasked_Support: Support (crm:reports read, tapi DI LUAR
+// allow-list canSeeARR) melihat PipelineValue & Value per-stage tersamar
+// flsHidden — bukan angka mentah. Regresi audit FLS M9 gap 1.
+func TestReportsSales_ARRMasked_Support(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa Masking", &uid, nil, nil)
+	env.seedReportDeal(t, acc.ID, &uid, "Prospecting", "9000000")
+
+	_, body := env.reportsSalesBody(t, uid, "owner", "support")
+	if !strings.Contains(body, flsHidden) {
+		t.Errorf("support harus melihat penanda tersamar %q, body:\n%s", flsHidden, body)
+	}
+	if strings.Contains(body, "Rp 9.000.000") {
+		t.Errorf("support TAK BOLEH melihat nilai ARR mentah, body:\n%s", body)
+	}
+}
+
+// TestReportsSales_ARRVisible_Sales: sales (di dalam allow-list canSeeARR)
+// tetap melihat nilai apa adanya — memastikan fix F4 tak over-masking role
+// yang memang berhak.
+func TestReportsSales_ARRVisible_Sales(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa Masking Sales", &uid, nil, nil)
+	env.seedReportDeal(t, acc.ID, &uid, "Prospecting", "4000000")
+
+	_, body := env.reportsSalesBody(t, uid, "owner", "sales")
+	if !strings.Contains(body, "Rp 4.000.000") {
+		t.Errorf("sales harus melihat nilai ARR apa adanya, body:\n%s", body)
+	}
+}
+
+// TestReportsSales_Export_NoLeak_Support: CSV export tak memuat nilai ARR
+// mentah bagi Support. Support data_scope='none' atas deals (business_defaults.go)
+// → ReportPipelineByStage SUDAH mengembalikan nol baris lewat F3 (scope_all/is_own
+// sama-sama false) SEBELUM maskARR (F4) sempat dipanggil — beda dgn KPI kartu
+// PipelineValue di halaman HTML (TestReportsSales_ARRMasked_Support) yang selalu
+// dirender apa pun nilainya (termasuk "Rp 0"), jadi selalu tersamar. maskARR pada
+// kolom Nilai (baris 114, reports_sales.go) TETAP dipertahankan sebagai
+// pertahanan-berlapis: bila data_scope Support kelak dilonggarkan tanpa
+// menyentuh fls.go, baris CSV baru tak akan bocor mentah. Regresi audit FLS M9 gap 1.
+func TestReportsSales_Export_NoLeak_Support(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa Export Masking", &uid, nil, nil)
+	env.seedReportDeal(t, acc.ID, &uid, "Demo", "6600000")
+
+	req := accountsReq(http.MethodGet, "/w/test/reports/sales/export", nil, "")
+	rec := env.runAccount(uid, "owner", "support", req, env.h.ReportsSalesExport)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "Demo,1,") {
+		t.Errorf("support TAK BOLEH melihat baris deal (F3 data_scope=none), body:\n%s", body)
+	}
+	if strings.Contains(body, "6600000") {
+		t.Errorf("CSV TAK BOLEH memuat nilai ARR mentah bagi support, body:\n%s", body)
 	}
 }
 
