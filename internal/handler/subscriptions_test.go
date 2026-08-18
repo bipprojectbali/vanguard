@@ -17,7 +17,10 @@ import (
 //   - F3 (ownership): sales/csm data_scope 'own' → hanya langganan yang dimilikinya
 //     (subscription_owner = uid); di luar cakupan → 404 (keberadaan tak diungkap).
 //   - F4 (masking ARR): ARR hanya admin/manager; sales/csm melihat penanda flsHidden.
-//     MRR terlihat semua viewer.
+//     MRR terlihat sales/csm/manager (kebijakan umum canSeeARR, beda dari ARR)
+//     — Support (satu-satunya role dikecualikan) tak diuji lewat HTTP di sini
+//     krn F2/F3 sudah memblokirnya total dari halaman ini; wiring maskARR MRR
+//     diuji langsung di subscriptions_fls_test.go (audit FLS M9-1).
 //
 // Koneksi test = superuser (bypass RLS) → uji LOGIKA handler; isolasi RLS diuji di
 // rls_test.go. Setup & helper request memakai ulang setupAccounts/accountsReq/
