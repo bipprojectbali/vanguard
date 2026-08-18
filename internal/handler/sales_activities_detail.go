@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"go_starter/internal/db"
+	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 )
 
@@ -46,7 +47,14 @@ func (h *Handler) ActivityDetail(w http.ResponseWriter, r *http.Request) {
 // activityDetailView merakit detail lengkap. Nama target (& kontak untuk Call)
 // diresolusi best-effort (baris di luar tenant/terhapus → label cadangan, tak
 // menggagalkan halaman). Field per-kind diisi hanya untuk kind terkait.
+//
+// F4: Notes lewat maskInternalNotes (fls.go) — Catatan Internal hanya
+// Admin & CSM (skema.md §9: "activities (notes)"). crm:sales_activity write
+// hanya dipegang admin/manager/sales (business_policy.csv) — di antara
+// ketiganya, Manager & Sales sebelumnya melihat catatan mentah. Diperbaiki
+// audit FLS M9.
 func (h *Handler) activityDetailView(ctx context.Context, base string, a db.Activity, names map[int64]string) panel.ActivityDetailView {
+	br := session.BusinessRole(ctx)
 	v := panel.ActivityDetailView{
 		Base:         base,
 		ID:           a.ID,
@@ -60,7 +68,7 @@ func (h *Handler) activityDetailView(ctx context.Context, base string, a db.Acti
 		Updated:      fmtLocal(a.UpdatedAt),
 		Status:       deref(a.Status),
 		TaskStatuses: taskStatusOptions,
-		Notes:        deref(a.Notes),
+		Notes:        maskInternalNotes(deref(a.Notes), br),
 		CanWrite:     canWriteSalesActivity(ctx),
 	}
 	switch a.Kind {

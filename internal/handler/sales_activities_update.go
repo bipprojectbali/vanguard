@@ -17,6 +17,13 @@ import (
 // (per kind baris — form dibentuk oleh a.Kind). kind, target, owner, & status
 // TAK disentuh: kind/target immutable; owner tak diam-diam berpindah; status
 // punya jalur khusus (ActivityStatus). reminder_at belum ber-form v1 → dipertahankan.
+//
+// F4: Notes DIPERTAHANKAN (bukan diambil dari form) bila role tak berhak lihat
+// (!canSeeInternalNotes) — form GET (ActivityEdit) sudah mengosongkan
+// textarea-nya (maskInternalNotes) buat role itu, jadi POST-nya SELALU kosong.
+// Tanpa penjagaan ini, save oleh Manager/Sales akan menimpa catatan Admin/CSM
+// yang sudah ada dengan string kosong — kebocoran F4 lewat jalur tulis, bukan
+// baca. Diperbaiki audit FLS M9 (simetris dgn ActivityEdit/activityDetailView).
 func (h *Handler) ActivityUpdate(w http.ResponseWriter, r *http.Request) {
 	if !h.requireActivityWrite(w, r) {
 		return
@@ -38,12 +45,17 @@ func (h *Handler) ActivityUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	notes := form.Notes
+	if br := session.BusinessRole(ctx); !canSeeInternalNotes(br) {
+		notes = a.Notes // role tak berhak → pertahankan nilai lama, abaikan form
+	}
+
 	uid := session.UserID(ctx)
 	if _, err := h.q(ctx).UpdateActivity(ctx, db.UpdateActivityParams{
 		Subject:     form.Subject,
 		OwnerID:     a.OwnerID,    // pertahankan pemilik
 		ReminderAt:  a.ReminderAt, // pertahankan (belum ber-form v1)
-		Notes:       form.Notes,
+		Notes:       notes,
 		DueDate:     form.DueDate,
 		Priority:    form.Priority,
 		ContactID:   form.ContactID,
