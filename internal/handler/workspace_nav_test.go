@@ -363,11 +363,11 @@ func TestWorkspaceNav_CSGroup(t *testing.T) {
 }
 
 // TestWorkspaceNav_ReportsGroup: Reports = grup bersarang yang SELALU tampil
-// (peta jalan wireframe 8). Sales Reports (8.1) & Subscription Reports (8.4)
-// berbackend (M8-1), enabled mengikuti SATU izin canReports (objek crm:reports
-// read). Customer Success Reports (8.2)/Support Reports (8.3)/Custom Reports
-// (8.5) SELALU disabled — bukan mengikuti canReports (8.2/8.3 depend slice
-// Modul 6 lain, 8.5 ditunda eksplisit v1.1).
+// (peta jalan wireframe 8). Sales Reports (8.1), Customer Success Reports
+// (8.2), Support Reports (8.3), Subscription Reports (8.4) berbackend,
+// enabled mengikuti SATU izin canReports (objek crm:reports read). Custom
+// Reports (8.5, Report Builder) ditunda v1.1 (skema.md §10) — item nav-nya
+// TIDAK ADA sama sekali, bukan disabled.
 func TestWorkspaceNav_ReportsGroup(t *testing.T) {
 	nav := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true)
 	grp, ok := findItem(nav, "Reports")
@@ -378,8 +378,10 @@ func TestWorkspaceNav_ReportsGroup(t *testing.T) {
 		t.Errorf("header grup Reports tak boleh jadi link, got Href %q", grp.Href)
 	}
 	wantEnabled := map[string]string{
-		"Sales Reports":        "/w/acme/reports/sales",
-		"Subscription Reports": "/w/acme/reports/subscriptions",
+		"Sales Reports":            "/w/acme/reports/sales",
+		"Customer Success Reports": "/w/acme/reports/customer-success",
+		"Support Reports":          "/w/acme/reports/support",
+		"Subscription Reports":     "/w/acme/reports/subscriptions",
 	}
 	for label, href := range wantEnabled {
 		ch, ok := findItem(grp.Children, label)
@@ -391,25 +393,18 @@ func TestWorkspaceNav_ReportsGroup(t *testing.T) {
 			t.Errorf("anak %q harus enabled→%q, got disabled=%v href=%q", label, href, ch.Disabled, ch.Href)
 		}
 	}
-	for _, label := range []string{"Customer Success Reports", "Support Reports", "Custom Reports"} {
-		ch, ok := findItem(grp.Children, label)
-		if !ok {
-			t.Errorf("grup Reports kurang placeholder %q", label)
-			continue
-		}
-		if !ch.Disabled || ch.Href != "" {
-			t.Errorf("placeholder %q harus disabled tanpa href, got disabled=%v href=%q", label, ch.Disabled, ch.Href)
-		}
+	if _, ok := findItem(grp.Children, "Custom Reports"); ok {
+		t.Error("Custom Reports (8.5) ditunda — item nav-nya harus dihapus total, bukan disabled")
 	}
 
-	// canReports=false → grup tetap tampil, Sales/Subscription Reports pun
-	// disabled tanpa href (menu tak menawarkan pintu yang lalu ditolak 403).
+	// canReports=false → grup tetap tampil, semua anak disabled tanpa href
+	// (menu tak menawarkan pintu yang lalu ditolak 403).
 	navNone := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false)
 	grpNone, ok := findItem(navNone, "Reports")
 	if !ok {
 		t.Fatal("grup Reports tetap tampil walau tanpa izin")
 	}
-	for _, label := range []string{"Sales Reports", "Subscription Reports"} {
+	for _, label := range []string{"Sales Reports", "Customer Success Reports", "Support Reports", "Subscription Reports"} {
 		ch, ok := findItem(grpNone.Children, label)
 		if !ok {
 			t.Errorf("anak %q harus tetap tampil (disabled)", label)
@@ -418,6 +413,9 @@ func TestWorkspaceNav_ReportsGroup(t *testing.T) {
 		if !ch.Disabled || ch.Href != "" {
 			t.Errorf("tanpa izin, anak %q harus disabled tanpa href, got disabled=%v href=%q", label, ch.Disabled, ch.Href)
 		}
+	}
+	if _, ok := findItem(grpNone.Children, "Custom Reports"); ok {
+		t.Error("Custom Reports (8.5) harus tetap tidak ada walau tanpa izin")
 	}
 }
 
