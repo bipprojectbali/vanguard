@@ -87,6 +87,7 @@ func AccountForm(v AccountFormView) g.Node {
 	body := []g.Node{
 		h.Div(
 			h.H1(h.Class("text-xl font-semibold"), g.Text(title)),
+			h.P(h.Class("text-sm text-base-content/60 mb-1"), g.Text(accountFormHint(v.IsEdit))),
 			h.A(h.Href(v.Base+"/accounts"), h.Class("text-sm text-base-content/60"),
 				g.Text("« Kembali ke daftar desa")),
 		),
@@ -101,7 +102,9 @@ func AccountForm(v AccountFormView) g.Node {
 
 		formCard("Identitas",
 			field("Nama Desa", "village_name", v.Fields.VillageName, true, "text"),
-			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.Types, true),
+			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.Types, true,
+				"Prospect = calon pelanggan (belum berlangganan) · Customer = pelanggan aktif · "+
+					"Former Customer = pernah berlangganan, sudah berhenti."),
 			field("Kode Desa (Kemendagri)", "village_code", v.Fields.VillageCode, false, "text"),
 			field("Website", "website", v.Fields.Website, false, "url"),
 			textareaField("Deskripsi", "description", v.Fields.Description),
@@ -110,11 +113,17 @@ func AccountForm(v AccountFormView) g.Node {
 			regionSelect("account", v.RegionsJSON, v.Fields.DistrictID),
 			field("Alamat", "village_address", v.Fields.VillageAddress, false, "text"),
 			field("Kode Pos", "postal_code", v.Fields.PostalCode, false, "text"),
-			field("Teritori", "territory", v.Fields.Territory, false, "text"),
+			field("Teritori", "territory", v.Fields.Territory, false, "text",
+				"Pembagian wilayah kerja Sales/CSM internal (bebas isi) — beda dari Kabupaten/Kota "+
+					"administratif di atas."),
 		),
 		formCard("Profil Desa",
-			selectField("Status", "village_status", v.Fields.VillageStatus, v.Statuses, false),
-			selectField("Klasifikasi (IDM)", "village_classification", v.Fields.VillageClassification, v.Classifications, false),
+			selectField("Status", "village_status", v.Fields.VillageStatus, v.Statuses, false,
+				"Sebutan resmi wilayah administratif setingkat desa — beda istilah per daerah "+
+					"(Kelurahan, Nagari di Sumbar, Gampong di Aceh, dst)."),
+			selectField("Klasifikasi (IDM)", "village_classification", v.Fields.VillageClassification, v.Classifications, false,
+				"Indeks Desa Membangun, dari yang paling maju: Mandiri > Maju > Berkembang > "+
+					"Tertinggal > Sangat Tertinggal."),
 			field("Jumlah Penduduk", "population", v.Fields.Population, false, "number"),
 			field("Jumlah Dusun", "hamlets_count", v.Fields.HamletsCount, false, "number"),
 			field("Anggaran (APBDes)", "village_budget", v.Fields.VillageBudget, false, "text"),
@@ -142,6 +151,18 @@ func AccountForm(v AccountFormView) g.Node {
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
+// accountFormHint = penjelasan singkat di bawah judul form, beda utk tambah vs
+// sunting — sama pola dgn accountsTabDesc (penjelasan mengikuti konteks yang
+// sedang dilihat, bukan satu kalimat generik). Menyebut penugasan CSM eksplisit
+// karena assignCard baru muncul setelah desa TERSIMPAN (IsEdit) — tanpa hint ini
+// pengguna baru bisa bingung kenapa opsi itu tak ada di form tambah.
+func accountFormHint(isEdit bool) string {
+	if isEdit {
+		return "Ubah data desa ini. Penugasan CSM (utama/cadangan) diatur terpisah lewat kartu \"Penugasan CSM\" di bawah."
+	}
+	return "Lengkapi data desa baru untuk workspace ini. Penugasan CSM (utama/cadangan) bisa dilakukan setelah desa tersimpan, dari halaman sunting."
+}
+
 // formCard = satu kelompok field dalam kartu. Grid 1-kolom di mobile → 2 di sm
 // ke atas (mobile-first).
 func formCard(title string, fields ...g.Node) g.Node {
@@ -155,9 +176,40 @@ func formCard(title string, fields ...g.Node) g.Node {
 	)
 }
 
+// fieldHint = baris penjelasan opsional di bawah input, dipanggil field/
+// selectField saat hint diisi. Variadic pada pemanggil agar dropdown pemanggil
+// lama (mayoritas field self-explanatory) tak perlu ikut berubah — kirim ""
+// atau tak sama sekali = tanpa hint, sama seperti pola phoneField sebelumnya.
+func fieldHint(hint []string) g.Node {
+	if len(hint) == 0 || hint[0] == "" {
+		return g.Text("")
+	}
+	return h.P(h.Class("text-xs text-base-content/60"), g.Text(hint[0]))
+}
+
+// fieldWrapClass menentukan lebar grid satu field di formCard (sm:grid-cols-2).
+// Field TANPA hint tetap setengah lebar (dua per baris, seperti semula). Field
+// BER-hint dilebarkan penuh (sm:col-span-2) — sebelum ini, field ber-hint yang
+// kebetulan berpasangan dgn field tanpa hint pada baris grid yang sama (mis.
+// "Kode Pos" vs "Teritori", "Nama Desa" vs "Tipe Akun") membuat baris itu
+// tampak timpang: sel bertetangga jauh lebih pendek, menyisakan ruang kosong
+// di bawahnya karena tinggi baris grid mengikuti sel tertinggi. Melebarkan
+// penuh field ber-hint memutus pasangannya dgn field tak terkait sehingga tiap
+// baris tetap rata — pola yang sama dgn textareaField yang sudah lebih dulu
+// full-width.
+func fieldWrapClass(hint []string) string {
+	if len(hint) > 0 && hint[0] != "" {
+		return "grid gap-1 min-w-0 sm:col-span-2"
+	}
+	return "grid gap-1 min-w-0"
+}
+
 // field = satu input teks/angka. required menandai wajib (jaring klien; backend
-// tetap memvalidasi). text-base (≥16px) agar iOS tak auto-zoom saat fokus.
-func field(label, name, val string, required bool, typ string) g.Node {
+// tetap memvalidasi). text-base (≥16px) agar iOS tak auto-zoom saat fokus. hint
+// (opsional, variadic) = penjelasan singkat utk field yang maknanya tak jelas
+// hanya dari label (mis. beda Teritori vs Kabupaten/Kota administratif). Field
+// ber-hint dilebarkan penuh (fieldWrapClass) — lihat komentarnya soal alasan.
+func field(label, name, val string, required bool, typ string, hint ...string) g.Node {
 	attrs := []g.Node{
 		h.ID("f-" + name), h.Name(name), h.Type(typ),
 		h.Value(val), h.Class("input text-base w-full"),
@@ -169,9 +221,10 @@ func field(label, name, val string, required bool, typ string) g.Node {
 		attrs = append(attrs, g.Attr("min", "0"))
 	}
 	return h.Div(
-		h.Class("grid gap-1 min-w-0"),
+		h.Class(fieldWrapClass(hint)),
 		labelFor(label, "f-"+name, required),
 		ui.Input(attrs...),
+		fieldHint(hint),
 	)
 }
 
@@ -207,8 +260,11 @@ func textareaField(label, name, val string) g.Node {
 }
 
 // selectField = dropdown enum. Opsi kosong "—" hanya bila tak wajib (nilai
-// opsional boleh dikosongkan = NULL).
-func selectField(label, name, current string, opts []string, required bool) g.Node {
+// opsional boleh dikosongkan = NULL). hint (opsional, variadic) = penjelasan
+// arti tiap opsi utk enum yang nilainya bukan kata umum (mis. IDM) — lihat
+// fieldHint. Backward-compatible: pemanggil existing yang tak lewat hint tak
+// perlu ikut berubah.
+func selectField(label, name, current string, opts []string, required bool, hint ...string) g.Node {
 	nodes := make([]g.Node, 0, len(opts)+1)
 	if !required {
 		nodes = append(nodes, h.Option(h.Value(""), g.Text("—")))
@@ -227,9 +283,10 @@ func selectField(label, name, current string, opts []string, required bool) g.No
 		sel = append(sel, h.Required())
 	}
 	return h.Div(
-		h.Class("grid gap-1 min-w-0"),
+		h.Class(fieldWrapClass(hint)),
 		labelFor(label, "f-"+name, required),
 		h.Select(append(sel, g.Group(nodes))...),
+		fieldHint(hint),
 	)
 }
 
