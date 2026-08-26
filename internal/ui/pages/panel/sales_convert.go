@@ -23,9 +23,7 @@ import (
 type ConvertFormFields struct {
 	VillageName string
 	AccountType string
-	Province    string
-	Regency     string
-	District    string
+	DistrictID  string
 
 	FirstName   string
 	LastName    string
@@ -45,7 +43,7 @@ type DuplicateCandidate struct {
 	AccountID   int64
 	EntityCode  string
 	VillageName string
-	Regency     string
+	RegionLabel string
 }
 
 // LeadConvertView = data halaman review. Action = URL POST konversi. BackURL =
@@ -65,6 +63,10 @@ type LeadConvertView struct {
 	AccountTypes  []string
 	Fields        ConvertFormFields
 	Duplicates    []DuplicateCandidate
+
+	// RegionsJSON = dataset penuh master wilayah (h.regionsJSON), diembed sekali
+	// utk cascading dropdown Provinsi/Kabupaten-Kota/Kecamatan (ADR 0009).
+	RegionsJSON string
 }
 
 // LeadConvert merender halaman review lengkap: header konteks, banner penjelasan,
@@ -106,9 +108,7 @@ func LeadConvert(v LeadConvertView) g.Node {
 		formCard("Desa (Account)",
 			field("Nama Desa", "village_name", v.Fields.VillageName, true, "text"),
 			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.AccountTypes, true),
-			field("Provinsi", "province", v.Fields.Province, false, "text"),
-			field("Kabupaten/Kota", "regency", v.Fields.Regency, false, "text"),
-			field("Kecamatan", "district", v.Fields.District, false, "text"),
+			regionSelect("convert", v.RegionsJSON, v.Fields.DistrictID),
 		),
 		formCard("Kontak Utama",
 			field("Nama Depan", "first_name", v.Fields.FirstName, true, "text"),
@@ -130,6 +130,9 @@ func LeadConvert(v LeadConvertView) g.Node {
 			h.A(h.Href(v.BackURL), h.Class("btn btn-ghost min-h-11"), g.Text("Batal")),
 		),
 	))
+	// Cascading dropdown wilayah (regionSelect di atas cuma menanam data + markup;
+	// interaksi berjenjangnya di sini, same-origin CSP-safe, gotcha #12).
+	body = append(body, h.Script(h.Src("/static/regions.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
@@ -151,8 +154,8 @@ func duplicateWarning(base string, dupes []DuplicateCandidate) g.Node {
 				h.Span(h.Class("font-mono"), g.Text(d.EntityCode)),
 				g.Text(")"),
 			})),
-			ui.When(d.Regency != "", g.Group([]g.Node{
-				g.Text(" — " + d.Regency),
+			ui.When(d.RegionLabel != "", g.Group([]g.Node{
+				g.Text(" — " + d.RegionLabel),
 			})),
 		))
 	}

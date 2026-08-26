@@ -36,3 +36,20 @@ func optInt32(s string) (*int32, string) {
 	v := int32(n)
 	return &v, ""
 }
+
+// optInt64 mengurai ID opsional (mis. district_id dari <select> wilayah): kosong
+// → (nil, ""); terisi & sah & >0 → (&v, ""); tak terurai/≤0 → (nil, "id"). Kode
+// generik "id" — pemanggil yang butuh pesan spesifik per field (mis.
+// "district_id") menimpanya sendiri, sama seperti optInt32 dipakai apa adanya
+// oleh pemanggil yang cukup dengan pesan generik "number".
+func optInt64(s string) (*int64, string) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, ""
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n <= 0 {
+		return nil, "id"
+	}
+	return &n, ""
+}

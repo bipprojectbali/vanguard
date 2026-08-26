@@ -62,6 +62,14 @@ func (h *Handler) leadDetailView(ctx context.Context, base string, l db.Lead, na
 	canWrite := canWriteLeads(ctx)
 	// Konversi hanya untuk lead Qualified yang belum dikonversi & aktor boleh tulis.
 	canConvert := canWrite && l.LeadStatus == "Qualified" && !l.Converted
+	// Satu baris → 1 query GetRegionAncestry (bukan regionAncestryMap, yang
+	// scan ~7.817 baris demi 1 hasil — cocok utk daftar, bukan detail).
+	var province, regency, district string
+	if l.DistrictID != nil {
+		if anc, err := h.q(ctx).GetRegionAncestry(ctx, *l.DistrictID); err == nil {
+			province, regency, district = anc.ProvinceName, anc.RegencyName, anc.DistrictName
+		}
+	}
 	return panel.LeadDetailView{
 		Base:              base,
 		ID:                l.ID,
@@ -74,9 +82,9 @@ func (h *Handler) leadDetailView(ctx context.Context, base string, l db.Lead, na
 		Rating:            deref(l.Rating),
 		UnqualifiedReason: deref(l.UnqualifiedReason),
 		EstValue:          maskARR(formatRupiah(l.EstimatedValue), br),
-		Province:          deref(l.Province),
-		Regency:           deref(l.Regency),
-		District:          deref(l.District),
+		Province:          province,
+		Regency:           regency,
+		District:          district,
 		MobilePhone:       maskPhone(deref(l.MobilePhone), br),
 		Whatsapp:          maskPhone(deref(l.Whatsapp), br),
 		Email:             deref(l.Email),

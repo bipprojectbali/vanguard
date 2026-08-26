@@ -45,7 +45,7 @@ INSERT INTO accounts (
     tenant_id, entity_code, village_name, village_code, account_type,
     account_owner, assigned_csm, backup_csm,
     website, description,
-    province, regency, district, village_address, postal_code, territory,
+    district_id, village_address, postal_code, territory,
     village_status, village_classification, population, hamlets_count, village_budget,
     contact_phone, office_phone, office_email,
     created_by
@@ -54,14 +54,14 @@ INSERT INTO accounts (
     $4, $5,
     $6, $7, $8,
     $9, $10,
-    $11, $12, $13,
-    $14, $15, $16,
-    $17, $18,
-    $19, $20, $21,
-    $22, $23, $24,
-    $25
+    $11,
+    $12, $13, $14,
+    $15, $16,
+    $17, $18, $19,
+    $20, $21, $22,
+    $23
 )
-RETURNING id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province, regency, district, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code
+RETURNING id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province_legacy, regency_legacy, district_legacy, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code, district_id
 `
 
 type CreateAccountParams struct {
@@ -75,9 +75,7 @@ type CreateAccountParams struct {
 	BackupCsm             *int64         `json:"backup_csm"`
 	Website               *string        `json:"website"`
 	Description           *string        `json:"description"`
-	Province              *string        `json:"province"`
-	Regency               *string        `json:"regency"`
-	District              *string        `json:"district"`
+	DistrictID            *int64         `json:"district_id"`
 	VillageAddress        *string        `json:"village_address"`
 	PostalCode            *string        `json:"postal_code"`
 	Territory             *string        `json:"territory"`
@@ -114,9 +112,7 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (A
 		arg.BackupCsm,
 		arg.Website,
 		arg.Description,
-		arg.Province,
-		arg.Regency,
-		arg.District,
+		arg.DistrictID,
 		arg.VillageAddress,
 		arg.PostalCode,
 		arg.Territory,
@@ -143,9 +139,9 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (A
 		&i.ParentAccountID,
 		&i.Website,
 		&i.Description,
-		&i.Province,
-		&i.Regency,
-		&i.District,
+		&i.ProvinceLegacy,
+		&i.RegencyLegacy,
+		&i.DistrictLegacy,
 		&i.VillageAddress,
 		&i.PostalCode,
 		&i.Latitude,
@@ -165,45 +161,47 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (A
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.EntityCode,
+		&i.DistrictID,
 	)
 	return i, err
 }
 
 const findDuplicateAccountsByNameRegion = `-- name: FindDuplicateAccountsByNameRegion :many
-SELECT id, entity_code, village_name, regency
+SELECT id, entity_code, village_name, district_id
 FROM accounts
 WHERE tenant_id = $1
   AND deleted_at IS NULL
   AND lower(trim(village_name)) = lower(trim($2))
   AND (
-      $3::text IS NULL
-      OR lower(trim(COALESCE(regency, ''))) = lower(trim($3))
+      $3::bigint IS NULL
+      OR district_id = $3
   )
 ORDER BY created_at DESC
 LIMIT 5
 `
 
 type FindDuplicateAccountsByNameRegionParams struct {
-	TenantID    int64   `json:"tenant_id"`
-	VillageName string  `json:"village_name"`
-	Regency     *string `json:"regency"`
+	TenantID    int64  `json:"tenant_id"`
+	VillageName string `json:"village_name"`
+	DistrictID  *int64 `json:"district_id"`
 }
 
 type FindDuplicateAccountsByNameRegionRow struct {
 	ID          int64   `json:"id"`
 	EntityCode  *string `json:"entity_code"`
 	VillageName string  `json:"village_name"`
-	Regency     *string `json:"regency"`
+	DistrictID  *int64  `json:"district_id"`
 }
 
 // Kandidat desa dgn nama sama (case-insensitive, trim) di tenant yang sama — dipakai
 // sbg soft-warning di halaman review konversi lead (M4-6, follow-up), BUKAN hard
-// block: nama desa yang sama bisa valid beda dusun/kabupaten. regency opsional:
-// diisi → ikut menyaring; kosong → cukup cocokkan nama. Ditopang index functional
+// block: nama desa yang sama bisa valid beda dusun/kabupaten. district_id opsional
+// (FK exact-match sejak 0009 — sebelumnya fuzzy teks pada regency): diisi → ikut
+// menyaring persis, kosong → cukup cocokkan nama. Ditopang index functional
 // idx_accounts_village_name_ci (00020). Dibatasi 5 kandidat, cukup utk peringatan,
 // bukan daftar lengkap.
 func (q *Queries) FindDuplicateAccountsByNameRegion(ctx context.Context, arg FindDuplicateAccountsByNameRegionParams) ([]FindDuplicateAccountsByNameRegionRow, error) {
-	rows, err := q.db.Query(ctx, findDuplicateAccountsByNameRegion, arg.TenantID, arg.VillageName, arg.Regency)
+	rows, err := q.db.Query(ctx, findDuplicateAccountsByNameRegion, arg.TenantID, arg.VillageName, arg.DistrictID)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +213,7 @@ func (q *Queries) FindDuplicateAccountsByNameRegion(ctx context.Context, arg Fin
 			&i.ID,
 			&i.EntityCode,
 			&i.VillageName,
-			&i.Regency,
+			&i.DistrictID,
 		); err != nil {
 			return nil, err
 		}
@@ -228,7 +226,7 @@ func (q *Queries) FindDuplicateAccountsByNameRegion(ctx context.Context, arg Fin
 }
 
 const getAccount = `-- name: GetAccount :one
-SELECT id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province, regency, district, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code FROM accounts
+SELECT id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province_legacy, regency_legacy, district_legacy, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code, district_id FROM accounts
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -250,9 +248,9 @@ func (q *Queries) GetAccount(ctx context.Context, id int64) (Account, error) {
 		&i.ParentAccountID,
 		&i.Website,
 		&i.Description,
-		&i.Province,
-		&i.Regency,
-		&i.District,
+		&i.ProvinceLegacy,
+		&i.RegencyLegacy,
+		&i.DistrictLegacy,
 		&i.VillageAddress,
 		&i.PostalCode,
 		&i.Latitude,
@@ -272,12 +270,13 @@ func (q *Queries) GetAccount(ctx context.Context, id int64) (Account, error) {
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.EntityCode,
+		&i.DistrictID,
 	)
 	return i, err
 }
 
 const listAccounts = `-- name: ListAccounts :many
-SELECT id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province, regency, district, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code FROM accounts
+SELECT id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province_legacy, regency_legacy, district_legacy, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code, district_id FROM accounts
 WHERE deleted_at IS NULL
   AND (created_at, id) < ($1::timestamptz, $2::bigint)
   AND (
@@ -350,9 +349,9 @@ func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]A
 			&i.ParentAccountID,
 			&i.Website,
 			&i.Description,
-			&i.Province,
-			&i.Regency,
-			&i.District,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
 			&i.VillageAddress,
 			&i.PostalCode,
 			&i.Latitude,
@@ -372,6 +371,7 @@ func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]A
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.EntityCode,
+			&i.DistrictID,
 		); err != nil {
 			return nil, err
 		}
@@ -406,24 +406,22 @@ UPDATE accounts SET
     account_type          = $2,
     website               = $3,
     description           = $4,
-    province              = $5,
-    regency               = $6,
-    district              = $7,
-    village_address       = $8,
-    postal_code           = $9,
-    territory             = $10,
-    village_status        = $11,
-    village_classification = $12,
-    population            = $13,
-    hamlets_count         = $14,
-    village_budget        = $15,
-    contact_phone         = $16,
-    office_phone          = $17,
-    office_email          = $18,
-    updated_by            = $19,
+    district_id           = $5,
+    village_address       = $6,
+    postal_code           = $7,
+    territory             = $8,
+    village_status        = $9,
+    village_classification = $10,
+    population            = $11,
+    hamlets_count         = $12,
+    village_budget        = $13,
+    contact_phone         = $14,
+    office_phone          = $15,
+    office_email          = $16,
+    updated_by            = $17,
     updated_at            = now()
-WHERE id = $20 AND deleted_at IS NULL
-RETURNING id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province, regency, district, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code
+WHERE id = $18 AND deleted_at IS NULL
+RETURNING id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province_legacy, regency_legacy, district_legacy, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code, district_id
 `
 
 type UpdateAccountParams struct {
@@ -431,9 +429,7 @@ type UpdateAccountParams struct {
 	AccountType           string         `json:"account_type"`
 	Website               *string        `json:"website"`
 	Description           *string        `json:"description"`
-	Province              *string        `json:"province"`
-	Regency               *string        `json:"regency"`
-	District              *string        `json:"district"`
+	DistrictID            *int64         `json:"district_id"`
 	VillageAddress        *string        `json:"village_address"`
 	PostalCode            *string        `json:"postal_code"`
 	Territory             *string        `json:"territory"`
@@ -459,9 +455,7 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) (A
 		arg.AccountType,
 		arg.Website,
 		arg.Description,
-		arg.Province,
-		arg.Regency,
-		arg.District,
+		arg.DistrictID,
 		arg.VillageAddress,
 		arg.PostalCode,
 		arg.Territory,
@@ -489,9 +483,9 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) (A
 		&i.ParentAccountID,
 		&i.Website,
 		&i.Description,
-		&i.Province,
-		&i.Regency,
-		&i.District,
+		&i.ProvinceLegacy,
+		&i.RegencyLegacy,
+		&i.DistrictLegacy,
 		&i.VillageAddress,
 		&i.PostalCode,
 		&i.Latitude,
@@ -511,6 +505,7 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) (A
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.EntityCode,
+		&i.DistrictID,
 	)
 	return i, err
 }

@@ -25,9 +25,7 @@ type AccountFormFields struct {
 	AccountType           string
 	Website               string
 	Description           string
-	Province              string
-	Regency               string
-	District              string
+	DistrictID            string
 	VillageAddress        string
 	PostalCode            string
 	Territory             string
@@ -57,6 +55,10 @@ type AccountFormView struct {
 	IsEdit bool
 	Err    string
 	Fields AccountFormFields
+
+	// RegionsJSON = dataset penuh master wilayah (h.regionsJSON), diembed sekali
+	// utk cascading dropdown Provinsi/Kabupaten-Kota/Kecamatan (ADR 0009).
+	RegionsJSON string
 
 	PhoneEditable bool
 
@@ -105,9 +107,7 @@ func AccountForm(v AccountFormView) g.Node {
 			textareaField("Deskripsi", "description", v.Fields.Description),
 		),
 		formCard("Wilayah",
-			field("Provinsi", "province", v.Fields.Province, false, "text"),
-			field("Kabupaten/Kota", "regency", v.Fields.Regency, false, "text"),
-			field("Kecamatan", "district", v.Fields.District, false, "text"),
+			regionSelect("account", v.RegionsJSON, v.Fields.DistrictID),
 			field("Alamat", "village_address", v.Fields.VillageAddress, false, "text"),
 			field("Kode Pos", "postal_code", v.Fields.PostalCode, false, "text"),
 			field("Teritori", "territory", v.Fields.Territory, false, "text"),
@@ -135,6 +135,9 @@ func AccountForm(v AccountFormView) g.Node {
 	if v.IsEdit {
 		body = append(body, assignCard(v))
 	}
+	// Cascading dropdown wilayah (regionSelect di atas cuma menanam data + markup;
+	// interaksi berjenjangnya di sini, same-origin CSP-safe, gotcha #12).
+	body = append(body, h.Script(h.Src("/static/regions.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }

@@ -42,9 +42,7 @@ type leadForm struct {
 	Rating            *string
 	UnqualifiedReason *string
 	EstimatedValue    pgtype.Numeric
-	Province          *string
-	Regency           *string
-	District          *string
+	DistrictID        *int64
 	MobilePhone       *string
 	Whatsapp          *string
 	Email             *string
@@ -84,14 +82,18 @@ func parseLeadForm(fv func(string) string) (leadForm, string) {
 	}
 	f.EstimatedValue = ev
 
+	// Kecamatan: FK ke master regions (0009) — lihat parseAccountForm, pola sama.
+	did, code := optInt64(fv("district_id"))
+	if code != "" {
+		return leadForm{}, "district_id"
+	}
+	f.DistrictID = did
+
 	// Teks bebas opsional: trim, kosong → NULL.
 	f.ContactPerson = optTrim(fv("contact_person"))
 	f.JobTitle = optTrim(fv("job_title"))
 	f.LeadSource = optTrim(fv("lead_source"))
 	f.UnqualifiedReason = optTrim(fv("unqualified_reason"))
-	f.Province = optTrim(fv("province"))
-	f.Regency = optTrim(fv("regency"))
-	f.District = optTrim(fv("district"))
 	f.MobilePhone = optTrim(fv("mobile_phone"))
 	f.Whatsapp = optTrim(fv("whatsapp"))
 	f.Email = optTrim(fv("email"))

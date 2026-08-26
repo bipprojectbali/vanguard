@@ -23,9 +23,7 @@ type LeadFormFields struct {
 	Rating            string
 	UnqualifiedReason string
 	EstimatedValue    string
-	Province          string
-	Regency           string
-	District          string
+	DistrictID        string
 	MobilePhone       string
 	Whatsapp          string
 	Email             string
@@ -41,6 +39,10 @@ type LeadFormView struct {
 	Fields   LeadFormFields
 	Statuses []string
 	Ratings  []string
+
+	// RegionsJSON = dataset penuh master wilayah (h.regionsJSON), diembed sekali
+	// utk cascading dropdown Provinsi/Kabupaten-Kota/Kecamatan (ADR 0009).
+	RegionsJSON string
 }
 
 // LeadForm merender halaman form lengkap.
@@ -80,9 +82,7 @@ func LeadForm(v LeadFormView) g.Node {
 			textareaField("Alasan Unqualified", "unqualified_reason", v.Fields.UnqualifiedReason),
 		),
 		formCard("Lokasi & Kontak",
-			field("Provinsi", "province", v.Fields.Province, false, "text"),
-			field("Kabupaten/Kota", "regency", v.Fields.Regency, false, "text"),
-			field("Kecamatan", "district", v.Fields.District, false, "text"),
+			regionSelect("lead", v.RegionsJSON, v.Fields.DistrictID),
 			field("HP", "mobile_phone", v.Fields.MobilePhone, false, "tel"),
 			field("WhatsApp", "whatsapp", v.Fields.Whatsapp, false, "tel"),
 			field("Email", "email", v.Fields.Email, false, "email"),
@@ -94,6 +94,9 @@ func LeadForm(v LeadFormView) g.Node {
 			h.A(h.Href(v.Base+"/leads"), h.Class("btn btn-ghost min-h-11"), g.Text("Batal")),
 		),
 	))
+	// Cascading dropdown wilayah (regionSelect di atas cuma menanam data + markup;
+	// interaksi berjenjangnya di sini, same-origin CSP-safe, gotcha #12).
+	body = append(body, h.Script(h.Src("/static/regions.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }

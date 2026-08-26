@@ -118,9 +118,8 @@ Pusat sistem. Semua modul lain menyambung ke sini.
 | parent_account_id | BIGINT → accounts | 2.A · self-FK hierarki (Kec/Kab). Nullable, **opsional v1** |
 | website | TEXT | 2.A |
 | description | TEXT | 2.A |
-| province | TEXT | 2.B · picklist disimpan sebagai nilai (bukan master table — lihat keputusan) |
-| regency | TEXT | 2.B |
-| district | TEXT | 2.B |
+| district_id | BIGINT → regions | 2.B · Kecamatan (master wilayah 3-level, ADR 0009). Nullable — NULL pada baris pre-migrasi sampai di-assign ulang |
+| province_legacy, regency_legacy, district_legacy | TEXT | 2.B · **legacy**, bekas kolom teks bebas (lihat keputusan) — tak lagi ditulis, jejak bantu backfill manual |
 | village_address | TEXT | 2.B |
 | postal_code | TEXT | 2.B |
 | latitude | NUMERIC(10,7) | 2.B · Geo. Bukan PostGIS |
@@ -149,14 +148,18 @@ CREATE INDEX idx_accounts_live   ON accounts (tenant_id, created_at DESC, id DES
     WHERE deleted_at IS NULL;
 CREATE INDEX idx_accounts_owner  ON accounts (tenant_id, account_owner) WHERE deleted_at IS NULL;
 CREATE INDEX idx_accounts_csm    ON accounts (tenant_id, assigned_csm)  WHERE deleted_at IS NULL;
-CREATE INDEX idx_accounts_region ON accounts (tenant_id, province, regency, district)
-    WHERE deleted_at IS NULL;   -- Territory/Region View (2.3), GROUP BY
+CREATE INDEX idx_accounts_district ON accounts (tenant_id, district_id)
+    WHERE deleted_at IS NULL;   -- Territory/Region View (2.3), GROUP BY district_id
 ```
 
 **Keputusan:**
-- **Region = kolom text, bukan master table.** `accounts` menampung desa
-  *pipeline* saja (bukan 80rb desa Indonesia). Territory View = `GROUP BY`
-  kolom region. `village_code` mengenkode hierarki bila kelak butuh derive.
+- **Region = master wilayah administratif 3-level** (Provinsi/Kabupaten-Kota/
+  Kecamatan) di tabel global `regions`, direferensikan via `district_id` —
+  lihat [ADR 0009](../decisions/0009-master-wilayah-administratif.md). Desa
+  itu sendiri (`village_name`/`village_code`) **tetap** teks bebas milik akun
+  — `accounts` masih menampung desa *pipeline* saja (bukan ~83rb desa
+  Indonesia), hanya jenjang administratif di atasnya yang jadi master.
+  Territory View = `GROUP BY district_id` (join `regions` untuk nama).
 - **`village_code` unique partial** = pengaman duplikat saat konversi Lead →
   tabrakan ketahuan di DB, bukan jadi desa ganda.
 - **Ownership authoritative di hub** (§8) — `account_owner`/`assigned_csm`/
@@ -166,6 +169,27 @@ CREATE INDEX idx_accounts_region ON accounts (tenant_id, province, regency, dist
 - **`parent_account_id` self-FK opsional v1** — kolom ada (nullable, murah), tapi
   pohon administratif tak wajib diisi. `account_type` belum punya nilai
   "administrative"; ditambah bila hierarki dipakai serius.
+
+---
+
+## 2b. `regions` — Master Wilayah Administratif (dipakai §2 `accounts` & §4a `leads`)
+
+Tabel **GLOBAL** (tanpa `tenant_id`, tanpa RLS — pola sama `platform_staff`),
+lihat [ADR 0009](../decisions/0009-master-wilayah-administratif.md) untuk
+rasional lengkap.
+
+| Kolom | Tipe | Sumber / Catatan |
+|---|---|---|
+| id | BIGINT IDENTITY PK | |
+| parent_region_id | BIGINT → regions | self-FK, nullable (NULL di level 1). `ON DELETE CASCADE` |
+| level | SMALLINT NN CHECK (1,2,3) | 1=Provinsi, 2=Kabupaten/Kota, 3=Kecamatan |
+| code | TEXT NN UNIQUE | kode resmi berjenjang titik (`"11.01.01"`), sumber cahyadsn/wilayah |
+| name | TEXT NN | |
+
+Di-seed sekali via migrasi `00026_crm_regions.sql` (±7.833 baris: 34 provinsi
++ ~514 kab/kota + ~7.285 kecamatan), sumber dataset **cahyadsn/wilayah**
+(GitHub, MIT License). **Tidak** mencakup level Desa/Kelurahan — level itu
+tetap teks bebas milik akun (`village_name`).
 
 ---
 
@@ -236,7 +260,8 @@ account. Konversi (Salesforce-style) membuat account+contact+deal.
 | rating | TEXT | 4.1.B · Hot/Warm/Cold |
 | unqualified_reason | TEXT | 4.1.B · termasuk Duplicate |
 | estimated_value | NUMERIC(15,2) | 4.1.B |
-| province, regency, district | TEXT | 4.1.C · picklist (mentah, belum jadi account) |
+| district_id | BIGINT → regions | 4.1.C · Kecamatan (master wilayah 3-level, ADR 0009), mentah — belum jadi account |
+| province_legacy, regency_legacy, district_legacy | TEXT | 4.1.C · **legacy**, bekas kolom teks bebas — tak lagi ditulis |
 | mobile_phone, whatsapp, email | TEXT | 4.1.C |
 | converted | BOOLEAN NN DEFAULT false | 4.1.B |
 | converted_account_id | BIGINT → accounts | hasil konversi (nullable) |

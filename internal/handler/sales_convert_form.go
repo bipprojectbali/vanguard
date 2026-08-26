@@ -16,9 +16,7 @@ type convertForm struct {
 	// Desa (Account)
 	VillageName string
 	AccountType string
-	Province    *string
-	Regency     *string
-	District    *string
+	DistrictID  *int64
 	// Kontak utama (Contact)
 	FirstName   string
 	LastName    *string
@@ -62,10 +60,16 @@ func parseConvertForm(fv func(string) string) (convertForm, string) {
 	}
 	f.Amount = amt
 
+	// district_id: sama pola parseAccountForm/parseLeadForm — cukup parse & pastikan
+	// bentuknya ID sah; keberadaannya di DB dijaga FK (pelanggaran → SQLSTATE 23503,
+	// ditangani accountWriteErr di sales_convert_action.go).
+	did, code := optInt64(fv("district_id"))
+	if code != "" {
+		return convertForm{}, "district_id"
+	}
+	f.DistrictID = did
+
 	// Teks bebas opsional: trim, kosong → NULL.
-	f.Province = optTrim(fv("province"))
-	f.Regency = optTrim(fv("regency"))
-	f.District = optTrim(fv("district"))
 	f.LastName = optTrim(fv("last_name"))
 	f.JobTitle = optTrim(fv("job_title"))
 	f.MobilePhone = optTrim(fv("mobile_phone"))

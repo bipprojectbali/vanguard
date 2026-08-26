@@ -21,15 +21,19 @@ import (
 // daftar (PII; hanya relevan di detail), jadi tak ada yang perlu disamarkan di
 // sini — masking F4 berlaku di detail. names = peta user_id→nama (dirakit sekali
 // di handler) untuk kolom Owner/CSM; id tak-tertugas / tak-dikenal → "" ("—").
-func accountRowView(a db.Account, names map[int64]string) panel.AccountRow {
+// regions = peta ancestry wilayah (h.regionAncestryMap, dimuat SEKALI oleh
+// pemanggil sebelum loop baris — rule #13, ADR 0009) dipakai resolve
+// Regency/Province dari district_id TANPA query tambahan per baris.
+func accountRowView(a db.Account, names map[int64]string, regions map[int64]regionNode) panel.AccountRow {
+	_, regency, province := regionNames(regions, a.DistrictID)
 	return panel.AccountRow{
 		ID:          a.ID,
 		EntityCode:  deref(a.EntityCode),
 		VillageName: a.VillageName,
 		VillageCode: deref(a.VillageCode),
 		AccountType: accountTypeLabel(a.AccountType),
-		Regency:     deref(a.Regency),
-		Province:    deref(a.Province),
+		Regency:     regency,
+		Province:    province,
 		OwnerName:   memberName(names, a.AccountOwner),
 		CSMName:     memberName(names, a.AssignedCsm),
 	}
@@ -39,6 +43,14 @@ func accountRowView(a db.Account, names map[int64]string) panel.AccountRow {
 // membaca business_role aktor (dasar masking). base = prefix URL workspace.
 func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Account) panel.AccountDetailView {
 	br := session.BusinessRole(ctx)
+	// Satu baris → 1 query GetRegionAncestry (bukan regionAncestryMap, yang
+	// scan ~7.817 baris demi 1 hasil — cocok utk daftar, bukan detail).
+	var province, regency, district string
+	if a.DistrictID != nil {
+		if anc, err := h.q(ctx).GetRegionAncestry(ctx, *a.DistrictID); err == nil {
+			province, regency, district = anc.ProvinceName, anc.RegencyName, anc.DistrictName
+		}
+	}
 	return panel.AccountDetailView{
 		Base:        base,
 		ID:          a.ID,
@@ -49,9 +61,9 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 		Website:     deref(a.Website),
 		Description: deref(a.Description),
 
-		Province:       deref(a.Province),
-		Regency:        deref(a.Regency),
-		District:       deref(a.District),
+		Province:       province,
+		Regency:        regency,
+		District:       district,
 		VillageAddress: deref(a.VillageAddress),
 		PostalCode:     deref(a.PostalCode),
 		Territory:      deref(a.Territory),

@@ -71,9 +71,7 @@ func (h *Handler) LeadConvert(w http.ResponseWriter, r *http.Request) {
 		VillageName:  form.VillageName,
 		AccountType:  form.AccountType,
 		AccountOwner: owner,
-		Province:     form.Province,
-		Regency:      form.Regency,
-		District:     form.District,
+		DistrictID:   form.DistrictID,
 		CreatedBy:    &uid,
 	})
 	if err != nil {

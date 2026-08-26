@@ -25,7 +25,7 @@ import (
 
 // seedQualifiedLead menaruh satu lead Qualified (siap konversi) milik owner
 // tertentu, langsung lewat pool (bypass handler form).
-func (e *testEnv) seedQualifiedLead(t *testing.T, name string, owner int64, regency *string) db.Lead {
+func (e *testEnv) seedQualifiedLead(t *testing.T, name string, owner int64, districtID *int64) db.Lead {
 	t.Helper()
 	code, err := e.q.GenerateEntityCode(t.Context(), e.tenantID, codes.EntityLead)
 	if err != nil {
@@ -37,7 +37,7 @@ func (e *testEnv) seedQualifiedLead(t *testing.T, name string, owner int64, rege
 		LeadName:   name,
 		LeadOwner:  &owner,
 		LeadStatus: "Qualified",
-		Regency:    regency,
+		DistrictID: districtID,
 		CreatedBy:  &owner,
 	})
 	if err != nil {

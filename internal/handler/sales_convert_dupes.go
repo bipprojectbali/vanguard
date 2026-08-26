@@ -18,17 +18,15 @@ import (
 // Nama desa sama bisa valid utk beda dusun/kabupaten, jadi ini bukan hard block.
 
 // findDuplicateVillages mencari kandidat desa dgn nama sama di tenant yang sama
-// via FindDuplicateAccountsByNameRegion. Galat query TAK menghalangi halaman
-// review (soft-warning, bukan gerbang) — dicatat lalu dianggap "tak ada kandidat".
-func (h *Handler) findDuplicateVillages(ctx context.Context, tenantID int64, villageName, regency string) []panel.DuplicateCandidate {
-	var regencyArg *string
-	if regency != "" {
-		regencyArg = &regency
-	}
+// via FindDuplicateAccountsByNameRegion. Sejak ADR 0009, districtID exact match
+// (bukan lagi fuzzy teks regency) — FK menghapus kebutuhan bandingan teks sama
+// sekali. Galat query TAK menghalangi halaman review (soft-warning, bukan
+// gerbang) — dicatat lalu dianggap "tak ada kandidat".
+func (h *Handler) findDuplicateVillages(ctx context.Context, tenantID int64, villageName string, districtID *int64) []panel.DuplicateCandidate {
 	rows, err := h.q(ctx).FindDuplicateAccountsByNameRegion(ctx, db.FindDuplicateAccountsByNameRegionParams{
 		TenantID:    tenantID,
 		VillageName: villageName,
-		Regency:     regencyArg,
+		DistrictID:  districtID,
 	})
 	if err != nil {
 		h.Log.Error("convert: find duplicate villages", "err", err)
@@ -40,7 +38,7 @@ func (h *Handler) findDuplicateVillages(ctx context.Context, tenantID int64, vil
 			AccountID:   row.ID,
 			EntityCode:  deref(row.EntityCode),
 			VillageName: row.VillageName,
-			Regency:     deref(row.Regency),
+			RegionLabel: h.regionLabel(ctx, row.DistrictID),
 		})
 	}
 	return out

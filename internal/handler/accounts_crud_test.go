@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -16,9 +17,10 @@ import (
 // audit tercatat.
 func TestAccounts_CreateSuccess(t *testing.T) {
 	env, uid := setupAccounts(t)
+	districtID := firstDistrictID(t, env)
 	form := accountFormValues("Desa Sukamaju", "prospect")
 	form.Set("village_code", "3201012001")
-	form.Set("province", "Jawa Barat")
+	form.Set("district_id", strconv.FormatInt(districtID, 10))
 	form.Set("contact_phone", "0812-1111-2222")
 	req := accountsReq(http.MethodPost, "/w/test/accounts", form, "")
 	rec := env.runAccount(uid, "owner", "sales", req, env.h.AccountCreate)
@@ -43,7 +45,50 @@ func TestAccounts_CreateSuccess(t *testing.T) {
 	if a.EntityCode == nil || *a.EntityCode == "" {
 		t.Error("entity_code harus dialokasikan saat create")
 	}
+	if a.DistrictID == nil || *a.DistrictID != districtID {
+		t.Errorf("district_id harus tersimpan sesuai input, got %v want %d", a.DistrictID, districtID)
+	}
 	env.assertAudited(t, "account.create")
+}
+
+// TestAccounts_CreateRejectsUnknownDistrict: district_id yang tak ada di
+// master regions (FK violation, SQLSTATE 23503) ditolak dengan pesan spesifik
+// ("district_id"), bukan 500 mentah — accountWriteErr mengenali constraint
+// accounts_district_id_fkey (ADR 0009).
+func TestAccounts_CreateRejectsUnknownDistrict(t *testing.T) {
+	env, uid := setupAccounts(t)
+	form := accountFormValues("Desa X", "prospect")
+	form.Set("district_id", "999999999") // tak pernah ada di seed ~7.817 baris.
+	req := accountsReq(http.MethodPost, "/w/test/accounts", form, "")
+	rec := env.runAccount(uid, "owner", "sales", req, env.h.AccountCreate)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body:\n%s", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=district_id") {
+		t.Errorf("redirect harus err=district_id, got %q", loc)
+	}
+	if rows := env.allAccounts(t); len(rows) != 0 {
+		t.Errorf("FK violation harus membatalkan create, ada %d baris", len(rows))
+	}
+}
+
+// firstDistrictID mengambil satu id Kecamatan (level 3) dari master regions
+// yang di-seed migrasi 00026 — dipakai test yang butuh district_id valid tanpa
+// menghardcode ID yang bisa berubah bila urutan seed migration berubah.
+func firstDistrictID(t *testing.T, env *testEnv) int64 {
+	t.Helper()
+	rows, err := env.q.ListAllRegions(t.Context())
+	if err != nil {
+		t.Fatalf("list regions: %v", err)
+	}
+	for _, r := range rows {
+		if r.Level == 3 {
+			return r.ID
+		}
+	}
+	t.Fatal("master regions kosong — migrasi 00026 belum ter-seed")
+	return 0
 }
 
 // TestAccounts_CreateRejectsInvalid: input yang melanggar validasi backend
