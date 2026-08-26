@@ -87,6 +87,7 @@ func AccountForm(v AccountFormView) g.Node {
 	body := []g.Node{
 		h.Div(
 			h.H1(h.Class("text-xl font-semibold"), g.Text(title)),
+			h.P(h.Class("text-sm text-base-content/60 mb-1"), g.Text(accountFormHint(v.IsEdit))),
 			h.A(h.Href(v.Base+"/accounts"), h.Class("text-sm text-base-content/60"),
 				g.Text("« Kembali ke daftar desa")),
 		),
@@ -140,6 +141,18 @@ func AccountForm(v AccountFormView) g.Node {
 	body = append(body, h.Script(h.Src("/static/regions.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// accountFormHint = penjelasan singkat di bawah judul form, beda utk tambah vs
+// sunting — sama pola dgn accountsTabDesc (penjelasan mengikuti konteks yang
+// sedang dilihat, bukan satu kalimat generik). Menyebut penugasan CSM eksplisit
+// karena assignCard baru muncul setelah desa TERSIMPAN (IsEdit) — tanpa hint ini
+// pengguna baru bisa bingung kenapa opsi itu tak ada di form tambah.
+func accountFormHint(isEdit bool) string {
+	if isEdit {
+		return "Ubah data desa ini. Penugasan CSM (utama/cadangan) diatur terpisah lewat kartu \"Penugasan CSM\" di bawah."
+	}
+	return "Lengkapi data desa baru untuk workspace ini. Penugasan CSM (utama/cadangan) bisa dilakukan setelah desa tersimpan, dari halaman sunting."
 }
 
 // formCard = satu kelompok field dalam kartu. Grid 1-kolom di mobile → 2 di sm
