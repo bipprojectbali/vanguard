@@ -254,11 +254,13 @@ func TestCreateAccount_VillageCodeUniquePerTenant(t *testing.T) {
 }
 
 // TestFindDuplicateAccountsByNameRegion — kandidat duplikat desa (M4-6 follow-
-// up, soft-warning saat konversi). Empat perilaku yang bila rusak bikin
-// peringatan salah/bocor lintas-tenant:
+// up, soft-warning saat konversi). Sejak ADR 0009, penyaring wilayah adalah
+// district_id exact-match (FK ke master regions) — bukan lagi fuzzy teks
+// regency. Empat perilaku yang bila rusak bikin peringatan salah/bocor
+// lintas-tenant:
 //
 //	(1) match case-insensitive + trim ("SUKAMAJU " ketemu "Sukamaju")
-//	(2) regency kosong (NULL) → tak menyaring; regency terisi → ikut menyaring
+//	(2) district_id kosong (NULL) → tak menyaring; terisi → ikut menyaring
 //	(3) isolasi tenant: desa nama sama di tenant lain tak pernah muncul
 //	(4) desa ter-soft-delete dikecualikan
 func TestFindDuplicateAccountsByNameRegion(t *testing.T) {
@@ -270,13 +272,34 @@ func TestFindDuplicateAccountsByNameRegion(t *testing.T) {
 	tenA, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "A", Slug: "a"})
 	tenB, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "B", Slug: "b"})
 
-	regBandung := "Bandung"
-	regBogor := "Bogor"
+	// regions = tabel GLOBAL tanpa RLS (ADR 0009) → aman dibaca via New(pool)
+	// langsung, tanpa WithTenant. Ambil 2 kecamatan berbeda dari master seed
+	// (migrasi 00026) sbg dua district_id yang membedakan kandidat di bawah.
+	allRegions, err := q.ListAllRegions(ctx)
+	if err != nil {
+		t.Fatalf("list regions: %v", err)
+	}
+	var distA, distB int64
+	for _, r := range allRegions {
+		if r.Level != 3 {
+			continue
+		}
+		if distA == 0 {
+			distA = r.ID
+		} else if distB == 0 {
+			distB = r.ID
+			break
+		}
+	}
+	if distA == 0 || distB == 0 {
+		t.Fatalf("perlu >=2 kecamatan di master regions, got distA=%d distB=%d", distA, distB)
+	}
+
 	seedAccount(t, ctx, pool, tenA.ID, "Sukamaju", func(p *CreateAccountParams) {
-		p.Regency = &regBandung
+		p.DistrictID = &distA
 	})
 	seedAccount(t, ctx, pool, tenA.ID, "Sukamaju", func(p *CreateAccountParams) {
-		p.Regency = &regBogor
+		p.DistrictID = &distB
 	})
 	deleted := seedAccount(t, ctx, pool, tenA.ID, "Sukamaju", nil)
 	if e := WithTenant(ctx, pool, tenA.ID, func(q *Queries) error {
@@ -286,8 +309,8 @@ func TestFindDuplicateAccountsByNameRegion(t *testing.T) {
 	}
 	seedAccount(t, ctx, pool, tenB.ID, "Sukamaju", nil) // tenant lain, harus TAK terlihat.
 
-	// (1)+(2): nama beda kapitalisasi/spasi, tanpa filter regency → dua kandidat
-	// hidup (Bandung & Bogor), soft-deleted TAK ikut (4).
+	// (1)+(2): nama beda kapitalisasi/spasi, tanpa filter district_id → dua
+	// kandidat hidup (distA & distB), soft-deleted TAK ikut (4).
 	var rows []FindDuplicateAccountsByNameRegionRow
 	if e := WithTenant(ctx, pool, tenA.ID, func(q *Queries) error {
 		var e error
@@ -296,24 +319,24 @@ func TestFindDuplicateAccountsByNameRegion(t *testing.T) {
 		})
 		return e
 	}); e != nil {
-		t.Fatalf("find (tanpa regency): %v", e)
+		t.Fatalf("find (tanpa district_id): %v", e)
 	}
 	if len(rows) != 2 {
 		t.Fatalf("harus 2 kandidat hidup (soft-deleted dikecualikan), got %d", len(rows))
 	}
 
-	// (2) regency terisi → hanya menyaring ke Bandung.
+	// (2) district_id terisi → hanya menyaring ke distA.
 	if e := WithTenant(ctx, pool, tenA.ID, func(q *Queries) error {
 		var e error
 		rows, e = q.FindDuplicateAccountsByNameRegion(ctx, FindDuplicateAccountsByNameRegionParams{
-			TenantID: tenA.ID, VillageName: "Sukamaju", Regency: &regBandung,
+			TenantID: tenA.ID, VillageName: "Sukamaju", DistrictID: &distA,
 		})
 		return e
 	}); e != nil {
-		t.Fatalf("find (regency Bandung): %v", e)
+		t.Fatalf("find (district_id distA): %v", e)
 	}
-	if len(rows) != 1 || rows[0].Regency == nil || *rows[0].Regency != regBandung {
-		t.Errorf("regency terisi harus menyaring ke Bandung saja, got %d baris", len(rows))
+	if len(rows) != 1 || rows[0].DistrictID == nil || *rows[0].DistrictID != distA {
+		t.Errorf("district_id terisi harus menyaring ke distA saja, got %d baris", len(rows))
 	}
 
 	// (3) isolasi tenant: query di tenant B tak boleh melihat baris tenant A.
