@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 	"testing"
 
 	"go_starter/internal/db"
@@ -183,5 +185,33 @@ func TestSeedInto(t *testing.T) {
 		if !stages[want] {
 			t.Errorf("deal stage %q tidak ditemukan", want)
 		}
+	}
+
+	// 6. village_code berformat pseudo-Kemendagri (3 segmen kode kecamatan ASLI
+	// + 1 segmen urut fiktif), BUKAN prefix "VC-"/"VC-LEAD-" lama — mengunci
+	// perubahan format di accounts.go/leads.go (lihat desaSeqOffset di util.go).
+	villageCodeRe := regexp.MustCompile(`^[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]{4}$`)
+	vcRows, err := pkgPool.Query(ctx,
+		`SELECT village_code FROM accounts WHERE tenant_id = $1 AND village_code IS NOT NULL`, tenantID)
+	if err != nil {
+		t.Fatalf("query village_code: %v", err)
+	}
+	var villageCodeCount int
+	for vcRows.Next() {
+		var code string
+		if err := vcRows.Scan(&code); err != nil {
+			t.Fatalf("scan village_code: %v", err)
+		}
+		villageCodeCount++
+		if strings.Contains(code, "VC-") {
+			t.Errorf("village_code %q masih pakai prefix VC-/VC-LEAD- lama", code)
+		}
+		if !villageCodeRe.MatchString(code) {
+			t.Errorf("village_code %q tidak berformat pseudo-Kemendagri NN.NN.NN.NNNN", code)
+		}
+	}
+	vcRows.Close()
+	if villageCodeCount == 0 {
+		t.Error("tidak ada account dgn village_code terisi — seharusnya semua desa demo punya kode")
 	}
 }

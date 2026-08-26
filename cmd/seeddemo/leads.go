@@ -120,7 +120,9 @@ func convertLead(ctx context.Context, q *db.Queries, tenantID int64, tag string,
 	if err != nil {
 		return accountInfo{}, fmt.Errorf("kode account: %w", err)
 	}
-	villageCode := fmt.Sprintf("VC-LEAD-%s-%03d", tag, seq)
+	// Basis 1000+seq (bukan seq langsung) supaya disjoint dari basis 1..40
+	// akun biasa di accounts.go — lihat desaSeqOffset.
+	villageCode := fmt.Sprintf("%s.%04d", d.Code, (desaSeqOffset(tag)+1000+seq)%10000)
 	acc, err := q.CreateAccount(ctx, db.CreateAccountParams{
 		TenantID:      tenantID,
 		EntityCode:    &accCode,
