@@ -187,10 +187,28 @@ func fieldHint(hint []string) g.Node {
 	return h.P(h.Class("text-xs text-base-content/60"), g.Text(hint[0]))
 }
 
+// fieldWrapClass menentukan lebar grid satu field di formCard (sm:grid-cols-2).
+// Field TANPA hint tetap setengah lebar (dua per baris, seperti semula). Field
+// BER-hint dilebarkan penuh (sm:col-span-2) — sebelum ini, field ber-hint yang
+// kebetulan berpasangan dgn field tanpa hint pada baris grid yang sama (mis.
+// "Kode Pos" vs "Teritori", "Nama Desa" vs "Tipe Akun") membuat baris itu
+// tampak timpang: sel bertetangga jauh lebih pendek, menyisakan ruang kosong
+// di bawahnya karena tinggi baris grid mengikuti sel tertinggi. Melebarkan
+// penuh field ber-hint memutus pasangannya dgn field tak terkait sehingga tiap
+// baris tetap rata — pola yang sama dgn textareaField yang sudah lebih dulu
+// full-width.
+func fieldWrapClass(hint []string) string {
+	if len(hint) > 0 && hint[0] != "" {
+		return "grid gap-1 min-w-0 sm:col-span-2"
+	}
+	return "grid gap-1 min-w-0"
+}
+
 // field = satu input teks/angka. required menandai wajib (jaring klien; backend
 // tetap memvalidasi). text-base (≥16px) agar iOS tak auto-zoom saat fokus. hint
 // (opsional, variadic) = penjelasan singkat utk field yang maknanya tak jelas
-// hanya dari label (mis. beda Teritori vs Kabupaten/Kota administratif).
+// hanya dari label (mis. beda Teritori vs Kabupaten/Kota administratif). Field
+// ber-hint dilebarkan penuh (fieldWrapClass) — lihat komentarnya soal alasan.
 func field(label, name, val string, required bool, typ string, hint ...string) g.Node {
 	attrs := []g.Node{
 		h.ID("f-" + name), h.Name(name), h.Type(typ),
@@ -203,7 +221,7 @@ func field(label, name, val string, required bool, typ string, hint ...string) g
 		attrs = append(attrs, g.Attr("min", "0"))
 	}
 	return h.Div(
-		h.Class("grid gap-1 min-w-0"),
+		h.Class(fieldWrapClass(hint)),
 		labelFor(label, "f-"+name, required),
 		ui.Input(attrs...),
 		fieldHint(hint),
@@ -265,7 +283,7 @@ func selectField(label, name, current string, opts []string, required bool, hint
 		sel = append(sel, h.Required())
 	}
 	return h.Div(
-		h.Class("grid gap-1 min-w-0"),
+		h.Class(fieldWrapClass(hint)),
 		labelFor(label, "f-"+name, required),
 		h.Select(append(sel, g.Group(nodes))...),
 		fieldHint(hint),
