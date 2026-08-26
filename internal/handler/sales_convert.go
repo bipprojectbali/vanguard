@@ -47,9 +47,10 @@ func (h *Handler) LeadConvertPage(w http.ResponseWriter, r *http.Request) {
 		LeadName:      l.LeadName,
 		LeadCode:      deref(l.EntityCode),
 		PhoneEditable: phoneEditable,
+		RegionsJSON:   h.regionsJSON(ctx),
 		AccountTypes:  accountTypeOptions,
 		Fields:        convertPrefill(l, phoneEditable),
-		Duplicates:    h.findDuplicateVillages(ctx, session.TenantID(ctx), l.LeadName, deref(l.Regency)),
+		Duplicates:    h.findDuplicateVillages(ctx, session.TenantID(ctx), l.LeadName, l.DistrictID),
 	}
 	h.renderWorkspaceShell(w, r, "Konversi Lead", "/leads", panel.LeadConvert(v))
 }
@@ -74,9 +75,7 @@ func convertPrefill(l db.Lead, phoneEditable bool) panel.ConvertFormFields {
 	return panel.ConvertFormFields{
 		VillageName: l.LeadName,
 		AccountType: "prospect", // lead yang dikonversi = prospek baru.
-		Province:    deref(l.Province),
-		Regency:     deref(l.Regency),
-		District:    deref(l.District),
+		DistrictID:  int64PtrStr(l.DistrictID),
 		FirstName:   firstName,
 		JobTitle:    deref(l.JobTitle),
 		MobilePhone: mobile,

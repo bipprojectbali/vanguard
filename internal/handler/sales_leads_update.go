@@ -27,16 +27,18 @@ func (h *Handler) LeadEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
 	base := wsPath(slugFromRequest(r), "")
 	idStr := strconv.FormatInt(l.ID, 10)
 	v := panel.LeadFormView{
-		Base:     base,
-		Action:   base + "/leads/" + idStr,
-		IsEdit:   true,
-		Err:      wsErrMsg(r.URL.Query().Get("err")),
-		Fields:   leadFormFields(l, canEditPhone(r.Context())),
-		Statuses: leadStatusOptions,
-		Ratings:  leadRatingOptions,
+		Base:        base,
+		Action:      base + "/leads/" + idStr,
+		IsEdit:      true,
+		Err:         wsErrMsg(r.URL.Query().Get("err")),
+		RegionsJSON: h.regionsJSON(ctx),
+		Fields:      leadFormFields(l, canEditPhone(ctx)),
+		Statuses:    leadStatusOptions,
+		Ratings:     leadRatingOptions,
 	}
 	h.renderWorkspaceShell(w, r, "Sunting Lead", "/leads", panel.LeadForm(v))
 }
@@ -86,15 +88,17 @@ func (h *Handler) LeadUpdate(w http.ResponseWriter, r *http.Request) {
 		Rating:            form.Rating,
 		UnqualifiedReason: form.UnqualifiedReason,
 		EstimatedValue:    form.EstimatedValue,
-		Province:          form.Province,
-		Regency:           form.Regency,
-		District:          form.District,
+		DistrictID:        form.DistrictID,
 		MobilePhone:       mobile,
 		Whatsapp:          whatsapp,
 		Email:             form.Email,
 		UpdatedBy:         &uid,
 		ID:                id,
 	}); err != nil {
+		if code, ok := leadWriteErr(err); ok {
+			wsRedirect(w, r, "/leads/"+strconv.FormatInt(id, 10)+"/edit", code)
+			return
+		}
 		h.Log.Error("leads: update", "err", err)
 		wsRedirect(w, r, "/leads/"+strconv.FormatInt(id, 10)+"/edit", "failed")
 		return

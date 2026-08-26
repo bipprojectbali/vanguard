@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -8,6 +9,8 @@ import (
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // sales_leads.go — AKSI atas Lead: gerbang tulis bersama + form buat/create.
@@ -35,14 +38,16 @@ func (h *Handler) LeadNew(w http.ResponseWriter, r *http.Request) {
 	if !h.requireLeadWrite(w, r) {
 		return
 	}
+	ctx := r.Context()
 	base := wsPath(slugFromRequest(r), "")
 	v := panel.LeadFormView{
-		Base:     base,
-		Action:   base + "/leads",
-		IsEdit:   false,
-		Err:      wsErrMsg(r.URL.Query().Get("err")),
-		Statuses: leadStatusOptions,
-		Ratings:  leadRatingOptions,
+		Base:        base,
+		Action:      base + "/leads",
+		IsEdit:      false,
+		Err:         wsErrMsg(r.URL.Query().Get("err")),
+		RegionsJSON: h.regionsJSON(ctx),
+		Statuses:    leadStatusOptions,
+		Ratings:     leadRatingOptions,
 	}
 	h.renderWorkspaceShell(w, r, "Tambah Lead", "/leads", panel.LeadForm(v))
 }
@@ -82,15 +87,17 @@ func (h *Handler) LeadCreate(w http.ResponseWriter, r *http.Request) {
 		Rating:            form.Rating,
 		UnqualifiedReason: form.UnqualifiedReason,
 		EstimatedValue:    form.EstimatedValue,
-		Province:          form.Province,
-		Regency:           form.Regency,
-		District:          form.District,
+		DistrictID:        form.DistrictID,
 		MobilePhone:       form.MobilePhone,
 		Whatsapp:          form.Whatsapp,
 		Email:             form.Email,
 		CreatedBy:         &uid,
 	})
 	if err != nil {
+		if code, ok := leadWriteErr(err); ok {
+			wsRedirect(w, r, "/leads/new", code)
+			return
+		}
 		h.Log.Error("leads: create", "err", err)
 		wsRedirect(w, r, "/leads/new", "failed")
 		return
@@ -100,4 +107,16 @@ func (h *Handler) LeadCreate(w http.ResponseWriter, r *http.Request) {
 		"lead_id": strconv.FormatInt(l.ID, 10), "code": code,
 	})
 	wsRedirectOK(w, r, "/leads/"+strconv.FormatInt(l.ID, 10), "created")
+}
+
+// leadWriteErr mengenali galat DB yang bisa diperbaiki user → kode pesan. Hanya
+// district_id tak valid (FK) yang dikenali di sini; sisanya "internal" (mirip
+// accountWriteErr, tapi leads tak punya UNIQUE selain PK/entity_code).
+func leadWriteErr(err error) (string, bool) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == sqlStateForeignKeyViolation &&
+		pgErr.ConstraintName == "leads_district_id_fkey" {
+		return "district_id", true
+	}
+	return "", false
 }
