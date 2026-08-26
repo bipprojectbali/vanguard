@@ -117,7 +117,7 @@ func successPlansTable(v SuccessPlansListView) g.Node {
 		h.Th(g.Text("Objektif")),
 		h.Th(g.Text("Status")),
 		h.Th(g.Text("Progres")),
-		h.Th(g.Text("Owner CSM")),
+		h.Th(g.Text("Owner CS")),
 		h.Th(g.Text("Target")),
 	}
 	if v.CanWrite {

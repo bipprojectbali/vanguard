@@ -130,7 +130,7 @@ func accountsTabs(v AccountsListView) g.Node {
 func accountsTabDesc(view string) string {
 	switch view {
 	case AccViewMy:
-		return "Desa yang Anda kelola sebagai Owner atau CSM (utama/cadangan)."
+		return "Desa yang Anda kelola sebagai Owner atau CS (utama/cadangan)."
 	case AccViewUnowned:
 		return "Desa yang belum punya penanggung jawab (Owner)."
 	default: // AccViewAll
@@ -191,7 +191,7 @@ func accountsTable(v AccountsListView) g.Node {
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Kab/Kota")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Provinsi")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Owner")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("CSM")),
+					h.Th(h.Class("py-2 font-medium"), g.Text("CS")),
 				)),
 				h.TBody(g.Group(rows)),
 			)),
@@ -248,7 +248,7 @@ func AccountsForbidden() g.Node {
 		h.H1(h.Class("text-xl font-semibold mb-2"), g.Text("Desa")),
 		h.P(h.Class("text-base-content/70"),
 			g.Text("Modul Desa hanya bisa dibuka oleh pemegang peran CRM "+
-				"(admin, manajer, sales, atau CSM).")),
+				"(admin, manajer, sales, atau CS).")),
 		h.P(h.Class("text-sm text-base-content/60"),
 			g.Text("Hubungi admin workspace bila Anda perlu akses ke data desa.")),
 	)

@@ -323,7 +323,7 @@ func ContactsForbidden() g.Node {
 		h.H1(h.Class("text-xl font-semibold mb-2"), g.Text("Kontak")),
 		h.P(h.Class("text-base-content/70"),
 			g.Text("Modul Kontak hanya bisa dibuka oleh pemegang peran CRM "+
-				"(admin, manajer, sales, atau CSM).")),
+				"(admin, manajer, sales, atau CS).")),
 		h.P(h.Class("text-sm text-base-content/60"),
 			g.Text("Hubungi admin workspace bila Anda perlu akses ke data kontak.")),
 	)
