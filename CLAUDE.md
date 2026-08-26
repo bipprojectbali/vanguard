@@ -66,9 +66,14 @@ README = cara pakai; file ini = konvensi + **gotcha mahal**.
 - **Diagnosis overflow**: ukur `documentElement.scrollWidth` vs `clientWidth`, daftar elemen
   `getBoundingClientRect().right > vw` TANPA `closest('.overflow-x-auto')` — itu pelakunya.
 - **Tap target ≥ 44px**; input `text-base` (≥16px) agar iOS tak auto-zoom.
-- **VERIFIKASI 3 LEBAR WAJIB** sebelum lapor selesai untuk perubahan UI: skill
-  **ego-browser**, 375/768/1280 + screenshot tiap lebar. Tak ada `set_viewport` — pakai CDP
-  `Emulation.setDeviceMetricsOverride` lalu `clearDeviceMetricsOverride`.
+- **Verifikasi 3 lebar (375/768/1280) via ego-browser HANYA saat user memerintahkan
+  eksplisit** ("buka browser dan cek...", "verifikasi pakai ego-browser..." — pola sama
+  larangan Playwright global §1 CLAUDE.md user). Tanpa perintah eksplisit, review
+  statis kelas Tailwind (mobile-first, `flex-wrap`, `TableScroll`, dsb. — poin di atas)
+  cukup untuk lapor selesai; sebutkan bahwa verifikasi visual belum dijalankan. Jika
+  dijalankan: skill **ego-browser**, 375/768/1280 + screenshot tiap lebar; CDP
+  `Emulation.setDeviceMetricsOverride` lalu `clearDeviceMetricsOverride` (tak ada
+  `set_viewport`).
 
 ## Identitas panel (/w/{slug} · /dev)
 
