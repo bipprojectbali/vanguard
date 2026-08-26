@@ -20,9 +20,9 @@ type Account struct {
 	ParentAccountID       *int64             `json:"parent_account_id"`
 	Website               *string            `json:"website"`
 	Description           *string            `json:"description"`
-	Province              *string            `json:"province"`
-	Regency               *string            `json:"regency"`
-	District              *string            `json:"district"`
+	ProvinceLegacy        *string            `json:"province_legacy"`
+	RegencyLegacy         *string            `json:"regency_legacy"`
+	DistrictLegacy        *string            `json:"district_legacy"`
 	VillageAddress        *string            `json:"village_address"`
 	PostalCode            *string            `json:"postal_code"`
 	Latitude              pgtype.Numeric     `json:"latitude"`
@@ -42,6 +42,7 @@ type Account struct {
 	UpdatedBy             *int64             `json:"updated_by"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	EntityCode            *string            `json:"entity_code"`
+	DistrictID            *int64             `json:"district_id"`
 }
 
 type Activity struct {
@@ -330,9 +331,9 @@ type Lead struct {
 	Rating             *string            `json:"rating"`
 	UnqualifiedReason  *string            `json:"unqualified_reason"`
 	EstimatedValue     pgtype.Numeric     `json:"estimated_value"`
-	Province           *string            `json:"province"`
-	Regency            *string            `json:"regency"`
-	District           *string            `json:"district"`
+	ProvinceLegacy     *string            `json:"province_legacy"`
+	RegencyLegacy      *string            `json:"regency_legacy"`
+	DistrictLegacy     *string            `json:"district_legacy"`
 	MobilePhone        *string            `json:"mobile_phone"`
 	Whatsapp           *string            `json:"whatsapp"`
 	Email              *string            `json:"email"`
@@ -346,6 +347,7 @@ type Lead struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedBy          *int64             `json:"updated_by"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	DistrictID         *int64             `json:"district_id"`
 }
 
 type Membership struct {
@@ -454,6 +456,14 @@ type QuoteItem struct {
 	DiscountPct pgtype.Numeric `json:"discount_pct"`
 	Subtotal    pgtype.Numeric `json:"subtotal"`
 	LineNo      *int16         `json:"line_no"`
+}
+
+type Region struct {
+	ID             int64  `json:"id"`
+	ParentRegionID *int64 `json:"parent_region_id"`
+	Level          int16  `json:"level"`
+	Code           string `json:"code"`
+	Name           string `json:"name"`
 }
 
 type SlaPolicy struct {

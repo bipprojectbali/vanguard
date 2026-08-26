@@ -14,14 +14,14 @@ INSERT INTO leads (
     tenant_id, entity_code, lead_name, lead_owner,
     contact_person, job_title, lead_source,
     lead_status, rating, unqualified_reason, estimated_value,
-    province, regency, district, mobile_phone, whatsapp, email,
+    district_id, mobile_phone, whatsapp, email,
     created_by
 ) VALUES (
     sqlc.arg(tenant_id), sqlc.arg(entity_code), sqlc.arg(lead_name), sqlc.narg(lead_owner),
     sqlc.narg(contact_person), sqlc.narg(job_title), sqlc.narg(lead_source),
     sqlc.arg(lead_status), sqlc.narg(rating), sqlc.narg(unqualified_reason),
     sqlc.narg(estimated_value),
-    sqlc.narg(province), sqlc.narg(regency), sqlc.narg(district),
+    sqlc.narg(district_id),
     sqlc.narg(mobile_phone), sqlc.narg(whatsapp), sqlc.narg(email),
     sqlc.narg(created_by)
 )
@@ -71,9 +71,7 @@ UPDATE leads SET
     rating             = sqlc.narg(rating),
     unqualified_reason = sqlc.narg(unqualified_reason),
     estimated_value    = sqlc.narg(estimated_value),
-    province           = sqlc.narg(province),
-    regency            = sqlc.narg(regency),
-    district           = sqlc.narg(district),
+    district_id        = sqlc.narg(district_id),
     mobile_phone       = sqlc.narg(mobile_phone),
     whatsapp           = sqlc.narg(whatsapp),
     email              = sqlc.narg(email),

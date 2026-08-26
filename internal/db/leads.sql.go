@@ -17,18 +17,18 @@ INSERT INTO leads (
     tenant_id, entity_code, lead_name, lead_owner,
     contact_person, job_title, lead_source,
     lead_status, rating, unqualified_reason, estimated_value,
-    province, regency, district, mobile_phone, whatsapp, email,
+    district_id, mobile_phone, whatsapp, email,
     created_by
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7,
     $8, $9, $10,
     $11,
-    $12, $13, $14,
-    $15, $16, $17,
-    $18
+    $12,
+    $13, $14, $15,
+    $16
 )
-RETURNING id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province, regency, district, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at
+RETURNING id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id
 `
 
 type CreateLeadParams struct {
@@ -43,9 +43,7 @@ type CreateLeadParams struct {
 	Rating            *string        `json:"rating"`
 	UnqualifiedReason *string        `json:"unqualified_reason"`
 	EstimatedValue    pgtype.Numeric `json:"estimated_value"`
-	Province          *string        `json:"province"`
-	Regency           *string        `json:"regency"`
-	District          *string        `json:"district"`
+	DistrictID        *int64         `json:"district_id"`
 	MobilePhone       *string        `json:"mobile_phone"`
 	Whatsapp          *string        `json:"whatsapp"`
 	Email             *string        `json:"email"`
@@ -75,9 +73,7 @@ func (q *Queries) CreateLead(ctx context.Context, arg CreateLeadParams) (Lead, e
 		arg.Rating,
 		arg.UnqualifiedReason,
 		arg.EstimatedValue,
-		arg.Province,
-		arg.Regency,
-		arg.District,
+		arg.DistrictID,
 		arg.MobilePhone,
 		arg.Whatsapp,
 		arg.Email,
@@ -97,9 +93,9 @@ func (q *Queries) CreateLead(ctx context.Context, arg CreateLeadParams) (Lead, e
 		&i.Rating,
 		&i.UnqualifiedReason,
 		&i.EstimatedValue,
-		&i.Province,
-		&i.Regency,
-		&i.District,
+		&i.ProvinceLegacy,
+		&i.RegencyLegacy,
+		&i.DistrictLegacy,
 		&i.MobilePhone,
 		&i.Whatsapp,
 		&i.Email,
@@ -113,12 +109,13 @@ func (q *Queries) CreateLead(ctx context.Context, arg CreateLeadParams) (Lead, e
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.DistrictID,
 	)
 	return i, err
 }
 
 const getLead = `-- name: GetLead :one
-SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province, regency, district, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at FROM leads
+SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id FROM leads
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -140,9 +137,9 @@ func (q *Queries) GetLead(ctx context.Context, id int64) (Lead, error) {
 		&i.Rating,
 		&i.UnqualifiedReason,
 		&i.EstimatedValue,
-		&i.Province,
-		&i.Regency,
-		&i.District,
+		&i.ProvinceLegacy,
+		&i.RegencyLegacy,
+		&i.DistrictLegacy,
 		&i.MobilePhone,
 		&i.Whatsapp,
 		&i.Email,
@@ -156,12 +153,13 @@ func (q *Queries) GetLead(ctx context.Context, id int64) (Lead, error) {
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.DistrictID,
 	)
 	return i, err
 }
 
 const listLeads = `-- name: ListLeads :many
-SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province, regency, district, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at FROM leads
+SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id FROM leads
 WHERE deleted_at IS NULL
   AND (created_at, id) < ($1::timestamptz, $2::bigint)
   AND (
@@ -230,9 +228,9 @@ func (q *Queries) ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, e
 			&i.Rating,
 			&i.UnqualifiedReason,
 			&i.EstimatedValue,
-			&i.Province,
-			&i.Regency,
-			&i.District,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
 			&i.MobilePhone,
 			&i.Whatsapp,
 			&i.Email,
@@ -246,6 +244,7 @@ func (q *Queries) ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, e
 			&i.CreatedAt,
 			&i.UpdatedBy,
 			&i.UpdatedAt,
+			&i.DistrictID,
 		); err != nil {
 			return nil, err
 		}
@@ -322,16 +321,14 @@ UPDATE leads SET
     rating             = $7,
     unqualified_reason = $8,
     estimated_value    = $9,
-    province           = $10,
-    regency            = $11,
-    district           = $12,
-    mobile_phone       = $13,
-    whatsapp           = $14,
-    email              = $15,
-    updated_by         = $16,
+    district_id        = $10,
+    mobile_phone       = $11,
+    whatsapp           = $12,
+    email              = $13,
+    updated_by         = $14,
     updated_at         = now()
-WHERE id = $17 AND deleted_at IS NULL
-RETURNING id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province, regency, district, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at
+WHERE id = $15 AND deleted_at IS NULL
+RETURNING id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id
 `
 
 type UpdateLeadParams struct {
@@ -344,9 +341,7 @@ type UpdateLeadParams struct {
 	Rating            *string        `json:"rating"`
 	UnqualifiedReason *string        `json:"unqualified_reason"`
 	EstimatedValue    pgtype.Numeric `json:"estimated_value"`
-	Province          *string        `json:"province"`
-	Regency           *string        `json:"regency"`
-	District          *string        `json:"district"`
+	DistrictID        *int64         `json:"district_id"`
 	MobilePhone       *string        `json:"mobile_phone"`
 	Whatsapp          *string        `json:"whatsapp"`
 	Email             *string        `json:"email"`
@@ -368,9 +363,7 @@ func (q *Queries) UpdateLead(ctx context.Context, arg UpdateLeadParams) (Lead, e
 		arg.Rating,
 		arg.UnqualifiedReason,
 		arg.EstimatedValue,
-		arg.Province,
-		arg.Regency,
-		arg.District,
+		arg.DistrictID,
 		arg.MobilePhone,
 		arg.Whatsapp,
 		arg.Email,
@@ -391,9 +384,9 @@ func (q *Queries) UpdateLead(ctx context.Context, arg UpdateLeadParams) (Lead, e
 		&i.Rating,
 		&i.UnqualifiedReason,
 		&i.EstimatedValue,
-		&i.Province,
-		&i.Regency,
-		&i.District,
+		&i.ProvinceLegacy,
+		&i.RegencyLegacy,
+		&i.DistrictLegacy,
 		&i.MobilePhone,
 		&i.Whatsapp,
 		&i.Email,
@@ -407,6 +400,7 @@ func (q *Queries) UpdateLead(ctx context.Context, arg UpdateLeadParams) (Lead, e
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.DistrictID,
 	)
 	return i, err
 }

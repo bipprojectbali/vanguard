@@ -356,8 +356,9 @@ type Querier interface {
 	DeleteQuoteItem(ctx context.Context, id int64) error
 	// Kandidat desa dgn nama sama (case-insensitive, trim) di tenant yang sama — dipakai
 	// sbg soft-warning di halaman review konversi lead (M4-6, follow-up), BUKAN hard
-	// block: nama desa yang sama bisa valid beda dusun/kabupaten. regency opsional:
-	// diisi → ikut menyaring; kosong → cukup cocokkan nama. Ditopang index functional
+	// block: nama desa yang sama bisa valid beda dusun/kabupaten. district_id opsional
+	// (FK exact-match sejak 0009 — sebelumnya fuzzy teks pada regency): diisi → ikut
+	// menyaring persis, kosong → cukup cocokkan nama. Ditopang index functional
 	// idx_accounts_village_name_ci (00020). Dibatasi 5 kandidat, cukup utk peringatan,
 	// bukan daftar lengkap.
 	FindDuplicateAccountsByNameRegion(ctx context.Context, arg FindDuplicateAccountsByNameRegionParams) ([]FindDuplicateAccountsByNameRegionRow, error)
@@ -435,6 +436,11 @@ type Querier interface {
 	// Satu quote hidup. RLS menjamin tenant_id; kelayakan akses (via deal ber-owner)
 	// diputuskan handler sebelum memanggil ini.
 	GetQuote(ctx context.Context, id int64) (Quote, error)
+	// Nama Kecamatan + Kabupaten/Kota + Provinsi sekaligus utk SATU district_id — dipakai
+	// READ view (list/detail account & lead, banner dupe konversi) yang tampil tanpa JS.
+	// Self-join 3x murni (bukan recursive CTE) karena kedalaman selalu tepat 3, lebih
+	// mudah dibaca sqlc & planner Postgres.
+	GetRegionAncestry(ctx context.Context, districtID int64) (GetRegionAncestryRow, error)
 	// Satu kebijakan (untuk baca target saat dipakai D1/D2). RLS menjamin
 	// tenant_id. Tak filter is_active: handler memutuskan.
 	GetSLAPolicy(ctx context.Context, id int64) (SlaPolicy, error)
@@ -536,6 +542,11 @@ type Querier interface {
 	// WithSuper — di tenant-tx, RLS menyembunyikan tenant lain → enforcer deny-all
 	// senyap untuk mereka.
 	ListAllBusinessRolePermissions(ctx context.Context) ([]ListAllBusinessRolePermissionsRow, error)
+	// SEMUA ~7.817 baris (3 level), dipakai SEKALI di handler form utk embed
+	// <script type="application/json"> yang dibaca static/regions.js — cascading
+	// dropdown Provinsi→Kabupaten/Kota→Kecamatan 100% di browser, tanpa round-trip
+	// server per pilihan (lihat keputusan desain #5, plan 0009).
+	ListAllRegions(ctx context.Context) ([]ListAllRegionsRow, error)
 	ListAuditLogs(ctx context.Context, pageSize int32) ([]AuditLog, error)
 	// Izin SATU workspace — dipakai reload per-tenant setelah matriks diubah, dan
 	// untuk merender editor. Urut agar diff/tampilan stabil.
@@ -612,6 +623,9 @@ type Querier interface {
 	// per kolom). LIMIT membatasi papan agar tak memuat seluruh tabel (guardrail
 	// pagination); deal di luar batas tetap terlihat lewat tampilan Tabel berkeyset.
 	ListDealsForPipeline(ctx context.Context, arg ListDealsForPipelineParams) ([]Deal, error)
+	// Level 3 (Kecamatan) di bawah satu kabupaten/kota. Sama alasannya dgn
+	// ListRegenciesByProvince — bukan jalur utama (JS-side), cadangan validasi.
+	ListDistrictsByRegency(ctx context.Context, parentRegionID *int64) ([]Region, error)
 	// Daftar engagement, keyset (scheduled_at DESC, id DESC) + F3 ownership + filter tab.
 	//
 	// Ownership dikodekan sebagai dua flag boolean (scope_all / is_own):
@@ -737,6 +751,14 @@ type Querier interface {
 	// ListPlaybooks (hanya aktif). Aktif dulu lalu urut nama. Bounded katalog
 	// master per-workspace → tanpa keyset.
 	ListPlaybooksAll(ctx context.Context) ([]Playbook, error)
+	// regions.sql — master wilayah administratif GLOBAL (Provinsi → Kabupaten/Kota →
+	// Kecamatan), lihat migrations/00026_crm_regions.sql & docs/decisions/0009. Tabel ini
+	// TANPA tenant_id/RLS (data sama utk semua tenant, pola sama dgn platform_staff) —
+	// semua query di sini aman dipanggil lewat h.q(ctx) (tx ber-tenant) MAUPUN db.WithSuper,
+	// keduanya baca baris yang sama.
+	// Level 1 (Provinsi), dipakai isi opsi pertama dropdown wilayah server-side (fallback
+	// non-JS / SSR awal) sebelum static/regions.js mengambil alih interaksi client-side.
+	ListProvinces(ctx context.Context) ([]Region, error)
 	// Baris item satu quote, urut tampil (line_no lalu id). Menopang detail quote &
 	// rekalkulasi total. Bounded per-quote (bukan daftar global) → tanpa keyset.
 	ListQuoteItems(ctx context.Context, quoteID int64) ([]QuoteItem, error)
@@ -751,6 +773,10 @@ type Querier interface {
 	// (created_at DESC, id DESC). Deal sudah ter-scope ownership di handler; di sini
 	// cukup filter deal_id + baris hidup. First page: cursor = (now(), max bigint).
 	ListQuotesForDeal(ctx context.Context, arg ListQuotesForDealParams) ([]Quote, error)
+	// Level 2 (Kabupaten/Kota) di bawah satu provinsi. Tak dipakai cascading di JS
+	// (dataset penuh sudah di-embed via ListAllRegions), tapi berguna utk validasi
+	// server-side / API lain di masa depan.
+	ListRegenciesByProvince(ctx context.Context, parentRegionID *int64) ([]Region, error)
 	// Riwayat renewal (M5-4): telusuri rantai MUNDUR dari satu langganan lewat
 	// previous_subscription_id (self-FK) sampai periode paling awal, lalu urut kronologis
 	// (lama→baru). Rekursif via self-FK (bukan filter account+plan) karena renewal

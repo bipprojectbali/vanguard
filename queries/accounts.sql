@@ -14,7 +14,7 @@ INSERT INTO accounts (
     tenant_id, entity_code, village_name, village_code, account_type,
     account_owner, assigned_csm, backup_csm,
     website, description,
-    province, regency, district, village_address, postal_code, territory,
+    district_id, village_address, postal_code, territory,
     village_status, village_classification, population, hamlets_count, village_budget,
     contact_phone, office_phone, office_email,
     created_by
@@ -23,7 +23,7 @@ INSERT INTO accounts (
     sqlc.narg(village_code), sqlc.arg(account_type),
     sqlc.narg(account_owner), sqlc.narg(assigned_csm), sqlc.narg(backup_csm),
     sqlc.narg(website), sqlc.narg(description),
-    sqlc.narg(province), sqlc.narg(regency), sqlc.narg(district),
+    sqlc.narg(district_id),
     sqlc.narg(village_address), sqlc.narg(postal_code), sqlc.narg(territory),
     sqlc.narg(village_status), sqlc.narg(village_classification),
     sqlc.narg(population), sqlc.narg(hamlets_count), sqlc.narg(village_budget),
@@ -79,9 +79,7 @@ UPDATE accounts SET
     account_type          = sqlc.arg(account_type),
     website               = sqlc.narg(website),
     description           = sqlc.narg(description),
-    province              = sqlc.narg(province),
-    regency               = sqlc.narg(regency),
-    district              = sqlc.narg(district),
+    district_id           = sqlc.narg(district_id),
     village_address       = sqlc.narg(village_address),
     postal_code           = sqlc.narg(postal_code),
     territory             = sqlc.narg(territory),
@@ -117,18 +115,19 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 -- name: FindDuplicateAccountsByNameRegion :many
 -- Kandidat desa dgn nama sama (case-insensitive, trim) di tenant yang sama — dipakai
 -- sbg soft-warning di halaman review konversi lead (M4-6, follow-up), BUKAN hard
--- block: nama desa yang sama bisa valid beda dusun/kabupaten. regency opsional:
--- diisi → ikut menyaring; kosong → cukup cocokkan nama. Ditopang index functional
+-- block: nama desa yang sama bisa valid beda dusun/kabupaten. district_id opsional
+-- (FK exact-match sejak 0009 — sebelumnya fuzzy teks pada regency): diisi → ikut
+-- menyaring persis, kosong → cukup cocokkan nama. Ditopang index functional
 -- idx_accounts_village_name_ci (00020). Dibatasi 5 kandidat, cukup utk peringatan,
 -- bukan daftar lengkap.
-SELECT id, entity_code, village_name, regency
+SELECT id, entity_code, village_name, district_id
 FROM accounts
 WHERE tenant_id = sqlc.arg(tenant_id)
   AND deleted_at IS NULL
   AND lower(trim(village_name)) = lower(trim(sqlc.arg(village_name)))
   AND (
-      sqlc.narg(regency)::text IS NULL
-      OR lower(trim(COALESCE(regency, ''))) = lower(trim(sqlc.narg(regency)))
+      sqlc.narg(district_id)::bigint IS NULL
+      OR district_id = sqlc.narg(district_id)
   )
 ORDER BY created_at DESC
 LIMIT 5;
