@@ -69,13 +69,22 @@ func (h *Handler) AccountsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Muat SEKALI (bukan per-baris — rule #13, ADR 0009): peta ancestry seluruh
+	// master wilayah, dipakai resolve Regency/Province tiap baris di bawah.
+	regions, err := h.regionAncestryMap(ctx)
+	if err != nil {
+		h.Log.Error("accounts: region ancestry", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	shown, nextCursor := splitPage(rows, func(a db.Account) (pgtype.Timestamptz, int64) {
 		return a.CreatedAt, a.ID
 	})
 
 	items := make([]panel.AccountRow, 0, len(shown))
 	for _, a := range shown {
-		items = append(items, accountRowView(a, names))
+		items = append(items, accountRowView(a, names, regions))
 	}
 
 	base := wsPath(slugFromRequest(r), "")

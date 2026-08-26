@@ -24,10 +24,15 @@ import (
 // peran tulis boleh membuat/menyunting desa mana pun di workspace-nya (batas
 // per-baris untuk edit menyusul bila dibutuhkan). RLS tetap mengurung workspace.
 
-// sqlStateUniqueViolation = kode Postgres untuk pelanggaran UNIQUE. Dipakai
-// mengenali tabrakan village_code (idx_accounts_code) → pesan spesifik, bukan
+// sqlStateUniqueViolation/sqlStateForeignKeyViolation = kode Postgres yang
+// dikenali khusus. UNIQUE → tabrakan village_code (idx_accounts_code); FK →
+// district_id yang dikirim klien sudah tak ada di master regions (mis. race
+// dgn migrasi data, atau payload dipalsukan) — keduanya pesan spesifik, bukan
 // "internal error" yang menyembunyikan sebab yang bisa diperbaiki user.
-const sqlStateUniqueViolation = "23505"
+const (
+	sqlStateUniqueViolation     = "23505"
+	sqlStateForeignKeyViolation = "23503"
+)
 
 // requireAccountWrite = gerbang tulis bersama. Mengembalikan false & menulis
 // respons penolakan bila aktor tak berhak. Read-only workspace (arsip) juga
@@ -47,13 +52,15 @@ func (h *Handler) AccountNew(w http.ResponseWriter, r *http.Request) {
 	if !h.requireAccountWrite(w, r) {
 		return
 	}
+	ctx := r.Context()
 	base := wsPath(slugFromRequest(r), "")
 	v := panel.AccountFormView{
 		Base:            base,
 		Action:          base + "/accounts",
 		IsEdit:          false,
 		Err:             wsErrMsg(r.URL.Query().Get("err")),
-		PhoneEditable:   canEditPhone(r.Context()),
+		RegionsJSON:     h.regionsJSON(ctx),
+		PhoneEditable:   canEditPhone(ctx),
 		Types:           accountTypeOptions,
 		Statuses:        villageStatusOptions,
 		Classifications: classificationOptions,
@@ -94,9 +101,7 @@ func (h *Handler) AccountCreate(w http.ResponseWriter, r *http.Request) {
 		AccountOwner:          &uid, // pembuat = pemilik awal (dasar F3 ScopeOwn)
 		Website:               form.Website,
 		Description:           form.Description,
-		Province:              form.Province,
-		Regency:               form.Regency,
-		District:              form.District,
+		DistrictID:            form.DistrictID,
 		VillageAddress:        form.VillageAddress,
 		PostalCode:            form.PostalCode,
 		Territory:             form.Territory,
@@ -127,13 +132,18 @@ func (h *Handler) AccountCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 // accountWriteErr mengenali galat DB yang bisa diperbaiki user → kode pesan.
-// Hanya tabrakan village_code (UNIQUE) yang dikenali; sisanya "internal".
+// Tabrakan village_code (UNIQUE) & district_id tak valid (FK) dikenali;
+// sisanya "internal".
 func accountWriteErr(err error) (string, bool) {
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == sqlStateUniqueViolation {
-		if pgErr.ConstraintName == "idx_accounts_code" {
-			return "village_code_dup", true
-		}
+	if !errors.As(err, &pgErr) {
+		return "", false
+	}
+	switch {
+	case pgErr.Code == sqlStateUniqueViolation && pgErr.ConstraintName == "idx_accounts_code":
+		return "village_code_dup", true
+	case pgErr.Code == sqlStateForeignKeyViolation && pgErr.ConstraintName == "accounts_district_id_fkey":
+		return "district_id", true
 	}
 	return "", false
 }

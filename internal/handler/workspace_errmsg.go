@@ -48,6 +48,8 @@ func wsErrMsg(code string) string {
 		return "Tipe akun tidak valid."
 	case "village_status":
 		return "Status desa tidak valid."
+	case "district_id":
+		return "Kecamatan yang dipilih tidak valid."
 	case "classification":
 		return "Klasifikasi (IDM) tidak valid."
 	case "number":

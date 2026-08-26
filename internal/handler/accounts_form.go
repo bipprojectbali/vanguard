@@ -43,9 +43,7 @@ type accountForm struct {
 	AccountType           string
 	Website               *string
 	Description           *string
-	Province              *string
-	Regency               *string
-	District              *string
+	DistrictID            *int64
 	VillageAddress        *string
 	PostalCode            *string
 	Territory             *string
@@ -112,14 +110,21 @@ func parseAccountForm(fv func(string) string) (accountForm, string) {
 		f.VillageBudget = n
 	}
 
+	// Kecamatan: FK ke master regions (0009), bukan lagi teks bebas. <select>
+	// bernilai ID dipopulasikan cascading di client (static/regions.js) — di sini
+	// cukup parse & pastikan bentuknya ID sah; keberadaannya di DB dijaga FK
+	// (pelanggaran → SQLSTATE 23503, ditangani createAccount/updateAccount).
+	did, code := optInt64(fv("district_id"))
+	if code != "" {
+		return accountForm{}, "district_id"
+	}
+	f.DistrictID = did
+
 	// Teks bebas opsional: trim, kosong → NULL. village_code (Kemendagri) ikut
 	// pola ini; keunikannya dijaga index DB, dicek saat INSERT/UPDATE.
 	f.VillageCode = optTrim(fv("village_code"))
 	f.Website = optTrim(fv("website"))
 	f.Description = optTrim(fv("description"))
-	f.Province = optTrim(fv("province"))
-	f.Regency = optTrim(fv("regency"))
-	f.District = optTrim(fv("district"))
 	f.VillageAddress = optTrim(fv("village_address"))
 	f.PostalCode = optTrim(fv("postal_code"))
 	f.Territory = optTrim(fv("territory"))
