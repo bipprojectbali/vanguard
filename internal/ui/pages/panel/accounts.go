@@ -91,10 +91,14 @@ func AccountsList(v AccountsListView) g.Node {
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
-// accountsTabs = bilah tab cakupan (All/My/Belum-ada-Owner) untuk peran 'all'.
-// Navigasi tautan <a> biasa (bookmarkable + reload penuh, lolos CSP gotcha #16),
-// BUKAN Datastar. flex-wrap agar tak mendorong lebar di 375px; tiap tab min-h-11
-// (tap target 44px). role="tablist" seperti bilah tab panel lain (a11y).
+// accountsTabs = bilah tab cakupan (All/My/Belum-ada-Owner) untuk peran 'all',
+// plus satu baris penjelasan di bawahnya yang MENYESUAIKAN tab aktif (bukan
+// satu kalimat statis merangkum ketiganya) — arti tab yang sedang dilihat
+// lebih relevan daripada penjelasan tab lain yang tak aktif; lihat
+// accountsTabDesc. Navigasi tautan <a> biasa (bookmarkable + reload penuh,
+// lolos CSP gotcha #16), BUKAN Datastar. flex-wrap agar tak mendorong lebar
+// di 375px; tiap tab min-h-11 (tap target 44px). role="tablist" seperti
+// bilah tab panel lain (a11y).
 //
 // Varian tabs-box (BUKAN tabs-boxed — nama daisyUI v4 yang sudah tak ada di v5,
 // jadi tree-shaken → tak bergaya; gotcha #4): satu-satunya varian yang ikut
@@ -108,13 +112,30 @@ func accountsTabs(v AccountsListView) g.Node {
 		}
 		return h.A(h.Href(accountsListHref(v.Base, view)), h.Class(cls), g.Text(label))
 	}
-	return h.Div(
-		h.Role("tablist"),
-		h.Class("tabs tabs-box flex-wrap"),
-		tab("Semua Desa", AccViewAll),
-		tab("Desa Saya", AccViewMy),
-		tab("Belum ada Owner", AccViewUnowned),
-	)
+	return g.Group([]g.Node{
+		h.Div(
+			h.Role("tablist"),
+			h.Class("tabs tabs-box flex-wrap"),
+			tab("Semua Desa", AccViewAll),
+			tab("Desa Saya", AccViewMy),
+			tab("Belum ada Owner", AccViewUnowned),
+		),
+		h.P(h.Class("text-xs text-base-content/60"), g.Text(accountsTabDesc(v.ActiveView))),
+	})
+}
+
+// accountsTabDesc = penjelasan satu tab AKTIF (bukan ketiganya sekaligus).
+// Default (AccViewAll & nilai tak dikenal) sengaja sama — normalizeAccountsView
+// sudah menjatuhkan nilai liar ke AccViewAll sebelum sampai sini.
+func accountsTabDesc(view string) string {
+	switch view {
+	case AccViewMy:
+		return "Desa yang Anda kelola sebagai Owner atau CSM (utama/cadangan)."
+	case AccViewUnowned:
+		return "Desa yang belum punya penanggung jawab (Owner)."
+	default: // AccViewAll
+		return "Seluruh desa di workspace ini."
+	}
 }
 
 // accountsListHref merakit URL daftar untuk sebuah view. all/"" = tanpa param
