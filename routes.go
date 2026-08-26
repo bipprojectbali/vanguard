@@ -522,6 +522,19 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/engagements", h.EngagementCreate)
 		r.Post("/engagements/{id}/status", h.EngagementUpdateStatus)
 
+		// Implementation Tasks & Training Schedule (Customer Success, CRM Modul 6,
+		// sub-item Onboarding 6.2.1.1/6.2.1.2). F2 REUSE "crm:journey" (Journey/
+		// Onboarding) — bukan objek Casbin baru, sub-fitur onboarding yang sama.
+		r.Get("/impl-tasks", h.CSImplTasksList)
+		r.Get("/impl-tasks/new", h.CSImplTaskNew)
+		r.Post("/impl-tasks", h.CSImplTaskCreate)
+		r.Post("/impl-tasks/{id}/status", h.CSImplTaskUpdateStatus)
+
+		r.Get("/trainings", h.CSTrainingsList)
+		r.Get("/trainings/new", h.CSTrainingNew)
+		r.Post("/trainings", h.CSTrainingCreate)
+		r.Post("/trainings/{id}/status", h.CSTrainingUpdateStatus)
+
 		// Renewal Management — AKSI CS pada langganan (Modul 6 slice 6.6).
 		// "Renewal Dua-Rumah": DATA renewal tetap di subscriptions (Modul 5.2);
 		// halaman ini MENAMPILKAN data tersebut dan MENULIS field aksi CS

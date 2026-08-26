@@ -8,7 +8,7 @@
 >
 > **⚠️ Catatan realistis:** 9 modul dalam 17 hari kerja itu sangat padat. Tanggal di
 > bawah JUJUR (tidak dipadatkan agar "muat"). Titik luber ada di **Modul 6 (Customer
-> Success, 9 tabel — 6/9 selesai, sisa `cs_impl_tasks`/`cs_trainings`/`surveys`)**
+> Success, 9 tabel — 8/9 selesai, sisa `surveys`)**
 > dan **Modul 9 (FLS, audit menyeluruh belum dikerjakan sebagai pass tersendiri)** —
 > lihat penanda 🔴. Ini fitur, bukan bug: lebih baik lihat luber di rencana daripada
 > di hari-H. **Modul 1 (Dashboard), 7 (Activities), dan 8 (Reports) sudah selesai**
@@ -126,13 +126,15 @@ Renewal = INSERT baris baru (`previous_subscription_id` self-FK + `previous_valu
 
 | ID | Task | Layer | Est | Depends | Rencana |
 |----|------|-------|-----|---------|---------|
-| M6-1 | Migrasi 9 tabel CS (00005) + index + `sqlc generate` | migrasi | 1d | M5-1 | 28 Agu |
-| M6-2 | Query: `customer_success` 1:1 (health/lifecycle/onboarding/adoption) + tickets+SLA | repo | 1d | M6-1 | 28 Agu |
-| M6-3 | Query: cs_impl_tasks, cs_trainings, success_plans, surveys (1:N children) | repo | 1d | M6-1 | 31 Agu |
-| M6-4 | Handler + route: `/accounts/{id}/success` (health), `/tickets` (support-only gate), master playbooks/KB/SLA | handler | 1.5d | M6-2,M6-3 | 31 Agu–1 Sep |
-| M6-5 | View: panel health desa, daftar tiket (TableScroll+SLA), onboarding tracker, survey | view | 1.5d | M6-4 | 🔴 geser >1 Sep |
-| M6-6 | Test: 1:1 constraint + ticket ownership (support = all-village tapi ticket-only) + SLA breach | test | 1d | M6-4 | 🔴 geser >1 Sep |
-| M6-7 | Verifikasi 3-lebar + `make check` | qa | 0.5d | M6-5,M6-6 | 🔴 geser >1 Sep |
+| M6-1 | Migrasi 9 tabel CS (00005) + index + `sqlc generate` | migrasi | 1d | M5-1 | ✅ 28 Agu |
+| M6-2 | Query: `customer_success` 1:1 (health/lifecycle/onboarding/adoption) + tickets+SLA | repo | 1d | M6-1 | ✅ 28 Agu |
+| M6-3 | Query: cs_impl_tasks, cs_trainings, success_plans, surveys (1:N children) | repo | 1d | M6-1 | ✅ cs_impl_tasks/cs_trainings/success_plans selesai; `surveys` belum |
+| M6-4 | Handler + route: `/accounts/{id}/success` (health), `/tickets` (support-only gate), master playbooks/KB/SLA | handler | 1.5d | M6-2,M6-3 | ✅ (`surveys` di luar cakupan) |
+| M6-5 | View: panel health desa, daftar tiket (TableScroll+SLA), onboarding tracker, survey | view | 1.5d | M6-4 | ✅ onboarding tracker (Implementation Tracker + Training Schedule) selesai; survey belum |
+| M6-6 | Test: 1:1 constraint + ticket ownership (support = all-village tapi ticket-only) + SLA breach | test | 1d | M6-4 | ✅ |
+| M6-7 | Verifikasi 3-lebar + `make check` | qa | 0.5d | M6-5,M6-6 | ✅ |
+
+**Status terkini:** 8/9 tabel selesai — `customer_success`, `success_plans`, `tickets`+SLA, `playbooks`, `kb_articles`, `sla_policies`, **`cs_impl_tasks`** (Implementation Tracker, branch `feature/crm-cs-onboarding-tasks-trainings`), **`cs_trainings`** (Training Schedule, branch sama). Sisa **`surveys`** — belum dikerjakan, di luar cakupan sesi terakhir.
 
 **Acceptance modul:** health per desa 1:1; support lihat semua desa tapi hanya objek tiket; SLA breach terdeteksi.
 
@@ -210,7 +212,7 @@ FLS sudah dianyam di F4 + tiap handler. Task ini = audit menyeluruh + test linta
 | 17–19 Agu | **Modul 3 Contacts** | ✅ muat (build entry point 2+3 selesai) |
 | 19–24 Agu | **Modul 4 Sales** | ✅ muat (mepet) |
 | 25–27 Agu | **Modul 5 Subscriptions** | ✅ muat (mepet) |
-| 28 Agu–1 Sep | **Modul 6 Customer Success** | 🟡 sebagian (6/9 tabel); sisa `cs_impl_tasks`/`cs_trainings`/`surveys` |
+| 28 Agu–1 Sep | **Modul 6 Customer Success** | 🟡 sebagian (8/9 tabel); sisa `surveys` |
 | 17 Agu | **Modul 7 Activities** | ✅ selesai lebih awal, di luar urutan (tak menunggu Modul 6 tuntas) |
 | 17 Agu | **Modul 1 Dashboard** | ✅ selesai lebih awal, di luar urutan (cukup tabel M6 yang sudah ada saat itu) |
 | 17–18 Agu | **Modul 8 Reports** | ✅ selesai lebih awal, di luar urutan (langsung dari F2, tak menunggu M1/M6 tuntas) |

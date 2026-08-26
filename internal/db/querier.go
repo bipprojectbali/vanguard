@@ -53,6 +53,12 @@ type Querier interface {
 	// (auth.login, workspace.create, member.role.update), jadi keluarga bisa
 	// diturunkan tanpa tabel pemetaan yang harus dijaga selaras.
 	CountActivityByAction(ctx context.Context, arg CountActivityByActionParams) ([]CountActivityByActionRow, error)
+	// Agregat KPI header halaman /impl-tasks. Cakupan scope sama persis ListCSImplTasks.
+	// uid dioper walau scope_all=true (diabaikan dalam kasus itu).
+	CountCSImplTaskKPIs(ctx context.Context, arg CountCSImplTaskKPIsParams) (CountCSImplTaskKPIsRow, error)
+	// Agregat KPI header halaman /trainings. Cakupan scope sama persis ListCSTrainings.
+	// uid dioper walau scope_all=true (diabaikan dalam kasus itu).
+	CountCSTrainingKPIs(ctx context.Context, arg CountCSTrainingKPIsParams) (CountCSTrainingKPIsRow, error)
 	// Jumlah kontak hidup satu desa — untuk badge/ringkasan di detail desa. Murah:
 	// idx_contacts_account (partial WHERE deleted_at IS NULL) melayaninya langsung.
 	CountContactsByAccount(ctx context.Context, accountID int64) (int64, error)
@@ -132,6 +138,25 @@ type Querier interface {
 	// satu baris (kolom Deskripsi wireframe 9.2, boleh ''). is_system hanya true untuk
 	// seed admin. created_by NULL untuk seed migrasi/boot.
 	CreateBusinessRole(ctx context.Context, arg CreateBusinessRoleParams) (CreateBusinessRoleRow, error)
+	// cs_impl_tasks.sql — Query Implementation Tracker (CRM Modul 6, sub-item
+	// Onboarding 6.2.1.1). RLS mengisolasi workspace; F3 ownership ditegakkan
+	// lewat flag boolean (scope_all, is_own) — satu sumber kebenaran dengan
+	// CSImplTasksListFilterFor (ownership.go).
+	//
+	// Keyset: (created_at DESC, id DESC) — BUKAN due_date (nullable, task belum
+	// ditugaskan tanggal boleh ada), pola sama Tickets (bukan Engagements yang
+	// scheduled_at-nya NOT NULL).
+	// Buat task baru. owner_id dan due_date opsional (ditugaskan belakangan).
+	CreateCSImplTask(ctx context.Context, arg CreateCSImplTaskParams) (CsImplTask, error)
+	// cs_trainings.sql — Query Training Schedule (CRM Modul 6, sub-item Onboarding
+	// 6.2.1.2). RLS mengisolasi workspace; F3 ownership ditegakkan lewat flag
+	// boolean (scope_all, is_own) — satu sumber kebenaran dengan
+	// CSTrainingsListFilterFor (ownership.go).
+	//
+	// Keyset: (training_date DESC, id DESC) — training_date NOT NULL (jadwal wajib
+	// diisi saat dibuat), pola sama Engagements (scheduled_at).
+	// Buat jadwal training baru. trainer_id dan participants opsional.
+	CreateCSTraining(ctx context.Context, arg CreateCSTrainingParams) (CsTraining, error)
 	// contacts.sql — orang di dalam sebuah desa (Contact), 1:N ke accounts. Isolasi
 	// WORKSPACE ditegakkan RLS (GUC app.tenant_id di WithTenant, tenant_id di-AND-kan
 	// otomatis). Isolasi ANTAR-DESA (F3) TIDAK punya filter sendiri di sini: kontak
@@ -350,6 +375,14 @@ type Querier interface {
 	// RefreshIdentity, disimpan di session. Dipisah dari GetBusinessRole agar jalur
 	// panas ini tak menarik kolom yang tak dipakainya.
 	GetBusinessRoleDataScope(ctx context.Context, arg GetBusinessRoleDataScopeParams) (string, error)
+	// Satu task + nama desa + nama owner. Dipakai handler CSImplTaskUpdateStatus
+	// sebelum update untuk validasi keberadaan + F3 (handler memanggil
+	// CSImplTasksListFilter.Allows).
+	GetCSImplTask(ctx context.Context, id int64) (GetCSImplTaskRow, error)
+	// Satu training + nama desa + nama trainer. Dipakai handler
+	// CSTrainingUpdateStatus sebelum update untuk validasi keberadaan + F3
+	// (handler memanggil CSTrainingsListFilter.Allows).
+	GetCSTraining(ctx context.Context, id int64) (GetCSTrainingRow, error)
 	// Format kode satu (tenant, entity). Tak ada baris = SAH: pemanggil jatuh ke
 	// codes.DefaultFormat (workspace baru berkode tanpa seed). pgx.ErrNoRows bukan
 	// kegagalan yang perlu diributkan.
@@ -513,6 +546,16 @@ type Querier interface {
 	// tanpa pemegang tetap muncul dengan 0. COALESCE ke bigint: sqlc emit int64, bukan
 	// interface{}. GROUP BY br.id (PK) sah — kolom br.* bergantung fungsional padanya.
 	ListBusinessRoles(ctx context.Context, tenantID int64) ([]ListBusinessRolesRow, error)
+	// Daftar task, keyset (created_at DESC, id DESC) + F3 ownership + filter tab.
+	//
+	// Ownership dikodekan sebagai dua flag boolean (scope_all / is_own):
+	//   scope_all → lihat semua task workspace (Admin, Manager)
+	//   is_own    → hanya task desa yang ditugaskan (CSM)
+	//              = union kepemilikan: account_owner ATAU assigned_csm ATAU backup_csm
+	// Keduanya false → OR selalu false → NOL baris (fail-closed).
+	//
+	// filter_status '' → semua status; non-'' → cocokkan persis.
+	ListCSImplTasks(ctx context.Context, arg ListCSImplTasksParams) ([]ListCSImplTasksRow, error)
 	// Daftar Renewal Management CS (Menu 6.6). Menampilkan langganan yang punya
 	// dimensi renewal (end_date terisi), berikut field AKSI CS (renewal_stage,
 	// renewal_risk, renewal_action_plan, renewal_next_action_date, renewal_owner).
@@ -525,6 +568,16 @@ type Querier interface {
 	// filter_stage '' → semua stage; non-'' → cocokkan persis.
 	// Keyset (created_at DESC, id DESC) — reuse pageCursor/splitPage standar.
 	ListCSRenewals(ctx context.Context, arg ListCSRenewalsParams) ([]ListCSRenewalsRow, error)
+	// Daftar training, keyset (training_date DESC, id DESC) + F3 ownership + filter tab.
+	//
+	// Ownership dikodekan sebagai dua flag boolean (scope_all / is_own):
+	//   scope_all → lihat semua training workspace (Admin, Manager)
+	//   is_own    → hanya training desa yang ditugaskan (CSM)
+	//              = union kepemilikan: account_owner ATAU assigned_csm ATAU backup_csm
+	// Keduanya false → OR selalu false → NOL baris (fail-closed).
+	//
+	// filter_status '' → semua status; non-'' → cocokkan persis.
+	ListCSTrainings(ctx context.Context, arg ListCSTrainingsParams) ([]ListCSTrainingsRow, error)
 	// Dasbor Churn (Menu 5.2/5.4, READ-ONLY). Langganan yang telah berhenti
 	// (status Cancelled/Churned), di-scope ownership (F3) dengan flag yang SAMA dgn
 	// ListSubscriptions (scope_all → semua; is_own → subscription_owner = uid; keduanya
@@ -957,10 +1010,16 @@ type Querier interface {
 	// sini — mengganti nama peran memutus assign yang sudah ada; kalau perlu, buat
 	// peran baru. is_system tak bisa disunting (dijaga di handler, bukan di query).
 	UpdateBusinessRole(ctx context.Context, arg UpdateBusinessRoleParams) error
+	// Ubah status task + due_date (dapat digeser saat status = in_progress) +
+	// owner_id (reassign penanggung jawab).
+	UpdateCSImplTaskStatus(ctx context.Context, arg UpdateCSImplTaskStatusParams) (CsImplTask, error)
 	// Perbarui field AKSI CS renewal (6.6 "Renewal Dua-Rumah"). Hanya empat field
 	// milik CS yang disentuh; field inti langganan (status, MRR, dsb.) tidak berubah.
 	// Handler menegakkan F3 (loadCSRenewal) sebelum memanggil query ini.
 	UpdateCSRenewalAction(ctx context.Context, arg UpdateCSRenewalActionParams) (UpdateCSRenewalActionRow, error)
+	// Ubah status training + attendance (diisi setelah status = completed) +
+	// participants (jumlah peserta aktual).
+	UpdateCSTrainingStatus(ctx context.Context, arg UpdateCSTrainingStatusParams) (CsTraining, error)
 	// Sunting kontak. is_primary_contact di-set pemanggil setelah mengosongkan primary
 	// lama (ClearAccountPrimaryContact) bila dinaikkan jadi utama. account_id TIDAK
 	// diubah di sini — memindahkan kontak antar-desa adalah aksi lain (belum ada).
