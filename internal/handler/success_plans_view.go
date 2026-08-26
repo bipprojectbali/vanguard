@@ -67,7 +67,7 @@ func successPlansErrMsg(code string) string {
 	case "account":
 		return "Desa tidak ditemukan atau tidak dalam cakupan Anda."
 	case "owner":
-		return "Owner CSM tidak valid."
+		return "Owner CS tidak valid."
 	case "notfound":
 		return "Success plan tidak ditemukan."
 	case "failed":

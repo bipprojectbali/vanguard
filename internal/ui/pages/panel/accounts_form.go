@@ -114,7 +114,7 @@ func AccountForm(v AccountFormView) g.Node {
 			field("Alamat", "village_address", v.Fields.VillageAddress, false, "text"),
 			field("Kode Pos", "postal_code", v.Fields.PostalCode, false, "text"),
 			field("Teritori", "territory", v.Fields.Territory, false, "text",
-				"Pembagian wilayah kerja Sales/CSM internal (bebas isi) — beda dari Kabupaten/Kota "+
+				"Pembagian wilayah kerja Sales/CS internal (bebas isi) — beda dari Kabupaten/Kota "+
 					"administratif di atas."),
 		),
 		formCard("Profil Desa",
@@ -158,9 +158,9 @@ func AccountForm(v AccountFormView) g.Node {
 // pengguna baru bisa bingung kenapa opsi itu tak ada di form tambah.
 func accountFormHint(isEdit bool) string {
 	if isEdit {
-		return "Ubah data desa ini. Penugasan CSM (utama/cadangan) diatur terpisah lewat kartu \"Penugasan CSM\" di bawah."
+		return "Ubah data desa ini. Penugasan CS (utama/cadangan) diatur terpisah lewat kartu \"Penugasan CS\" di bawah."
 	}
-	return "Lengkapi data desa baru untuk workspace ini. Penugasan CSM (utama/cadangan) bisa dilakukan setelah desa tersimpan, dari halaman sunting."
+	return "Lengkapi data desa baru untuk workspace ini. Penugasan CS (utama/cadangan) bisa dilakukan setelah desa tersimpan, dari halaman sunting."
 }
 
 // formCard = satu kelompok field dalam kartu. Grid 1-kolom di mobile → 2 di sm
@@ -297,14 +297,14 @@ func assignCard(v AccountFormView) g.Node {
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
 		h.Div(
 			h.Class("card-body min-w-0"),
-			h.H2(h.Class("font-semibold mb-1"), g.Text("Penugasan CSM")),
+			h.H2(h.Class("font-semibold mb-1"), g.Text("Penugasan CS")),
 			h.P(h.Class("text-sm text-base-content/60 mb-2"),
 				g.Text("Menentukan siapa yang melihat desa ini di daftar mereka.")),
 			h.FormEl(
 				h.Method("post"), h.Action(v.AssignAction),
 				h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
-				memberSelect("CSM Utama", "assigned_csm", v.AssignedCSM, v.Members),
-				memberSelect("CSM Cadangan", "backup_csm", v.BackupCSM, v.Members),
+				memberSelect("CS Utama", "assigned_csm", v.AssignedCSM, v.Members),
+				memberSelect("CS Cadangan", "backup_csm", v.BackupCSM, v.Members),
 				h.Div(
 					h.Class("sm:col-span-2"),
 					h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),

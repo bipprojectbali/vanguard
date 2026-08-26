@@ -100,7 +100,7 @@ func DefaultBusinessRoles() []DefaultRole {
 			},
 		},
 		{
-			Name: BusinessRoleCSM, DisplayName: "Customer Success Manager",
+			Name: BusinessRoleCSM, DisplayName: "Customer Success",
 			Description: "Health score, renewal, onboarding desa binaan",
 			DataScope:   DataScopeOwn, IsSystem: false,
 			Perms: []DefaultPerm{

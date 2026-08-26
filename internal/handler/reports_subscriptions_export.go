@@ -72,7 +72,7 @@ func (h *Handler) reportsSubscriptionsExportRows(ctx context.Context, section st
 		if err != nil {
 			return nil, nil, err
 		}
-		header := []string{"Desa", "Paket", "MRR Hilang", "Alasan", "Tipe", "Tgl Churn", "CSM"}
+		header := []string{"Desa", "Paket", "MRR Hilang", "Alasan", "Tipe", "Tgl Churn", "CS"}
 		rows := make([][]string, 0, len(all))
 		for _, s := range all {
 			v := churnRowView(s, names, br)

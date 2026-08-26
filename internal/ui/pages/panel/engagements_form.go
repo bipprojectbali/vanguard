@@ -194,7 +194,7 @@ func engagementMemberSelect(members []EngagementMemberOption) g.Node {
 	}
 	return h.Div(
 		h.Class("grid gap-2 min-w-0"),
-		ui.Label("Owner / CSM Pelaksana", h.For("owner_id")),
+		ui.Label("Owner / CS Pelaksana", h.For("owner_id")),
 		h.Select(
 			h.ID("owner_id"), h.Name("owner_id"),
 			h.Class("select text-base w-full"),

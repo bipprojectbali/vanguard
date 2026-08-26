@@ -52,7 +52,7 @@ func PlaybookList(v PlaybookListView) g.Node {
 			h.Div(
 				h.H1(h.Class("text-xl font-semibold"), g.Text("Playbooks")),
 				h.P(h.Class("text-base-content/70"),
-					g.Text("Prosedur respons per skenario — panduan langkah CSM saat health drop, adopsi rendah, mendekati renewal, atau onboarding baru.")),
+					g.Text("Prosedur respons per skenario — panduan langkah CS saat health drop, adopsi rendah, mendekati renewal, atau onboarding baru.")),
 			),
 			ui.When(v.CanWrite, h.A(
 				h.Href(v.Base+"/playbooks/new"), h.Class("btn btn-primary min-h-11"),

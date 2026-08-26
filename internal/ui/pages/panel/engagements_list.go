@@ -89,7 +89,7 @@ func EngagementsList(v EngagementsListView) g.Node {
 			h.Div(
 				h.H1(h.Class("text-xl font-semibold"), g.Text("Engagements")),
 				h.P(h.Class("text-base-content/70"),
-					g.Text("Touch point dan interaksi CSM dengan desa — jadwalkan, catat, dan pantau tindak lanjut.")),
+					g.Text("Touch point dan interaksi CS dengan desa — jadwalkan, catat, dan pantau tindak lanjut.")),
 			),
 			ui.When(v.CanWrite, h.A(
 				h.Href(v.Base+"/engagements/new"), h.Class("btn btn-primary min-h-11"),

@@ -146,7 +146,7 @@ func CustomerSuccessForbidden() g.Node {
 		h.H1(h.Class("text-xl font-semibold mb-2"), g.Text("Customer Success")),
 		h.P(h.Class("text-base-content/70"),
 			g.Text("Halaman ini hanya bisa dibuka oleh pemegang peran CRM yang punya akses "+
-				"ke Health Score, Journey, atau Product Adoption (admin, manajer, sales, CSM, "+
+				"ke Health Score, Journey, atau Product Adoption (admin, manajer, sales, CS, "+
 				"atau support — tergantung section).")),
 		h.P(h.Class("text-sm text-base-content/60"),
 			g.Text("Hubungi admin workspace bila Anda perlu akses ke data ini.")),

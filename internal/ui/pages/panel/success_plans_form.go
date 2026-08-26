@@ -258,7 +258,7 @@ func successPlanOwnerCsmField(v SuccessPlanFormView) g.Node {
 		currentID = *v.CurrentOwnerCsmID
 	}
 	opts := make([]g.Node, 0, len(v.Members)+1)
-	opts = append(opts, h.Option(h.Value(""), g.Text("— Pilih Owner CSM —"),
+	opts = append(opts, h.Option(h.Value(""), g.Text("— Pilih Owner CS —"),
 		g.If(currentID == 0, h.Selected())))
 	for _, m := range v.Members {
 		opts = append(opts, h.Option(
@@ -268,7 +268,7 @@ func successPlanOwnerCsmField(v SuccessPlanFormView) g.Node {
 		))
 	}
 	return h.Div(h.Class("form-control gap-1"),
-		h.Label(h.Class("label pb-0"), h.Span(h.Class("label-text"), g.Text("Owner CSM"))),
+		h.Label(h.Class("label pb-0"), h.Span(h.Class("label-text"), g.Text("Owner CS"))),
 		h.Select(h.Name("owner_csm"), h.Class("select select-bordered w-full"),
 			g.Group(opts),
 		),

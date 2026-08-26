@@ -112,7 +112,7 @@ func churnTable(v ChurnView) g.Node {
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Alasan")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Tipe")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Tgl Churn")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("CSM")),
+					h.Th(h.Class("py-2 font-medium"), g.Text("CS")),
 				)),
 				h.TBody(g.Group(rows)),
 			)),
