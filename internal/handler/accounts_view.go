@@ -51,6 +51,16 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 			province, regency, district = anc.ProvinceName, anc.RegencyName, anc.DistrictName
 		}
 	}
+
+	// names = peta user_id→nama, dirakit SEKALI untuk semua kartu rollup
+	// (Pemilik Akun, CSM, audit Dibuat/Diperbarui oleh) — bukan query per kartu.
+	names, err := h.accountMemberNames(ctx)
+	if err != nil {
+		h.Log.Error("accounts: member names", "err", err)
+	}
+	parentLabel, parentHref := h.parentAccountFor(ctx, base, a.ParentAccountID)
+	sub := h.subscriptionSummaryFor(ctx, base, a.ID, br)
+
 	return panel.AccountDetailView{
 		Base:        base,
 		ID:          a.ID,
@@ -61,12 +71,20 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 		Website:     deref(a.Website),
 		Description: deref(a.Description),
 
+		// M2-7: kolom identitas tambahan — akun sudah punya kolomnya sejak awal,
+		// sebelumnya tak pernah disurfacekan ke view.
+		AccountOwnerName:   memberName(names, a.AccountOwner),
+		ParentAccountLabel: parentLabel,
+		ParentAccountHref:  parentHref,
+
 		Province:       province,
 		Regency:        regency,
 		District:       district,
 		VillageAddress: deref(a.VillageAddress),
 		PostalCode:     deref(a.PostalCode),
 		Territory:      deref(a.Territory),
+		Latitude:       numericStr(a.Latitude),
+		Longitude:      numericStr(a.Longitude),
 
 		VillageStatus:         deref(a.VillageStatus),
 		VillageClassification: deref(a.VillageClassification),
@@ -84,7 +102,16 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 		OfficePhone:  deref(a.OfficePhone),
 		OfficeEmail:  deref(a.OfficeEmail),
 
-		CanWrite:   canWriteAccounts(ctx),
+		CanWrite: canWriteAccounts(ctx),
+
+		// M2-8/M2-9: kartu ringkasan lintas-modul + baris "Terkait" — satu
+		// layout utk semua role (F2/F3/F4 di builder masing-masing yang
+		// memutuskan isinya, bukan tampilan per-POV terpisah).
+		Subscription:    sub,
+		CustomerSuccess: h.customerSuccessSummaryFor(ctx, base, a, names),
+		Audit:           auditViewFor(a, names),
+		Related:         h.relatedRecordsFor(ctx, base, a.ID, sub),
+
 		Activities: h.activitiesTimelineFor(ctx, base, "account", a.ID, canWriteSalesActivityPerm(ctx)),
 	}
 }

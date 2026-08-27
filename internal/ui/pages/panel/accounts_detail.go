@@ -27,12 +27,23 @@ type AccountDetailView struct {
 	Website     string
 	Description string
 
+	// AccountOwnerName/ParentAccountLabel = kolom identitas tambahan (M2-7).
+	// ParentAccountHref non-kosong → ParentAccountLabel jadi tautan; kosong
+	// (termasuk saat resolve induk gagal best-effort) → teks polos/"—".
+	AccountOwnerName   string
+	ParentAccountLabel string
+	ParentAccountHref  string
+
 	Province       string
 	Regency        string
 	District       string
 	VillageAddress string
 	PostalCode     string
 	Territory      string
+	// Latitude/Longitude = koordinat desa (M2-7), kolom sudah ada di skema
+	// sejak awal, sebelumnya tak pernah disurfacekan ke view.
+	Latitude  string
+	Longitude string
 
 	VillageStatus         string
 	VillageClassification string
@@ -45,6 +56,17 @@ type AccountDetailView struct {
 	OfficeEmail  string
 
 	CanWrite bool
+
+	// Subscription/CustomerSuccess/Audit = kartu ringkasan lintas-modul (M2-8),
+	// satu layout utk semua role — F2/F3/F4 di handler yang memutuskan isinya,
+	// bukan tampilan terpisah per POV. Diisi handler via accounts_rollups.go.
+	Subscription    SubscriptionSummaryView
+	CustomerSuccess CustomerSuccessSummaryView
+	Audit           AuditView
+
+	// Related = baris "Terkait" (M2-9): ringkasan Contacts/Deals/Subscriptions/
+	// Tickets satu desa.
+	Related RelatedRecordsView
 
 	// Activities = timeline aktivitas desa ini (M7-A). Diisi handler via
 	// activitiesTimelineFor (dibatasi activityTimelineLimit baris terbaru).
@@ -76,6 +98,54 @@ func AccountDetail(v AccountDetailView) g.Node {
 		)),
 	)
 
+	parentAccountValue := g.Node(g.Text(orDash(v.ParentAccountLabel)))
+	if v.ParentAccountHref != "" {
+		parentAccountValue = h.A(h.Href(v.ParentAccountHref), h.Class("link link-hover"),
+			g.Text(v.ParentAccountLabel))
+	}
+
+	identitas := cardRows("Identitas", "",
+		detailRow("Nama Desa", g.Text(orDash(v.VillageName))),
+		detailRow("Kode Desa (Kemendagri)", g.Text(orDash(v.VillageCode))),
+		detailRow("Tipe Akun", g.Text(orDash(v.AccountType))),
+		detailRow("Pemilik Akun", g.Text(orDash(v.AccountOwnerName))),
+		detailRow("Induk Akun", parentAccountValue),
+		detailRow("Website", g.Text(orDash(v.Website))),
+		detailRow("Deskripsi", g.Text(orDash(v.Description))),
+	)
+
+	wilayah := detailCard("Wilayah", []detailField{
+		{"Provinsi", v.Province},
+		{"Kabupaten/Kota", v.Regency},
+		{"Kecamatan", v.District},
+		{"Alamat", v.VillageAddress},
+		{"Kode Pos", v.PostalCode},
+		{"Teritori", v.Territory},
+		{"Lintang", v.Latitude},
+		{"Bujur", v.Longitude},
+	})
+
+	profilDesa := detailCard("Profil Desa", []detailField{
+		{"Status", v.VillageStatus},
+		{"Klasifikasi (IDM)", v.VillageClassification},
+		{"Jumlah Penduduk", v.Population},
+		{"Jumlah Dusun", v.HamletsCount},
+		{"Anggaran (APBDes)", v.VillageBudget},
+	})
+
+	kontak := detailCard("Kontak", []detailField{
+		{"HP Kontak", v.ContactPhone},
+		{"Telepon Kantor", v.OfficePhone},
+		{"Email Kantor", v.OfficeEmail},
+	})
+
+	sistem := detailCard("Sistem", []detailField{
+		{"Dibuat oleh", v.Audit.CreatedByName},
+		{"Dibuat pada", v.Audit.CreatedAt},
+		{"Diperbarui oleh", v.Audit.UpdatedByName},
+		{"Diperbarui pada", v.Audit.UpdatedAt},
+	})
+
 	return h.Div(
 		h.Class("grid gap-4 min-w-0"),
 		header,
@@ -88,33 +158,16 @@ func AccountDetail(v AccountDetailView) g.Node {
 			h.A(h.Href(base+"/customer-success"), h.Class("btn btn-sm btn-ghost min-h-11"),
 				g.Text("Customer Success »")),
 		),
-		detailCard("Identitas", []detailField{
-			{"Nama Desa", v.VillageName},
-			{"Kode Desa (Kemendagri)", v.VillageCode},
-			{"Tipe Akun", v.AccountType},
-			{"Website", v.Website},
-			{"Deskripsi", v.Description},
-		}),
-		detailCard("Wilayah", []detailField{
-			{"Provinsi", v.Province},
-			{"Kabupaten/Kota", v.Regency},
-			{"Kecamatan", v.District},
-			{"Alamat", v.VillageAddress},
-			{"Kode Pos", v.PostalCode},
-			{"Teritori", v.Territory},
-		}),
-		detailCard("Profil Desa", []detailField{
-			{"Status", v.VillageStatus},
-			{"Klasifikasi (IDM)", v.VillageClassification},
-			{"Jumlah Penduduk", v.Population},
-			{"Jumlah Dusun", v.HamletsCount},
-			{"Anggaran (APBDes)", v.VillageBudget},
-		}),
-		detailCard("Kontak", []detailField{
-			{"HP Kontak", v.ContactPhone},
-			{"Telepon Kantor", v.OfficePhone},
-			{"Email Kantor", v.OfficeEmail},
-		}),
+		h.Div(
+			h.Class("grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0"),
+			h.Div(h.Class("grid gap-4 min-w-0"), identitas, wilayah, profilDesa, kontak),
+			h.Div(h.Class("grid gap-4 min-w-0"),
+				SubscriptionSummaryCard(v.Subscription),
+				CustomerSuccessSummaryCard(v.CustomerSuccess),
+				sistem,
+			),
+		),
+		RelatedRecords(v.Related),
 		ActivityTimeline(v.Activities),
 	)
 }
@@ -124,25 +177,15 @@ type detailField struct {
 	value string
 }
 
-// detailCard = kartu satu kelompok field, sebagai daftar deskripsi. Grid
-// 1-kolom di mobile → 2-kolom label:nilai di sm ke atas (mobile-first).
+// detailCard = kartu satu kelompok field label:nilai teks polos — wrapper tipis
+// di atas cardRows/detailRow (accounts_detail_rollup.go), yang menerima g.Node
+// utk baris non-teks (badge/tautan, dipakai kartu rollup & Identitas).
 func detailCard(title string, fields []detailField) g.Node {
 	rows := make([]g.Node, 0, len(fields))
 	for _, f := range fields {
-		rows = append(rows, h.Div(
-			h.Class("grid gap-1 sm:grid-cols-3 sm:gap-2 py-2 border-b border-base-300/50 last:border-0"),
-			h.Dt(h.Class("text-sm text-base-content/60"), g.Text(f.label)),
-			h.Dd(h.Class("sm:col-span-2 break-words"), g.Text(orDash(f.value))),
-		))
+		rows = append(rows, detailRow(f.label, g.Text(orDash(f.value))))
 	}
-	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body min-w-0"),
-			h.H2(h.Class("font-semibold mb-2"), g.Text(title)),
-			h.Dl(h.Class("min-w-0"), g.Group(rows)),
-		),
-	)
+	return cardRows(title, "", rows...)
 }
 
 // deleteAccountForm = tombol hapus (soft-delete). Form NATIVE POST → 303
