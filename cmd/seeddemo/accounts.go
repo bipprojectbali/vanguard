@@ -67,7 +67,9 @@ func seedAccounts(ctx context.Context, q *db.Queries, tenantID int64, tag string
 		}
 		d := districts[i%len(districts)]
 		name := names[i]
-		villageCode := fmt.Sprintf("VC-%s-%03d", tag, i+1)
+		// Pseudo-Kemendagri: 3 segmen depan = kode kecamatan ASLI (d.Code, mis.
+		// "32.01.01"), segmen ke-4 = urutan desa fiktif (lihat desaSeqOffset).
+		villageCode := fmt.Sprintf("%s.%04d", d.Code, (desaSeqOffset(tag)+i+1)%10000)
 		accType := weightedPick(rng, typeWeights)
 
 		var accOwner, csm *int64

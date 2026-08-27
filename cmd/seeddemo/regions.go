@@ -10,17 +10,23 @@ import (
 
 // regions.go — pemilihan kecamatan REAL utk desa demo. `regions` sudah
 // ter-seed migrasi 00026 (~7.817 baris 3 level: provinsi/kabupaten/
-// kecamatan) — file ini HANYA baca (ListAllRegions), tak pernah insert.
-// Provinsi dicari via strings.Contains nama (bukan ID hardcode) supaya
-// portabel antar environment/re-seed data wilayah.
+// kecamatan) — file ini HANYA baca (ListAllRegions/ListDistrictsByRegency),
+// tak pernah insert. Provinsi dicari via strings.Contains nama (bukan ID
+// hardcode) supaya portabel antar environment/re-seed data wilayah.
 
 // district = satu kecamatan terpilih + label kabupaten/provinsi induknya
-// (dipakai accounts.go utk kolom deskriptif & district_id FK).
+// (dipakai accounts.go utk kolom deskriptif & district_id FK). Code = kode
+// wilayah Kemendagri ASLI kecamatan ini (mis. "32.01.01", 3 segmen —
+// provinsi.kabupaten.kecamatan, lihat migrations/00026_crm_regions.sql) —
+// dipakai accounts.go/leads.go sbg 3 segmen depan village_code pseudo-resmi
+// ("32.01.01.2001"); segmen ke-4 (desa) TETAP fiktif krn desa demo tak
+// bertaut ke desa Kemendagri sungguhan.
 type district struct {
 	ID       int64
 	Name     string
 	Regency  string
 	Province string
+	Code     string
 }
 
 // targetProvinces = ~8 provinsi tersebar (Jawa, Sumatera, Sulawesi, Bali,
@@ -69,18 +75,27 @@ func pickDistricts(ctx context.Context, q *db.Queries) ([]district, error) {
 			if found || regency.Level != 2 || regency.ParentRegionID == nil || *regency.ParentRegionID != prov.ID {
 				continue
 			}
-			for _, kec := range rows {
-				if kec.Level == 3 && kec.ParentRegionID != nil && *kec.ParentRegionID == regency.ID {
-					result = append(result, district{
-						ID:       kec.ID,
-						Name:     kec.Name,
-						Regency:  regency.Name,
-						Province: prov.Name,
-					})
-					found = true
-					break
-				}
+			// Kecamatan via query terpisah (bukan filter `rows`) — ListAllRegions
+			// SENGAJA tak sertakan kolom `code` (payload embed dropdown form
+			// produksi, lihat queries/regions.sql), sedangkan ListDistrictsByRegency
+			// pakai `SELECT *` jadi punya Code (kode Kemendagri asli) yang
+			// dibutuhkan utk format village_code pseudo-resmi.
+			kecs, err := q.ListDistrictsByRegency(ctx, &regency.ID)
+			if err != nil {
+				return nil, fmt.Errorf("kecamatan kabupaten %s: %w", regency.Name, err)
 			}
+			if len(kecs) == 0 {
+				continue
+			}
+			kec := kecs[0]
+			result = append(result, district{
+				ID:       kec.ID,
+				Name:     kec.Name,
+				Regency:  regency.Name,
+				Province: prov.Name,
+				Code:     kec.Code,
+			})
+			found = true
 		}
 	}
 
