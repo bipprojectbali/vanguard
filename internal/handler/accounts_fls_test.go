@@ -7,6 +7,7 @@ import (
 
 	"go_starter/internal/codes"
 	"go_starter/internal/db"
+	"go_starter/internal/ui/pages/panel"
 )
 
 // accounts_fls_test.go — dua sumbu izin di-level baris & field untuk Desa:
@@ -224,5 +225,55 @@ func TestAccountDetailView_VillageBudgetMasked(t *testing.T) {
 		if got := view(role); got != wantBudget {
 			t.Errorf("role %q: VillageBudget harus %q, got %q", role, wantBudget, got)
 		}
+	}
+}
+
+// TestAccountDetail_F4_ARRMaskedForSupport: MRR/ARR di kartu Ringkasan
+// Langganan (M2-8) tersamar bagi Support — kelas sensitivitas sama dgn
+// VillageBudget/deal Amount (maskARR, canSeeARR). Pola direct-call sama dgn
+// TestAccountDetailView_VillageBudgetMasked — Support ScopeNone selalu 404 di
+// jalur HTTP nyata (TestAccounts_F3_SupportNolBaris), jadi wiring masking
+// diuji lewat pemanggilan langsung accountDetailView.
+func TestAccountDetail_F4_ARRMaskedForSupport(t *testing.T) {
+	env, uid := setupAccounts(t)
+	a := env.seedAccount(t, "Desa Langganan Rahasia", &uid, nil, nil)
+	plan := env.seedPlan(t, "Paket Uji F4", "PLAN-F4-ARR", "500000")
+	env.seedSubscription(t, a.ID, plan, &uid, "Active", "500000", "6000000")
+
+	req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID), nil, itoa(a.ID))
+	var v panel.AccountDetailView
+	env.runAccount(uid, "owner", "support", req, func(w http.ResponseWriter, r *http.Request) {
+		v = env.h.accountDetailView(r.Context(), "", a)
+	})
+	if v.Subscription.MRR != flsHidden || v.Subscription.ARR != flsHidden {
+		t.Errorf("support: MRR/ARR harus tersamar (%s), got MRR=%q ARR=%q",
+			flsHidden, v.Subscription.MRR, v.Subscription.ARR)
+	}
+}
+
+// TestAccountDetail_F4_ARRVisibleForManager: Manager ada di allow-list
+// canSeeARR → MRR/ARR tampil apa adanya (diformat formatRupiah).
+func TestAccountDetail_F4_ARRVisibleForManager(t *testing.T) {
+	env, uid := setupAccounts(t)
+	a := env.seedAccount(t, "Desa Langganan Terbuka", &uid, nil, nil)
+	plan := env.seedPlan(t, "Paket Uji F4b", "PLAN-F4-ARR2", "500000")
+	env.seedSubscription(t, a.ID, plan, &uid, "Active", "500000", "6000000")
+
+	req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID), nil, itoa(a.ID))
+	var v panel.AccountDetailView
+	env.runAccount(uid, "owner", "manager", req, func(w http.ResponseWriter, r *http.Request) {
+		v = env.h.accountDetailView(r.Context(), "", a)
+	})
+	if v.Subscription.MRR == flsHidden || v.Subscription.MRR == "" {
+		t.Errorf("manager: MRR tak boleh tersamar/kosong, got %q", v.Subscription.MRR)
+	}
+	if v.Subscription.ARR == flsHidden || v.Subscription.ARR == "" {
+		t.Errorf("manager: ARR tak boleh tersamar/kosong, got %q", v.Subscription.ARR)
+	}
+	if !strings.Contains(v.Subscription.MRR, "500.000") {
+		t.Errorf("manager: MRR harus memuat nilai terformat 500.000, got %q", v.Subscription.MRR)
+	}
+	if !strings.Contains(v.Subscription.ARR, "6.000.000") {
+		t.Errorf("manager: ARR harus memuat nilai terformat 6.000.000, got %q", v.Subscription.ARR)
 	}
 }
