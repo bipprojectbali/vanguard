@@ -312,3 +312,15 @@ RETURNING id, renewal_stage, renewal_risk, renewal_action_plan,
 -- FK dari deals.created_subscription_id tak putus). Idempotent: hanya baris hidup.
 UPDATE subscriptions SET deleted_at = now(), updated_by = sqlc.narg(updated_by)
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
+
+-- name: GetLatestSubscriptionForAccount :one
+-- Langganan TERBARU satu desa (kartu "Ringkasan Langganan" di detail Account) —
+-- satu baris tanpa keyset, beda kebutuhan dari ListSubscriptionsForAccount (daftar
+-- berhalaman). plan_name ikut lewat JOIN plans yang sama. pgx.ErrNoRows = desa
+-- belum pernah berlangganan (empty-state di handler, bukan error).
+SELECT s.*, p.plan_name
+FROM subscriptions s
+JOIN plans p ON p.id = s.plan_id
+WHERE s.account_id = sqlc.arg(account_id) AND s.deleted_at IS NULL
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT 1;

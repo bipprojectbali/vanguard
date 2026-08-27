@@ -200,6 +200,65 @@ func (q *Queries) GetEngagement(ctx context.Context, id int64) (GetEngagementRow
 	return i, err
 }
 
+const getLatestEngagementForAccount = `-- name: GetLatestEngagementForAccount :one
+SELECT e.id, e.tenant_id, e.account_id, e.subject, e.engagement_type, e.frequency, e.scheduled_at, e.status, e.channel, e.outcome, e.next_due_date, e.owner_id, e.created_by, e.created_at, e.updated_by, e.updated_at, u.name AS owner_name
+FROM engagements e
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE e.account_id = $1
+ORDER BY e.scheduled_at DESC, e.id DESC
+LIMIT 1
+`
+
+type GetLatestEngagementForAccountRow struct {
+	ID             int64              `json:"id"`
+	TenantID       int64              `json:"tenant_id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	EngagementType string             `json:"engagement_type"`
+	Frequency      *string            `json:"frequency"`
+	ScheduledAt    pgtype.Timestamptz `json:"scheduled_at"`
+	Status         string             `json:"status"`
+	Channel        *string            `json:"channel"`
+	Outcome        *string            `json:"outcome"`
+	NextDueDate    pgtype.Date        `json:"next_due_date"`
+	OwnerID        *int64             `json:"owner_id"`
+	CreatedBy      *int64             `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy      *int64             `json:"updated_by"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	OwnerName      *string            `json:"owner_name"`
+}
+
+// Engagement TERPILIH TERBARU satu desa (kartu "Ringkasan Customer Success" di
+// detail Account, baris "Terakhir Engagement") — diurut scheduled_at (bukan
+// created_at), konsisten dgn ListEngagements (lihat rationale di atas). Tanpa
+// filter ownership: gerbangnya desa induk (handler via loadOwnedAccount), sama
+// seperti ListContactsByAccount. pgx.ErrNoRows = desa belum punya engagement.
+func (q *Queries) GetLatestEngagementForAccount(ctx context.Context, accountID int64) (GetLatestEngagementForAccountRow, error) {
+	row := q.db.QueryRow(ctx, getLatestEngagementForAccount, accountID)
+	var i GetLatestEngagementForAccountRow
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.AccountID,
+		&i.Subject,
+		&i.EngagementType,
+		&i.Frequency,
+		&i.ScheduledAt,
+		&i.Status,
+		&i.Channel,
+		&i.Outcome,
+		&i.NextDueDate,
+		&i.OwnerID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+		&i.OwnerName,
+	)
+	return i, err
+}
+
 const listEngagements = `-- name: ListEngagements :many
 SELECT
     e.id, e.account_id, e.subject,

@@ -280,6 +280,116 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 	return i, err
 }
 
+const getLatestSubscriptionForAccount = `-- name: GetLatestSubscriptionForAccount :one
+SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, p.plan_name
+FROM subscriptions s
+JOIN plans p ON p.id = s.plan_id
+WHERE s.account_id = $1 AND s.deleted_at IS NULL
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT 1
+`
+
+type GetLatestSubscriptionForAccountRow struct {
+	ID                     int64              `json:"id"`
+	TenantID               int64              `json:"tenant_id"`
+	EntityCode             *string            `json:"entity_code"`
+	SubscriptionOwner      *int64             `json:"subscription_owner"`
+	AccountID              int64              `json:"account_id"`
+	PlanID                 int64              `json:"plan_id"`
+	SourceDealID           *int64             `json:"source_deal_id"`
+	PreviousSubscriptionID *int64             `json:"previous_subscription_id"`
+	Status                 string             `json:"status"`
+	StartDate              pgtype.Date        `json:"start_date"`
+	EndDate                pgtype.Date        `json:"end_date"`
+	BillingCycle           *string            `json:"billing_cycle"`
+	AutoRenew              bool               `json:"auto_renew"`
+	ContractTermMonths     *int32             `json:"contract_term_months"`
+	Mrr                    pgtype.Numeric     `json:"mrr"`
+	Arr                    pgtype.Numeric     `json:"arr"`
+	QuantitySeats          *int32             `json:"quantity_seats"`
+	DiscountPct            pgtype.Numeric     `json:"discount_pct"`
+	PaymentStatus          *string            `json:"payment_status"`
+	RenewalStatus          *string            `json:"renewal_status"`
+	RenewalType            *string            `json:"renewal_type"`
+	RenewalOwner           *int64             `json:"renewal_owner"`
+	RenewalQuoteID         *int64             `json:"renewal_quote_id"`
+	PreviousValue          pgtype.Numeric     `json:"previous_value"`
+	RenewalStage           *string            `json:"renewal_stage"`
+	RenewalRisk            *string            `json:"renewal_risk"`
+	RenewalActionPlan      *string            `json:"renewal_action_plan"`
+	RenewalNextActionDate  pgtype.Date        `json:"renewal_next_action_date"`
+	CancellationDate       pgtype.Date        `json:"cancellation_date"`
+	ChurnReason            *string            `json:"churn_reason"`
+	ChurnType              *string            `json:"churn_type"`
+	ChurnNotes             *string            `json:"churn_notes"`
+	LostValueMrr           pgtype.Numeric     `json:"lost_value_mrr"`
+	WinBackEligible        *bool              `json:"win_back_eligible"`
+	DeletedAt              pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy              *int64             `json:"created_by"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy              *int64             `json:"updated_by"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ApprovalStatus         *string            `json:"approval_status"`
+	ApprovedBy             *int64             `json:"approved_by"`
+	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
+	PlanName               string             `json:"plan_name"`
+}
+
+// Langganan TERBARU satu desa (kartu "Ringkasan Langganan" di detail Account) —
+// satu baris tanpa keyset, beda kebutuhan dari ListSubscriptionsForAccount (daftar
+// berhalaman). plan_name ikut lewat JOIN plans yang sama. pgx.ErrNoRows = desa
+// belum pernah berlangganan (empty-state di handler, bukan error).
+func (q *Queries) GetLatestSubscriptionForAccount(ctx context.Context, accountID int64) (GetLatestSubscriptionForAccountRow, error) {
+	row := q.db.QueryRow(ctx, getLatestSubscriptionForAccount, accountID)
+	var i GetLatestSubscriptionForAccountRow
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.EntityCode,
+		&i.SubscriptionOwner,
+		&i.AccountID,
+		&i.PlanID,
+		&i.SourceDealID,
+		&i.PreviousSubscriptionID,
+		&i.Status,
+		&i.StartDate,
+		&i.EndDate,
+		&i.BillingCycle,
+		&i.AutoRenew,
+		&i.ContractTermMonths,
+		&i.Mrr,
+		&i.Arr,
+		&i.QuantitySeats,
+		&i.DiscountPct,
+		&i.PaymentStatus,
+		&i.RenewalStatus,
+		&i.RenewalType,
+		&i.RenewalOwner,
+		&i.RenewalQuoteID,
+		&i.PreviousValue,
+		&i.RenewalStage,
+		&i.RenewalRisk,
+		&i.RenewalActionPlan,
+		&i.RenewalNextActionDate,
+		&i.CancellationDate,
+		&i.ChurnReason,
+		&i.ChurnType,
+		&i.ChurnNotes,
+		&i.LostValueMrr,
+		&i.WinBackEligible,
+		&i.DeletedAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+		&i.ApprovalStatus,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
+		&i.PlanName,
+	)
+	return i, err
+}
+
 const getSubscription = `-- name: GetSubscription :one
 SELECT id, tenant_id, entity_code, subscription_owner, account_id, plan_id, source_deal_id, previous_subscription_id, status, start_date, end_date, billing_cycle, auto_renew, contract_term_months, mrr, arr, quantity_seats, discount_pct, payment_status, renewal_status, renewal_type, renewal_owner, renewal_quote_id, previous_value, renewal_stage, renewal_risk, renewal_action_plan, renewal_next_action_date, cancellation_date, churn_reason, churn_type, churn_notes, lost_value_mrr, win_back_eligible, deleted_at, created_by, created_at, updated_by, updated_at, approval_status, approved_by, approved_at FROM subscriptions
 WHERE id = $1 AND deleted_at IS NULL

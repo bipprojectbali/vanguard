@@ -107,3 +107,16 @@ WHERE (
         OR a.backup_csm = sqlc.arg(uid)
     ))
 );
+
+-- name: GetLatestEngagementForAccount :one
+-- Engagement TERPILIH TERBARU satu desa (kartu "Ringkasan Customer Success" di
+-- detail Account, baris "Terakhir Engagement") — diurut scheduled_at (bukan
+-- created_at), konsisten dgn ListEngagements (lihat rationale di atas). Tanpa
+-- filter ownership: gerbangnya desa induk (handler via loadOwnedAccount), sama
+-- seperti ListContactsByAccount. pgx.ErrNoRows = desa belum punya engagement.
+SELECT e.*, u.name AS owner_name
+FROM engagements e
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE e.account_id = sqlc.arg(account_id)
+ORDER BY e.scheduled_at DESC, e.id DESC
+LIMIT 1;
