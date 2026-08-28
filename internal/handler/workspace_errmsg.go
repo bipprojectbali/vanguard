@@ -74,6 +74,8 @@ func wsErrMsg(code string) string {
 		return "Peran kontak tidak valid."
 	case "contact_channel":
 		return "Kanal komunikasi pilihan tidak valid."
+	case "account_id":
+		return "Desa induk wajib dipilih."
 	case "role_name":
 		return "Nama peran harus 2–32 karakter, huruf kecil/angka/garis bawah, diawali huruf."
 	case "role_display":

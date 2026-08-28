@@ -62,6 +62,39 @@ func (q *Queries) AssignAccountCSM(ctx context.Context, arg AssignAccountCSMPara
 	return err
 }
 
+const countAccountsForSelect = `-- name: CountAccountsForSelect :one
+SELECT count(*) FROM accounts
+WHERE deleted_at IS NULL
+  AND (
+      $1::boolean
+      OR ($2::boolean AND account_owner = $3)
+      OR ($4::boolean AND (assigned_csm = $3 OR backup_csm = $3))
+  )
+`
+
+type CountAccountsForSelectParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsSales  bool   `json:"is_sales"`
+	Uid      *int64 `json:"uid"`
+	IsCsm    bool   `json:"is_csm"`
+}
+
+// Jumlah desa yang boleh ditulis aktor (predikat sama ListAccountsForSelect).
+// Dipakai gerbang tombol "Tambah Kontak" di daftar kontak global: 0 desa →
+// sembunyikan tombol (tak ada induk yang bisa dipilih). Murah (indeks + RLS
+// satu workspace), tak memuat baris ke handler daftar.
+func (q *Queries) CountAccountsForSelect(ctx context.Context, arg CountAccountsForSelectParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAccountsForSelect,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAccount = `-- name: CreateAccount :one
 
 INSERT INTO accounts (
@@ -396,6 +429,60 @@ func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]A
 			&i.EntityCode,
 			&i.DistrictID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccountsForSelect = `-- name: ListAccountsForSelect :many
+SELECT id, village_name FROM accounts
+WHERE deleted_at IS NULL
+  AND (
+      $1::boolean
+      OR ($2::boolean AND account_owner = $3)
+      OR ($4::boolean AND (assigned_csm = $3 OR backup_csm = $3))
+  )
+ORDER BY village_name ASC
+`
+
+type ListAccountsForSelectParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsSales  bool   `json:"is_sales"`
+	Uid      *int64 `json:"uid"`
+	IsCsm    bool   `json:"is_csm"`
+}
+
+type ListAccountsForSelectRow struct {
+	ID          int64  `json:"id"`
+	VillageName string `json:"village_name"`
+}
+
+// Desa yang boleh DITULIS aktor (F3), untuk dropdown pemilih desa di form "Tambah
+// Kontak" global. Predikat ownership IDENTIK ListAccounts (scope_all/is_sales/
+// is_csm → fail-closed: ketiganya false = NOL baris), tapi TANPA keyset dan hanya
+// kolom untuk <option> (id + nama), urut nama agar dropdown terbaca. Tak
+// dipaginasi: dipakai untuk MEMILIH satu desa, bukan menelusuri — RLS sudah
+// mengurung ke satu workspace.
+func (q *Queries) ListAccountsForSelect(ctx context.Context, arg ListAccountsForSelectParams) ([]ListAccountsForSelectRow, error) {
+	rows, err := q.db.Query(ctx, listAccountsForSelect,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAccountsForSelectRow{}
+	for rows.Next() {
+		var i ListAccountsForSelectRow
+		if err := rows.Scan(&i.ID, &i.VillageName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

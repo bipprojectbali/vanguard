@@ -50,6 +50,11 @@ type Querier interface {
 	// (maks 1 utama per desa) tak pernah dilanggar. Idempotent: nol baris bila belum
 	// ada utama.
 	ClearAccountPrimaryContact(ctx context.Context, arg ClearAccountPrimaryContactParams) error
+	// Jumlah desa yang boleh ditulis aktor (predikat sama ListAccountsForSelect).
+	// Dipakai gerbang tombol "Tambah Kontak" di daftar kontak global: 0 desa →
+	// sembunyikan tombol (tak ada induk yang bisa dipilih). Murah (indeks + RLS
+	// satu workspace), tak memuat baris ke handler daftar.
+	CountAccountsForSelect(ctx context.Context, arg CountAccountsForSelectParams) (int64, error)
 	// Jumlah peristiwa per KELUARGA aksi pada rentang ini (auth, workspace, member,
 	// user, invite, settings, platform) — dipakai untuk melabeli opsi filter dengan
 	// angka, sehingga operator tahu mana yang berisi sebelum mengkliknya.
@@ -522,6 +527,13 @@ type Querier interface {
 	// ber-scope 'own' tak pernah punya baris owner-kosong, jadi handler hanya
 	// menyalakannya untuk peran ScopeAll (Manager/Admin).
 	ListAccounts(ctx context.Context, arg ListAccountsParams) ([]Account, error)
+	// Desa yang boleh DITULIS aktor (F3), untuk dropdown pemilih desa di form "Tambah
+	// Kontak" global. Predikat ownership IDENTIK ListAccounts (scope_all/is_sales/
+	// is_csm → fail-closed: ketiganya false = NOL baris), tapi TANPA keyset dan hanya
+	// kolom untuk <option> (id + nama), urut nama agar dropdown terbaca. Tak
+	// dipaginasi: dipakai untuk MEMILIH satu desa, bukan menelusuri — RLS sudah
+	// mengurung ke satu workspace.
+	ListAccountsForSelect(ctx context.Context, arg ListAccountsForSelectParams) ([]ListAccountsForSelectRow, error)
 	// Daftar aktivitas (tampilan Tabel), keyset (created_at DESC, id DESC) + filter
 	// ownership F3 + filter context. Dua flag ownership (sumber SATU dengan
 	// ActivitiesListFilter): scope_all → semua; is_own → owner_id = uid; keduanya

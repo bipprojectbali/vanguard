@@ -318,7 +318,13 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// Daftar kontak LINTAS-desa (global). Cakupannya masih satu workspace
 		// (RLS), tapi menembus batas per-desa; filter kepemilikan DESA INDUK di
 		// query (ListContacts JOIN accounts). Alamat sibling accounts.
+		//
+		// BUAT dari sini: desa induk BELUM di URL → form global memuat dropdown
+		// pemilih desa (hanya yang boleh ditulis aktor); account_id dari FORM
+		// divalidasi ulang loadOwnedAccount (F3). Insert dibagi jalur nested.
 		r.Get("/contacts", h.ContactsAll)
+		r.Get("/contacts/new", h.ContactNewGlobal)
+		r.Post("/contacts", h.ContactCreateGlobal)
 
 		// Customer Success (Modul 6 slice B1): Health Score (6.1) + Journey/
 		// Onboarding (6.2) + Product Adoption (6.4) — SATU baris `customer_success`
