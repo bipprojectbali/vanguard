@@ -1,6 +1,8 @@
 package panel
 
 import (
+	"strconv"
+
 	"go_starter/internal/ui"
 
 	g "maragu.dev/gomponents"
@@ -39,9 +41,23 @@ type ContactFormFields struct {
 	DoNotContact       bool
 }
 
+// AccountOption = satu <option> desa untuk pemilih desa induk di form global.
+// Value = id desa (dikirim sebagai account_id), Label = nama desa.
+type AccountOption struct {
+	ID   int64
+	Name string
+}
+
 // ContactFormView = data halaman form kontak. Action = URL POST tujuan.
 // AccountBase = URL desa induk (tautan batal/kembali). IsEdit mengubah
 // judul/label. PhoneEditable menentukan apakah field HP/WhatsApp terkunci.
+//
+// DUA jalur pemakaian:
+//   - NESTED (dari detail desa): AccountBase & AccountName terisi, Accounts nil →
+//     desa induk sudah pasti, tak ada pemilih; tautan kembali ke desa itu.
+//   - GLOBAL (dari daftar kontak): AccountBase kosong, Accounts terisi → render
+//     dropdown <select name="account_id">; ListHref = tautan kembali ke daftar
+//     kontak global (AccountBase kosong tak bisa merakit tautan desa).
 type ContactFormView struct {
 	AccountBase string
 	AccountName string
@@ -51,6 +67,10 @@ type ContactFormView struct {
 	Fields      ContactFormFields
 
 	PhoneEditable bool
+
+	// Global-only: pemilih desa induk. Accounts non-kosong → mode global.
+	Accounts []AccountOption
+	ListHref string
 
 	Positions []string
 	Roles     []string
@@ -66,12 +86,22 @@ func ContactForm(v ContactFormView) g.Node {
 		submit = "Simpan Perubahan"
 	}
 
+	// Mode global (dari daftar kontak): desa induk BELUM dipilih → dropdown +
+	// tautan kembali ke daftar kontak global. Mode nested (dari detail desa):
+	// desa sudah pasti → subjudul menyebut namanya, tautan kembali ke desa itu.
+	isGlobal := len(v.Accounts) > 0
+	subtitle := "Kontak untuk " + v.AccountName + "."
+	backHref := v.AccountBase + "/contacts"
+	if isGlobal {
+		subtitle = "Pilih desa induk lalu isi data kontak."
+		backHref = v.ListHref
+	}
+
 	body := []g.Node{
 		h.Div(
 			h.H1(h.Class("text-xl font-semibold"), g.Text(title)),
-			h.P(h.Class("text-sm text-base-content/60"),
-				g.Text("Kontak untuk "+v.AccountName+".")),
-			h.A(h.Href(v.AccountBase+"/contacts"), h.Class("text-sm text-base-content/60"),
+			h.P(h.Class("text-sm text-base-content/60"), g.Text(subtitle)),
+			h.A(h.Href(backHref), h.Class("text-sm text-base-content/60"),
 				g.Text("« Kembali ke daftar kontak")),
 		),
 	}
@@ -79,10 +109,19 @@ func ContactForm(v ContactFormView) g.Node {
 		body = append(body, ui.Alert(ui.VariantDestructive, "contact-form-err", g.Text(v.Err)))
 	}
 
-	body = append(body, h.FormEl(
+	form := []g.Node{
 		h.Method("post"), h.Action(v.Action),
 		h.Class("grid gap-4 min-w-0"),
-
+	}
+	// Selektor desa induk HANYA di mode global — di atas kartu Identitas agar
+	// "kontak ini milik desa mana" diputuskan lebih dulu. account_id divalidasi
+	// ulang backend (loadOwnedAccount → 404 bila di luar cakupan).
+	if isGlobal {
+		form = append(form, formCard("Desa Induk",
+			contactAccountSelectField(v.Accounts),
+		))
+	}
+	form = append(form,
 		formCard("Identitas",
 			field("Nama Depan", "first_name", v.Fields.FirstName, true, "text"),
 			field("Nama Belakang", "last_name", v.Fields.LastName, false, "text"),
@@ -114,11 +153,36 @@ func ContactForm(v ContactFormView) g.Node {
 		h.Div(
 			h.Class("flex flex-wrap items-center gap-2"),
 			h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"), g.Text(submit)),
-			h.A(h.Href(v.AccountBase+"/contacts"), h.Class("btn btn-ghost min-h-11"), g.Text("Batal")),
+			h.A(h.Href(backHref), h.Class("btn btn-ghost min-h-11"), g.Text("Batal")),
 		),
-	))
+	)
+	body = append(body, h.FormEl(form...))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// contactAccountSelectField merender dropdown desa induk (mode global). required: satu
+// desa WAJIB dipilih (kontak selalu milik sebuah desa). Placeholder disabled
+// mencegah submit tanpa memilih; backend tetap memvalidasi (loadOwnedAccount).
+func contactAccountSelectField(accounts []AccountOption) g.Node {
+	nodes := []g.Node{
+		h.Option(h.Value(""), h.Disabled(), h.Selected(), g.Text("— Pilih desa —")),
+	}
+	for _, a := range accounts {
+		nodes = append(nodes, h.Option(
+			h.Value(strconv.FormatInt(a.ID, 10)), g.Text(a.Name),
+		))
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0 sm:col-span-2"),
+		labelFor("Desa", "f-account_id", true),
+		h.Select(
+			append([]g.Node{
+				h.ID("f-account_id"), h.Name("account_id"),
+				h.Class("select text-base w-full"), h.Required(),
+			}, g.Group(nodes))...,
+		),
+	)
 }
 
 // contactPhoneField = nomor pribadi (HP/WhatsApp). Bila tak boleh disunting (bukan

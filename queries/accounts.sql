@@ -165,3 +165,32 @@ SELECT EXISTS(
     SELECT 1 FROM accounts
     WHERE tenant_id = sqlc.arg(tenant_id) AND entity_code = sqlc.arg(entity_code)
 ) AS exists;
+
+-- name: ListAccountsForSelect :many
+-- Desa yang boleh DITULIS aktor (F3), untuk dropdown pemilih desa di form "Tambah
+-- Kontak" global. Predikat ownership IDENTIK ListAccounts (scope_all/is_sales/
+-- is_csm → fail-closed: ketiganya false = NOL baris), tapi TANPA keyset dan hanya
+-- kolom untuk <option> (id + nama), urut nama agar dropdown terbaca. Tak
+-- dipaginasi: dipakai untuk MEMILIH satu desa, bukan menelusuri — RLS sudah
+-- mengurung ke satu workspace.
+SELECT id, village_name FROM accounts
+WHERE deleted_at IS NULL
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (assigned_csm = sqlc.arg(uid) OR backup_csm = sqlc.arg(uid)))
+  )
+ORDER BY village_name ASC;
+
+-- name: CountAccountsForSelect :one
+-- Jumlah desa yang boleh ditulis aktor (predikat sama ListAccountsForSelect).
+-- Dipakai gerbang tombol "Tambah Kontak" di daftar kontak global: 0 desa →
+-- sembunyikan tombol (tak ada induk yang bisa dipilih). Murah (indeks + RLS
+-- satu workspace), tak memuat baris ke handler daftar.
+SELECT count(*) FROM accounts
+WHERE deleted_at IS NULL
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (assigned_csm = sqlc.arg(uid) OR backup_csm = sqlc.arg(uid)))
+  );

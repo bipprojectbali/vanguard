@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -40,6 +41,7 @@ func (h *Handler) ContactNew(w http.ResponseWriter, r *http.Request) {
 	if !h.requireContactWrite(w, r) {
 		return
 	}
+	ctx := r.Context()
 	accountID, ok := h.parseTargetID(w, r)
 	if !ok {
 		return
@@ -57,9 +59,13 @@ func (h *Handler) ContactNew(w http.ResponseWriter, r *http.Request) {
 		Action:      accountBase + "/contacts",
 		IsEdit:      false,
 		Err:         wsErrMsg(r.URL.Query().Get("err")),
-		Positions:   contactPositionOptions,
-		Roles:       contactRoleOptions,
-		Channels:    contactChannelOptions,
+		// F4: hanya Sales (canEditPhone) boleh mengisi HP/WhatsApp — tanpa flag ini
+		// form BUAT mengunci nomor bagi SEMUA role (termasuk Sales sendiri). Sejajar
+		// form EDIT (contactFormFields juga pakai canEditPhone).
+		PhoneEditable: canEditPhone(ctx),
+		Positions:     contactPositionOptions,
+		Roles:         contactRoleOptions,
+		Channels:      contactChannelOptions,
 	}))
 }
 
@@ -84,18 +90,30 @@ func (h *Handler) ContactCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	c, err := h.insertContact(ctx, accountID, form)
+	if err != nil {
+		h.Log.Error("contacts: create", "err", err)
+		wsRedirect(w, r, "/accounts/"+strconv.FormatInt(accountID, 10)+"/contacts/new", "failed")
+		return
+	}
+	wsRedirectOK(w, r, contactPath(accountID, c.ID), "created")
+}
+
+// insertContact = jalur BUAT kontak bersama (nested & global). Set-primary dua
+// langkah (kosongkan yang lama SEBELUM INSERT primary baru, atau idx_contacts_primary
+// menolak dua utama) + INSERT + audit dalam SATU tx (h.q sudah tx dari Scope).
+// Pemanggil menentukan redirect sukses/gagalnya sendiri (alamat form berbeda).
+// F3 sudah DIVERIFIKASI pemanggil lewat loadOwnedAccount(accountID) — helper ini
+// menganggap accountID sah & dalam cakupan.
+func (h *Handler) insertContact(ctx context.Context, accountID int64, form contactForm) (db.Contact, error) {
 	uid := session.UserID(ctx)
 	tenantID := session.TenantID(ctx)
 
-	// Set-primary dua langkah: kosongkan yang lama SEBELUM INSERT primary baru,
-	// atau index menolak dua utama. Idempotent bila belum ada utama.
 	if form.IsPrimaryContact {
 		if err := h.q(ctx).ClearAccountPrimaryContact(ctx, db.ClearAccountPrimaryContactParams{
 			UpdatedBy: &uid, AccountID: accountID,
 		}); err != nil {
-			h.Log.Error("contacts: clear primary", "err", err)
-			wsRedirect(w, r, "/accounts/"+strconv.FormatInt(accountID, 10)+"/contacts/new", "failed")
-			return
+			return db.Contact{}, err
 		}
 	}
 
@@ -125,14 +143,12 @@ func (h *Handler) ContactCreate(w http.ResponseWriter, r *http.Request) {
 		CreatedBy:          &uid,
 	})
 	if err != nil {
-		h.Log.Error("contacts: create", "err", err)
-		wsRedirect(w, r, "/accounts/"+strconv.FormatInt(accountID, 10)+"/contacts/new", "failed")
-		return
+		return db.Contact{}, err
 	}
 
 	h.auditWorkspace(ctx, uid, "contact.create", tenantID, map[string]string{
 		"account_id": strconv.FormatInt(accountID, 10),
 		"contact_id": strconv.FormatInt(c.ID, 10),
 	})
-	wsRedirectOK(w, r, contactPath(accountID, c.ID), "created")
+	return c, nil
 }

@@ -115,6 +115,18 @@ func (h *Handler) ContactsAll(w http.ResponseWriter, r *http.Request) {
 		items = append(items, contactRowViewGlobal(ctx, c))
 	}
 
+	// Tombol "Tambah Kontak" tampil hanya bila aktor boleh menulis DAN punya ≥1
+	// desa yang bisa dipilih sebagai induk. Count gagal → sembunyikan tombol (log),
+	// bukan 500-kan daftar: tombol sekunder, daftar tetap berguna.
+	canWrite := false
+	if canWriteContacts(ctx) {
+		has, err := h.hasWritableAccount(ctx)
+		if err != nil {
+			h.Log.Error("contacts: count writable accounts", "err", err)
+		}
+		canWrite = has
+	}
+
 	base := wsPath(slugFromRequest(r), "")
 	h.renderWorkspaceShell(w, r, "Kontak", "/contacts",
 		panel.ContactsAll(panel.ContactsAllView{
@@ -123,6 +135,7 @@ func (h *Handler) ContactsAll(w http.ResponseWriter, r *http.Request) {
 			ShowTabs:   showTabs,
 			ActiveView: view,
 			NextCursor: nextCursor,
+			CanWrite:   canWrite,
 			Err:        wsErrMsg(r.URL.Query().Get("err")),
 			Msg:        contactsMsg(r.URL.Query().Get("ok")),
 		}))

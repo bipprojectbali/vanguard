@@ -71,8 +71,12 @@ type ContactsAllView struct {
 	ShowTabs   bool
 	ActiveView string
 	NextCursor string
-	Err        string
-	Msg        string
+	// CanWrite = tombol "Tambah Kontak" tampil. Handler menyalakannya HANYA bila
+	// aktor boleh menulis DAN punya ≥1 desa dalam cakupannya (ada induk yang bisa
+	// dipilih); tanpa desa, tombol menuju form kosong tanpa pilihan → disembunyikan.
+	CanWrite bool
+	Err      string
+	Msg      string
 }
 
 // ContactsList merender daftar kontak satu desa: header + aksi tambah, alert,
@@ -117,9 +121,17 @@ func ContactsList(v ContactsListView) g.Node {
 func ContactsAll(v ContactsAllView) g.Node {
 	body := []g.Node{
 		h.Div(
-			h.H1(h.Class("text-xl font-semibold"), g.Text("Kontak")),
-			h.P(h.Class("text-base-content/70"),
-				g.Text("Semua kontak di desa yang Anda kelola.")),
+			h.Class("flex flex-wrap items-center justify-between gap-2 mb-2"),
+			h.Div(
+				h.Class("min-w-0"),
+				h.H1(h.Class("text-xl font-semibold truncate"), g.Text("Kontak")),
+				h.P(h.Class("text-base-content/70 truncate"),
+					g.Text("Semua kontak di desa yang Anda kelola.")),
+			),
+			ui.When(v.CanWrite, h.A(
+				h.Href(v.Base+"/contacts/new"), h.Class("btn btn-primary min-h-11"),
+				g.Text("Tambah Kontak"),
+			)),
 		),
 	}
 	if v.ShowTabs {
