@@ -131,3 +131,18 @@ WHERE (
         OR a.backup_csm = sqlc.arg(uid)
     ))
 );
+
+-- name: CountTicketsByAccount :one
+-- Ringkasan tiket SATU desa (chip "Terkait" di detail Account): terbuka + breach
+-- dalam satu baris, tanpa filter ownership (gerbangnya desa induk, pola sama
+-- CountContactsByAccount). Predikat breach SAMA PERSIS dgn CountTicketKPIs
+-- (tickets TANPA kolom deleted_at — lihat header file ini).
+SELECT
+    COUNT(*) FILTER (WHERE t.status <> 'selesai')
+        AS open_count,
+    COUNT(*) FILTER (WHERE t.sla_deadline_at IS NOT NULL
+                       AND t.sla_deadline_at < now()
+                       AND t.status <> 'selesai')
+        AS breached_count
+FROM tickets t
+WHERE t.account_id = sqlc.arg(account_id);

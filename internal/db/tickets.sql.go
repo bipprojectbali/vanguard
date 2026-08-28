@@ -75,6 +75,34 @@ func (q *Queries) CountTicketKPIs(ctx context.Context, arg CountTicketKPIsParams
 	return i, err
 }
 
+const countTicketsByAccount = `-- name: CountTicketsByAccount :one
+SELECT
+    COUNT(*) FILTER (WHERE t.status <> 'selesai')
+        AS open_count,
+    COUNT(*) FILTER (WHERE t.sla_deadline_at IS NOT NULL
+                       AND t.sla_deadline_at < now()
+                       AND t.status <> 'selesai')
+        AS breached_count
+FROM tickets t
+WHERE t.account_id = $1
+`
+
+type CountTicketsByAccountRow struct {
+	OpenCount     int64 `json:"open_count"`
+	BreachedCount int64 `json:"breached_count"`
+}
+
+// Ringkasan tiket SATU desa (chip "Terkait" di detail Account): terbuka + breach
+// dalam satu baris, tanpa filter ownership (gerbangnya desa induk, pola sama
+// CountContactsByAccount). Predikat breach SAMA PERSIS dgn CountTicketKPIs
+// (tickets TANPA kolom deleted_at — lihat header file ini).
+func (q *Queries) CountTicketsByAccount(ctx context.Context, accountID int64) (CountTicketsByAccountRow, error) {
+	row := q.db.QueryRow(ctx, countTicketsByAccount, accountID)
+	var i CountTicketsByAccountRow
+	err := row.Scan(&i.OpenCount, &i.BreachedCount)
+	return i, err
+}
+
 const createTicket = `-- name: CreateTicket :one
 
 INSERT INTO tickets (

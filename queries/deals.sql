@@ -134,3 +134,18 @@ UPDATE deals SET
     updated_by              = sqlc.narg(updated_by),
     updated_at              = now()
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
+
+-- name: GetLatestDealForAccount :one
+-- Deal TERBARU satu desa (chip "Terkait" di detail Account). Tanpa filter
+-- ownership: gerbangnya desa induk (handler via loadOwnedAccount), pola sama
+-- ListContactsByAccount. pgx.ErrNoRows = desa belum punya deal sama sekali.
+SELECT * FROM deals
+WHERE account_id = sqlc.arg(account_id) AND deleted_at IS NULL
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
+-- name: CountDealsByAccount :one
+-- Jumlah deal hidup satu desa — label chip "Terkait" di detail Account. Mirror
+-- CountContactsByAccount.
+SELECT COUNT(*) FROM deals
+WHERE account_id = sqlc.arg(account_id) AND deleted_at IS NULL;

@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countDealsByAccount = `-- name: CountDealsByAccount :one
+SELECT COUNT(*) FROM deals
+WHERE account_id = $1 AND deleted_at IS NULL
+`
+
+// Jumlah deal hidup satu desa — label chip "Terkait" di detail Account. Mirror
+// CountContactsByAccount.
+func (q *Queries) CountDealsByAccount(ctx context.Context, accountID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countDealsByAccount, accountID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createDeal = `-- name: CreateDeal :one
 
 INSERT INTO deals (
@@ -163,6 +177,50 @@ WHERE id = $1 AND deleted_at IS NULL
 // (DealsListFilter.Allows) atas baris.
 func (q *Queries) GetDeal(ctx context.Context, id int64) (Deal, error) {
 	row := q.db.QueryRow(ctx, getDeal, id)
+	var i Deal
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.EntityCode,
+		&i.DealOwner,
+		&i.AccountID,
+		&i.PrimaryContactID,
+		&i.PlanRequestedID,
+		&i.DealName,
+		&i.DealType,
+		&i.Stage,
+		&i.Amount,
+		&i.Probability,
+		&i.ExpectedCloseDate,
+		&i.ForecastCategory,
+		&i.NextStep,
+		&i.ClosedDate,
+		&i.WinLossReason,
+		&i.Competitor,
+		&i.LossNotes,
+		&i.SubscriptionTerm,
+		&i.CreatedSubscriptionID,
+		&i.DeletedAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getLatestDealForAccount = `-- name: GetLatestDealForAccount :one
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at FROM deals
+WHERE account_id = $1 AND deleted_at IS NULL
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+// Deal TERBARU satu desa (chip "Terkait" di detail Account). Tanpa filter
+// ownership: gerbangnya desa induk (handler via loadOwnedAccount), pola sama
+// ListContactsByAccount. pgx.ErrNoRows = desa belum punya deal sama sekali.
+func (q *Queries) GetLatestDealForAccount(ctx context.Context, accountID int64) (Deal, error) {
+	row := q.db.QueryRow(ctx, getLatestDealForAccount, accountID)
 	var i Deal
 	err := row.Scan(
 		&i.ID,

@@ -62,6 +62,9 @@ type Querier interface {
 	// Jumlah kontak hidup satu desa — untuk badge/ringkasan di detail desa. Murah:
 	// idx_contacts_account (partial WHERE deleted_at IS NULL) melayaninya langsung.
 	CountContactsByAccount(ctx context.Context, accountID int64) (int64, error)
+	// Jumlah deal hidup satu desa — label chip "Terkait" di detail Account. Mirror
+	// CountContactsByAccount.
+	CountDealsByAccount(ctx context.Context, accountID int64) (int64, error)
 	// Agregat KPI header halaman /engagements. Cakupan scope sama persis ListEngagements.
 	// uid dioper walau scope_all=true (diabaikan dalam kasus itu).
 	CountEngagementKPIs(ctx context.Context, arg CountEngagementKPIsParams) (CountEngagementKPIsRow, error)
@@ -103,6 +106,11 @@ type Querier interface {
 	// untuk monitoring operasional. Timezone workspace (gotcha #14) tidak diterapkan
 	// di v1 untuk menjaga query tetap sederhana.
 	CountTicketKPIs(ctx context.Context, arg CountTicketKPIsParams) (CountTicketKPIsRow, error)
+	// Ringkasan tiket SATU desa (chip "Terkait" di detail Account): terbuka + breach
+	// dalam satu baris, tanpa filter ownership (gerbangnya desa induk, pola sama
+	// CountContactsByAccount). Predikat breach SAMA PERSIS dgn CountTicketKPIs
+	// (tickets TANPA kolom deleted_at — lihat header file ini).
+	CountTicketsByAccount(ctx context.Context, accountID int64) (CountTicketsByAccountRow, error)
 	// Badge sidebar — dirender di SETIAP halaman, ditopang index partial
 	// idx_notif_unread agar tak menyentuh baris yang sudah terbaca.
 	CountUnreadNotifications(ctx context.Context, userID int64) (int64, error)
@@ -415,6 +423,21 @@ type Querier interface {
 	GetInviteByToken(ctx context.Context, token string) (GetInviteByTokenRow, error)
 	// Satu artikel (baca detail/isi). RLS menjamin tenant_id.
 	GetKBArticle(ctx context.Context, id int64) (KbArticle, error)
+	// Deal TERBARU satu desa (chip "Terkait" di detail Account). Tanpa filter
+	// ownership: gerbangnya desa induk (handler via loadOwnedAccount), pola sama
+	// ListContactsByAccount. pgx.ErrNoRows = desa belum punya deal sama sekali.
+	GetLatestDealForAccount(ctx context.Context, accountID int64) (Deal, error)
+	// Engagement TERPILIH TERBARU satu desa (kartu "Ringkasan Customer Success" di
+	// detail Account, baris "Terakhir Engagement") — diurut scheduled_at (bukan
+	// created_at), konsisten dgn ListEngagements (lihat rationale di atas). Tanpa
+	// filter ownership: gerbangnya desa induk (handler via loadOwnedAccount), sama
+	// seperti ListContactsByAccount. pgx.ErrNoRows = desa belum punya engagement.
+	GetLatestEngagementForAccount(ctx context.Context, accountID int64) (GetLatestEngagementForAccountRow, error)
+	// Langganan TERBARU satu desa (kartu "Ringkasan Langganan" di detail Account) —
+	// satu baris tanpa keyset, beda kebutuhan dari ListSubscriptionsForAccount (daftar
+	// berhalaman). plan_name ikut lewat JOIN plans yang sama. pgx.ErrNoRows = desa
+	// belum pernah berlangganan (empty-state di handler, bukan error).
+	GetLatestSubscriptionForAccount(ctx context.Context, accountID int64) (GetLatestSubscriptionForAccountRow, error)
 	// Satu lead hidup. RLS menjamin tenant_id; filter deleted_at menyembunyikan yang
 	// ter-soft-delete. Ownership diputuskan handler (LeadsListFilter.Allows) atas baris.
 	GetLead(ctx context.Context, id int64) (Lead, error)

@@ -63,8 +63,13 @@ Hub semua relasi. `account_owner`/`assigned_csm`/`backup_csm` otoritatif; `villa
 | M2-4 | View: daftar desa (TableScroll, keyset pagination `?after=`), form desa (mobile-first), detail hub | view | 1d | M2-3 | 13 Agu |
 | M2-5 | Test: RLS isolasi workspace + ownership-filter antar-desa + handler CRUD + keyset | test | 1d | M2-3 | 14 Agu |
 | M2-6 | Verifikasi 3-lebar (375/768/1280) + screenshot; `make check` hijau | qa | 0.5d | M2-4,M2-5 | 14 Agu |
+| M2-7 | Detail: surfacekan kolom identitas yang sudah ada di skema sejak awal — Pemilik Akun, Induk Akun (best-effort, terhapus/gagal → kosong), Lintang/Bujur | view+handler | 0.5d | M2-4 | ✅ 26 Agu |
+| M2-8 | Detail: kartu ringkasan lintas-modul — Langganan (MRR/ARR ter-mask F4 spt VillageBudget), Customer Success (health/lifecycle, tanpa mask), Sistem (audit) | view+handler | 1d | M2-4,M5,M6 | ✅ 26 Agu |
+| M2-9 | Detail: baris "Terkait" — 4 chip ringkasan (Kontak, Deal, Langganan, Tiket); Deal/Tiket sengaja tanpa href (belum ada rute daftar ber-filter desa) | view+handler | 0.5d | M2-8 | ✅ 26 Agu |
 
 **Acceptance modul:** owner/CSM hanya lihat desa miliknya (kecuali admin); duplikat `village_code` ditolak; halaman desa nol overflow di 375px; submit form assign-CSM benar-benar menulis (bukan 404).
+
+**Catatan M2-7..M2-9** (`feature/crm-accounts-detail-rollup`, di luar urutan awal — rebuild halaman detail sesuai wireframe Penpot "Accounts — 2.3 Account Detail"): **satu layout untuk semua business_role**, bukan 4 halaman terpisah per POV — F2 (Casbin)/F3 (ownership)/F4 (masking) di handler yang memutuskan visibilitas per role, konsisten dgn pola modul lain. Tak perlu migrasi baru (kolom `account_owner`/`parent_account_id`/`latitude`/`longitude` sudah ada sejak M2-1, sebelumnya tak pernah disurfacekan). Dua kotak anotasi "BUG DESAIN" di wireframe adalah artefak review Penpot saja (rujukan dokumen non-repo, tak ada cacat nyata yg cocok) — sengaja TIDAK ikut ke UI nyata.
 
 ---
 
@@ -218,6 +223,7 @@ FLS sudah dianyam di F4 + tiap handler. Task ini = audit menyeluruh + test linta
 | 17–18 Agu | **Modul 8 Reports** | ✅ selesai lebih awal, di luar urutan (langsung dari F2, tak menunggu M1/M6 tuntas) |
 | 18 Agu | **Modul 9 M9-1 (Audit FLS)** | ✅ selesai lebih awal, di luar urutan (1 gap live + 3 gap laten diperbaiki) |
 | 18 Agu | **Modul 9 M9-2 (Test matriks FLS)** | ✅ selesai lebih awal, di luar urutan (4 gap cakupan matriks ditambal: ARR subscription, admin di ARR subscription, matriks ARR reports jadi 5-role, Deals Amount [modul tanpa test sebelumnya], PII phone Support di accounts/contacts) |
+| 26 Agu | **Modul 2 M2-7..M2-9 (rollup detail Account)** | ✅ selesai lebih awal, di luar urutan (rebuild halaman detail sesuai wireframe Penpot; satu layout semua role, F2/F3/F4 di handler; tak perlu migrasi baru) |
 | >1 Sep | sisa Modul 6 | 🔴 luber ke September |
 
 **Rekomendasi:** kunci komitmen 1 Sep pada **Modul 2–5, 1, 7, 8, 9 tuntas + Modul 6 sebagian**. Kalau kamu mau Modul 6 benar-benar tuntas sebelum 1 Sep, satu-satunya tuas jujur adalah mengurangi kedalaman (mis. `customer_success`+`tickets` cukup, `cs_impl_tasks`/`cs_trainings`/`surveys` jadi v1.1) — bukan menambah jam.
