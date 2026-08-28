@@ -29,7 +29,7 @@ import (
 //     TANPA peran CRM tak otomatis masuk (tak ada short-circuit root).
 //   - F3 (ownership, layer app): Sales melihat account_owner-nya; CSM melihat
 //     assigned/backup; Admin/Manager semua; di luar cakupan → 404 (bukan 403).
-//   - F4 (field-level): nomor HP kontak utuh HANYA Sales; editor non-Sales tak
+//   - F4 (field-level): nomor HP kontak utuh untuk Sales & Admin; role lain tak
 //     pernah menerima nomor asli & tak bisa menimpanya.
 //   - Keyset: pageSize+1 → tombol "Berikutnya" hanya saat memang ada halaman lanjut.
 //

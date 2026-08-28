@@ -13,7 +13,7 @@ import (
 // accounts_fls_test.go — dua sumbu izin di-level baris & field untuk Desa:
 //   - F3 (ownership): Sales lihat miliknya, CSM lihat binaan, Support nol baris,
 //     Admin lihat semua; di luar cakupan → 404 (bukan 403).
-//   - F4 (field-level): nomor HP kontak utuh HANYA Sales; editor non-Sales tak
+//   - F4 (field-level): nomor HP kontak utuh untuk Sales & Admin; role lain tak
 //     pernah menerima nomor asli & masknya tak boleh menimpa nilai tersimpan.
 //
 // F2 gate + CRUD + keyset diuji di file lain; helper bersama di accounts_test.go.
@@ -105,8 +105,8 @@ func TestAccounts_F3_AdminLihatSemua(t *testing.T) {
 
 // --- F4: field masking -----------------------------------------------------
 
-// TestAccounts_F4_PhoneMasking: nomor HP kontak utuh HANYA Sales; role lain
-// menerima mask. Nilai asli tak boleh SAMPAI ke browser non-Sales (view-source).
+// TestAccounts_F4_PhoneMasking: nomor HP kontak utuh untuk Sales & Admin; role
+// lain (Manager, CSM) menerima mask. Nilai asli tak boleh SAMPAI ke browser.
 func TestAccounts_F4_PhoneMasking(t *testing.T) {
 	env, uid := setupAccounts(t)
 	phone := "0812-3456-7890"
@@ -117,7 +117,7 @@ func TestAccounts_F4_PhoneMasking(t *testing.T) {
 		full bool
 	}{
 		{"sales", true},
-		{"admin", false},
+		{"admin", true}, // Admin CRM = pengelola workspace → akses penuh HP
 		{"manager", false},
 		{"csm", false},
 	}
@@ -127,7 +127,7 @@ func TestAccounts_F4_PhoneMasking(t *testing.T) {
 			body := env.runAccount(uid, "owner", c.role, req, env.h.AccountDetail).Body.String()
 			has := strings.Contains(body, phone)
 			if c.full && !has {
-				t.Errorf("sales harus melihat nomor utuh")
+				t.Errorf("role %q harus melihat nomor utuh", c.role)
 			}
 			if !c.full && has {
 				t.Errorf("role %q BOCOR — nomor asli sampai ke browser non-Sales", c.role)

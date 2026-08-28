@@ -41,15 +41,15 @@ func TestFLS_ARR(t *testing.T) {
 	}
 }
 
-// TestFLS_Phone — utuh HANYA untuk Sales; semua role lain (termasuk Admin &
-// Manager, §8.3) tersamar. Nomor kosong tetap kosong.
+// TestFLS_Phone — utuh untuk Sales & Admin; role lain (Manager, CSM, Support)
+// tersamar. Nomor kosong tetap kosong.
 func TestFLS_Phone(t *testing.T) {
 	cases := []struct {
 		role string
 		full bool
 	}{
 		{"sales", true},
-		{"admin", false},
+		{"admin", true}, // Admin CRM = pengelola workspace → akses penuh HP/WA
 		{"manager", false}, // §8.3: nomor HP tetap tersamar bagi Manager
 		{"csm", false},
 		{"support", false},
