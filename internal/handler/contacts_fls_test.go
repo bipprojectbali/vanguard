@@ -13,7 +13,7 @@ import (
 //   - F3 (ownership) DIWARISI DESA INDUK: kontak yang tampil = desa yang tampil.
 //     Sales lihat kontak desanya; Support nol baris; Admin semua; luar cakupan &
 //     account_id mismatch → 404 (menyangkal keberadaan, bukan 403).
-//   - F4 (field-level): HP & WhatsApp utuh HANYA Sales; non-Sales menerima mask &
+//   - F4 (field-level): HP & WhatsApp utuh untuk Sales & Admin; role lain menerima mask &
 //     masknya tak boleh menimpa nomor asli. Telepon kantor tak pernah disamarkan.
 
 // TestContacts_F3_SalesLihatKontakDesanya: di daftar global, Sales melihat HANYA
@@ -104,8 +104,8 @@ func TestContacts_AccountMismatch404(t *testing.T) {
 
 // --- F4: masking nomor -----------------------------------------------------
 
-// TestContacts_F4_PhoneMasking: HP & WhatsApp utuh HANYA Sales; role lain menerima
-// mask. Telepon KANTOR (kelembagaan) tak pernah disamarkan. Nilai asli tak boleh
+// TestContacts_F4_PhoneMasking: HP & WhatsApp utuh untuk Sales & Admin; role lain
+// (Manager, CSM) menerima mask. Telepon KANTOR (kelembagaan) tak pernah disamarkan. Nilai asli tak boleh
 // SAMPAI ke browser non-Sales (view-source).
 func TestContacts_F4_PhoneMasking(t *testing.T) {
 	env, uid := setupAccounts(t)
@@ -120,7 +120,7 @@ func TestContacts_F4_PhoneMasking(t *testing.T) {
 		full bool
 	}{
 		{"sales", true},
-		{"admin", false},
+		{"admin", true}, // Admin CRM = pengelola workspace → akses penuh HP/WA
 		{"manager", false},
 		{"csm", false},
 	}
@@ -133,7 +133,7 @@ func TestContacts_F4_PhoneMasking(t *testing.T) {
 			hasMobile := strings.Contains(body, mobile)
 			hasWhatsapp := strings.Contains(body, whatsapp)
 			if tc.full && (!hasMobile || !hasWhatsapp) {
-				t.Errorf("sales harus melihat HP & WhatsApp utuh")
+				t.Errorf("role %q harus melihat HP & WhatsApp utuh", tc.role)
 			}
 			if !tc.full && (hasMobile || hasWhatsapp) {
 				t.Errorf("role %q BOCOR — nomor pribadi sampai ke browser non-Sales", tc.role)

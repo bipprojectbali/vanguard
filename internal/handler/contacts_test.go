@@ -28,7 +28,7 @@ import (
 //   - PRIMARY: maks 1 kontak utama per desa (idx_contacts_primary). Set-primary
 //     mengosongkan yang lama; menghapus kontak utama membebaskan slotnya.
 //   - Opt-out (email_opt_out / do_not_contact) writable & tersimpan.
-//   - F4 (field-level): HP & WhatsApp utuh HANYA Sales; editor non-Sales tak
+//   - F4 (field-level): HP & WhatsApp utuh untuk Sales & Admin; role lain tak
 //     pernah menerima nomor asli & masknya tak boleh menimpa nilai tersimpan.
 //   - account_id URL WAJIB cocok c.account_id → mismatch 404 (URL nested jujur).
 //

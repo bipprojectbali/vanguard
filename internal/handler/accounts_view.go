@@ -96,7 +96,7 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 		// in depth bila F3 pernah berubah).
 		VillageBudget: maskARR(numericStr(a.VillageBudget), br),
 
-		// F4: nomor HP kontak utuh HANYA Sales; lainnya tersamar. Office phone/
+		// F4: nomor HP kontak utuh untuk Sales & Admin; lainnya tersamar. Office phone/
 		// email = data kelembagaan (bukan PII pribadi kepala desa) → tak disamar.
 		ContactPhone: maskPhone(deref(a.ContactPhone), br),
 		OfficePhone:  deref(a.OfficePhone),

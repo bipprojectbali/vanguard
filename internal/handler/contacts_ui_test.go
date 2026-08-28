@@ -39,28 +39,33 @@ func (e *testEnv) seedContactReports(t *testing.T, accountID int64, firstName st
 
 // --- Daftar global: masking WhatsApp + kolom Desa -------------------------
 
-// TestContacts_ListWhatsappMasking: di DAFTAR global, nomor WhatsApp utuh HANYA
-// bagi Sales; Admin (non-Sales) menerima penanda tersamar — nomor asli tak pernah
-// sampai ke browser. Membuktikan F4 menjaga daftar, bukan cuma detail.
+// TestContacts_ListWhatsappMasking: di DAFTAR global, nomor WhatsApp utuh untuk
+// Sales & Admin (pengelola workspace); role yang masih ter-mask (Manager)
+// menerima penanda tersamar — nomor asli tak pernah sampai ke browser mereka.
+// Membuktikan F4 menjaga daftar, bukan cuma detail.
 func TestContacts_ListWhatsappMasking(t *testing.T) {
 	env, uid := setupAccounts(t)
 	whatsapp := "0813-2222-3333"
 	a := env.seedAccount(t, "Desa WA", &uid, nil, nil)
 	env.seedContactPhone(t, a.ID, "Sari", "0812-0000-0000", whatsapp, "021-555-0000")
 
-	req := contactsReq(http.MethodGet, "/w/test/contacts", nil, "", "")
-	salesBody := env.runAccount(uid, "member", "sales", req, env.h.ContactsAll).Body.String()
-	if !strings.Contains(salesBody, whatsapp) {
-		t.Error("Sales harus melihat nomor WhatsApp utuh di daftar")
+	// Sales & Admin → nomor utuh.
+	for _, role := range []string{"sales", "admin"} {
+		req := contactsReq(http.MethodGet, "/w/test/contacts", nil, "", "")
+		body := env.runAccount(uid, "owner", role, req, env.h.ContactsAll).Body.String()
+		if !strings.Contains(body, whatsapp) {
+			t.Errorf("%s harus melihat nomor WhatsApp utuh di daftar", role)
+		}
 	}
 
-	req2 := contactsReq(http.MethodGet, "/w/test/contacts", nil, "", "")
-	adminBody := env.runAccount(uid, "owner", "admin", req2, env.h.ContactsAll).Body.String()
-	if strings.Contains(adminBody, whatsapp) {
-		t.Error("Admin non-Sales BOCOR — nomor WhatsApp asli sampai ke daftar")
+	// Manager → masih tersamar (bukan Sales/Admin).
+	req := contactsReq(http.MethodGet, "/w/test/contacts", nil, "", "")
+	mgrBody := env.runAccount(uid, "owner", "manager", req, env.h.ContactsAll).Body.String()
+	if strings.Contains(mgrBody, whatsapp) {
+		t.Error("Manager BOCOR — nomor WhatsApp asli sampai ke daftar")
 	}
-	if !strings.Contains(adminBody, flsHidden) {
-		t.Error("Admin harus menerima penanda tersamar (flsHidden) di kolom WhatsApp")
+	if !strings.Contains(mgrBody, flsHidden) {
+		t.Error("Manager harus menerima penanda tersamar (flsHidden) di kolom WhatsApp")
 	}
 }
 

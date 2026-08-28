@@ -46,11 +46,18 @@ func canSeeARR(businessRole string) bool {
 	}
 }
 
-// canSeeFullPhone — Nomor HP kontak utuh HANYA untuk Sales (§5): pemegang
-// hubungan yang memang menghubungi kepala desa. Semua role lain (termasuk Admin
-// & Manager, §8.3) melihat versi tersamar — membatasi sebaran PII.
+// canSeeFullPhone — Nomor HP kontak utuh untuk Sales & Admin (§5): Sales adalah
+// pemegang hubungan yang memang menghubungi kepala desa; Admin CRM diberi akses
+// penuh sebagai pengelola workspace yang perlu memverifikasi/memperbaiki kontak.
+// Manager, CSM, & Support tetap melihat versi tersamar — membatasi sebaran PII.
+//
+// Tetap allow-list (fail-CLOSED): role platform yang tersasar ke sini
+// (super_admin/owner/staff BUKAN business_role) & nilai liar tersembunyi. Sumbu
+// tetap tegak lurus (§3) — otoritas platform TIDAK membuka field ini; hanya
+// business_role = admin yang lolos.
 func canSeeFullPhone(businessRole string) bool {
-	return businessRole == authz.BusinessRoleSales
+	return businessRole == authz.BusinessRoleSales ||
+		businessRole == authz.BusinessRoleAdmin
 }
 
 // canSeeInternalNotes — Catatan Internal HANYA Admin & CSM (§5): isinya penilaian
@@ -77,7 +84,7 @@ func maskARR(formatted, businessRole string) string {
 	return flsHidden
 }
 
-// maskPhone menyamarkan nomor HP bagi non-Sales. Penyamaran = SEMBUNYIKAN PENUH
+// maskPhone menyamarkan nomor HP bagi role selain Sales & Admin. Penyamaran = SEMBUNYIKAN PENUH
 // (penanda tetap), bukan sekadar menutup sebagian: alasan §5 adalah "membatasi
 // sebaran PII", dan membocorkan digit awal/akhir tetap membocorkan nomor sekaligus
 // panjangnya. Baris tetap bisa dibedakan lewat NAMA kontak — jadi tak ada guna

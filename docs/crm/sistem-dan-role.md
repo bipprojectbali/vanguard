@@ -230,7 +230,7 @@ Sesuai spec §9.2 dan sudah tergambar di board 9.2:
 | Field | Aturan | Alasan |
 |---|---|---|
 | Nilai Kontrak / ARR | Disembunyikan dari Support Agent | Agen tiket tak perlu tahu nilai komersial |
-| Nomor HP Kontak | Tersamar untuk role non-Sales | Membatasi sebaran PII |
+| Nomor HP Kontak | Utuh untuk Sales & Admin; tersamar untuk Manager, CSM, Support | Batasi sebaran PII; Admin = pengelola workspace yang perlu verifikasi/perbaiki kontak |
 | Catatan Internal | Hanya Admin & CSM | Isinya penilaian jujur tentang pelanggan |
 | Health Score | Terbuka untuk semua role | Justru harus dilihat bersama |
 
