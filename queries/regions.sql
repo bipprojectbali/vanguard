@@ -50,3 +50,11 @@ FROM regions d
 JOIN regions rgc  ON rgc.id = d.parent_region_id
 JOIN regions prov ON prov.id = rgc.parent_region_id
 WHERE d.id = sqlc.arg(district_id) AND d.level = 3;
+
+-- name: GetDistrictCode :one
+-- Kode Kemendagri (mis. "32.01.01") satu Kecamatan (level 3) — dipakai sbg PREFIX
+-- village_code otomatis saat create desa (generateVillageCode). Filter level = 3
+-- eksplisit: id level 1/2 (atau id tak ada) → pgx.ErrNoRows, dipetakan pemanggil
+-- ke galat "district_id" (payload district_id bukan Kecamatan sah).
+SELECT code FROM regions
+WHERE id = sqlc.arg(id) AND level = 3;

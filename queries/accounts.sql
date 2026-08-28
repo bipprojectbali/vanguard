@@ -131,3 +131,37 @@ WHERE tenant_id = sqlc.arg(tenant_id)
   )
 ORDER BY created_at DESC
 LIMIT 5;
+
+-- name: MaxVillageSeqForPrefix :one
+-- Nomor urut (segmen ke-4) TERTINGGI yang sudah dipakai village_code otomatis
+-- untuk satu tenant + prefix Kecamatan (mis. prefix "32.01.01."). Dihitung atas
+-- SEMUA baris — termasuk yang ter-soft-delete — supaya nomor desa yang pernah ada
+-- TAK PERNAH dipakai ulang (village_code adalah identitas yang orang kutip).
+-- Guard regex '^[0-9]{1,9}$' membuat cast ::int aman terhadap village_code lama
+-- warisan field manual yang mungkin tak berformat 4-segmen. COALESCE → 0 bila
+-- belum ada, jadi pemanggil cukup +1.
+SELECT COALESCE(MAX((split_part(village_code, '.', 4))::int), 0)::int AS max_seq
+FROM accounts
+WHERE tenant_id = sqlc.arg(tenant_id)
+  AND village_code LIKE sqlc.arg(prefix)
+  AND split_part(village_code, '.', 4) ~ '^[0-9]{1,9}$';
+
+-- name: VillageCodeExists :one
+-- Apakah village_code persis ini sudah dipakai di tenant (SEMUA baris, termasuk
+-- soft-deleted). Dipakai generateVillageCode utk melewati nomor yang sudah
+-- terpakai SEBELUM INSERT — INSERT gagal akan meracuni tx ber-tenant, jadi kode
+-- bebas harus dipastikan lebih dulu lewat SELECT (yang tak membatalkan tx).
+SELECT EXISTS(
+    SELECT 1 FROM accounts
+    WHERE tenant_id = sqlc.arg(tenant_id) AND village_code = sqlc.arg(village_code)
+) AS exists;
+
+-- name: AccountEntityCodeExists :one
+-- Apakah entity_code (kode sistem, mis. "DESA-001") ini sudah dipakai di tenant
+-- (SEMUA baris). Dipakai allocEntityCode agar jalur OTOMATIS melewati slot yang
+-- sudah direbut override manual — pola cek-sebelum-INSERT yang sama dgn
+-- VillageCodeExists (tx tak boleh dibatalkan lalu dicoba ulang).
+SELECT EXISTS(
+    SELECT 1 FROM accounts
+    WHERE tenant_id = sqlc.arg(tenant_id) AND entity_code = sqlc.arg(entity_code)
+) AS exists;

@@ -58,7 +58,6 @@ func accountFormFields(a db.Account, phoneEditable bool) panel.AccountFormFields
 	}
 	return panel.AccountFormFields{
 		VillageName:           a.VillageName,
-		VillageCode:           deref(a.VillageCode),
 		AccountType:           a.AccountType,
 		Website:               deref(a.Website),
 		Description:           deref(a.Description),

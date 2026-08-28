@@ -9,6 +9,22 @@ import (
 	"context"
 )
 
+const getDistrictCode = `-- name: GetDistrictCode :one
+SELECT code FROM regions
+WHERE id = $1 AND level = 3
+`
+
+// Kode Kemendagri (mis. "32.01.01") satu Kecamatan (level 3) — dipakai sbg PREFIX
+// village_code otomatis saat create desa (generateVillageCode). Filter level = 3
+// eksplisit: id level 1/2 (atau id tak ada) → pgx.ErrNoRows, dipetakan pemanggil
+// ke galat "district_id" (payload district_id bukan Kecamatan sah).
+func (q *Queries) GetDistrictCode(ctx context.Context, id int64) (string, error) {
+	row := q.db.QueryRow(ctx, getDistrictCode, id)
+	var code string
+	err := row.Scan(&code)
+	return code, err
+}
+
 const getRegionAncestry = `-- name: GetRegionAncestry :one
 SELECT
     d.id           AS district_id,

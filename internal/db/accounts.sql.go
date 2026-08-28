@@ -11,6 +11,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const accountEntityCodeExists = `-- name: AccountEntityCodeExists :one
+SELECT EXISTS(
+    SELECT 1 FROM accounts
+    WHERE tenant_id = $1 AND entity_code = $2
+) AS exists
+`
+
+type AccountEntityCodeExistsParams struct {
+	TenantID   int64   `json:"tenant_id"`
+	EntityCode *string `json:"entity_code"`
+}
+
+// Apakah entity_code (kode sistem, mis. "DESA-001") ini sudah dipakai di tenant
+// (SEMUA baris). Dipakai allocEntityCode agar jalur OTOMATIS melewati slot yang
+// sudah direbut override manual — pola cek-sebelum-INSERT yang sama dgn
+// VillageCodeExists (tx tak boleh dibatalkan lalu dicoba ulang).
+func (q *Queries) AccountEntityCodeExists(ctx context.Context, arg AccountEntityCodeExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, accountEntityCodeExists, arg.TenantID, arg.EntityCode)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const assignAccountCSM = `-- name: AssignAccountCSM :exec
 UPDATE accounts SET
     assigned_csm = $1,
@@ -383,6 +406,33 @@ func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]A
 	return items, nil
 }
 
+const maxVillageSeqForPrefix = `-- name: MaxVillageSeqForPrefix :one
+SELECT COALESCE(MAX((split_part(village_code, '.', 4))::int), 0)::int AS max_seq
+FROM accounts
+WHERE tenant_id = $1
+  AND village_code LIKE $2
+  AND split_part(village_code, '.', 4) ~ '^[0-9]{1,9}$'
+`
+
+type MaxVillageSeqForPrefixParams struct {
+	TenantID int64   `json:"tenant_id"`
+	Prefix   *string `json:"prefix"`
+}
+
+// Nomor urut (segmen ke-4) TERTINGGI yang sudah dipakai village_code otomatis
+// untuk satu tenant + prefix Kecamatan (mis. prefix "32.01.01."). Dihitung atas
+// SEMUA baris — termasuk yang ter-soft-delete — supaya nomor desa yang pernah ada
+// TAK PERNAH dipakai ulang (village_code adalah identitas yang orang kutip).
+// Guard regex '^[0-9]{1,9}$' membuat cast ::int aman terhadap village_code lama
+// warisan field manual yang mungkin tak berformat 4-segmen. COALESCE → 0 bila
+// belum ada, jadi pemanggil cukup +1.
+func (q *Queries) MaxVillageSeqForPrefix(ctx context.Context, arg MaxVillageSeqForPrefixParams) (int32, error) {
+	row := q.db.QueryRow(ctx, maxVillageSeqForPrefix, arg.TenantID, arg.Prefix)
+	var max_seq int32
+	err := row.Scan(&max_seq)
+	return max_seq, err
+}
+
 const softDeleteAccount = `-- name: SoftDeleteAccount :exec
 UPDATE accounts SET deleted_at = now(), updated_by = $1
 WHERE id = $2 AND deleted_at IS NULL
@@ -508,4 +558,27 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) (A
 		&i.DistrictID,
 	)
 	return i, err
+}
+
+const villageCodeExists = `-- name: VillageCodeExists :one
+SELECT EXISTS(
+    SELECT 1 FROM accounts
+    WHERE tenant_id = $1 AND village_code = $2
+) AS exists
+`
+
+type VillageCodeExistsParams struct {
+	TenantID    int64   `json:"tenant_id"`
+	VillageCode *string `json:"village_code"`
+}
+
+// Apakah village_code persis ini sudah dipakai di tenant (SEMUA baris, termasuk
+// soft-deleted). Dipakai generateVillageCode utk melewati nomor yang sudah
+// terpakai SEBELUM INSERT — INSERT gagal akan meracuni tx ber-tenant, jadi kode
+// bebas harus dipastikan lebih dulu lewat SELECT (yang tak membatalkan tx).
+func (q *Queries) VillageCodeExists(ctx context.Context, arg VillageCodeExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, villageCodeExists, arg.TenantID, arg.VillageCode)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

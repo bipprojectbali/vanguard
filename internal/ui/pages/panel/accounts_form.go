@@ -21,7 +21,6 @@ import (
 // string apa adanya untuk input number/text.
 type AccountFormFields struct {
 	VillageName           string
-	VillageCode           string
 	AccountType           string
 	Website               string
 	Description           string
@@ -105,12 +104,12 @@ func AccountForm(v AccountFormView) g.Node {
 			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.Types, true,
 				"Prospect = calon pelanggan (belum berlangganan) · Customer = pelanggan aktif · "+
 					"Former Customer = pernah berlangganan, sudah berhenti."),
-			field("Kode Desa (Kemendagri)", "village_code", v.Fields.VillageCode, false, "text"),
+			entityCodeField(v.IsEdit),
 			field("Website", "website", v.Fields.Website, false, "url"),
 			textareaField("Deskripsi", "description", v.Fields.Description),
 		),
 		formCard("Wilayah",
-			regionSelect("account", v.RegionsJSON, v.Fields.DistrictID),
+			regionSelect("account", v.RegionsJSON, v.Fields.DistrictID, !v.IsEdit),
 			field("Alamat", "village_address", v.Fields.VillageAddress, false, "text"),
 			field("Kode Pos", "postal_code", v.Fields.PostalCode, false, "text"),
 			field("Teritori", "territory", v.Fields.Territory, false, "text",
@@ -226,6 +225,21 @@ func field(label, name, val string, required bool, typ string, hint ...string) g
 		ui.Input(attrs...),
 		fieldHint(hint),
 	)
+}
+
+// entityCodeField = override OPSIONAL kode sistem (entity_code), HANYA di form
+// tambah. Kosong → dibuat otomatis (mis. DESA-001); diisi → menetapkan kode
+// sendiri. Disembunyikan saat sunting: entity_code adalah identitas stabil yang
+// dikutip manusia ("cek DESA-014") — jalur update sengaja tak menyentuhnya
+// (accounts_codes.go), jadi menawarkannya di edit akan menyesatkan. Kembalikan
+// node kosong saat edit (formCard.g.Group menoleransinya).
+func entityCodeField(isEdit bool) g.Node {
+	if isEdit {
+		return g.Text("")
+	}
+	return field("Kode Sistem (opsional)", "entity_code", "", false, "text",
+		"Kosongkan untuk dibuat otomatis (mis. DESA-001). Isi hanya bila ingin "+
+			"menetapkan kode sendiri.")
 }
 
 // phoneField = HP kontak. Bila tak boleh disunting (bukan Sales), field dikunci

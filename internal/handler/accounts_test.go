@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -270,6 +271,9 @@ func TestAccounts_GateWrite(t *testing.T) {
 		t.Run("role="+c.role, func(t *testing.T) {
 			env, uid := setupAccounts(t)
 			form := accountFormValues("Desa Uji", "prospect")
+			// Kecamatan kini WAJIB di create (village_code diturunkan darinya) —
+			// tanpa ini jalur "allow" ditolak district_required sebelum menyentuh gate.
+			form.Set("district_id", strconv.FormatInt(firstDistrictID(t, env), 10))
 			req := accountsReq(http.MethodPost, "/w/test/accounts", form, "")
 			rec := env.runAccount(uid, "owner", c.role, req, env.h.AccountCreate)
 

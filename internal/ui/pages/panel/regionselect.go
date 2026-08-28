@@ -21,7 +21,10 @@ import (
 // tapi aman kalau suatu saat ada). regionsJSON = output handler regionsJSON
 // (sudah json.Marshal, "[]" bila galat). selectedDistrictID = prefill (kosong =
 // belum pilih; form baru selalu kosong, form edit diisi int64PtrStr(district_id)).
-func regionSelect(embedID, regionsJSON, selectedDistrictID string) g.Node {
+// required menandai Kecamatan wajib (jaring klien; pemanggil kirim true HANYA di
+// create — village_code diturunkan darinya, jadi tak boleh kosong saat tambah —
+// dan false di edit agar baris lama tanpa Kecamatan tetap bisa disimpan).
+func regionSelect(embedID, regionsJSON, selectedDistrictID string, required bool) g.Node {
 	return g.Group([]g.Node{
 		h.Script(
 			h.Type("application/json"),
@@ -30,7 +33,7 @@ func regionSelect(embedID, regionsJSON, selectedDistrictID string) g.Node {
 		),
 		regionFieldSelect("Provinsi", embedID, "1"),
 		regionFieldSelect("Kabupaten/Kota", embedID, "2"),
-		regionDistrictSelect(embedID, selectedDistrictID),
+		regionDistrictSelect(embedID, selectedDistrictID, required),
 	})
 }
 
@@ -55,18 +58,26 @@ func regionFieldSelect(label, embedID, level string) g.Node {
 // regionDistrictSelect = level 3 (Kecamatan) — SATU-SATUNYA select yang benar-
 // benar ter-submit (name="district_id"). data-selected-value dibaca
 // static/regions.js saat init utk preselect 3 level sekaligus (form edit) dgn
-// menelusuri parent_region_id mundur dari district terpilih.
-func regionDistrictSelect(embedID, selectedDistrictID string) g.Node {
+// menelusuri parent_region_id mundur dari district terpilih. required menambah
+// h.Required() + penanda "*": aman berdampingan dgn Disabled() awal karena
+// static/regions.js melepas disabled saat init (kontrol disabled dikecualikan
+// validasi constraint HTML) — jadi wajib baru berlaku setelah select aktif, tepat
+// saat user bisa memilih. Penegakan sebenarnya tetap di backend (AccountCreate).
+func regionDistrictSelect(embedID, selectedDistrictID string, required bool) g.Node {
 	id := "f-district_id-" + embedID
+	sel := []g.Node{
+		h.ID(id), h.Name("district_id"), h.Class("select text-base w-full"), h.Disabled(),
+		g.Attr("data-region-level", "3"),
+		g.Attr("data-region-group", embedID),
+		g.Attr("data-selected-value", selectedDistrictID),
+		h.Option(h.Value(""), g.Text("— Pilih Kecamatan —")),
+	}
+	if required {
+		sel = append(sel, h.Required())
+	}
 	return h.Div(
 		h.Class("grid gap-1 min-w-0"),
-		labelFor("Kecamatan", id, false),
-		h.Select(
-			h.ID(id), h.Name("district_id"), h.Class("select text-base w-full"), h.Disabled(),
-			g.Attr("data-region-level", "3"),
-			g.Attr("data-region-group", embedID),
-			g.Attr("data-selected-value", selectedDistrictID),
-			h.Option(h.Value(""), g.Text("— Pilih Kecamatan —")),
-		),
+		labelFor("Kecamatan", id, required),
+		h.Select(sel...),
 	)
 }

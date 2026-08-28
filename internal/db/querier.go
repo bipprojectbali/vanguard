@@ -14,6 +14,11 @@ type Querier interface {
 	// Tandai terpakai (one-time). Guard accepted_at IS NULL → race dua klik tak
 	// menghasilkan dua membership (UNIQUE di memberships jadi jaring kedua).
 	AcceptInvite(ctx context.Context, token string) error
+	// Apakah entity_code (kode sistem, mis. "DESA-001") ini sudah dipakai di tenant
+	// (SEMUA baris). Dipakai allocEntityCode agar jalur OTOMATIS melewati slot yang
+	// sudah direbut override manual — pola cek-sebelum-INSERT yang sama dgn
+	// VillageCodeExists (tx tak boleh dibatalkan lalu dicoba ulang).
+	AccountEntityCodeExists(ctx context.Context, arg AccountEntityCodeExistsParams) (bool, error)
 	AddPlatformStaff(ctx context.Context, email string) (PlatformStaff, error)
 	// ── quote_items — baris penawaran (hard-delete, tanpa soft-delete/audit) ──────
 	// Tambah baris item. tenant_id eksplisit (RLS WITH CHECK). unit_price & subtotal =
@@ -414,6 +419,11 @@ type Querier interface {
 	// Satu deal hidup. RLS menjamin tenant_id; ownership diputuskan handler
 	// (DealsListFilter.Allows) atas baris.
 	GetDeal(ctx context.Context, id int64) (Deal, error)
+	// Kode Kemendagri (mis. "32.01.01") satu Kecamatan (level 3) — dipakai sbg PREFIX
+	// village_code otomatis saat create desa (generateVillageCode). Filter level = 3
+	// eksplisit: id level 1/2 (atau id tak ada) → pgx.ErrNoRows, dipetakan pemanggil
+	// ke galat "district_id" (payload district_id bukan Kecamatan sah).
+	GetDistrictCode(ctx context.Context, id int64) (string, error)
 	// Satu engagement + nama desa + nama owner. Dipakai handler UpdateEngagementStatus
 	// sebelum update untuk validasi keberadaan + F3 (handler memanggil
 	// EngagementsListFilter.Allows).
@@ -888,6 +898,14 @@ type Querier interface {
 	// disimpan di tabel ini (sumber kebenarannya tetap `invites`), sehingga undangan
 	// pending tetap terhitung di badge sampai benar-benar ditindak.
 	MarkNotificationsRead(ctx context.Context, userID int64) error
+	// Nomor urut (segmen ke-4) TERTINGGI yang sudah dipakai village_code otomatis
+	// untuk satu tenant + prefix Kecamatan (mis. prefix "32.01.01."). Dihitung atas
+	// SEMUA baris — termasuk yang ter-soft-delete — supaya nomor desa yang pernah ada
+	// TAK PERNAH dipakai ulang (village_code adalah identitas yang orang kutip).
+	// Guard regex '^[0-9]{1,9}$' membuat cast ::int aman terhadap village_code lama
+	// warisan field manual yang mungkin tak berformat 4-segmen. COALESCE → 0 bila
+	// belum ada, jadi pemanggil cukup +1.
+	MaxVillageSeqForPrefix(ctx context.Context, arg MaxVillageSeqForPrefixParams) (int32, error)
 	// Alokasi nomor urut BERIKUTNYA untuk (tenant, entity), ATOMIK.
 	//
 	// Kenapa satu pernyataan INSERT..ON CONFLICT dan bukan SELECT max+1 di Go: ON
@@ -1178,6 +1196,11 @@ type Querier interface {
 	// Simpan pengaturan. UPSERT karena baris mungkin belum ada (deployment baru yang
 	// tak menjalankan seed): pemanggil tak perlu tahu bedanya.
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error
+	// Apakah village_code persis ini sudah dipakai di tenant (SEMUA baris, termasuk
+	// soft-deleted). Dipakai generateVillageCode utk melewati nomor yang sudah
+	// terpakai SEBELUM INSERT — INSERT gagal akan meracuni tx ber-tenant, jadi kode
+	// bebas harus dipastikan lebih dulu lewat SELECT (yang tak membatalkan tx).
+	VillageCodeExists(ctx context.Context, arg VillageCodeExistsParams) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)
