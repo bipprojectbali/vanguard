@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"go_starter/internal/codes"
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
@@ -25,10 +24,11 @@ import (
 // per-baris untuk edit menyusul bila dibutuhkan). RLS tetap mengurung workspace.
 
 // sqlStateUniqueViolation/sqlStateForeignKeyViolation = kode Postgres yang
-// dikenali khusus. UNIQUE → tabrakan village_code (idx_accounts_code); FK →
-// district_id yang dikirim klien sudah tak ada di master regions (mis. race
-// dgn migrasi data, atau payload dipalsukan) — keduanya pesan spesifik, bukan
-// "internal error" yang menyembunyikan sebab yang bisa diperbaiki user.
+// dikenali khusus. UNIQUE → tabrakan village_code (idx_accounts_code) atau
+// entity_code override manual (idx_accounts_entity_code); FK → district_id yang
+// dikirim klien sudah tak ada di master regions (mis. race dgn migrasi data, atau
+// payload dipalsukan) — keduanya pesan spesifik, bukan "internal error" yang
+// menyembunyikan sebab yang bisa diperbaiki user.
 const (
 	sqlStateUniqueViolation     = "23505"
 	sqlStateForeignKeyViolation = "23503"
@@ -68,9 +68,9 @@ func (h *Handler) AccountNew(w http.ResponseWriter, r *http.Request) {
 	h.renderWorkspaceShell(w, r, "Tambah Desa", "/accounts", panel.AccountForm(v))
 }
 
-// AccountCreate — POST /w/{workspace}/accounts. Membuat desa. entity_code
-// dialokasikan DALAM tx ber-tenant yang sama (h.q), jadi create-nya atomik:
-// nomor tak pernah terpakai untuk baris yang gagal disimpan.
+// AccountCreate — POST /w/{workspace}/accounts. Membuat desa. KEDUA kode
+// (village_code Kemendagri otomatis + entity_code sistem otomatis/override)
+// dialokasikan DALAM tx ber-tenant yang sama (h.q) — lihat accounts_codes.go.
 func (h *Handler) AccountCreate(w http.ResponseWriter, r *http.Request) {
 	if !h.requireAccountWrite(w, r) {
 		return
@@ -82,12 +82,35 @@ func (h *Handler) AccountCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Kecamatan WAJIB di create (dijaga di sini, bukan di parseAccountForm yang
+	// dipakai bersama update — baris lama tanpa district tetap boleh disunting):
+	// village_code otomatis diturunkan darinya, tak bisa dirakit tanpa Kecamatan.
+	if form.DistrictID == nil {
+		wsRedirect(w, r, "/accounts/new", "district_required")
+		return
+	}
+
 	uid := session.UserID(ctx)
 	tenantID := session.TenantID(ctx)
 
-	code, err := h.q(ctx).GenerateEntityCode(ctx, tenantID, codes.EntityAccount)
+	// village_code Kemendagri OTOMATIS dari Kecamatan (validasi Kecamatan sah
+	// terjadi di sini: errInvalidDistrict → "district_id"). Didahulukan sebelum
+	// entity_code agar district palsu tak sempat memajukan counter kode sistem.
+	vcode, err := h.generateVillageCode(ctx, tenantID, *form.DistrictID)
 	if err != nil {
-		h.Log.Error("accounts: generate code", "err", err)
+		if errors.Is(err, errInvalidDistrict) {
+			wsRedirect(w, r, "/accounts/new", "district_id")
+			return
+		}
+		h.Log.Error("accounts: generate village_code", "err", err)
+		wsRedirect(w, r, "/accounts/new", "failed")
+		return
+	}
+
+	// entity_code sistem: otomatis (form.EntityCode == nil) atau override manual.
+	code, err := h.allocEntityCode(ctx, tenantID, form.EntityCode)
+	if err != nil {
+		h.Log.Error("accounts: alloc entity_code", "err", err)
 		wsRedirect(w, r, "/accounts/new", "failed")
 		return
 	}
@@ -96,7 +119,7 @@ func (h *Handler) AccountCreate(w http.ResponseWriter, r *http.Request) {
 		TenantID:              tenantID,
 		EntityCode:            &code,
 		VillageName:           form.VillageName,
-		VillageCode:           form.VillageCode,
+		VillageCode:           &vcode,
 		AccountType:           form.AccountType,
 		AccountOwner:          &uid, // pembuat = pemilik awal (dasar F3 ScopeOwn)
 		Website:               form.Website,
@@ -142,6 +165,8 @@ func accountWriteErr(err error) (string, bool) {
 	switch {
 	case pgErr.Code == sqlStateUniqueViolation && pgErr.ConstraintName == "idx_accounts_code":
 		return "village_code_dup", true
+	case pgErr.Code == sqlStateUniqueViolation && pgErr.ConstraintName == "idx_accounts_entity_code":
+		return "entity_code_dup", true
 	case pgErr.Code == sqlStateForeignKeyViolation && pgErr.ConstraintName == "accounts_district_id_fkey":
 		return "district_id", true
 	}

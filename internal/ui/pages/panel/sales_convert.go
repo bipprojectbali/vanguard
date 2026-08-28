@@ -108,7 +108,7 @@ func LeadConvert(v LeadConvertView) g.Node {
 		formCard("Desa (Account)",
 			field("Nama Desa", "village_name", v.Fields.VillageName, true, "text"),
 			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.AccountTypes, true),
-			regionSelect("convert", v.RegionsJSON, v.Fields.DistrictID),
+			regionSelect("convert", v.RegionsJSON, v.Fields.DistrictID, false),
 		),
 		formCard("Kontak Utama",
 			field("Nama Depan", "first_name", v.Fields.FirstName, true, "text"),

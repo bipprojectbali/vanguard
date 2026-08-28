@@ -82,7 +82,7 @@ func LeadForm(v LeadFormView) g.Node {
 			textareaField("Alasan Unqualified", "unqualified_reason", v.Fields.UnqualifiedReason),
 		),
 		formCard("Lokasi & Kontak",
-			regionSelect("lead", v.RegionsJSON, v.Fields.DistrictID),
+			regionSelect("lead", v.RegionsJSON, v.Fields.DistrictID, false),
 			field("HP", "mobile_phone", v.Fields.MobilePhone, false, "tel"),
 			field("WhatsApp", "whatsapp", v.Fields.Whatsapp, false, "tel"),
 			field("Email", "email", v.Fields.Email, false, "email"),

@@ -9,8 +9,10 @@ import (
 )
 
 // accounts_crud_test.go — jalur CRUD happy-path Desa (create/update/soft-delete)
-// plus validasi backend & keunikan village_code. Sumbu izin (F2/F3/F4) & keyset
-// diuji di accounts_test.go / accounts_fls_test.go; helper bersama di sana.
+// plus validasi backend. Pembuatan otomatis kedua kode (village_code Kemendagri +
+// entity_code sistem) & tabrakannya diuji di accounts_codes_test.go; sumbu izin
+// (F2/F3/F4) & keyset di accounts_test.go / accounts_fls_test.go; helper bersama
+// di sana.
 
 // TestAccounts_CreateSuccess: create sebagai sales → 303 ke detail dengan
 // ok=created, baris tersimpan dengan pembuat sebagai owner, entity_code terisi,
@@ -19,7 +21,7 @@ func TestAccounts_CreateSuccess(t *testing.T) {
 	env, uid := setupAccounts(t)
 	districtID := firstDistrictID(t, env)
 	form := accountFormValues("Desa Sukamaju", "prospect")
-	form.Set("village_code", "3201012001")
+	// village_code TAK lagi input manual — dibuat otomatis dari Kecamatan.
 	form.Set("district_id", strconv.FormatInt(districtID, 10))
 	form.Set("contact_phone", "0812-1111-2222")
 	req := accountsReq(http.MethodPost, "/w/test/accounts", form, "")
@@ -44,6 +46,9 @@ func TestAccounts_CreateSuccess(t *testing.T) {
 	}
 	if a.EntityCode == nil || *a.EntityCode == "" {
 		t.Error("entity_code harus dialokasikan saat create")
+	}
+	if a.VillageCode == nil || *a.VillageCode == "" {
+		t.Error("village_code (Kemendagri) harus dibuat otomatis saat create")
 	}
 	if a.DistrictID == nil || *a.DistrictID != districtID {
 		t.Errorf("district_id harus tersimpan sesuai input, got %v want %d", a.DistrictID, districtID)
@@ -115,26 +120,6 @@ func TestAccounts_CreateRejectsInvalid(t *testing.T) {
 				t.Errorf("input invalid tak boleh menyimpan, ada %d baris", len(rows))
 			}
 		})
-	}
-}
-
-// TestAccounts_VillageCodeDuplicate: village_code UNIQUE per tenant — tabrakan
-// dikenali sebagai galat spesifik (village_code_dup), bukan "internal error".
-func TestAccounts_VillageCodeDuplicate(t *testing.T) {
-	env, uid := setupAccounts(t)
-	first := accountFormValues("Desa Satu", "prospect")
-	first.Set("village_code", "3201012001")
-	req1 := accountsReq(http.MethodPost, "/w/test/accounts", first, "")
-	if rec := env.runAccount(uid, "owner", "sales", req1, env.h.AccountCreate); rec.Code != http.StatusSeeOther {
-		t.Fatalf("create pertama gagal: %d\n%s", rec.Code, rec.Body.String())
-	}
-
-	dup := accountFormValues("Desa Dua", "prospect")
-	dup.Set("village_code", "3201012001") // sama
-	req2 := accountsReq(http.MethodPost, "/w/test/accounts", dup, "")
-	rec := env.runAccount(uid, "owner", "sales", req2, env.h.AccountCreate)
-	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=village_code_dup") {
-		t.Errorf("tabrakan village_code harus err=village_code_dup, got %q", loc)
 	}
 }
 

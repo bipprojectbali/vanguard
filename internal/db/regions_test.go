@@ -2,7 +2,10 @@ package db
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // regions_test.go — bukti master wilayah administratif GLOBAL (ADR 0009):
@@ -181,5 +184,61 @@ func TestGetRegionAncestry_BukanKecamatanGagal(t *testing.T) {
 	// pgx.ErrNoRows — bukti query tak diam-diam balikin baris jenjang salah.
 	if _, err := q.GetRegionAncestry(ctx, provinces[0].ID); err == nil {
 		t.Error("GetRegionAncestry(id provinsi) harus gagal (bukan level=3), tapi sukses")
+	}
+}
+
+// TestGetDistrictCode_ReturnsLevel3Code: kode Kemendagri satu Kecamatan (level 3)
+// dikembalikan apa adanya — dipakai sbg prefix village_code otomatis
+// (generateVillageCode). Ambil satu Kecamatan sungguhan dari seed, bukan hardcode
+// id yang bisa bergeser bila urutan seed berubah.
+func TestGetDistrictCode_ReturnsLevel3Code(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	q := New(pool)
+
+	// ListDistrictsByRegency balikin Region lengkap (termasuk Code) — beda dgn
+	// ListAllRegions yang tak memuat kode. Telusur provinsi→kab/kota→kecamatan
+	// utk dapat satu Kecamatan sungguhan beserta kode-nya.
+	provinces, err := q.ListProvinces(ctx)
+	if err != nil || len(provinces) == 0 {
+		t.Fatalf("list provinces: %v (len=%d)", err, len(provinces))
+	}
+	regencies, err := q.ListRegenciesByProvince(ctx, &provinces[0].ID)
+	if err != nil || len(regencies) == 0 {
+		t.Fatalf("list regencies: %v (len=%d)", err, len(regencies))
+	}
+	districts, err := q.ListDistrictsByRegency(ctx, &regencies[0].ID)
+	if err != nil || len(districts) == 0 {
+		t.Fatalf("list districts: %v (len=%d)", err, len(districts))
+	}
+	district := districts[0]
+
+	code, err := q.GetDistrictCode(ctx, district.ID)
+	if err != nil {
+		t.Fatalf("get district code: %v", err)
+	}
+	if code != district.Code {
+		t.Errorf("kode = %q, want %q (kode Kecamatan sesungguhnya)", code, district.Code)
+	}
+}
+
+// TestGetDistrictCode_NonDistrictErrNoRows: id yang BUKAN Kecamatan (provinsi
+// level 1) → pgx.ErrNoRows, dipetakan pemanggil ke galat "district_id". Bukti
+// filter level = 3 menolak jenjang salah, bukan diam-diam balikin kode provinsi.
+func TestGetDistrictCode_NonDistrictErrNoRows(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	q := New(pool)
+
+	provinces, err := q.ListProvinces(ctx)
+	if err != nil || len(provinces) == 0 {
+		t.Fatalf("list provinces: %v (len=%d)", err, len(provinces))
+	}
+	if _, err := q.GetDistrictCode(ctx, provinces[0].ID); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("GetDistrictCode(id provinsi) harus pgx.ErrNoRows, got %v", err)
+	}
+	// id yang tak ada sama sekali → juga ErrNoRows.
+	if _, err := q.GetDistrictCode(ctx, 999999999); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("GetDistrictCode(id tak ada) harus pgx.ErrNoRows, got %v", err)
 	}
 }

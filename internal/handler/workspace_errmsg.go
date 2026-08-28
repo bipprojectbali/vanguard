@@ -50,6 +50,8 @@ func wsErrMsg(code string) string {
 		return "Status desa tidak valid."
 	case "district_id":
 		return "Kecamatan yang dipilih tidak valid."
+	case "district_required":
+		return "Kecamatan wajib dipilih."
 	case "classification":
 		return "Klasifikasi (IDM) tidak valid."
 	case "number":
@@ -58,6 +60,10 @@ func wsErrMsg(code string) string {
 		return "Anggaran desa harus berupa angka."
 	case "village_code_dup":
 		return "Kode desa (Kemendagri) itu sudah dipakai desa lain di workspace ini."
+	case "entity_code":
+		return "Kode sistem tidak valid (maks 32 karakter)."
+	case "entity_code_dup":
+		return "Kode sistem itu sudah dipakai desa lain di workspace ini."
 	case "csm":
 		return "Orang yang dipilih bukan anggota workspace ini."
 	case "first_name":

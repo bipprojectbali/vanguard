@@ -18,6 +18,12 @@ import (
 
 const maxVillageNameLen = 200
 
+// maxEntityCodeLen = batas panjang override manual kode sistem (entity_code).
+// Kolomnya TEXT (tak dibatasi DB), tapi kode adalah label pendek yang dikutip
+// manusia ("cek DESA-014") — 32 karakter memberi ruang cukup tanpa mengundang
+// "kode" sepanjang paragraf.
+const maxEntityCodeLen = 32
+
 // Nilai enum sah — set (map→struct kosong) agar cek keanggotaan O(1) & niatnya
 // terbaca. Urutan untuk dropdown ada di accountEnumOptions (slice terpisah,
 // karena map tak berurutan).
@@ -38,8 +44,11 @@ var (
 // Create/UpdateAccountParams. Kolom opsional bertipe pointer (nil = NULL);
 // village_budget pgtype.Numeric (nil-valid = NULL).
 type accountForm struct {
-	VillageName           string
-	VillageCode           *string
+	VillageName string
+	// EntityCode = override kode sistem OPSIONAL (nil = auto). village_code
+	// (Kemendagri) TAK lagi field form — dibuat otomatis dari Kecamatan di jalur
+	// create (accounts_codes.go).
+	EntityCode            *string
 	AccountType           string
 	Website               *string
 	Description           *string
@@ -120,9 +129,18 @@ func parseAccountForm(fv func(string) string) (accountForm, string) {
 	}
 	f.DistrictID = did
 
-	// Teks bebas opsional: trim, kosong → NULL. village_code (Kemendagri) ikut
-	// pola ini; keunikannya dijaga index DB, dicek saat INSERT/UPDATE.
-	f.VillageCode = optTrim(fv("village_code"))
+	// entity_code (kode sistem) OPSIONAL: kosong → nil (dibuat otomatis di
+	// create); terisi → override manual, dibatasi panjangnya (keunikan dijaga
+	// index DB, dicek saat INSERT). Hanya bermakna di jalur create — update tak
+	// menyentuh entity_code.
+	if s := strings.TrimSpace(fv("entity_code")); s != "" {
+		if len(s) > maxEntityCodeLen {
+			return accountForm{}, "entity_code"
+		}
+		f.EntityCode = &s
+	}
+
+	// Teks bebas opsional: trim, kosong → NULL.
 	f.Website = optTrim(fv("website"))
 	f.Description = optTrim(fv("description"))
 	f.VillageAddress = optTrim(fv("village_address"))
