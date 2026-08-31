@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -28,6 +29,8 @@ func (h *Handler) QuotesIndex(w http.ResponseWriter, r *http.Request) {
 	filter := db.DealsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
 
+	// q = pencarian bebas (BL-6): MEMPERSEMPIT di atas ownership warisan deal.
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	cursorAt, cursorID := pageCursor(r)
 	rows, err := h.q(ctx).ListQuotes(ctx, db.ListQuotesParams{
 		CursorCreatedAt: cursorAt,
@@ -35,6 +38,7 @@ func (h *Handler) QuotesIndex(w http.ResponseWriter, r *http.Request) {
 		ScopeAll:        filter.ScopeAll,
 		IsOwn:           filter.IsOwn,
 		Uid:             &uid,
+		Search:          query,
 		PageSize:        pageSize + 1,
 	})
 	if err != nil {
@@ -55,6 +59,7 @@ func (h *Handler) QuotesIndex(w http.ResponseWriter, r *http.Request) {
 	h.renderWorkspaceShell(w, r, "Quotes", "/quotes", panel.QuotesIndex(panel.QuotesIndexView{
 		Base:       base,
 		Err:        wsErrMsg(r.URL.Query().Get("err")),
+		Query:      query,
 		Items:      items,
 		NextCursor: nextCursor,
 	}))

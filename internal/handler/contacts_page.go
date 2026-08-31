@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -97,8 +98,11 @@ func (h *Handler) ContactsAll(w http.ResponseWriter, r *http.Request) {
 	showTabs := db.AccountsScopeFor(dataScope) == db.ScopeAll
 	view := normalizeContactsView(r.URL.Query().Get("view"), showTabs)
 
+	// q = pencarian bebas (BL-6): MEMPERSEMPIT di atas ownership desa induk.
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	params := contactsListParams(dataScope, view, uid)
 	params.CursorCreatedAt, params.CursorID = pageCursor(r)
+	params.Search = query
 	params.PageSize = pageSize + 1
 	rows, err := h.q(ctx).ListContacts(ctx, params)
 	if err != nil {
@@ -134,6 +138,7 @@ func (h *Handler) ContactsAll(w http.ResponseWriter, r *http.Request) {
 			Items:      items,
 			ShowTabs:   showTabs,
 			ActiveView: view,
+			Query:      query,
 			NextCursor: nextCursor,
 			CanWrite:   canWrite,
 			Err:        wsErrMsg(r.URL.Query().Get("err")),

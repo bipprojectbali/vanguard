@@ -50,6 +50,7 @@ type DealPipelineView struct {
 	Stages        []DealStageColumn
 
 	StageFilter string
+	Query       string // ?q= pencarian bebas (BL-6, hanya view Tabel); "" = tak mencari
 	Items       []DealRow
 	NextCursor  string
 }
@@ -80,6 +81,10 @@ func DealPipeline(v DealPipelineView) g.Node {
 	}
 
 	if v.View == "table" {
+		// Search hanya di view Tabel (berkeyset); papan Kanban di luar lingkup slice.
+		body = append(body, searchBox(v.Base+"/deals", v.Query,
+			"Cari deal — nama atau kode…", "Cari deal",
+			hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter}))
 		if len(v.Items) == 0 {
 			body = append(body, emptyDeals(v))
 		} else {
@@ -254,19 +259,22 @@ func dealStageBadge(stage string) g.Node {
 }
 
 func emptyDeals(v DealPipelineView) g.Node {
-	if v.NextCursor == "" && v.StageFilter == "" {
+	if v.NextCursor == "" && v.StageFilter == "" && v.Query == "" {
 		return h.Div(
 			h.Class("card bg-base-100 border border-base-300"),
 			h.Div(h.Class("card-body"),
 				h.P(h.Class("text-base-content/70"), g.Text("Belum ada deal."))),
 		)
 	}
+	// Kembali ke awal mempertahankan view=table + stage + q agar tak melompat keluar.
+	back := withQuery(v.Base+"/deals", v.Query,
+		hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter})
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300"),
 		h.Div(h.Class("card-body items-start"),
 			h.P(h.Class("text-base-content/70"),
 				g.Text("Belum ada deal yang cocok pada tampilan ini.")),
-			h.A(h.Href(v.Base+"/deals?view=table"), h.Class("btn btn-ghost btn-sm min-h-11"),
+			h.A(h.Href(back), h.Class("btn btn-ghost btn-sm min-h-11"),
 				g.Text("« Kembali ke awal")),
 		),
 	)
@@ -281,6 +289,7 @@ func dealsPager(v DealPipelineView) g.Node {
 	if v.StageFilter != "" {
 		href += "&stage=" + v.StageFilter
 	}
+	href = appendQuery(href, v.Query) // q bertahan ke halaman berikutnya
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
 		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),

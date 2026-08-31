@@ -36,6 +36,12 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 -- ownership F3 + filter stage opsional. Dua flag ownership (sumber SATU dengan
 -- DealsListFilter): scope_all → semua; is_own → deal_owner = uid; keduanya false
 -- → NOL baris (fail-closed). stage_filter '' → semua stage.
+--
+-- search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+-- insensitive) di ATAS ownership+stage — tak pernah melebarkan baris. Hanya kolom
+-- tak-tersamar yang tampil di tabel (deal_name + entity_code); nilai ARR tersamar
+-- tak dijadikan kunci cari. Papan Kanban (ListDealsForPipeline) TAK ikut — di luar
+-- lingkup slice ini (board terbatas LIMIT, bukan daftar berkeyset).
 SELECT * FROM deals
 WHERE deleted_at IS NULL
   AND (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
@@ -44,6 +50,11 @@ WHERE deleted_at IS NULL
       OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
   )
   AND (sqlc.arg(stage_filter)::text = '' OR stage = sqlc.arg(stage_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR deal_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 

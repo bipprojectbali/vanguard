@@ -230,8 +230,13 @@ WHERE c.deleted_at IS NULL
       OR ($4::boolean AND a.account_owner = $5)
       OR ($6::boolean AND (a.assigned_csm = $5 OR a.backup_csm = $5))
   )
+  AND (
+      $7::text = ''
+      OR (c.first_name || ' ' || coalesce(c.last_name, '')) ILIKE '%' || $7 || '%'
+      OR a.village_name ILIKE '%' || $7 || '%'
+  )
 ORDER BY c.created_at DESC, c.id DESC
-LIMIT $7
+LIMIT $8
 `
 
 type ListContactsParams struct {
@@ -241,6 +246,7 @@ type ListContactsParams struct {
 	IsSales         bool               `json:"is_sales"`
 	Uid             *int64             `json:"uid"`
 	IsCsm           bool               `json:"is_csm"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -284,6 +290,13 @@ type ListContactsRow struct {
 // Ketiganya false (Support/role kosong/liar) → NOL baris (fail-closed).
 // a.village_name dibawa untuk kolom "Desa" di daftar global (di daftar per-desa
 // redundan — sudah di judul halaman — jadi query per-desa tak mengambilnya).
+//
+// search ” → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+// insensitive) di ATAS ownership desa induk — tak pernah melebarkan baris. Nama
+// kontak dirangkai (first_name + last_name; coalesce agar last_name NULL tak
+// meng-NULL-kan seluruh ekspresi) → satu ekspresi mencakup nama-depan, nama-
+// belakang, maupun nama lengkap; plus a.village_name (desa induk). PII (telepon/
+// email) tak dijadikan kunci — search bukan jalur enumerasi data tersamar.
 func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]ListContactsRow, error) {
 	rows, err := q.db.Query(ctx, listContacts,
 		arg.CursorCreatedAt,
@@ -292,6 +305,7 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]L
 		arg.IsSales,
 		arg.Uid,
 		arg.IsCsm,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {

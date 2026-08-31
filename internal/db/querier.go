@@ -657,6 +657,13 @@ type Querier interface {
 	// Ketiganya false (Support/role kosong/liar) → NOL baris (fail-closed).
 	// a.village_name dibawa untuk kolom "Desa" di daftar global (di daftar per-desa
 	// redundan — sudah di judul halaman — jadi query per-desa tak mengambilnya).
+	//
+	// search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+	// insensitive) di ATAS ownership desa induk — tak pernah melebarkan baris. Nama
+	// kontak dirangkai (first_name + last_name; coalesce agar last_name NULL tak
+	// meng-NULL-kan seluruh ekspresi) → satu ekspresi mencakup nama-depan, nama-
+	// belakang, maupun nama lengkap; plus a.village_name (desa induk). PII (telepon/
+	// email) tak dijadikan kunci — search bukan jalur enumerasi data tersamar.
 	ListContacts(ctx context.Context, arg ListContactsParams) ([]ListContactsRow, error)
 	// Kontak SATU desa, keyset (created_at DESC, id DESC). TANPA filter ownership:
 	// gerbangnya adalah desa induk (handler memvalidasi via loadOwnedAccount sebelum
@@ -667,6 +674,12 @@ type Querier interface {
 	// ownership F3 + filter stage opsional. Dua flag ownership (sumber SATU dengan
 	// DealsListFilter): scope_all → semua; is_own → deal_owner = uid; keduanya false
 	// → NOL baris (fail-closed). stage_filter '' → semua stage.
+	//
+	// search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+	// insensitive) di ATAS ownership+stage — tak pernah melebarkan baris. Hanya kolom
+	// tak-tersamar yang tampil di tabel (deal_name + entity_code); nilai ARR tersamar
+	// tak dijadikan kunci cari. Papan Kanban (ListDealsForPipeline) TAK ikut — di luar
+	// lingkup slice ini (board terbatas LIMIT, bukan daftar berkeyset).
 	ListDeals(ctx context.Context, arg ListDealsParams) ([]Deal, error)
 	// Papan Kanban: seluruh deal hidup dalam cakupan ownership, diurutkan agar kartu
 	// rapi per-stage lalu terbaru dulu. Di-bucket per-stage di handler (bukan N query
@@ -722,6 +735,12 @@ type Querier interface {
 	// Tab tambahan (ortogonal dari ownership):
 	//   mine_only  → paksa lead_owner = uid (tab "My Leads", walau aktor scope_all)
 	//   status_filter '' → semua status; selain itu = filter satu status ("Unqualified")
+	//
+	// search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+	// insensitive) di ATAS ownership+tab — tak pernah melebarkan baris yang boleh
+	// dilihat aktor. Hanya kolom yang DITAMPILKAN tak-tersamar di daftar (lead_name +
+	// entity_code); PII (telepon/email) tak ikut agar search bukan jalur enumerasi
+	// data tersamar. Tetap keyset+LIMIT. Trigram/index ditunda (dataset kecil).
 	ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, error)
 	// user_id anggota workspace dgn business_role tertentu — dipakai menarget
 	// notifikasi (mis. semua Manager saat renewal Upsell menunggu persetujuan).
@@ -818,6 +837,11 @@ type Querier interface {
 	// false → NOL baris (fail-closed). INNER JOIN deals: quote selalu menempel ke deal
 	// (deal_id di-set saat create); quote tanpa deal hidup TAK tampil di daftar global
 	// (tak punya owner untuk disaring). deal_name dibawa untuk kolom "Deal".
+	//
+	// search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+	// insensitive) di ATAS ownership warisan deal — tak pernah melebarkan baris. Kolom
+	// tak-tersamar yang tampil di tabel: quote_name + entity_code (quote) + d.deal_name
+	// (deal induk); nilai grand total tak dijadikan kunci cari.
 	ListQuotes(ctx context.Context, arg ListQuotesParams) ([]ListQuotesRow, error)
 	// Daftar quote milik satu deal (detail deal → daftar quote-nya), keyset
 	// (created_at DESC, id DESC). Deal sudah ter-scope ownership di handler; di sini

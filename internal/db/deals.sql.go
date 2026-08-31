@@ -262,8 +262,13 @@ WHERE deleted_at IS NULL
       OR ($4::boolean AND deal_owner = $5)
   )
   AND ($6::text = '' OR stage = $6::text)
+  AND (
+      $7::text = ''
+      OR deal_name ILIKE '%' || $7 || '%'
+      OR entity_code ILIKE '%' || $7 || '%'
+  )
 ORDER BY created_at DESC, id DESC
-LIMIT $7
+LIMIT $8
 `
 
 type ListDealsParams struct {
@@ -273,6 +278,7 @@ type ListDealsParams struct {
 	IsOwn           bool               `json:"is_own"`
 	Uid             *int64             `json:"uid"`
 	StageFilter     string             `json:"stage_filter"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -280,6 +286,12 @@ type ListDealsParams struct {
 // ownership F3 + filter stage opsional. Dua flag ownership (sumber SATU dengan
 // DealsListFilter): scope_all → semua; is_own → deal_owner = uid; keduanya false
 // → NOL baris (fail-closed). stage_filter ” → semua stage.
+//
+// search ” → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+// insensitive) di ATAS ownership+stage — tak pernah melebarkan baris. Hanya kolom
+// tak-tersamar yang tampil di tabel (deal_name + entity_code); nilai ARR tersamar
+// tak dijadikan kunci cari. Papan Kanban (ListDealsForPipeline) TAK ikut — di luar
+// lingkup slice ini (board terbatas LIMIT, bukan daftar berkeyset).
 func (q *Queries) ListDeals(ctx context.Context, arg ListDealsParams) ([]Deal, error) {
 	rows, err := q.db.Query(ctx, listDeals,
 		arg.CursorCreatedAt,
@@ -288,6 +300,7 @@ func (q *Queries) ListDeals(ctx context.Context, arg ListDealsParams) ([]Deal, e
 		arg.IsOwn,
 		arg.Uid,
 		arg.StageFilter,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {

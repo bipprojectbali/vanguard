@@ -66,6 +66,13 @@ LIMIT sqlc.arg(page_size);
 -- Ketiganya false (Support/role kosong/liar) → NOL baris (fail-closed).
 -- a.village_name dibawa untuk kolom "Desa" di daftar global (di daftar per-desa
 -- redundan — sudah di judul halaman — jadi query per-desa tak mengambilnya).
+--
+-- search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+-- insensitive) di ATAS ownership desa induk — tak pernah melebarkan baris. Nama
+-- kontak dirangkai (first_name + last_name; coalesce agar last_name NULL tak
+-- meng-NULL-kan seluruh ekspresi) → satu ekspresi mencakup nama-depan, nama-
+-- belakang, maupun nama lengkap; plus a.village_name (desa induk). PII (telepon/
+-- email) tak dijadikan kunci — search bukan jalur enumerasi data tersamar.
 SELECT c.*, a.village_name FROM contacts c
 JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
 WHERE c.deleted_at IS NULL
@@ -74,6 +81,11 @@ WHERE c.deleted_at IS NULL
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_sales)::boolean AND a.account_owner = sqlc.arg(uid))
       OR (sqlc.arg(is_csm)::boolean AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR (c.first_name || ' ' || coalesce(c.last_name, '')) ILIKE '%' || sqlc.arg(search) || '%'
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
   )
 ORDER BY c.created_at DESC, c.id DESC
 LIMIT sqlc.arg(page_size);

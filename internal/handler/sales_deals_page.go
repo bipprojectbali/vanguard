@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -103,6 +104,8 @@ func (h *Handler) dealsTable(w http.ResponseWriter, r *http.Request) {
 	uid := session.UserID(ctx)
 	br := session.BusinessRole(ctx)
 
+	// q = pencarian bebas (BL-6): MEMPERSEMPIT di atas F3+stage, tak melebarkan.
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	cursorAt, cursorID := pageCursor(r)
 	rows, err := h.q(ctx).ListDeals(ctx, db.ListDealsParams{
 		CursorCreatedAt: cursorAt,
@@ -111,6 +114,7 @@ func (h *Handler) dealsTable(w http.ResponseWriter, r *http.Request) {
 		IsOwn:           filter.IsOwn,
 		Uid:             &uid,
 		StageFilter:     r.URL.Query().Get("stage"),
+		Search:          query,
 		PageSize:        pageSize + 1,
 	})
 	if err != nil {
@@ -140,6 +144,7 @@ func (h *Handler) dealsTable(w http.ResponseWriter, r *http.Request) {
 		Err:         wsErrMsg(r.URL.Query().Get("err")),
 		Msg:         dealsMsg(r.URL.Query().Get("ok")),
 		StageFilter: r.URL.Query().Get("stage"),
+		Query:       query,
 		Items:       items,
 		NextCursor:  nextCursor,
 	}))

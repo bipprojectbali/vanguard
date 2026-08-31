@@ -45,6 +45,12 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 -- Tab tambahan (ortogonal dari ownership):
 --   mine_only  → paksa lead_owner = uid (tab "My Leads", walau aktor scope_all)
 --   status_filter '' → semua status; selain itu = filter satu status ("Unqualified")
+--
+-- search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+-- insensitive) di ATAS ownership+tab — tak pernah melebarkan baris yang boleh
+-- dilihat aktor. Hanya kolom yang DITAMPILKAN tak-tersamar di daftar (lead_name +
+-- entity_code); PII (telepon/email) tak ikut agar search bukan jalur enumerasi
+-- data tersamar. Tetap keyset+LIMIT. Trigram/index ditunda (dataset kecil).
 SELECT * FROM leads
 WHERE deleted_at IS NULL
   AND (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
@@ -54,6 +60,11 @@ WHERE deleted_at IS NULL
   )
   AND (NOT sqlc.arg(mine_only)::boolean OR lead_owner = sqlc.arg(uid))
   AND (sqlc.arg(status_filter)::text = '' OR lead_status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR lead_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 

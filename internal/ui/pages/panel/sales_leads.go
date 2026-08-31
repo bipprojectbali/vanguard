@@ -36,6 +36,7 @@ type LeadsListView struct {
 	Base       string
 	Items      []LeadRow
 	Tab        string
+	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	CanWrite   bool
 	HideMyTab  bool
 	NextCursor string
@@ -71,6 +72,8 @@ func LeadsList(v LeadsListView) g.Node {
 			)),
 		),
 		leadTabsNav(v),
+		searchBox(v.Base+"/leads", v.Query, "Cari lead — nama atau kode…", "Cari lead",
+			hiddenField{"tab", v.Tab}),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "leads-err", g.Text(v.Err)))
@@ -96,10 +99,8 @@ func leadTabsNav(v LeadsListView) g.Node {
 		if t.key == "my" && v.HideMyTab {
 			continue
 		}
-		href := v.Base + "/leads"
-		if t.key != "" {
-			href += "?tab=" + t.key
-		}
+		// q dibawa lintas tab (mencari lalu ganti tab tak menghapus pencarian).
+		href := withQuery(v.Base+"/leads", v.Query, hiddenField{"tab", t.key})
 		cls := "tab"
 		if t.key == v.Tab {
 			cls += " tab-active font-medium"
@@ -116,8 +117,8 @@ func emptyLeads(v LeadsListView) g.Node {
 			h.Div(h.Class("card-body items-start"),
 				h.P(h.Class("text-base-content/70"),
 					g.Text("Belum ada lead yang cocok pada tampilan ini.")),
-				h.A(h.Href(v.Base+"/leads"), h.Class("btn btn-ghost btn-sm min-h-11"),
-					g.Text("« Kembali ke awal")),
+				h.A(h.Href(withQuery(v.Base+"/leads", v.Query, hiddenField{"tab", v.Tab})),
+					h.Class("btn btn-ghost btn-sm min-h-11"), g.Text("« Kembali ke awal")),
 			),
 		)
 	}
@@ -202,6 +203,7 @@ func leadsPager(v LeadsListView) g.Node {
 	if v.Tab != "" {
 		href += "&tab=" + v.Tab
 	}
+	href = appendQuery(href, v.Query) // q bertahan ke halaman berikutnya
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
 		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
