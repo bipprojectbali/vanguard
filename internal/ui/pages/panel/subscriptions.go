@@ -37,6 +37,7 @@ type SubListView struct {
 	Base         string
 	StatusFilter string
 	Statuses     []string
+	Query        string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	Err          string
 	Items        []SubRow
 	NextCursor   string
@@ -54,6 +55,9 @@ func SubList(v SubListView) g.Node {
 			),
 		),
 		subStatusFilter(v),
+		searchBox(v.Base+"/subscriptions", v.Query,
+			"Cari langganan — desa, paket, atau kode…", "Cari langganan",
+			hiddenField{"status", v.StatusFilter}),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "subs-err", g.Text(v.Err)))
@@ -70,10 +74,8 @@ func SubList(v SubListView) g.Node {
 // bookmarkable (gotcha #16); flex-wrap agar tak mendorong lebar di mobile.
 func subStatusFilter(v SubListView) g.Node {
 	tab := func(label, status string) g.Node {
-		href := v.Base + "/subscriptions"
-		if status != "" {
-			href += "?status=" + status
-		}
+		// q dibawa lintas tab (mencari lalu ganti status tak menghapus pencarian).
+		href := withQuery(v.Base+"/subscriptions", v.Query, hiddenField{"status", status})
 		cls := "tab"
 		if v.StatusFilter == status {
 			cls += " tab-active font-medium"
@@ -90,15 +92,20 @@ func subStatusFilter(v SubListView) g.Node {
 
 func emptySubs(v SubListView) g.Node {
 	msg := "Belum ada langganan."
-	if v.NextCursor == "" && v.StatusFilter != "" {
+	switch {
+	case v.Query != "":
+		msg = "Belum ada langganan yang cocok pencarian."
+	case v.NextCursor == "" && v.StatusFilter != "":
 		msg = "Belum ada langganan dengan status ini."
 	}
+	// Reset mempertahankan status aktif tapi membuang q (kembali ke awal filter).
+	reset := withQuery(v.Base+"/subscriptions", "", hiddenField{"status", v.StatusFilter})
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300"),
 		h.Div(h.Class("card-body items-start"),
 			h.P(h.Class("text-base-content/70"), g.Text(msg)),
-			ui.When(v.StatusFilter != "", h.A(
-				h.Href(v.Base+"/subscriptions"), h.Class("btn btn-ghost btn-sm min-h-11"),
+			ui.When(v.StatusFilter != "" || v.Query != "", h.A(
+				h.Href(reset), h.Class("btn btn-ghost btn-sm min-h-11"),
 				g.Text("« Semua langganan"))),
 		),
 	)
@@ -179,6 +186,7 @@ func subsPager(v SubListView) g.Node {
 	if v.StatusFilter != "" {
 		href += "&status=" + v.StatusFilter
 	}
+	href = appendQuery(href, v.Query) // q bertahan ke halaman berikutnya
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
 		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),

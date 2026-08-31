@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -31,6 +32,8 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 
 	cursorAt, cursorID := pageCursor(r)
 	statusFilter := r.URL.Query().Get("status")
+	// q = pencarian bebas (BL-6): MEMPERSEMPIT di atas F3+status, tak melebarkan.
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	rows, err := h.q(ctx).ListSubscriptions(ctx, db.ListSubscriptionsParams{
 		CursorCreatedAt: cursorAt,
 		CursorID:        cursorID,
@@ -38,6 +41,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 		IsOwn:           filter.IsOwn,
 		Uid:             &uid,
 		StatusFilter:    statusFilter,
+		Search:          query,
 		PageSize:        pageSize + 1,
 	})
 	if err != nil {
@@ -65,6 +69,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 			Base:         base,
 			StatusFilter: statusFilter,
 			Statuses:     subscriptionStatuses,
+			Query:        query,
 			Err:          wsErrMsg(r.URL.Query().Get("err")),
 			Items:        items,
 			NextCursor:   nextCursor,
