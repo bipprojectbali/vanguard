@@ -211,6 +211,32 @@ FLS sudah dianyam di F4 + tiap handler. Task ini = audit menyeluruh + test linta
 
 ---
 
+## FASE QC — Stabilisasi & Bug Hunt (pra-rilis v1)
+
+Pass QC menyeluruh atas modul yang sudah jadi (M1–M9). **Bukan** verifikasi ulang
+dari nol — tiap modul sudah lolos QA per-modul (3-lebar) saat dibangun. Fokus: smoke
+end-to-end tiap alur happy-path, integrasi lintas-modul, regresi tenancy + FLS, sweep
+mobile menyeluruh, lalu triage + perbaikan bug temuan. Mulai **31 Agu** (hari ini).
+
+**Di luar cakupan:** `surveys` (M6-9, belum dibangun) & Report Builder 8.5 (ditunda v1).
+
+| ID | Task | Layer | Est | Depends | Rencana |
+|----|------|-------|-----|---------|---------|
+| QC-1 | Smoke fungsional **Modul 1 Dashboard** + **Modul 7 Activities** (KPI/chart ECharts render, agregasi timezone, activity polymorphic) | qa | 0.5d | — | 31 Agu |
+| QC-2 | Smoke fungsional **Modul 2 Accounts** (hub): CRUD desa, auto-code `village_code`/`entity_code`, assign-CSM submit (bukan 404), rollup detail lintas-modul | qa | 1d | — | 31 Agu–1 Sep |
+| QC-3 | Smoke fungsional **Modul 3 Contacts** + **Modul 4 Sales** (global "Tambah Kontak", leads→convert 1 TX atomik, quote snapshot harga) | qa | 1d | — | 1–2 Sep |
+| QC-4 | Smoke fungsional **Modul 5 Subscriptions** + **Modul 6 Customer Success** (8 tabel aktif) + **Modul 8 Reports** (4 preset read-only + export CSV) | qa | 1d | — | 2–3 Sep |
+| QC-5 | Regresi lintas-modul: isolasi tenant (RLS+FORCE), mode single↔multi, lifecycle gate (suspended/archived/deleted), keyset pagination `?after=` | qa | 1d | QC-1..4 | 3–4 Sep |
+| QC-6 | Regresi **FLS 5-role** (Modul 9): mask ARR/budget, PII kontak, admin full-phone/WhatsApp — lintas semua halaman | qa | 0.5d | QC-5 | 4 Sep |
+| QC-7 | Sweep **mobile 3-lebar** (375/768/1280): nol overflow horizontal, `TableScroll`, `flex-wrap`, tap-target ≥44px — semua halaman CRM | qa | 1d | QC-1..4 | 7 Sep |
+| QC-8 | Triage + perbaikan bug temuan (kategori blocker/mayor/minor → fix → re-test); `make check` hijau; smoke seeder demo | fix+qa | 1.5d | QC-5..7 | 7–8 Sep |
+
+**Total est:** ~7,5 hari-kerja · **span:** 31 Agu – 8 Sep (akhir pekan 5–6 Sep libur).
+
+**Acceptance fase:** happy-path tiap modul lolos end-to-end; nol overflow di 375px;
+matriks FLS 5-role tak bocor; `make check` hijau; bug blocker/mayor tuntas, minor
+tercatat sebagai backlog v1.1.
+
 ## Ringkasan timeline (jujur)
 
 | Periode | Modul | Status realistis |
@@ -228,6 +254,7 @@ FLS sudah dianyam di F4 + tiap handler. Task ini = audit menyeluruh + test linta
 | 18 Agu | **Modul 9 M9-2 (Test matriks FLS)** | ✅ selesai lebih awal, di luar urutan (4 gap cakupan matriks ditambal: ARR subscription, admin di ARR subscription, matriks ARR reports jadi 5-role, Deals Amount [modul tanpa test sebelumnya], PII phone Support di accounts/contacts) |
 | 26 Agu | **Modul 2 M2-7..M2-9 (rollup detail Account)** | ✅ selesai lebih awal, di luar urutan (rebuild halaman detail sesuai wireframe Penpot; satu layout semua role, F2/F3/F4 di handler; tak perlu migrasi baru) |
 | 26 Agu | **Modul 2 M2-10 (auto-code Account)** | ✅ di luar urutan (`village_code` Kemendagri otomatis dari Kecamatan [kini wajib, field manual dihapus]; `entity_code` sistem otomatis + override manual opsional; anti-tabrak; tak perlu migrasi baru) |
+| 31 Agu–8 Sep | **FASE QC — Stabilisasi & Bug Hunt** | 🆕 QC end-to-end M1–M9; sweep mobile + regresi FLS/tenancy; ~7,5 hari-kerja (surveys & 8.5 di luar cakupan) |
 | >1 Sep | sisa Modul 6 | 🔴 luber ke September |
 
 **Rekomendasi:** kunci komitmen 1 Sep pada **Modul 2–5, 1, 7, 8, 9 tuntas + Modul 6 sebagian**. Kalau kamu mau Modul 6 benar-benar tuntas sebelum 1 Sep, satu-satunya tuas jujur adalah mengurangi kedalaman (mis. `customer_success`+`tickets` cukup, `cs_impl_tasks`/`cs_trainings`/`surveys` jadi v1.1) — bukan menambah jam.
