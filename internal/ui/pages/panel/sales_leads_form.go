@@ -78,13 +78,13 @@ func LeadForm(v LeadFormView) g.Node {
 		formCard("Kualifikasi",
 			selectField("Status", "lead_status", v.Fields.LeadStatus, v.Statuses, true),
 			selectField("Rating", "rating", v.Fields.Rating, v.Ratings, false),
-			field("Nilai Estimasi (Rp)", "estimated_value", v.Fields.EstimatedValue, false, "text"),
+			moneyField("Nilai Estimasi (Rp)", "estimated_value", v.Fields.EstimatedValue),
 			textareaField("Alasan Unqualified", "unqualified_reason", v.Fields.UnqualifiedReason),
 		),
 		formCard("Lokasi & Kontak",
 			regionSelect("lead", v.RegionsJSON, v.Fields.DistrictID, false),
-			field("HP", "mobile_phone", v.Fields.MobilePhone, false, "tel"),
-			field("WhatsApp", "whatsapp", v.Fields.Whatsapp, false, "tel"),
+			phoneNumField("HP", "mobile_phone", v.Fields.MobilePhone),
+			phoneNumField("WhatsApp", "whatsapp", v.Fields.Whatsapp),
 			field("Email", "email", v.Fields.Email, false, "email"),
 		),
 
@@ -97,6 +97,9 @@ func LeadForm(v LeadFormView) g.Node {
 	// Cascading dropdown wilayah (regionSelect di atas cuma menanam data + markup;
 	// interaksi berjenjangnya di sini, same-origin CSP-safe, gotcha #12).
 	body = append(body, h.Script(h.Src("/static/regions.js"), h.Defer()))
+	// Pengelompokan ribuan utk input uang (data-numgroup): memformat tampilan &
+	// menormalkan jadi digit polos saat submit. Same-origin CSP-safe (gotcha #16).
+	body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }

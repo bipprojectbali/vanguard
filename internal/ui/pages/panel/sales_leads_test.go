@@ -52,3 +52,37 @@ func TestLeadsList_TabSaya_SembunyiSaatScopeOwn(t *testing.T) {
 		}
 	}
 }
+
+// TestLeadForm_FieldNumerik — regresi BL-2: HP/WhatsApp/Nilai Estimasi harus
+// "berasa angka" (inputmode numeric + pattern) TANPA type="number" (yang membuang
+// leading zero & prefix +62). Estimasi bertanda data-numgroup (kait numgroup.js)
+// & form memuat numgroup.js. Atribut ini jaring klien; backend tetap penjaga.
+func TestLeadForm_FieldNumerik(t *testing.T) {
+	out := renderLeads(t, LeadForm(LeadFormView{
+		Base:        "/w/desa",
+		Action:      "/w/desa/leads/new",
+		Statuses:    []string{"New"},
+		Ratings:     []string{"Hot"},
+		RegionsJSON: "[]",
+	}))
+
+	for _, want := range []string{
+		`inputmode="numeric"`,    // keypad angka mobile
+		`data-numgroup`,          // kait pengelompokan ribuan (estimasi)
+		`pattern="[0-9.]*"`,      // pola uang (titik ribuan ditoleransi)
+		`pattern="[0-9+ -]*"`,    // pola telepon (digit/+/pemisah)
+		`name="estimated_value"`, //
+		`name="mobile_phone"`,    //
+		`name="whatsapp"`,        //
+		`/static/numgroup.js`,    // skrip format+normalisasi termuat
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("form lead harus memuat %q:\n%s", want, out)
+		}
+	}
+
+	// type="number" TAK boleh dipakai (merusak leading zero & '+').
+	if strings.Contains(out, `type="number"`) {
+		t.Errorf("form lead TAK boleh pakai type=\"number\" utk field numerik:\n%s", out)
+	}
+}
