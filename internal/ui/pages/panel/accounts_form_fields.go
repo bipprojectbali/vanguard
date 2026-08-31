@@ -129,17 +129,6 @@ func textareaField(label, name, val string) g.Node {
 // fieldHint. Backward-compatible: pemanggil existing yang tak lewat hint tak
 // perlu ikut berubah.
 func selectField(label, name, current string, opts []string, required bool, hint ...string) g.Node {
-	nodes := make([]g.Node, 0, len(opts)+1)
-	if !required {
-		nodes = append(nodes, h.Option(h.Value(""), g.Text("—")))
-	}
-	for _, o := range opts {
-		attrs := []g.Node{h.Value(o)}
-		if o == current {
-			attrs = append(attrs, h.Selected())
-		}
-		nodes = append(nodes, h.Option(append(attrs, g.Text(o))...))
-	}
 	sel := []g.Node{
 		h.ID("f-" + name), h.Name(name), h.Class("select text-base w-full"),
 	}
@@ -149,7 +138,26 @@ func selectField(label, name, current string, opts []string, required bool, hint
 	return h.Div(
 		h.Class(fieldWrapClass(hint)),
 		labelFor(label, "f-"+name, required),
-		h.Select(append(sel, g.Group(nodes))...),
+		h.Select(append(sel, g.Group(enumOptions(current, opts, !required)))...),
 		fieldHint(hint),
 	)
+}
+
+// enumOptions membangun daftar <option> untuk dropdown enum. blank=true (field
+// opsional) menambah opsi "—" bernilai kosong di depan; opsi yang == current
+// ditandai Selected. Diekstrak agar selectField & leadEnumField (legenda BL-3)
+// merakit markup opsi dari SATU tempat — tak bercabang jadi dua kebenaran.
+func enumOptions(current string, opts []string, blank bool) []g.Node {
+	nodes := make([]g.Node, 0, len(opts)+1)
+	if blank {
+		nodes = append(nodes, h.Option(h.Value(""), g.Text("—")))
+	}
+	for _, o := range opts {
+		attrs := []g.Node{h.Value(o)}
+		if o == current {
+			attrs = append(attrs, h.Selected())
+		}
+		nodes = append(nodes, h.Option(append(attrs, g.Text(o))...))
+	}
+	return nodes
 }
