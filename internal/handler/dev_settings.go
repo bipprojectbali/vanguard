@@ -119,33 +119,3 @@ func (h *Handler) DevUserQuotaReset(w http.ResponseWriter, r *http.Request) {
 	h.audit(ctx, session.UserID(ctx), "user.quota.reset", id, nil)
 	http.Redirect(w, r, "/dev/users", http.StatusSeeOther)
 }
-
-// settingsErr/settingsMsg memetakan kode PRG ke pesan (pola authErrMsg).
-func settingsErr(code string) string {
-	switch code {
-	case "quota":
-		return "Kuota harus antara " + strconv.Itoa(settings.MinWorkspaceQuota) +
-			" dan " + strconv.Itoa(settings.MaxWorkspaceQuota)
-	case "retention":
-		return "Masa simpan jejak harus antara " + strconv.Itoa(settings.MinAuditRetentionDays) +
-			" dan " + strconv.Itoa(settings.MaxAuditRetentionDays) + " hari"
-	case "confirm":
-		return "Konfirmasi tidak cocok — ketik nama aplikasi persis seperti yang tertulis"
-	case "failed":
-		return "Gagal menyimpan pengaturan"
-	default:
-		return ""
-	}
-}
-
-func settingsMsg(code string) string {
-	switch code {
-	case "saved":
-		return "Pengaturan disimpan dan langsung berlaku"
-	case "tenancy":
-		return "Aplikasi kini berjalan sebagai multi-workspace. Berlaku seketika — " +
-			"alamat ruang kerja yang sudah ada tidak berubah."
-	default:
-		return ""
-	}
-}
