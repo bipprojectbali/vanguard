@@ -894,6 +894,11 @@ type Querier interface {
 	// keduanya false → NOL baris (fail-closed). status_filter '' → semua status.
 	// JOIN accounts+plans membawa nama untuk kolom (hindari N+1, rule 13); INNER JOIN
 	// aman karena account_id/plan_id NOT NULL. accounts di-filter baris hidup.
+	//
+	// search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+	// insensitive) di ATAS ownership+status — tak pernah melebarkan baris. Hanya
+	// kolom tak-tersamar yang TAMPIL di tabel jadi kunci cari (desa, paket, kode
+	// entitas); nilai MRR/ARR tersamar TIDAK dijadikan kunci cari (BL-6).
 	ListSubscriptions(ctx context.Context, arg ListSubscriptionsParams) ([]ListSubscriptionsRow, error)
 	// Daftar langganan satu desa (detail account → langganannya), keyset. Account sudah
 	// ter-scope ownership di handler; di sini cukup filter account_id + baris hidup.

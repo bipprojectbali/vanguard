@@ -1028,8 +1028,14 @@ WHERE s.deleted_at IS NULL
       OR ($4::boolean AND s.subscription_owner = $5)
   )
   AND ($6::text = '' OR s.status = $6::text)
+  AND (
+      $7::text = ''
+      OR a.village_name ILIKE '%' || $7 || '%'
+      OR p.plan_name ILIKE '%' || $7 || '%'
+      OR s.entity_code ILIKE '%' || $7 || '%'
+  )
 ORDER BY s.created_at DESC, s.id DESC
-LIMIT $7
+LIMIT $8
 `
 
 type ListSubscriptionsParams struct {
@@ -1039,6 +1045,7 @@ type ListSubscriptionsParams struct {
 	IsOwn           bool               `json:"is_own"`
 	Uid             *int64             `json:"uid"`
 	StatusFilter    string             `json:"status_filter"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -1095,6 +1102,11 @@ type ListSubscriptionsRow struct {
 // keduanya false → NOL baris (fail-closed). status_filter ” → semua status.
 // JOIN accounts+plans membawa nama untuk kolom (hindari N+1, rule 13); INNER JOIN
 // aman karena account_id/plan_id NOT NULL. accounts di-filter baris hidup.
+//
+// search ” → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+// insensitive) di ATAS ownership+status — tak pernah melebarkan baris. Hanya
+// kolom tak-tersamar yang TAMPIL di tabel jadi kunci cari (desa, paket, kode
+// entitas); nilai MRR/ARR tersamar TIDAK dijadikan kunci cari (BL-6).
 func (q *Queries) ListSubscriptions(ctx context.Context, arg ListSubscriptionsParams) ([]ListSubscriptionsRow, error) {
 	rows, err := q.db.Query(ctx, listSubscriptions,
 		arg.CursorCreatedAt,
@@ -1103,6 +1115,7 @@ func (q *Queries) ListSubscriptions(ctx context.Context, arg ListSubscriptionsPa
 		arg.IsOwn,
 		arg.Uid,
 		arg.StatusFilter,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {

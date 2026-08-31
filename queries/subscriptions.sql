@@ -58,6 +58,11 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 -- keduanya false → NOL baris (fail-closed). status_filter '' → semua status.
 -- JOIN accounts+plans membawa nama untuk kolom (hindari N+1, rule 13); INNER JOIN
 -- aman karena account_id/plan_id NOT NULL. accounts di-filter baris hidup.
+--
+-- search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+-- insensitive) di ATAS ownership+status — tak pernah melebarkan baris. Hanya
+-- kolom tak-tersamar yang TAMPIL di tabel jadi kunci cari (desa, paket, kode
+-- entitas); nilai MRR/ARR tersamar TIDAK dijadikan kunci cari (BL-6).
 SELECT s.*, a.village_name, p.plan_name
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
@@ -70,6 +75,12 @@ WHERE s.deleted_at IS NULL
       OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
   )
   AND (sqlc.arg(status_filter)::text = '' OR s.status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR p.plan_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR s.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT sqlc.arg(page_size);
 
