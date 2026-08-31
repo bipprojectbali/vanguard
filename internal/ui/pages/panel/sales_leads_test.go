@@ -86,3 +86,31 @@ func TestLeadForm_FieldNumerik(t *testing.T) {
 		t.Errorf("form lead TAK boleh pakai type=\"number\" utk field numerik:\n%s", out)
 	}
 }
+
+// TestLeadForm_LegendaEnum — regresi BL-3: dropdown Status & Rating harus disertai
+// legenda makna tiap opsi (pengguna baru tak tahu beda Contacted vs Qualified,
+// Hot vs Cold). Legenda statis (bukan input user) → CSP-safe. Kita jaga bahwa
+// makna kunci tiap enum ter-render bersama istilahnya.
+func TestLeadForm_LegendaEnum(t *testing.T) {
+	out := renderLeads(t, LeadForm(LeadFormView{
+		Base:        "/w/desa",
+		Action:      "/w/desa/leads/new",
+		Statuses:    []string{"New", "Contacted", "Qualified", "Unqualified"},
+		Ratings:     []string{"Hot", "Warm", "Cold"},
+		RegionsJSON: "[]",
+	}))
+
+	// Istilah + potongan makna (tanpa '&' agar tak terpengaruh escape g.Text).
+	for _, want := range []string{
+		"Contacted:", "Sudah dihubungi",
+		"Qualified:", "siap dikonversi",
+		"Unqualified:", "Tak cocok",
+		"Hot:", "siap closing",
+		"Warm:", "perlu tindak lanjut",
+		"Cold:", "Belum tertarik",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("legenda enum lead harus memuat %q:\n%s", want, out)
+		}
+	}
+}
