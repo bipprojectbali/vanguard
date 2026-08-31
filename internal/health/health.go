@@ -8,7 +8,9 @@ package health
 
 import (
 	"bufio"
+	"bytes"
 	"io/fs"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -55,6 +57,12 @@ func classify(path string) Kind {
 	}
 }
 
+// genMarker mengenali penanda standar Go untuk kode hasil-generate
+// (`^// Code generated .* DO NOT EDIT\.$`, lihat `go help generate`). sqlc
+// memancarkan penanda ini di baris pertama querier.go/models.go/db.go yang
+// TIDAK berakhiran `.sql.go`, sehingga tak tertangkap isExcluded berbasis-path.
+var genMarker = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)
+
 // isExcluded melaporkan apakah path dikecualikan dari scan (generated/vendor).
 func isExcluded(path string) bool {
 	// File generated sqlc & sejenisnya.
@@ -73,20 +81,34 @@ func isExcluded(path string) bool {
 	return false
 }
 
-// countFile menghitung baris & karakter satu file dari fsys.
-func countFile(fsys fs.FS, path string) (lines, chars int, err error) {
+// countFile menghitung baris & karakter satu file dari fsys, sekaligus
+// mendeteksi penanda kode hasil-generate di bagian kepala (sebelum klausa
+// `package`) — konvensi resmi Go. Penanda setelah `package` diabaikan.
+func countFile(fsys fs.FS, path string) (lines, chars int, generated bool, err error) {
 	f, err := fsys.Open(path)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, false, err
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1024*1024), 1024*1024) // toleransi baris panjang
+	inHead := true                                // penanda generate hanya sah sebelum `package`
 	for sc.Scan() {
 		lines++
-		chars += len(sc.Bytes()) + 1 // +1 newline
+		line := sc.Bytes()
+		chars += len(line) + 1 // +1 newline
+		if inHead {
+			trimmed := bytes.TrimSpace(line)
+			switch {
+			case bytes.HasPrefix(trimmed, []byte("package ")):
+				inHead = false
+			case genMarker.Match(trimmed):
+				generated = true
+				inHead = false
+			}
+		}
 	}
-	return lines, chars, sc.Err()
+	return lines, chars, generated, sc.Err()
 }
 
 // evaluate membangun Report untuk satu file yang sudah dihitung.
@@ -130,9 +152,12 @@ func Scan(fsys fs.FS) (Result, error) {
 		if d.IsDir() || !strings.HasSuffix(path, ".go") || isExcluded(path) {
 			return nil
 		}
-		lines, chars, err := countFile(fsys, path)
+		lines, chars, generated, err := countFile(fsys, path)
 		if err != nil {
 			return err
+		}
+		if generated {
+			return nil // kode hasil-generate (header DO NOT EDIT): dikecualikan §8
 		}
 		reports = append(reports, evaluate(path, lines, chars))
 		return nil
