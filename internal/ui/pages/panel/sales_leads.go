@@ -29,12 +29,15 @@ type LeadRow struct {
 
 // LeadsListView = data halaman daftar lead. Tab = "" / "my" / "unqualified"
 // (menentukan tab aktif). CanWrite = tombol "Lead Baru" tampil. NextCursor "" =
-// halaman terakhir.
+// halaman terakhir. HideMyTab = sembunyikan tab "Lead Saya" saat cakupan aktor
+// 'own' (BL-1): filter dasar sudah mengunci lead_owner=uid → "Semua" ≡ "Lead
+// Saya", jadi tab itu redundan. Diputuskan HANDLER (dari filter.IsOwn), bukan view.
 type LeadsListView struct {
 	Base       string
 	Items      []LeadRow
 	Tab        string
 	CanWrite   bool
+	HideMyTab  bool
 	NextCursor string
 	Err        string
 	Msg        string
@@ -89,6 +92,10 @@ func LeadsList(v LeadsListView) g.Node {
 func leadTabsNav(v LeadsListView) g.Node {
 	tabs := make([]g.Node, 0, len(leadTabs))
 	for _, t := range leadTabs {
+		// BL-1: tab "Lead Saya" (my) redundan saat cakupan 'own' — lewati.
+		if t.key == "my" && v.HideMyTab {
+			continue
+		}
 		href := v.Base + "/leads"
 		if t.key != "" {
 			href += "?tab=" + t.key
