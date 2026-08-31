@@ -17,6 +17,10 @@ func wsErrMsgCRM(code string) string {
 		return "Rating lead tidak valid."
 	case "estimated":
 		return "Nilai estimasi harus berupa angka."
+	case "mobile_phone":
+		return "Nomor HP tidak valid (6–20 digit; boleh diawali + dan pemisah spasi/-)."
+	case "whatsapp":
+		return "Nomor WhatsApp tidak valid (6–20 digit; boleh diawali + dan pemisah spasi/-)."
 	case "date":
 		return "Tanggal tidak valid (format YYYY-MM-DD)."
 	case "probability":

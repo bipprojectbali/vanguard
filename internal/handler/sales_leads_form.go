@@ -75,8 +75,10 @@ func parseLeadForm(fv func(string) string) (leadForm, string) {
 		f.Rating = &s
 	}
 
-	// Nilai estimasi (ARR prospektif): kosong = NULL; terisi wajib desimal sah.
-	ev, code := optNumeric(fv("estimated_value"), "estimated")
+	// Nilai estimasi (ARR prospektif): kosong = NULL; terisi wajib angka. Pemisah
+	// ribuan dibuang dulu (cleanThousands) agar input terkelompok "5.000.000" dari
+	// numgroup.js — atau ketikan manual tanpa JS — sama-sama sah (BL-2).
+	ev, code := optNumeric(cleanThousands(fv("estimated_value")), "estimated")
 	if code != "" {
 		return leadForm{}, code
 	}
@@ -94,9 +96,21 @@ func parseLeadForm(fv func(string) string) (leadForm, string) {
 	f.JobTitle = optTrim(fv("job_title"))
 	f.LeadSource = optTrim(fv("lead_source"))
 	f.UnqualifiedReason = optTrim(fv("unqualified_reason"))
-	f.MobilePhone = optTrim(fv("mobile_phone"))
-	f.Whatsapp = optTrim(fv("whatsapp"))
 	f.Email = optTrim(fv("email"))
+
+	// HP/WhatsApp opsional (BL-2): kosong = NULL; terisi wajib "berupa nomor"
+	// (digit + opsional '+' prefix + pemisah, 6–20 digit). Format asli
+	// dipertahankan (leading zero & +62 utuh); validasi, bukan normalisasi.
+	mob, code := optPhone(fv("mobile_phone"), "mobile_phone")
+	if code != "" {
+		return leadForm{}, code
+	}
+	f.MobilePhone = mob
+	wa, code := optPhone(fv("whatsapp"), "whatsapp")
+	if code != "" {
+		return leadForm{}, code
+	}
+	f.Whatsapp = wa
 
 	return f, ""
 }
