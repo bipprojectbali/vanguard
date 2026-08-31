@@ -168,8 +168,13 @@ WHERE deleted_at IS NULL
   )
   AND (NOT $6::boolean OR lead_owner = $5)
   AND ($7::text = '' OR lead_status = $7::text)
+  AND (
+      $8::text = ''
+      OR lead_name ILIKE '%' || $8 || '%'
+      OR entity_code ILIKE '%' || $8 || '%'
+  )
 ORDER BY created_at DESC, id DESC
-LIMIT $8
+LIMIT $9
 `
 
 type ListLeadsParams struct {
@@ -180,6 +185,7 @@ type ListLeadsParams struct {
 	Uid             *int64             `json:"uid"`
 	MineOnly        bool               `json:"mine_only"`
 	StatusFilter    string             `json:"status_filter"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -197,6 +203,12 @@ type ListLeadsParams struct {
 //
 //	mine_only  → paksa lead_owner = uid (tab "My Leads", walau aktor scope_all)
 //	status_filter '' → semua status; selain itu = filter satu status ("Unqualified")
+//
+// search ” → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+// insensitive) di ATAS ownership+tab — tak pernah melebarkan baris yang boleh
+// dilihat aktor. Hanya kolom yang DITAMPILKAN tak-tersamar di daftar (lead_name +
+// entity_code); PII (telepon/email) tak ikut agar search bukan jalur enumerasi
+// data tersamar. Tetap keyset+LIMIT. Trigram/index ditunda (dataset kecil).
 func (q *Queries) ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, error) {
 	rows, err := q.db.Query(ctx, listLeads,
 		arg.CursorCreatedAt,
@@ -206,6 +218,7 @@ func (q *Queries) ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, e
 		arg.Uid,
 		arg.MineOnly,
 		arg.StatusFilter,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {

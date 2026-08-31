@@ -237,8 +237,14 @@ WHERE q.deleted_at IS NULL
       $3::boolean
       OR ($4::boolean AND d.deal_owner = $5)
   )
+  AND (
+      $6::text = ''
+      OR q.quote_name ILIKE '%' || $6 || '%'
+      OR q.entity_code ILIKE '%' || $6 || '%'
+      OR d.deal_name ILIKE '%' || $6 || '%'
+  )
 ORDER BY q.created_at DESC, q.id DESC
-LIMIT $6
+LIMIT $7
 `
 
 type ListQuotesParams struct {
@@ -247,6 +253,7 @@ type ListQuotesParams struct {
 	ScopeAll        bool               `json:"scope_all"`
 	IsOwn           bool               `json:"is_own"`
 	Uid             *int64             `json:"uid"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -278,6 +285,11 @@ type ListQuotesRow struct {
 // false → NOL baris (fail-closed). INNER JOIN deals: quote selalu menempel ke deal
 // (deal_id di-set saat create); quote tanpa deal hidup TAK tampil di daftar global
 // (tak punya owner untuk disaring). deal_name dibawa untuk kolom "Deal".
+//
+// search ” → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+// insensitive) di ATAS ownership warisan deal — tak pernah melebarkan baris. Kolom
+// tak-tersamar yang tampil di tabel: quote_name + entity_code (quote) + d.deal_name
+// (deal induk); nilai grand total tak dijadikan kunci cari.
 func (q *Queries) ListQuotes(ctx context.Context, arg ListQuotesParams) ([]ListQuotesRow, error) {
 	rows, err := q.db.Query(ctx, listQuotes,
 		arg.CursorCreatedAt,
@@ -285,6 +297,7 @@ func (q *Queries) ListQuotes(ctx context.Context, arg ListQuotesParams) ([]ListQ
 		arg.ScopeAll,
 		arg.IsOwn,
 		arg.Uid,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {

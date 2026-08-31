@@ -46,6 +46,11 @@ LIMIT sqlc.arg(page_size);
 -- false → NOL baris (fail-closed). INNER JOIN deals: quote selalu menempel ke deal
 -- (deal_id di-set saat create); quote tanpa deal hidup TAK tampil di daftar global
 -- (tak punya owner untuk disaring). deal_name dibawa untuk kolom "Deal".
+--
+-- search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+-- insensitive) di ATAS ownership warisan deal — tak pernah melebarkan baris. Kolom
+-- tak-tersamar yang tampil di tabel: quote_name + entity_code (quote) + d.deal_name
+-- (deal induk); nilai grand total tak dijadikan kunci cari.
 SELECT q.*, d.deal_name
 FROM quotes q
 JOIN deals d ON d.id = q.deal_id
@@ -55,6 +60,12 @@ WHERE q.deleted_at IS NULL
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND d.deal_owner = sqlc.arg(uid))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR q.quote_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR q.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+      OR d.deal_name ILIKE '%' || sqlc.arg(search) || '%'
   )
 ORDER BY q.created_at DESC, q.id DESC
 LIMIT sqlc.arg(page_size);

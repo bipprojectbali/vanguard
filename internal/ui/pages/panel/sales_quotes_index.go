@@ -32,6 +32,7 @@ type QuotesIndexView struct {
 	Base       string
 	Err        string
 	Msg        string
+	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	Items      []QuoteIndexRow
 	NextCursor string
 }
@@ -47,6 +48,8 @@ func QuotesIndex(v QuotesIndexView) g.Node {
 				g.Text("Semua penawaran dalam cakupan Anda. Buat quote dari detail deal.")),
 		),
 	}
+	body = append(body, searchBox(v.Base+"/quotes", v.Query,
+		"Cari quote — nama, kode, atau deal…", "Cari quote"))
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "quotes-err", g.Text(v.Err)))
 	}
@@ -55,7 +58,7 @@ func QuotesIndex(v QuotesIndexView) g.Node {
 	}
 
 	if len(v.Items) == 0 {
-		body = append(body, emptyQuotesIndex())
+		body = append(body, emptyQuotesIndex(v))
 	} else {
 		body = append(body, quotesIndexTable(v.Base, v.Items), quotesIndexPager(v))
 	}
@@ -110,12 +113,26 @@ func quotesIndexRow(base string, q QuoteIndexRow) g.Node {
 	)
 }
 
-func emptyQuotesIndex() g.Node {
+// emptyQuotesIndex = state kosong jujur. Pencarian/halaman-setelah-cursor yang
+// kosong menawarkan jalan kembali (mempertahankan q); daftar yang benar-benar
+// kosong mengarahkan cara membuat quote (dari detail deal).
+func emptyQuotesIndex(v QuotesIndexView) g.Node {
+	if v.NextCursor == "" && v.Query == "" {
+		return h.Div(
+			h.Class("card bg-base-100 border border-base-300"),
+			h.Div(h.Class("card-body"),
+				h.P(h.Class("text-base-content/70"),
+					g.Text("Belum ada quote. Buka sebuah deal untuk membuat penawaran."))),
+		)
+	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300"),
-		h.Div(h.Class("card-body"),
+		h.Div(h.Class("card-body items-start"),
 			h.P(h.Class("text-base-content/70"),
-				g.Text("Belum ada quote. Buka sebuah deal untuk membuat penawaran."))),
+				g.Text("Belum ada quote yang cocok pada tampilan ini.")),
+			h.A(h.Href(withQuery(v.Base+"/quotes", v.Query)),
+				h.Class("btn btn-ghost btn-sm min-h-11"), g.Text("« Kembali ke awal")),
+		),
 	)
 }
 
@@ -124,9 +141,9 @@ func quotesIndexPager(v QuotesIndexView) g.Node {
 		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
 			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
 	}
+	href := appendQuery(v.Base+"/quotes?after="+v.NextCursor, v.Query) // q bertahan antar halaman
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(v.Base+"/quotes?after="+v.NextCursor), h.Class("btn min-h-11"),
-			g.Text("Berikutnya »")),
+		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
 	)
 }

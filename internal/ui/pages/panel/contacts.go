@@ -68,6 +68,7 @@ type ContactsAllView struct {
 	Items      []ContactRow
 	ShowTabs   bool
 	ActiveView string
+	Query      string // ?q= pencarian bebas (BL-6, hanya daftar global); "" = tak mencari
 	NextCursor string
 	// CanWrite = tombol "Tambah Kontak" tampil. Handler menyalakannya HANYA bila
 	// aktor boleh menulis DAN punya ≥1 desa dalam cakupannya (ada induk yang bisa
@@ -109,7 +110,7 @@ func ContactsList(v ContactsListView) g.Node {
 	} else {
 		// Daftar per-desa: tanpa kolom Desa (redundan — sudah di judul halaman).
 		body = append(body, contactsTable(v.AccountBase, v.Items, false))
-		body = append(body, contactsPager(v.AccountBase+"/contacts", "", v.NextCursor))
+		body = append(body, contactsPager(v.AccountBase+"/contacts", "", v.NextCursor, ""))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
@@ -135,6 +136,14 @@ func ContactsAll(v ContactsAllView) g.Node {
 	if v.ShowTabs {
 		body = append(body, contactsTabs(v))
 	}
+	// Search hanya di daftar GLOBAL (per-desa gerbangnya desa induk). view aktif
+	// dipertahankan agar tab & pencarian tak saling menghapus.
+	viewKeep := ""
+	if v.ActiveView != "" && v.ActiveView != ContactViewAll {
+		viewKeep = v.ActiveView
+	}
+	body = append(body, searchBox(v.Base+"/contacts", v.Query,
+		"Cari kontak — nama atau desa…", "Cari kontak", hiddenField{"view", viewKeep}))
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "contacts-err", g.Text(v.Err)))
 	}
@@ -142,12 +151,12 @@ func ContactsAll(v ContactsAllView) g.Node {
 		body = append(body, ui.Alert(ui.VariantDefault, "contacts-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
-		body = append(body, emptyContacts(v.Base+"/contacts", v.NextCursor,
-			"Belum ada kontak yang cocok."))
+		body = append(body, emptyContacts(contactsListHref(v.Base, v.ActiveView, v.Query),
+			v.NextCursor, "Belum ada kontak yang cocok."))
 	} else {
 		// base per-baris = URL desa induk masing-masing (dirakit dari AccountID).
 		body = append(body, contactsGlobalTable(v.Base, v.Items))
-		body = append(body, contactsPager(v.Base+"/contacts", v.ActiveView, v.NextCursor))
+		body = append(body, contactsPager(v.Base+"/contacts", v.ActiveView, v.NextCursor, v.Query))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
@@ -162,7 +171,7 @@ func contactsTabs(v ContactsAllView) g.Node {
 		if v.ActiveView == view {
 			cls += " tab-active"
 		}
-		return h.A(h.Href(contactsListHref(v.Base, view)), h.Class(cls), g.Text(label))
+		return h.A(h.Href(contactsListHref(v.Base, view, v.Query)), h.Class(cls), g.Text(label))
 	}
 	return h.Div(
 		h.Role("tablist"),
@@ -172,13 +181,15 @@ func contactsTabs(v ContactsAllView) g.Node {
 	)
 }
 
-// contactsListHref merakit URL daftar global untuk sebuah view. all/"" = tanpa
-// param (URL kanonik); selain itu ?view=<view>.
-func contactsListHref(base, view string) string {
-	if view == "" || view == ContactViewAll {
-		return base + "/contacts"
+// contactsListHref merakit URL daftar global untuk sebuah view + q opsional.
+// all/"" = tanpa param view (URL kanonik); q kosong = tanpa param q. Urutan &
+// ditentukan url.Values.Encode (withQuery) — konsisten & ter-escape.
+func contactsListHref(base, view, query string) string {
+	viewKeep := ""
+	if view != "" && view != ContactViewAll {
+		viewKeep = view
 	}
-	return base + "/contacts?view=" + view
+	return withQuery(base+"/contacts", query, hiddenField{"view", viewKeep})
 }
 
 // emptyContacts = pesan kosong jujur. backHref menawarkan jalan kembali bila ini
@@ -206,7 +217,7 @@ func emptyContacts(backHref, nextCursor, msg string) g.Node {
 // bookmarkable + dimuat ulang, lolos gotcha #16), tap target 44px, flex-wrap 375px.
 // view (opsional, "" di daftar per-desa) diteruskan agar tab aktif bertahan antar
 // halaman: ?after= lebih dulu, lalu &view= (kembaran accountsPager).
-func contactsPager(listHref, view, nextCursor string) g.Node {
+func contactsPager(listHref, view, nextCursor, query string) g.Node {
 	if nextCursor == "" {
 		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
 			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
@@ -215,6 +226,7 @@ func contactsPager(listHref, view, nextCursor string) g.Node {
 	if view != "" && view != ContactViewAll {
 		href += "&view=" + view
 	}
+	href = appendQuery(href, query) // q bertahan ke halaman berikutnya (daftar global)
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
 		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),

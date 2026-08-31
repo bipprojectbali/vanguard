@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -45,6 +46,9 @@ func (h *Handler) LeadsList(w http.ResponseWriter, r *http.Request) {
 	uid := session.UserID(ctx)
 	tab := r.URL.Query().Get("tab")
 	mineOnly, statusFilter := leadTab(tab)
+	// q = pencarian bebas (BL-6): MEMPERSEMPIT di atas F3+tab, tak melebarkan.
+	// Trim agar spasi belaka ≡ tak mencari (query kosong lolos predikat SQL).
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	cursorAt, cursorID := pageCursor(r)
 	rows, err := h.q(ctx).ListLeads(ctx, db.ListLeadsParams{
@@ -55,6 +59,7 @@ func (h *Handler) LeadsList(w http.ResponseWriter, r *http.Request) {
 		Uid:             &uid,
 		MineOnly:        mineOnly,
 		StatusFilter:    statusFilter,
+		Search:          query,
 		PageSize:        pageSize + 1,
 	})
 	if err != nil {
@@ -84,6 +89,7 @@ func (h *Handler) LeadsList(w http.ResponseWriter, r *http.Request) {
 		Base:       base,
 		Items:      items,
 		Tab:        tab,
+		Query:      query,
 		CanWrite:   canWriteLeads(ctx),
 		HideMyTab:  filter.IsOwn, // BL-1: cakupan 'own' → "Semua" ≡ "Lead Saya"
 		NextCursor: nextCursor,
