@@ -127,8 +127,8 @@ func ContactForm(v ContactFormView) g.Node {
 			field("Nama Belakang", "last_name", v.Fields.LastName, false, "text"),
 			field("Sapaan", "salutation", v.Fields.Salutation, false, "text"),
 			field("Jabatan", "job_title", v.Fields.JobTitle, false, "text"),
-			selectField("Jabatan (Kategori)", "position_category", v.Fields.PositionCategory, v.Positions, false),
-			selectField("Peran", "contact_role", v.Fields.ContactRole, v.Roles, false),
+			enumField("Jabatan (Kategori)", "position_category", v.Fields.PositionCategory, v.Positions, false, contactPositionLegend),
+			enumField("Peran", "contact_role", v.Fields.ContactRole, v.Roles, false, contactRoleLegend),
 			field("Periode Menjabat", "term_period", v.Fields.TermPeriod, false, "text"),
 		),
 		formCard("Kontak",
@@ -136,7 +136,7 @@ func ContactForm(v ContactFormView) g.Node {
 			contactPhoneField(v.PhoneEditable, "WhatsApp", "whatsapp_number", v.Fields.WhatsappNumber),
 			field("Telepon Kantor", "office_phone", v.Fields.OfficePhone, false, "tel"),
 			field("Email", "email", v.Fields.Email, false, "email"),
-			selectField("Kanal Pilihan", "preferred_channel", v.Fields.PreferredChannel, v.Channels, false),
+			enumField("Kanal Pilihan", "preferred_channel", v.Fields.PreferredChannel, v.Channels, false, contactChannelLegend),
 		),
 		formCard("Alamat",
 			field("Alamat Surat", "mailing_address", v.Fields.MailingAddress, false, "text"),
@@ -144,10 +144,14 @@ func ContactForm(v ContactFormView) g.Node {
 			field("Kode Pos", "postal_code", v.Fields.PostalCode, false, "text"),
 		),
 		formCard("Penanda & Kepatuhan",
-			checkboxField("Kontak Utama desa", "is_primary_contact", v.Fields.IsPrimaryContact),
-			checkboxField("Kontak Teknis", "is_technical_contact", v.Fields.IsTechnicalContact),
-			checkboxField("Opt-out email (jangan kirim email)", "email_opt_out", v.Fields.EmailOptOut),
-			checkboxField("Jangan hubungi", "do_not_contact", v.Fields.DoNotContact),
+			checkboxHintField("Kontak Utama desa", "is_primary_contact", v.Fields.IsPrimaryContact,
+				"Penghubung utama desa (maks. satu per desa). Dipakai sebagai kontak default saat lead dikonversi jadi Deal."),
+			checkboxHintField("Kontak Teknis", "is_technical_contact", v.Fields.IsTechnicalContact,
+				"Narahubung untuk urusan teknis/implementasi produk."),
+			checkboxHintField("Opt-out email", "email_opt_out", v.Fields.EmailOptOut,
+				"Tandai bila kontak menolak email. Jadi acuan untuk tak mengirim email ke kontak ini."),
+			checkboxHintField("Jangan hubungi", "do_not_contact", v.Fields.DoNotContact,
+				"Tandai bila kontak minta tak dihubungi sama sekali. Jadi acuan untuk menghentikan semua kontak keluar & tindak lanjut."),
 		),
 
 		h.Div(
@@ -207,21 +211,36 @@ func contactPhoneField(editable bool, label, name, val string) g.Node {
 	)
 }
 
-// checkboxField = satu boolean. Checkbox HTML tak mengirim apa pun saat tak
-// dicentang, jadi absen = false secara alami (parseContactForm.optBool). Tap
-// target ≥44px lewat padding label. Nilai "1" hanya penanda kehadiran.
-func checkboxField(label, name string, checked bool) g.Node {
-	attrs := []g.Node{
-		h.ID("f-" + name), h.Name(name), h.Type("checkbox"),
-		h.Value("1"), h.Class("checkbox"),
-	}
-	if checked {
-		attrs = append(attrs, h.Checked())
-	}
-	return h.Label(
-		h.For("f-"+name),
-		h.Class("flex items-center gap-2 min-h-11 cursor-pointer sm:col-span-2"),
-		h.Input(attrs...),
-		h.Span(h.Class("text-sm"), g.Text(label)),
-	)
+// Legenda makna opsi enum kontak (BL-4) — dioper ke enumField. Tiap pasangan
+// {nilai, makna} HARUS himpunan yang sama dengan opsi enum di
+// contacts_helpers.go (contactPositionOptions/RoleOptions/ChannelOptions);
+// dijaga uji render TestContactForm_LegendaEnum.
+
+// contactPositionLegend = makna kategori jabatan pemerintah desa.
+var contactPositionLegend = [][2]string{
+	{"Kepala Desa", "Pemimpin desa; pengambil keputusan tertinggi."},
+	{"Sekdes", "Sekretaris Desa; koordinator administrasi."},
+	{"Kaur", "Kepala Urusan (tata usaha, keuangan, perencanaan)."},
+	{"Kasi", "Kepala Seksi (pemerintahan, kesejahteraan, pelayanan)."},
+	{"Operator", "Pengelola sistem/aplikasi desa sehari-hari."},
+	{"Bendahara", "Pemegang kas; urusan pembayaran."},
+	{"BPD", "Badan Permusyawaratan Desa; unsur pengawas."},
+	{"Lainnya", "Jabatan lain di luar daftar."},
+}
+
+// contactRoleLegend = peran kontak dalam keputusan pembelian (buying role).
+var contactRoleLegend = [][2]string{
+	{"Decision Maker", "Pemegang keputusan akhir pembelian."},
+	{"Influencer", "Memengaruhi keputusan, tapi bukan penentu."},
+	{"User", "Pengguna langsung produk sehari-hari."},
+	{"Finance", "Mengurus anggaran & pembayaran."},
+	{"Gatekeeper", "Penjaga akses ke pengambil keputusan."},
+}
+
+// contactChannelLegend = kanal yang diutamakan untuk menghubungi kontak.
+var contactChannelLegend = [][2]string{
+	{"WhatsApp", "Utamakan menghubungi lewat WhatsApp."},
+	{"Telepon", "Utamakan menghubungi lewat telepon."},
+	{"Email", "Utamakan menghubungi lewat email."},
+	{"Kunjungan", "Utamakan menemui langsung (kunjungan)."},
 }

@@ -76,8 +76,8 @@ func LeadForm(v LeadFormView) g.Node {
 			field("Sumber Lead", "lead_source", v.Fields.LeadSource, false, "text"),
 		),
 		formCard("Kualifikasi",
-			leadEnumField("Status", "lead_status", v.Fields.LeadStatus, v.Statuses, true, leadStatusLegend),
-			leadEnumField("Rating", "rating", v.Fields.Rating, v.Ratings, false, leadRatingLegend),
+			enumField("Status", "lead_status", v.Fields.LeadStatus, v.Statuses, true, leadStatusLegend),
+			enumField("Rating", "rating", v.Fields.Rating, v.Ratings, false, leadRatingLegend),
 			moneyField("Nilai Estimasi (Rp)", "estimated_value", v.Fields.EstimatedValue),
 			textareaField("Alasan Unqualified", "unqualified_reason", v.Fields.UnqualifiedReason),
 		),
@@ -102,4 +102,23 @@ func LeadForm(v LeadFormView) g.Node {
 	body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// leadStatusLegend = makna tiap status lead (BL-3). Urut = alur kualifikasi
+// (New → Contacted → Qualified, atau bercabang ke Unqualified). 'Converted' tak
+// di sini: itu status sistem hasil konversi, tak bisa dipilih manual (lihat
+// parseLeadForm). HARUS himpunan yang sama dengan leadStatusOptions.
+var leadStatusLegend = [][2]string{
+	{"New", "Baru masuk, belum dihubungi."},
+	{"Contacted", "Sudah dihubungi, belum dikualifikasi."},
+	{"Qualified", "Cocok dan siap dikonversi jadi Deal."},
+	{"Unqualified", "Tak cocok atau tak berminat (isi alasannya)."},
+}
+
+// leadRatingLegend = makna tiap rating minat (BL-3). Urut dari paling panas.
+// HARUS himpunan yang sama dengan leadRatingOptions.
+var leadRatingLegend = [][2]string{
+	{"Hot", "Minat tinggi, siap closing."},
+	{"Warm", "Tertarik, perlu tindak lanjut."},
+	{"Cold", "Belum tertarik atau prioritas rendah."},
 }

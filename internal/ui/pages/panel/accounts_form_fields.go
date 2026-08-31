@@ -145,7 +145,7 @@ func selectField(label, name, current string, opts []string, required bool, hint
 
 // enumOptions membangun daftar <option> untuk dropdown enum. blank=true (field
 // opsional) menambah opsi "—" bernilai kosong di depan; opsi yang == current
-// ditandai Selected. Diekstrak agar selectField & leadEnumField (legenda BL-3)
+// ditandai Selected. Diekstrak agar selectField & enumField (legenda BL-3/BL-4)
 // merakit markup opsi dari SATU tempat — tak bercabang jadi dua kebenaran.
 func enumOptions(current string, opts []string, blank bool) []g.Node {
 	nodes := make([]g.Node, 0, len(opts)+1)
