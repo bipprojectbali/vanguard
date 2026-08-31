@@ -1,0 +1,133 @@
+package handler
+
+import (
+	"context"
+	"strconv"
+	"time"
+
+	"go_starter/internal/db"
+	"go_starter/internal/ui/pages/panel"
+
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+// customer_success_view.go — skoring & pemetaan ke view (computeOverallHealthScore,
+// daysInStageLabel, customerSuccessDetailView, customerSuccessFormFields), dipisah
+// dari customer_success_helpers.go agar tiap file di bawah ambang tipe
+// Route/Handler (150). Definisi enum & form tetap di customer_success_helpers.go.
+
+// computeOverallHealthScore = rata-rata KOMPONEN non-NULL (adoption/engagement/
+// support/sentiment), dibulatkan. nil bila SEMUA komponen kosong (belum ada
+// dasar hitung) — kolom tetap NULL, bukan 0 yang menyesatkan (0 berarti "skor
+// terendah", bukan "belum dihitung"). Dipanggil handler SAJA (customer_success_
+// save.go); form tak pernah mengirim overall_health_score sendiri (lihat komentar
+// migrasi 00019: kolom disengaja app-computed, bukan generated, agar rumus bisa
+// berubah tanpa DDL).
+func computeOverallHealthScore(adoption, engagement, support, sentiment *int16) *int16 {
+	var sum, n int
+	for _, p := range []*int16{adoption, engagement, support, sentiment} {
+		if p != nil {
+			sum += int(*p)
+			n++
+		}
+	}
+	if n == 0 {
+		return nil
+	}
+	avg := int16((sum + n/2) / n) // pembulatan biasa, bukan selalu ke bawah
+	return &avg
+}
+
+// daysInStageLabel = selisih hari (kalender) HARI INI terhadap stage_entry_date,
+// diformat "N hari di tahap ini". Kebalikan arah daysLeftLabel (subscriptions_
+// renewals.go: hitung SISA hari ke depan) — di sini menghitung MUNDUR sejak
+// masuk tahap. Kedua tanggal dinormalkan ke tanggal sipil (UTC midnight) agar
+// bebas jam/zona.
+func daysInStageLabel(now time.Time, entry pgtype.Date) string {
+	if !entry.Valid {
+		return "—"
+	}
+	a := time.Date(entry.Time.Year(), entry.Time.Month(), entry.Time.Day(), 0, 0, 0, 0, time.UTC)
+	b := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	d := int(b.Sub(a).Hours() / 24)
+	if d < 0 {
+		d = 0 // stage_entry_date di masa depan (data janggal) — tampilkan 0, bukan negatif
+	}
+	return strconv.Itoa(d) + " hari di tahap ini"
+}
+
+// customerSuccessDetailView merakit data BACA lengkap + terapkan F2 per-section
+// (section yang tak berhak dibaca disembunyikan di view lewat flag CanReadX, nilai
+// mentahnya TETAP dioper — bukan PII per-baris seperti F4 phone, jadi tak perlu
+// disamar di sini, cukup tak dirender). exists=false → seluruh field kosong ("—").
+func customerSuccessDetailView(
+	ctx context.Context, base string, a db.Account, cs db.CustomerSuccess, exists bool,
+) panel.CustomerSuccessDetailView {
+	return panel.CustomerSuccessDetailView{
+		Base:        base,
+		ID:          a.ID,
+		AccountName: a.VillageName,
+		CanWrite:    canWriteCS(ctx) && !IsReadOnly(ctx),
+		Exists:      exists,
+
+		CanReadHealth:   canReadCSHealth(ctx),
+		CanReadJourney:  canReadCSJourney(ctx),
+		CanReadAdoption: canReadCSAdoption(ctx),
+
+		OverallHealthScore:   probabilityStr(cs.OverallHealthScore),
+		HealthStatus:         deref(cs.HealthStatus),
+		AdoptionScore:        probabilityStr(cs.AdoptionScore),
+		EngagementScore:      probabilityStr(cs.EngagementScore),
+		SupportScore:         probabilityStr(cs.SupportScore),
+		SentimentScore:       probabilityStr(cs.SentimentScore),
+		ScoreTrend:           deref(cs.ScoreTrend),
+		HealthLastCalculated: dateTimeStr(cs.HealthLastCalculated),
+
+		LifecycleStage:     deref(cs.LifecycleStage),
+		StageEntryDate:     dateStr(cs.StageEntryDate),
+		DaysInStage:        daysInStageLabel(time.Now(), cs.StageEntryDate),
+		OnboardingStatus:   deref(cs.OnboardingStatus),
+		KickoffDate:        dateStr(cs.KickoffDate),
+		TargetGoLiveDate:   dateStr(cs.TargetGoLiveDate),
+		ActualGoLiveDate:   dateStr(cs.ActualGoLiveDate),
+		OnboardingProgress: probabilityStr(cs.OnboardingProgress),
+
+		LastLoginDate:       dateStr(cs.LastLoginDate),
+		ActiveUsers:         int32Str(cs.ActiveUsers),
+		LoginFrequency:      deref(cs.LoginFrequency),
+		FeatureAdoptionRate: numericStr(cs.FeatureAdoptionRate),
+		KeyFeaturesUsed:     deref(cs.KeyFeaturesUsed),
+		UsageTrend:          deref(cs.UsageTrend),
+		UsageDataSource:     cs.UsageDataSource,
+	}
+}
+
+// customerSuccessFormFields memetakan baris existing (atau zero-value, jalur
+// create) → nilai prefill form. Section yang aktor tak berhak TULIS tetap
+// diisi (view menyembunyikan kartunya via CanWriteX, sama pola dgn detail).
+func customerSuccessFormFields(cs db.CustomerSuccess) panel.CustomerSuccessFormFields {
+	return panel.CustomerSuccessFormFields{
+		HealthStatus:    deref(cs.HealthStatus),
+		AdoptionScore:   probabilityStr(cs.AdoptionScore),
+		EngagementScore: probabilityStr(cs.EngagementScore),
+		SupportScore:    probabilityStr(cs.SupportScore),
+		SentimentScore:  probabilityStr(cs.SentimentScore),
+		ScoreTrend:      deref(cs.ScoreTrend),
+
+		LifecycleStage: deref(cs.LifecycleStage),
+		StageEntryDate: dateStr(cs.StageEntryDate),
+
+		OnboardingStatus:   deref(cs.OnboardingStatus),
+		KickoffDate:        dateStr(cs.KickoffDate),
+		TargetGoLiveDate:   dateStr(cs.TargetGoLiveDate),
+		ActualGoLiveDate:   dateStr(cs.ActualGoLiveDate),
+		OnboardingProgress: probabilityStr(cs.OnboardingProgress),
+
+		LastLoginDate:       dateStr(cs.LastLoginDate),
+		ActiveUsers:         int32Str(cs.ActiveUsers),
+		LoginFrequency:      deref(cs.LoginFrequency),
+		FeatureAdoptionRate: numericStr(cs.FeatureAdoptionRate),
+		KeyFeaturesUsed:     deref(cs.KeyFeaturesUsed),
+		UsageTrend:          deref(cs.UsageTrend),
+	}
+}
