@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -50,6 +51,7 @@ func (h *Handler) CSTrainingsList(w http.ResponseWriter, r *http.Request) {
 	default:
 		tab = ""
 	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	cursorAt, cursorID := pageCursor(r)
 
@@ -71,6 +73,7 @@ func (h *Handler) CSTrainingsList(w http.ResponseWriter, r *http.Request) {
 		IsOwn:        filter.IsOwn,
 		Uid:          &uid,
 		FilterStatus: filterStatus,
+		Search:       query,
 		PageSize:     pageSize + 1,
 	})
 	if err != nil {
@@ -95,6 +98,7 @@ func (h *Handler) CSTrainingsList(w http.ResponseWriter, r *http.Request) {
 		KPIs:       csTrainingKPIView(kpis),
 		Items:      items,
 		Tab:        tab,
+		Query:      query,
 		CanWrite:   canWrite,
 		NextCursor: nextCursor,
 		Err:        csTrainingsErrMsg(r.URL.Query().Get("err")),

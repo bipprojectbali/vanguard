@@ -73,6 +73,7 @@ type TicketsListView struct {
 	KPIs       TicketKPIs
 	Items      []TicketRow
 	Tab        string
+	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	CanWrite   bool
 	NextCursor string
 	Err        string
@@ -96,6 +97,9 @@ func TicketsList(v TicketsListView) g.Node {
 		),
 		ticketKPICards(v.KPIs, v.Base),
 		ticketTabsNav(v),
+		searchBox(v.Base+"/tickets", v.Query,
+			"Cari tiket — subjek atau desa…", "Cari tiket",
+			hiddenField{"tab", v.Tab}),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "tickets-err", g.Text(v.Err)))
@@ -148,10 +152,7 @@ func ticketKPICard(label, value, href, colorCls string) g.Node {
 func ticketTabsNav(v TicketsListView) g.Node {
 	tabs := make([]g.Node, 0, len(ticketTabs))
 	for _, t := range ticketTabs {
-		href := v.Base + "/tickets"
-		if t.key != "" {
-			href += "?tab=" + t.key
-		}
+		href := withQuery(v.Base+"/tickets", v.Query, hiddenField{"tab", t.key})
 		cls := "tab"
 		if t.key == v.Tab {
 			cls += " tab-active font-medium"
@@ -162,6 +163,19 @@ func ticketTabsNav(v TicketsListView) g.Node {
 }
 
 func emptyTickets(v TicketsListView) g.Node {
+	if v.Query != "" {
+		// Reset pencarian: kembali ke daftar tab aktif tanpa ?q=.
+		reset := withQuery(v.Base+"/tickets", "", hiddenField{"tab", v.Tab})
+		return h.Div(
+			h.Class("card bg-base-100 border border-base-300"),
+			h.Div(h.Class("card-body items-start"),
+				h.P(h.Class("text-base-content/70"),
+					g.Text("Belum ada tiket yang cocok pencarian.")),
+				h.A(h.Href(reset), h.Class("btn btn-ghost btn-sm min-h-11"),
+					g.Text("« Reset pencarian")),
+			),
+		)
+	}
 	if v.NextCursor != "" {
 		return h.Div(
 			h.Class("card bg-base-100 border border-base-300"),
@@ -189,6 +203,7 @@ func ticketsPager(v TicketsListView) g.Node {
 	if v.Tab != "" {
 		href += "&tab=" + v.Tab
 	}
+	href = appendQuery(href, v.Query) // q bertahan ke halaman berikutnya
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
 		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),

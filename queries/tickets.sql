@@ -93,6 +93,9 @@ WHERE (t.created_at, t.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg
   AND (NOT sqlc.arg(filter_sla_at_risk)::boolean
        OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
            AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND (sqlc.arg(search)::text = ''
+       OR t.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
 ORDER BY t.created_at DESC, t.id DESC
 LIMIT sqlc.arg(page_size);
 

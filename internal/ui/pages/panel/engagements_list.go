@@ -74,6 +74,7 @@ type EngagementsListView struct {
 	KPIs       EngagementKPIs
 	Items      []EngagementRow
 	Tab        string
+	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	CanWrite   bool
 	NextCursor string
 	Err        string
@@ -98,6 +99,9 @@ func EngagementsList(v EngagementsListView) g.Node {
 		),
 		engagementKPICards(v.KPIs, v.Base),
 		engagementTabsNav(v),
+		searchBox(v.Base+"/engagements", v.Query,
+			"Cari engagement — subjek atau desa…", "Cari engagement",
+			hiddenField{"tab", v.Tab}),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "engagements-err", g.Text(v.Err)))
@@ -146,10 +150,7 @@ func engagementKPICard(label, value, href, colorCls string) g.Node {
 func engagementTabsNav(v EngagementsListView) g.Node {
 	tabs := make([]g.Node, 0, len(engagementTabs))
 	for _, t := range engagementTabs {
-		href := v.Base + "/engagements"
-		if t.key != "" {
-			href += "?tab=" + t.key
-		}
+		href := withQuery(v.Base+"/engagements", v.Query, hiddenField{"tab", t.key})
 		cls := "tab"
 		if t.key == v.Tab {
 			cls += " tab-active font-medium"
@@ -160,6 +161,18 @@ func engagementTabsNav(v EngagementsListView) g.Node {
 }
 
 func emptyEngagements(v EngagementsListView) g.Node {
+	if v.Query != "" {
+		reset := withQuery(v.Base+"/engagements", "", hiddenField{"tab", v.Tab})
+		return h.Div(
+			h.Class("card bg-base-100 border border-base-300"),
+			h.Div(h.Class("card-body items-start"),
+				h.P(h.Class("text-base-content/70"),
+					g.Text("Belum ada engagement yang cocok pencarian.")),
+				h.A(h.Href(reset), h.Class("btn btn-ghost btn-sm min-h-11"),
+					g.Text("« Reset pencarian")),
+			),
+		)
+	}
 	if v.NextCursor != "" {
 		return h.Div(
 			h.Class("card bg-base-100 border border-base-300"),
@@ -273,6 +286,7 @@ func engagementsPager(v EngagementsListView) g.Node {
 	if v.Tab != "" {
 		href += "&tab=" + v.Tab
 	}
+	href = appendQuery(href, v.Query) // q bertahan ke halaman berikutnya
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
 		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),

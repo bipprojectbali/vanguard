@@ -82,6 +82,9 @@ WHERE (sp.created_at, sp.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.a
       ))
   )
   AND (sqlc.arg(filter_status) = '' OR sp.plan_status = sqlc.arg(filter_status))
+  AND (sqlc.arg(search)::text = ''
+       OR sp.plan_name ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
 ORDER BY sp.created_at DESC, sp.id DESC
 LIMIT sqlc.arg(page_size);
 

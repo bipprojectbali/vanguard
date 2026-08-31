@@ -37,6 +37,7 @@ type SuccessPlanRow struct {
 type SuccessPlansListView struct {
 	Base       string           // "/w/{slug}"
 	Tab        string           // nilai tab aktif
+	Query      string           // ?q= pencarian bebas (BL-6); "" = tak mencari
 	Tabs       []SuccessPlanTab // daftar tab dari handler
 	Msg        string           // pesan sukses ?ok=
 	Err        string           // pesan galat ?err=
@@ -51,6 +52,9 @@ func SuccessPlansList(v SuccessPlansListView) g.Node {
 		successPlansListHeader(v),
 		successPlansListAlert(v.Msg, v.Err),
 		successPlanTabsNav(v),
+		searchBox(v.Base+"/success-plans", v.Query,
+			"Cari plan — nama plan atau desa…", "Cari success plan",
+			hiddenField{"tab", v.Tab}),
 		successPlansTable(v),
 		successPlansPager(v),
 	)
@@ -93,10 +97,7 @@ func successPlanTabsNav(v SuccessPlansListView) g.Node {
 		if active {
 			cls += " tab-active"
 		}
-		href := v.Base + "/success-plans"
-		if t.Key != "" {
-			href += "?tab=" + t.Key
-		}
+		href := withQuery(v.Base+"/success-plans", v.Query, hiddenField{"tab", t.Key})
 		tabs = append(tabs, h.A(h.Href(href), h.Class(cls), g.Text(t.Label)))
 	}
 	return h.Div(h.Class("tabs tabs-border overflow-x-auto flex-wrap"), g.Group(tabs))
@@ -104,10 +105,18 @@ func successPlanTabsNav(v SuccessPlansListView) g.Node {
 
 func successPlansTable(v SuccessPlansListView) g.Node {
 	if len(v.Items) == 0 {
+		msg := "Belum ada success plan yang sesuai filter."
+		var reset g.Node
+		if v.Query != "" {
+			msg = "Belum ada success plan yang cocok pencarian."
+			reset = h.A(
+				h.Href(withQuery(v.Base+"/success-plans", "", hiddenField{"tab", v.Tab})),
+				h.Class("btn btn-ghost btn-sm min-h-11"), g.Text("« Reset pencarian"))
+		}
 		return h.Div(h.Class("card bg-base-100 shadow-sm"),
-			h.Div(h.Class("card-body"),
-				h.P(h.Class("text-sm text-base-content/60"),
-					g.Text("Belum ada success plan yang sesuai filter.")),
+			h.Div(h.Class("card-body items-start"),
+				h.P(h.Class("text-sm text-base-content/60"), g.Text(msg)),
+				g.If(reset != nil, reset),
 			),
 		)
 	}
@@ -188,6 +197,7 @@ func successPlansPager(v SuccessPlansListView) g.Node {
 	if v.Tab != "" {
 		href += "&tab=" + v.Tab
 	}
+	href = appendQuery(href, v.Query) // q bertahan ke halaman berikutnya
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
 		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),

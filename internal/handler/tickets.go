@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -55,6 +56,7 @@ func (h *Handler) TicketsList(w http.ResponseWriter, r *http.Request) {
 	default:
 		tab = "" // normalisasi nilai liar → "" (semua)
 	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	cursorAt, cursorID := pageCursor(r)
 
@@ -79,6 +81,7 @@ func (h *Handler) TicketsList(w http.ResponseWriter, r *http.Request) {
 		FilterStatus:      filterStatus,
 		FilterSlaBreached: filterSLABreached,
 		FilterSlaAtRisk:   filterSLAAtRisk,
+		Search:            query,
 		PageSize:          pageSize + 1,
 	})
 	if err != nil {
@@ -102,6 +105,7 @@ func (h *Handler) TicketsList(w http.ResponseWriter, r *http.Request) {
 		KPIs:       ticketKPIView(kpis),
 		Items:      items,
 		Tab:        tab,
+		Query:      query,
 		CanWrite:   canWrite,
 		NextCursor: nextCursor,
 		Err:        ticketsErrMsg(r.URL.Query().Get("err")),

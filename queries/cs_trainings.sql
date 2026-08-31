@@ -75,6 +75,9 @@ WHERE (tr.training_date, tr.id) < (sqlc.arg(cursor_at)::timestamptz, sqlc.arg(cu
       ))
   )
   AND (sqlc.arg(filter_status) = '' OR tr.training_status = sqlc.arg(filter_status))
+  AND (sqlc.arg(search)::text = ''
+       OR tr.training_topic ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
 ORDER BY tr.training_date DESC, tr.id DESC
 LIMIT sqlc.arg(page_size);
 
