@@ -57,6 +57,11 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 -- membatasi; true → hanya desa tanpa pemilik. Inheren cakupan-all: pemakai
 -- ber-scope 'own' tak pernah punya baris owner-kosong, jadi handler hanya
 -- menyalakannya untuk peran ScopeAll (Manager/Admin).
+--
+-- search = pencarian teks (BL-6): '' → tak menyaring; selain itu ILIKE contains
+-- pada village_name/village_code (case-insensitive). MENYEMPITKAN di atas ownership,
+-- tak pernah memperluas — RLS+F3 tetap gerbang cakupan. Tetap keyset+LIMIT (bukan
+-- full scan tak berbatas). Indeks trigram ditunda (lihat catatan handler).
 SELECT * FROM accounts
 WHERE deleted_at IS NULL
   AND (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
@@ -66,6 +71,11 @@ WHERE deleted_at IS NULL
       OR (sqlc.arg(is_csm)::boolean AND (assigned_csm = sqlc.arg(uid) OR backup_csm = sqlc.arg(uid)))
   )
   AND (NOT sqlc.arg(unowned)::boolean OR account_owner IS NULL)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR village_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 

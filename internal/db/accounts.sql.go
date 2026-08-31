@@ -341,8 +341,13 @@ WHERE deleted_at IS NULL
       OR ($6::boolean AND (assigned_csm = $5 OR backup_csm = $5))
   )
   AND (NOT $7::boolean OR account_owner IS NULL)
+  AND (
+      $8::text = ''
+      OR village_name ILIKE '%' || $8 || '%'
+      OR village_code ILIKE '%' || $8 || '%'
+  )
 ORDER BY created_at DESC, id DESC
-LIMIT $8
+LIMIT $9
 `
 
 type ListAccountsParams struct {
@@ -353,6 +358,7 @@ type ListAccountsParams struct {
 	Uid             *int64             `json:"uid"`
 	IsCsm           bool               `json:"is_csm"`
 	Unowned         bool               `json:"unowned"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -375,6 +381,11 @@ type ListAccountsParams struct {
 // membatasi; true → hanya desa tanpa pemilik. Inheren cakupan-all: pemakai
 // ber-scope 'own' tak pernah punya baris owner-kosong, jadi handler hanya
 // menyalakannya untuk peran ScopeAll (Manager/Admin).
+//
+// search = pencarian teks (BL-6): ” → tak menyaring; selain itu ILIKE contains
+// pada village_name/village_code (case-insensitive). MENYEMPITKAN di atas ownership,
+// tak pernah memperluas — RLS+F3 tetap gerbang cakupan. Tetap keyset+LIMIT (bukan
+// full scan tak berbatas). Indeks trigram ditunda (lihat catatan handler).
 func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]Account, error) {
 	rows, err := q.db.Query(ctx, listAccounts,
 		arg.CursorCreatedAt,
@@ -384,6 +395,7 @@ func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]A
 		arg.Uid,
 		arg.IsCsm,
 		arg.Unowned,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {
