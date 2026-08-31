@@ -1,7 +1,9 @@
 package panel
 
 import (
+	"net/url"
 	"strconv"
+	"strings"
 
 	"go_starter/internal/ui"
 
@@ -46,12 +48,17 @@ const (
 // ber-cakupan 'all' (Manager/Admin); handler yang memutuskan. Untuk peran 'own'
 // (Sales/CSM) All≡My (mereka cuma lihat desanya), jadi tab redundan & disembunyikan.
 // ActiveView = tab aktif (AccView*), menentukan sorotan & param yang diteruskan pager.
+//
+// Query = kata kunci pencarian aktif (BL-6). "" = tanpa pencarian. Diteruskan
+// ke kotak cari (mengisi ulang input), pager, dan tautan tab agar pencarian
+// bertahan saat pindah halaman/tab. Handler yang men-TrimSpace & menyaring.
 type AccountsListView struct {
 	Base       string
 	Items      []AccountRow
 	CanWrite   bool
 	ShowTabs   bool
 	ActiveView string
+	Query      string
 	NextCursor string
 	Err        string
 	Msg        string
@@ -76,6 +83,7 @@ func AccountsList(v AccountsListView) g.Node {
 	if v.ShowTabs {
 		body = append(body, accountsTabs(v))
 	}
+	body = append(body, accountsSearch(v))
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "accounts-err", g.Text(v.Err)))
 	}
@@ -110,7 +118,7 @@ func accountsTabs(v AccountsListView) g.Node {
 		if v.ActiveView == view {
 			cls += " tab-active"
 		}
-		return h.A(h.Href(accountsListHref(v.Base, view)), h.Class(cls), g.Text(label))
+		return h.A(h.Href(accountsListHref(v.Base, view, v.Query)), h.Class(cls), g.Text(label))
 	}
 	return g.Group([]g.Node{
 		h.Div(
@@ -138,19 +146,71 @@ func accountsTabDesc(view string) string {
 	}
 }
 
-// accountsListHref merakit URL daftar untuk sebuah view. all/"" = tanpa param
-// (URL kanonik daftar); selain itu ?view=<view>.
-func accountsListHref(base, view string) string {
-	if view == "" || view == AccViewAll {
+// accountsListHref merakit URL daftar untuk sebuah view + pencarian. all/"" =
+// tanpa param view (URL kanonik daftar). q di-QueryEscape (bisa berisi spasi/
+// karakter khusus); view aman (enum internal). Param after SENGAJA tak ikut:
+// tautan tab/reset selalu mulai dari halaman pertama.
+func accountsListHref(base, view, query string) string {
+	parts := make([]string, 0, 2)
+	if view != "" && view != AccViewAll {
+		parts = append(parts, "view="+view)
+	}
+	if query != "" {
+		parts = append(parts, "q="+url.QueryEscape(query))
+	}
+	if len(parts) == 0 {
 		return base + "/accounts"
 	}
-	return base + "/accounts?view=" + view
+	return base + "/accounts?" + strings.Join(parts, "&")
+}
+
+// accountsSearch = kotak pencarian (BL-6). Form GET murni (navigasi bookmarkable,
+// lolos CSP gotcha #16) — submit membuang `after` sehingga hasil selalu mulai
+// dari halaman pertama (reset paging saat kueri berubah). Tab aktif dijaga lewat
+// input tersembunyi. Mobile-first: input text-base (≥16px → iOS tak auto-zoom),
+// min-h-11 (tap ≥44px), flex-wrap agar tak meluber di 375px.
+func accountsSearch(v AccountsListView) g.Node {
+	fields := []g.Node{
+		h.Input(
+			h.Type("search"), h.Name("q"), h.Value(v.Query),
+			h.Placeholder("Cari desa — nama atau kode…"),
+			h.Class("input input-bordered text-base w-full sm:max-w-xs min-h-11 min-w-0"),
+			g.Attr("aria-label", "Cari desa"),
+		),
+	}
+	if v.ActiveView != "" && v.ActiveView != AccViewAll {
+		fields = append(fields, h.Input(h.Type("hidden"), h.Name("view"), h.Value(v.ActiveView)))
+	}
+	fields = append(fields, h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"), g.Text("Cari")))
+	if v.Query != "" {
+		fields = append(fields, h.A(
+			h.Href(accountsListHref(v.Base, v.ActiveView, "")),
+			h.Class("btn btn-ghost min-h-11"), g.Text("Reset")))
+	}
+	return h.Form(
+		h.Method("get"), h.Action(v.Base+"/accounts"),
+		h.Class("flex flex-wrap items-center gap-2 min-w-0"),
+		g.Group(fields),
+	)
 }
 
 // emptyAccounts = pesan kosong jujur. Halaman pertama benar-benar kosong vs
 // halaman kedua yang kosong (setelah cursor) dibedakan: yang kedua menawarkan
 // jalan kembali alih-alih "belum ada desa" yang berbohong.
 func emptyAccounts(v AccountsListView) g.Node {
+	if v.Query != "" {
+		// Pencarian tak berhasil: bukan "belum ada desa" (yang berbohong), tapi
+		// "tak ada yang cocok" + jalan keluar menghapus pencarian.
+		return h.Div(
+			h.Class("card bg-base-100 border border-base-300"),
+			h.Div(h.Class("card-body items-start"),
+				h.P(h.Class("text-base-content/70"),
+					g.Text("Tak ada desa yang cocok dengan pencarian Anda.")),
+				h.A(h.Href(accountsListHref(v.Base, v.ActiveView, "")), h.Class("btn btn-ghost btn-sm min-h-11"),
+					g.Text("« Hapus pencarian")),
+			),
+		)
+	}
 	if v.NextCursor == "" {
 		// Bisa halaman-setelah-cursor yang kebetulan habis: tawarkan kembali.
 		return h.Div(
@@ -158,7 +218,7 @@ func emptyAccounts(v AccountsListView) g.Node {
 			h.Div(h.Class("card-body items-start"),
 				h.P(h.Class("text-base-content/70"),
 					g.Text("Belum ada desa yang cocok. Tambah desa untuk memulai.")),
-				h.A(h.Href(accountsListHref(v.Base, v.ActiveView)), h.Class("btn btn-ghost btn-sm min-h-11"),
+				h.A(h.Href(accountsListHref(v.Base, v.ActiveView, "")), h.Class("btn btn-ghost btn-sm min-h-11"),
 					g.Text("« Kembali ke awal")),
 			),
 		)
@@ -232,6 +292,9 @@ func accountsPager(v AccountsListView) g.Node {
 	href := v.Base + "/accounts?after=" + v.NextCursor
 	if v.ActiveView != "" && v.ActiveView != AccViewAll {
 		href += "&view=" + v.ActiveView
+	}
+	if v.Query != "" {
+		href += "&q=" + url.QueryEscape(v.Query)
 	}
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),

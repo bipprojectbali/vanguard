@@ -526,6 +526,11 @@ type Querier interface {
 	// membatasi; true → hanya desa tanpa pemilik. Inheren cakupan-all: pemakai
 	// ber-scope 'own' tak pernah punya baris owner-kosong, jadi handler hanya
 	// menyalakannya untuk peran ScopeAll (Manager/Admin).
+	//
+	// search = pencarian teks (BL-6): '' → tak menyaring; selain itu ILIKE contains
+	// pada village_name/village_code (case-insensitive). MENYEMPITKAN di atas ownership,
+	// tak pernah memperluas — RLS+F3 tetap gerbang cakupan. Tetap keyset+LIMIT (bukan
+	// full scan tak berbatas). Indeks trigram ditunda (lihat catatan handler).
 	ListAccounts(ctx context.Context, arg ListAccountsParams) ([]Account, error)
 	// Desa yang boleh DITULIS aktor (F3), untuk dropdown pemilih desa di form "Tambah
 	// Kontak" global. Predikat ownership IDENTIK ListAccounts (scope_all/is_sales/

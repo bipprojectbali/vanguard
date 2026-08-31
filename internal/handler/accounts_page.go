@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -48,8 +49,12 @@ func (h *Handler) AccountsList(w http.ResponseWriter, r *http.Request) {
 	// dinormalkan: showTabs=false → "" (filter cakupan asli); liar → AccViewAll.
 	showTabs := db.AccountsScopeFor(dataScope) == db.ScopeAll
 	view := normalizeAccountsView(r.URL.Query().Get("view"), showTabs)
+	// q = pencarian teks bebas (BL-6). Kosong → tak menyaring. TrimSpace agar
+	// spasi murni tak jadi "%  %". MENYEMPITKAN di atas F3, tak pernah memperluas.
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	params := accountsListParams(dataScope, view, uid)
+	params.Search = query
 	params.CursorCreatedAt, params.CursorID = pageCursor(r)
 	// Ambil SATU lebih (pageSize+1): kelebihan itulah penanda "masih ada" untuk
 	// splitPage — tanpanya tombol "Berikutnya" muncul di halaman terakhir lalu
@@ -94,6 +99,7 @@ func (h *Handler) AccountsList(w http.ResponseWriter, r *http.Request) {
 		CanWrite:   canWriteAccounts(ctx),
 		ShowTabs:   showTabs,
 		ActiveView: view,
+		Query:      query,
 		NextCursor: nextCursor,
 		Err:        wsErrMsg(r.URL.Query().Get("err")),
 		Msg:        accountsMsg(r.URL.Query().Get("ok")),
