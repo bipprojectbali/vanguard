@@ -70,3 +70,49 @@ func TestContactForm_KeteranganCheckbox(t *testing.T) {
 		}
 	}
 }
+
+// contactFormGlobalFixture = mode GLOBAL (Accounts terisi) → merender pemilih
+// desa induk yang bisa diketik (BL-5). Beda dgn fixture nested di atas yang
+// AccountBase-nya terisi & tanpa Accounts.
+func contactFormGlobalFixture() ContactFormView {
+	f := contactFormViewFixture()
+	f.AccountBase = ""
+	f.Action = "/w/desa/contacts"
+	f.ListHref = "/w/desa/contacts"
+	f.Accounts = []AccountOption{
+		{ID: 7, Name: "Desa Sukamaju"},
+		{ID: 12, Name: "Desa Mekarsari"},
+	}
+	return f
+}
+
+// TestContactForm_GlobalDesaTypeahead — di mode global, pemilih desa induk WAJIB
+// bisa diketik/dicari (BL-5): input teks + <datalist> berisi nama desa + input
+// hidden name="account_id" (nilai ter-submit) + skrip same-origin accountpicker.js.
+// BUKAN lagi <select name="account_id"> polos.
+func TestContactForm_GlobalDesaTypeahead(t *testing.T) {
+	out := renderLeads(t, ContactForm(contactFormGlobalFixture()))
+
+	for _, want := range []string{
+		`data-account-picker`,             // wadah pemilih
+		`<datalist id="account-options">`, // sumber opsi native (CSP-safe)
+		`list="account-options"`,          // input tampak terhubung ke datalist
+		`data-account-search`,             // kait input ketik
+		`name="account_id"`,               // nilai id yang ter-submit
+		`type="hidden"`,                   // id disimpan di input tersembunyi
+		`data-account-value`,              // kait input hidden
+		`data-account-id="7"`,             // opsi membawa id numerik
+		`data-account-id="12"`,
+		"Desa Sukamaju", "Desa Mekarsari", // label desa tetap terlihat
+		`/static/accountpicker.js`, // skrip typeahead same-origin dimuat
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("pemilih desa typeahead harus memuat %q:\n%s", want, out)
+		}
+	}
+
+	// Regresi: account_id tak boleh lagi dirender sebagai <select> polos.
+	if strings.Contains(out, `<select id="f-account_id"`) {
+		t.Errorf("account_id tak boleh lagi <select> polos:\n%s", out)
+	}
+}

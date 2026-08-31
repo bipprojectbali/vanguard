@@ -118,7 +118,7 @@ func ContactForm(v ContactFormView) g.Node {
 	// ulang backend (loadOwnedAccount → 404 bila di luar cakupan).
 	if isGlobal {
 		form = append(form, formCard("Desa Induk",
-			contactAccountSelectField(v.Accounts),
+			contactAccountPickerField(v.Accounts),
 		))
 	}
 	form = append(form,
@@ -162,30 +162,55 @@ func ContactForm(v ContactFormView) g.Node {
 	)
 	body = append(body, h.FormEl(form...))
 
+	// Pemilih desa induk bisa diketik/dicari (BL-5) — interaksi typeahead di file
+	// same-origin (CSP script-src 'self', pola regions.js). HANYA mode global yang
+	// merender pemilih itu, jadi skrip pun hanya dimuat di sana.
+	if isGlobal {
+		body = append(body, h.Script(h.Src("/static/accountpicker.js"), h.Defer()))
+	}
+
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
-// contactAccountSelectField merender dropdown desa induk (mode global). required: satu
-// desa WAJIB dipilih (kontak selalu milik sebuah desa). Placeholder disabled
-// mencegah submit tanpa memilih; backend tetap memvalidasi (loadOwnedAccount).
-func contactAccountSelectField(accounts []AccountOption) g.Node {
-	nodes := []g.Node{
-		h.Option(h.Value(""), h.Disabled(), h.Selected(), g.Text("— Pilih desa —")),
-	}
+// contactAccountPickerField merender pemilih desa induk yang BISA DIKETIK/DICARI
+// (BL-5), menggantikan <select> polos yang sulit dinavigasi saat desa banyak.
+// CSP-safe tanpa lib pihak-ketiga: native <datalist> + input teks, dipandu
+// static/accountpicker.js (same-origin, script-src 'self').
+//
+// Dua kontrol, satu tampak satu tersembunyi:
+//   - input teks tampak (data-account-search) TAK bernama → tak ter-submit
+//     sendiri; hanya alat ketik/cari yang memfilter <datalist>. required =
+//     jaring klien agar tak submit kosong.
+//   - input hidden name="account_id" (data-account-value) = nilai SEBENARNYA
+//     yang ter-submit; diisi accountpicker.js dari data-account-id opsi yang
+//     namanya cocok persis. Ketikan yang tak cocok opsi → hidden kosong +
+//     setCustomValidity → submit ditahan (backend tetap penjaga: loadOwnedAccount
+//     → 404 di luar cakupan, jadi memalsu id tak menembus F3).
+func contactAccountPickerField(accounts []AccountOption) g.Node {
+	opts := make([]g.Node, 0, len(accounts))
 	for _, a := range accounts {
-		nodes = append(nodes, h.Option(
-			h.Value(strconv.FormatInt(a.ID, 10)), g.Text(a.Name),
+		opts = append(opts, h.Option(
+			h.Value(a.Name),
+			g.Attr("data-account-id", strconv.FormatInt(a.ID, 10)),
 		))
 	}
 	return h.Div(
 		h.Class("grid gap-1 min-w-0 sm:col-span-2"),
-		labelFor("Desa", "f-account_id", true),
-		h.Select(
-			append([]g.Node{
-				h.ID("f-account_id"), h.Name("account_id"),
-				h.Class("select text-base w-full"), h.Required(),
-			}, g.Group(nodes))...,
+		g.Attr("data-account-picker", ""),
+		labelFor("Desa", "f-account_id_search", true),
+		ui.Input(
+			h.ID("f-account_id_search"), h.Type("text"),
+			h.List("account-options"), h.Placeholder("Ketik nama desa…"),
+			g.Attr("autocomplete", "off"), g.Attr("data-account-search", ""),
+			h.Class("input text-base w-full min-h-11"), h.Required(),
 		),
+		h.Input(
+			h.Type("hidden"), h.ID("f-account_id"), h.Name("account_id"),
+			g.Attr("data-account-value", ""),
+		),
+		h.DataList(append([]g.Node{h.ID("account-options")}, opts...)...),
+		h.P(h.Class("text-xs text-base-content/60"),
+			g.Text("Ketik untuk mencari, lalu pilih desa dari daftar yang muncul.")),
 	)
 }
 
