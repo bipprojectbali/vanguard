@@ -35,6 +35,7 @@ func TestClassify(t *testing.T) {
 
 func TestIsExcluded(t *testing.T) {
 	excluded := []string{
+		"routes.go", // SSOT semua route, sengaja over-limit
 		"internal/db/users.sql.go",
 		"internal/x/foo.generated.go",
 		"internal/x/foo_gen.go",
@@ -47,6 +48,10 @@ func TestIsExcluded(t *testing.T) {
 	}
 	if isExcluded("internal/handler/auth.go") {
 		t.Error("file normal tak boleh excluded")
+	}
+	// Hanya routes.go di ROOT yang SSOT; routes.go bersarang tetap discan.
+	if isExcluded("internal/foo/routes.go") {
+		t.Error("routes.go bersarang tak boleh ikut excluded")
 	}
 }
 

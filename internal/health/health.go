@@ -64,6 +64,13 @@ func isExcluded(path string) bool {
 	if strings.HasSuffix(path, ".generated.go") || strings.HasSuffix(path, "_gen.go") {
 		return true
 	}
+	// routes.go = SATU sumber kebenaran semua route (SSOT; lihat CLAUDE.md &
+	// komentar di routes.go). Sengaja di atas ambang tipe supaya "semua route
+	// di satu tempat" tak dilanggar; dikecualikan agar keputusan arsitektur
+	// terdokumentasi tak ditandai merah tiap scan.
+	if path == "routes.go" {
+		return true
+	}
 	for _, seg := range []string{"vendor/", ".git/", "tmp/", "__mocks__/", "__fixtures__/"} {
 		// Cocok baik sebagai prefix (vendor/x) maupun segmen (a/vendor/x).
 		if strings.HasPrefix(path, seg) || strings.Contains(path, "/"+seg) {
