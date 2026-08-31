@@ -85,6 +85,7 @@ func (h *Handler) LeadsList(w http.ResponseWriter, r *http.Request) {
 		Items:      items,
 		Tab:        tab,
 		CanWrite:   canWriteLeads(ctx),
+		HideMyTab:  filter.IsOwn, // BL-1: cakupan 'own' → "Semua" ≡ "Lead Saya"
 		NextCursor: nextCursor,
 		Err:        wsErrMsg(r.URL.Query().Get("err")),
 		Msg:        leadsMsg(r.URL.Query().Get("ok")),
