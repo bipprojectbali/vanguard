@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -59,6 +60,7 @@ func (h *Handler) SuccessPlansList(w http.ResponseWriter, r *http.Request) {
 	default:
 		tab = "" // normalisasi nilai liar → "" (semua)
 	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	cursorAt, cursorID := pageCursor(r)
 
@@ -69,6 +71,7 @@ func (h *Handler) SuccessPlansList(w http.ResponseWriter, r *http.Request) {
 		IsOwn:           filter.IsOwn,
 		Uid:             &uid,
 		FilterStatus:    filterStatus,
+		Search:          query,
 		PageSize:        pageSize + 1,
 	})
 	if err != nil {
@@ -91,6 +94,7 @@ func (h *Handler) SuccessPlansList(w http.ResponseWriter, r *http.Request) {
 	h.renderWorkspaceShell(w, r, "Success Plans", "/success-plans", panel.SuccessPlansList(panel.SuccessPlansListView{
 		Base:       base,
 		Tab:        tab,
+		Query:      query,
 		Tabs:       successPlansTabs,
 		Items:      items,
 		CanWrite:   canWrite,

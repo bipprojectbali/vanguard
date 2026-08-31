@@ -97,8 +97,10 @@ WHERE a.deleted_at IS NULL
        OR COALESCE(cs.health_status, '') = $5)
   AND (a.created_at, a.id) < ($6::timestamptz,
                                $7::bigint)
+  AND ($8::text = ''
+       OR a.village_name ILIKE '%' || $8 || '%')
 ORDER BY a.created_at DESC, a.id DESC
-LIMIT $8
+LIMIT $9
 `
 
 type ListHealthScoresParams struct {
@@ -109,6 +111,7 @@ type ListHealthScoresParams struct {
 	FilterStatus    interface{}        `json:"filter_status"`
 	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
 	CursorID        int64              `json:"cursor_id"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -144,6 +147,7 @@ func (q *Queries) ListHealthScores(ctx context.Context, arg ListHealthScoresPara
 		arg.FilterStatus,
 		arg.CursorCreatedAt,
 		arg.CursorID,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {

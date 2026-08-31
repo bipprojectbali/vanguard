@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -49,6 +50,7 @@ func (h *Handler) EngagementsList(w http.ResponseWriter, r *http.Request) {
 	default:
 		tab = "" // normalisasi nilai liar → "" (semua)
 	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	cursorAt, cursorID := pageCursor(r)
 
@@ -72,6 +74,7 @@ func (h *Handler) EngagementsList(w http.ResponseWriter, r *http.Request) {
 		Uid:               &uid,
 		FilterStatus:      filterStatus,
 		FilterType:        filterType,
+		Search:            query,
 		PageSize:          pageSize + 1,
 	})
 	if err != nil {
@@ -96,6 +99,7 @@ func (h *Handler) EngagementsList(w http.ResponseWriter, r *http.Request) {
 		KPIs:       engagementKPIView(kpis),
 		Items:      items,
 		Tab:        tab,
+		Query:      query,
 		CanWrite:   canWrite,
 		NextCursor: nextCursor,
 		Err:        engagementsErrMsg(r.URL.Query().Get("err")),

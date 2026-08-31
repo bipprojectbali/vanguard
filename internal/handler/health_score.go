@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -32,6 +33,10 @@ func (h *Handler) HealthScoreList(w http.ResponseWriter, r *http.Request) {
 	tab := r.URL.Query().Get("tab")
 	lp.FilterStatus = healthTabToStatus(tab)
 
+	// Pencarian bebas (BL-6) — menyaring pada nama desa yang tampil.
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	lp.Search = query
+
 	kpis, err := h.q(ctx).CountHealthScoreKPIs(ctx, healthScoreKPIParams(lp))
 	if err != nil {
 		h.Log.Error("health-scores: count kpis", "err", err)
@@ -59,6 +64,7 @@ func (h *Handler) HealthScoreList(w http.ResponseWriter, r *http.Request) {
 	h.renderWorkspaceShell(w, r, "Customer Health Score", "/health-scores", panel.HealthScoreList(panel.HealthScoreListView{
 		Base:       wsPath(slug, ""),
 		ActiveTab:  tab,
+		Query:      query,
 		NextCursor: nextCursor,
 		KPIs: panel.HealthScoreKPIs{
 			Total:    kpis.Total,

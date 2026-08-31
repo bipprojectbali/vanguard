@@ -82,6 +82,9 @@ WHERE (e.scheduled_at, e.id) < (sqlc.arg(cursor_scheduled_at)::timestamptz, sqlc
   )
   AND (sqlc.arg(filter_status) = '' OR e.status = sqlc.arg(filter_status))
   AND (sqlc.arg(filter_type)   = '' OR e.engagement_type = sqlc.arg(filter_type))
+  AND (sqlc.arg(search)::text = ''
+       OR e.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
 ORDER BY e.scheduled_at DESC, e.id DESC
 LIMIT sqlc.arg(page_size);
 

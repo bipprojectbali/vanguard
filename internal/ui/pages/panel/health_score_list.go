@@ -37,6 +37,7 @@ type HealthScoreRowView struct {
 type HealthScoreListView struct {
 	Base       string
 	ActiveTab  string
+	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	NextCursor string
 	KPIs       HealthScoreKPIs
 	Rows       []HealthScoreRowView
@@ -47,7 +48,10 @@ type HealthScoreListView struct {
 func HealthScoreList(v HealthScoreListView) g.Node {
 	return h.Div(h.Class("space-y-4"),
 		healthScoreKPICards(v.KPIs),
-		healthScoreTabs(v.Base, v.ActiveTab),
+		healthScoreTabs(v.Base, v.ActiveTab, v.Query),
+		searchBox(v.Base+"/health-scores", v.Query,
+			"Cari desa…", "Cari health score",
+			hiddenField{"tab", v.ActiveTab}),
 		healthScoreTable(v),
 	)
 }
@@ -72,7 +76,7 @@ func healthKPICard(label, value, valueClass string) g.Node {
 }
 
 // healthScoreTabs — filter tab Semua / Sehat / Berisiko / Kritis.
-func healthScoreTabs(base, active string) g.Node {
+func healthScoreTabs(base, active, query string) g.Node {
 	tabs := []struct{ key, label string }{
 		{"", "Semua"},
 		{"sehat", "Sehat"},
@@ -81,10 +85,7 @@ func healthScoreTabs(base, active string) g.Node {
 	}
 	nodes := make([]g.Node, 0, len(tabs))
 	for _, t := range tabs {
-		href := base + "/health-scores"
-		if t.key != "" {
-			href += "?tab=" + t.key
-		}
+		href := withQuery(base+"/health-scores", query, hiddenField{"tab", t.key})
 		cls := "tab"
 		if t.key == active {
 			cls += " tab-active"
@@ -111,20 +112,28 @@ func healthScoreTable(v HealthScoreListView) g.Node {
 					h.Th(g.Text("Di Stage")),
 					h.Th(g.Text("")),
 				)),
-				h.TBody(healthScoreRows(v.Rows)),
+				h.TBody(healthScoreRows(v.Rows, v.Base, v.ActiveTab, v.Query)),
 			)),
-			healthScorePager(v.Base, v.ActiveTab, v.NextCursor),
+			healthScorePager(v.Base, v.ActiveTab, v.NextCursor, v.Query),
 		),
 	)
 }
 
-func healthScoreRows(rows []HealthScoreRowView) g.Node {
+func healthScoreRows(rows []HealthScoreRowView, base, tab, query string) g.Node {
 	if len(rows) == 0 {
-		return h.Tr(
-			h.Td(h.ColSpan("10"), h.Class("text-center text-base-content/50 py-8"),
-				g.Text("Belum ada data health score di ruang kerja ini."),
-			),
-		)
+		msg := "Belum ada data health score di ruang kerja ini."
+		cell := []g.Node{
+			h.ColSpan("10"), h.Class("text-center text-base-content/50 py-8"),
+		}
+		if query != "" {
+			msg = "Belum ada desa yang cocok pencarian."
+			cell = append(cell, h.Div(g.Text(msg)),
+				h.A(h.Href(withQuery(base+"/health-scores", "", hiddenField{"tab", tab})),
+					h.Class("btn btn-ghost btn-sm min-h-11 mt-2"), g.Text("« Reset pencarian")))
+			return h.Tr(h.Td(cell...))
+		}
+		cell = append(cell, g.Text(msg))
+		return h.Tr(h.Td(cell...))
 	}
 	nodes := make([]g.Node, 0, len(rows))
 	for _, row := range rows {
@@ -146,7 +155,7 @@ func healthScoreRows(rows []HealthScoreRowView) g.Node {
 	return g.Group(nodes)
 }
 
-func healthScorePager(base, tab, nextCursor string) g.Node {
+func healthScorePager(base, tab, nextCursor, query string) g.Node {
 	if nextCursor == "" {
 		return nil
 	}
@@ -154,6 +163,7 @@ func healthScorePager(base, tab, nextCursor string) g.Node {
 	if tab != "" {
 		href += "&tab=" + tab
 	}
+	href = appendQuery(href, query) // q bertahan ke halaman berikutnya
 	return h.Div(h.Class("flex justify-end p-3 border-t border-base-200"),
 		h.A(h.Href(href), h.Class("btn btn-sm btn-ghost"), g.Text("Berikutnya →")),
 	)

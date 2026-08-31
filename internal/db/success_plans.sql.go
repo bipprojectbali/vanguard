@@ -162,8 +162,11 @@ WHERE (sp.created_at, sp.id) < ($1::timestamptz, $2::bigint)
       ))
   )
   AND ($6 = '' OR sp.plan_status = $6)
+  AND ($7::text = ''
+       OR sp.plan_name ILIKE '%' || $7 || '%'
+       OR a.village_name ILIKE '%' || $7 || '%')
 ORDER BY sp.created_at DESC, sp.id DESC
-LIMIT $7
+LIMIT $8
 `
 
 type ListSuccessPlansParams struct {
@@ -173,6 +176,7 @@ type ListSuccessPlansParams struct {
 	IsOwn           bool               `json:"is_own"`
 	Uid             *int64             `json:"uid"`
 	FilterStatus    interface{}        `json:"filter_status"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -211,6 +215,7 @@ func (q *Queries) ListSuccessPlans(ctx context.Context, arg ListSuccessPlansPara
 		arg.IsOwn,
 		arg.Uid,
 		arg.FilterStatus,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {

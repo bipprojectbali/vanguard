@@ -73,6 +73,7 @@ type CSTrainingsListView struct {
 	KPIs       CSTrainingKPIs
 	Items      []CSTrainingRow
 	Tab        string
+	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	CanWrite   bool
 	NextCursor string
 	Err        string
@@ -97,6 +98,9 @@ func CSTrainingsList(v CSTrainingsListView) g.Node {
 		),
 		csTrainingKPICards(v.KPIs, v.Base),
 		csTrainingTabsNav(v),
+		searchBox(v.Base+"/trainings", v.Query,
+			"Cari training — topik atau desa…", "Cari training",
+			hiddenField{"tab", v.Tab}),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "cs-trainings-err", g.Text(v.Err)))
@@ -145,10 +149,7 @@ func csTrainingKPICard(label, value, href, colorCls string) g.Node {
 func csTrainingTabsNav(v CSTrainingsListView) g.Node {
 	tabs := make([]g.Node, 0, len(csTrainingTabs))
 	for _, t := range csTrainingTabs {
-		href := v.Base + "/trainings"
-		if t.key != "" {
-			href += "?tab=" + t.key
-		}
+		href := withQuery(v.Base+"/trainings", v.Query, hiddenField{"tab", t.key})
 		cls := "tab"
 		if t.key == v.Tab {
 			cls += " tab-active font-medium"
@@ -159,6 +160,18 @@ func csTrainingTabsNav(v CSTrainingsListView) g.Node {
 }
 
 func emptyCSTrainings(v CSTrainingsListView) g.Node {
+	if v.Query != "" {
+		reset := withQuery(v.Base+"/trainings", "", hiddenField{"tab", v.Tab})
+		return h.Div(
+			h.Class("card bg-base-100 border border-base-300"),
+			h.Div(h.Class("card-body items-start"),
+				h.P(h.Class("text-base-content/70"),
+					g.Text("Belum ada training yang cocok pencarian.")),
+				h.A(h.Href(reset), h.Class("btn btn-ghost btn-sm min-h-11"),
+					g.Text("« Reset pencarian")),
+			),
+		)
+	}
 	if v.NextCursor != "" {
 		return h.Div(
 			h.Class("card bg-base-100 border border-base-300"),
@@ -275,6 +288,7 @@ func csTrainingsPager(v CSTrainingsListView) g.Node {
 	if v.Tab != "" {
 		href += "&tab=" + v.Tab
 	}
+	href = appendQuery(href, v.Query) // q bertahan ke halaman berikutnya
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
 		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),

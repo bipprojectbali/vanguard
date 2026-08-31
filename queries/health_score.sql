@@ -36,6 +36,8 @@ WHERE a.deleted_at IS NULL
        OR COALESCE(cs.health_status, '') = sqlc.arg(filter_status))
   AND (a.created_at, a.id) < (sqlc.arg(cursor_created_at)::timestamptz,
                                sqlc.arg(cursor_id)::bigint)
+  AND (sqlc.arg(search)::text = ''
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
 ORDER BY a.created_at DESC, a.id DESC
 LIMIT sqlc.arg(page_size);
 

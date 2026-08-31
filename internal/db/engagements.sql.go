@@ -282,8 +282,11 @@ WHERE (e.scheduled_at, e.id) < ($1::timestamptz, $2::bigint)
   )
   AND ($6 = '' OR e.status = $6)
   AND ($7   = '' OR e.engagement_type = $7)
+  AND ($8::text = ''
+       OR e.subject ILIKE '%' || $8 || '%'
+       OR a.village_name ILIKE '%' || $8 || '%')
 ORDER BY e.scheduled_at DESC, e.id DESC
-LIMIT $8
+LIMIT $9
 `
 
 type ListEngagementsParams struct {
@@ -294,6 +297,7 @@ type ListEngagementsParams struct {
 	Uid               *int64             `json:"uid"`
 	FilterStatus      interface{}        `json:"filter_status"`
 	FilterType        interface{}        `json:"filter_type"`
+	Search            string             `json:"search"`
 	PageSize          int32              `json:"page_size"`
 }
 
@@ -336,6 +340,7 @@ func (q *Queries) ListEngagements(ctx context.Context, arg ListEngagementsParams
 		arg.Uid,
 		arg.FilterStatus,
 		arg.FilterType,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {

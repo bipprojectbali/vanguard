@@ -257,8 +257,11 @@ WHERE (t.created_at, t.id) < ($1::timestamptz, $2::bigint)
   AND (NOT $8::boolean
        OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
            AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND ($9::text = ''
+       OR t.subject ILIKE '%' || $9 || '%'
+       OR a.village_name ILIKE '%' || $9 || '%')
 ORDER BY t.created_at DESC, t.id DESC
-LIMIT $9
+LIMIT $10
 `
 
 type ListTicketsParams struct {
@@ -270,6 +273,7 @@ type ListTicketsParams struct {
 	FilterStatus      interface{}        `json:"filter_status"`
 	FilterSlaBreached bool               `json:"filter_sla_breached"`
 	FilterSlaAtRisk   bool               `json:"filter_sla_at_risk"`
+	Search            string             `json:"search"`
 	PageSize          int32              `json:"page_size"`
 }
 
@@ -314,6 +318,7 @@ func (q *Queries) ListTickets(ctx context.Context, arg ListTicketsParams) ([]Lis
 		arg.FilterStatus,
 		arg.FilterSlaBreached,
 		arg.FilterSlaAtRisk,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {
