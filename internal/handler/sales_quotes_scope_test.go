@@ -173,3 +173,26 @@ func TestQuotes_CreateInheritsDealAccount(t *testing.T) {
 		t.Errorf("pajak negatif tak boleh menyimpan, grand=%s", numericStr(got.GrandTotal))
 	}
 }
+
+// TestQuotes_NewFormDefaultsPreparedByToActor: BL-15 — form BUAT quote (QuoteNew,
+// GET) mempreselect "Disusun oleh" ke user aktif (pembuat hampir selalu penyusun),
+// bukan "— Tidak ditugaskan —". Aktor = anggota tenant (ada di assignableMembers)
+// → opsi dengan value id-nya ter-`selected`. Murni default view; tak menyentuh
+// validasi backend (prepared_by tetap bisa diganti manual di POST).
+func TestQuotes_NewFormDefaultsPreparedByToActor(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
+	deal := env.seedDeal(t, acc.ID, &uid)
+	env.setDealStage(t, deal.ID, "Qualification") // BL-13: masuk jendela quoting
+
+	req := quotesReq(http.MethodGet, quoteListSub(deal.ID)+"/new", nil, itoa(deal.ID), "", "")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.QuoteNew)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("QuoteNew harus 200, got %d\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	want := `value="` + itoa(uid) + `" selected`
+	if !strings.Contains(body, want) {
+		t.Errorf("form buat harus preselect prepared_by = aktor (%q), tak ditemukan di body", want)
+	}
+}
