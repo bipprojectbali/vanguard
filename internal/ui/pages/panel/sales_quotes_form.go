@@ -29,11 +29,15 @@ type QuoteFormFields struct {
 // QuoteFormView = data halaman form. Action = URL POST tujuan. IsEdit mengubah
 // judul/label. Members = kandidat penyusun (prepared_by), F3-scoped di handler.
 type QuoteFormView struct {
-	Base    string
-	DealID  int64
-	Action  string
-	IsEdit  bool
-	Err     string
+	Base   string
+	DealID int64
+	Action string
+	IsEdit bool
+	Err    string
+	// ExpMin (BL-17) = batas bawah `min` input tanggal kedaluwarsa (hari ini,
+	// YYYY-MM-DD, zona aplikasi) — jaring klien agar picker tak menawarkan tanggal
+	// lampau. Backend (parseQuoteForm) tetap penjaga sesungguhnya.
+	ExpMin  string
 	Fields  QuoteFormFields
 	Members []AccountMemberOption
 }
@@ -65,7 +69,7 @@ func QuoteForm(v QuoteFormView) g.Node {
 
 		formCard("Identitas Quote",
 			field("Nama Quote", "quote_name", v.Fields.QuoteName, false, "text"),
-			field("Tanggal Kedaluwarsa", "expiration_date", v.Fields.ExpirationDate, false, "date"),
+			dateFieldMin("Tanggal Kedaluwarsa", "expiration_date", v.Fields.ExpirationDate, v.ExpMin),
 			memberSelect("Disusun oleh", "prepared_by", v.Fields.PreparedBy, v.Members),
 		),
 		formCard("Syarat & Catatan",

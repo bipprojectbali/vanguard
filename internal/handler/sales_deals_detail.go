@@ -78,9 +78,10 @@ func (h *Handler) dealQuotesPreview(ctx context.Context, dealID int64) []panel.Q
 		h.Log.Error("deals: quotes preview", "err", err)
 		return nil
 	}
+	today := todayInAppTZ() // BL-17: konsisten dengan daftar quote penuh
 	out := make([]panel.QuoteRow, 0, len(rows))
 	for _, q := range rows {
-		out = append(out, quoteRowView(q))
+		out = append(out, quoteRowView(q, today))
 	}
 	return out
 }

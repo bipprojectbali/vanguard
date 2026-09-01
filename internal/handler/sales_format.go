@@ -46,6 +46,29 @@ func dateStr(d pgtype.Date) string {
 // stempel waktu aktivitas v1; agregasi berzona belum diperlukan di sini.
 const dateTimeLayout = "2006-01-02T15:04"
 
+// todayInAppTZ = "hari ini" menurut zona aplikasi (appTZ), untuk perbandingan
+// date-only kedaluwarsa quote (BL-17). Tak di-truncate ke midnight: pembanding
+// dateBefore hanya melihat Y/M/D, komponen jam diabaikan — menghindari skew batas
+// hari saat zona non-UTC (bertetangga gotcha #14: simpan UTC, banding berzona).
+func todayInAppTZ() time.Time { return time.Now().In(appTZ) }
+
+// dateBefore membandingkan DUA tanggal secara date-only (Y/M/D) di zona masing-
+// masing: true bila a jatuh pada kalender SEBELUM b. Dipakai enforce expiration
+// quote (BL-17): expiration_date (midnight UTC dari optDate) vs todayInAppTZ.
+// Perbandingan kalender (bukan instant) agar "== hari ini" tak terhitung lampau
+// walau jam berbeda; hanya STRICTLY-before yang true.
+func dateBefore(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	if ay != by {
+		return ay < by
+	}
+	if am != bm {
+		return am < bm
+	}
+	return ad < bd
+}
+
 // optDateTime mengurai stempel waktu opsional (mis. activity_at pada Call):
 // kosong → (NULL, ""); terisi & sah → (Timestamptz valid, ""); tak terurai →
 // (zero, "datetime"). Menerima varian berdetik dari beberapa browser.

@@ -35,7 +35,7 @@ func (h *Handler) QuoteUpdate(w http.ResponseWriter, r *http.Request) {
 	if !h.requireQuotableStage(w, r, d.Stage, quoteSub(dealID, quoteID)) {
 		return
 	}
-	form, errCode := parseQuoteForm(r.FormValue)
+	form, errCode := parseQuoteForm(r.FormValue, todayInAppTZ())
 	if errCode != "" {
 		wsRedirect(w, r, quoteSub(dealID, quoteID)+"/edit", errCode)
 		return

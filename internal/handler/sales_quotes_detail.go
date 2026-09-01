@@ -110,6 +110,7 @@ func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64
 		CanWrite:     canWriteDeals(ctx),
 		Quotable:     quotableStage(stage), // BL-13: gate stage (mutasi vs arsip)
 		StageLockMsg: stageLockMsg(stage),
+		Expired:      quoteExpired(q.QuoteStatus, q.ExpirationDate, todayInAppTZ()), // BL-17
 	}
 }
 

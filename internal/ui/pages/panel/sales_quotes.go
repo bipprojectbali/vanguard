@@ -23,6 +23,10 @@ type QuoteRow struct {
 	Status     string
 	GrandTotal string
 	Expiration string
+	// Expired (BL-17) = penanda kedaluwarsa computed-on-read, di-precompute
+	// handler (Draft dikecualikan). Ditampilkan sebagai badge terpisah dari
+	// status — quote bisa kedaluwarsa walau status belum diubah manual ke "Expired".
+	Expired bool
 }
 
 // QuotesListView = data halaman daftar quote satu deal. Quotable (BL-13) =
@@ -116,7 +120,8 @@ func quoteTableRow(dealBase string, q QuoteRow) g.Node {
 		link(orDash(q.EntityCode), "py-2 pr-4 font-mono text-xs"),
 		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), h.Class("block truncate font-medium"),
 			g.Text(orDash(q.QuoteName)))),
-		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), quoteStatusBadge(q.Status))),
+		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), h.Class("flex flex-wrap items-center gap-1"),
+			quoteStatusBadge(q.Status), ui.When(q.Expired, quoteExpiredBadge()))),
 		link(orDash(q.GrandTotal), "py-2 pr-4"),
 		link(orDash(q.Expiration), "py-2"),
 	)
@@ -135,6 +140,14 @@ func quoteStatusBadge(status string) g.Node {
 		cls = "badge badge-info"
 	}
 	return h.Span(h.Class(cls), g.Text(orDash(status)))
+}
+
+// quoteExpiredBadge = penanda "Kedaluwarsa" (BL-17), terpisah dari status. Token
+// semantik daisyUI `warning` (peringatan, bukan galat/status terminal) — quote
+// mungkin masih bisa direvisi ulang dengan re-tanggal. Dipakai list, kartu deal,
+// & baris identitas builder.
+func quoteExpiredBadge() g.Node {
+	return h.Span(h.Class("badge badge-warning badge-sm"), g.Text("Kedaluwarsa"))
 }
 
 func emptyQuotes() g.Node {

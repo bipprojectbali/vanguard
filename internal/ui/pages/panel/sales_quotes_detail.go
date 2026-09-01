@@ -76,12 +76,35 @@ type QuoteDetailView struct {
 	// disembunyikan, StageLockMsg jadi banner. Flag di-precompute handler.
 	Quotable     bool
 	StageLockMsg string
+	// Expired (BL-17) = penanda kedaluwarsa computed-on-read (Draft dikecualikan),
+	// di-precompute handler. Badge muncul di baris "Kedaluwarsa" kartu identitas —
+	// terpisah dari Status (bisa kedaluwarsa walau status belum diubah manual).
+	Expired bool
 }
 
 // CanMutate = boleh mengubah quote/item (punya izin tulis DAN deal di jendela
 // quoting). Gerbang tunggal untuk semua kontrol tulis builder (BL-13); backend
 // tetap penjaga sesungguhnya.
 func (v QuoteDetailView) CanMutate() bool { return v.CanWrite && v.Quotable }
+
+// quoteIdentityCard = kartu "Identitas Quote". Sebagian besar baris teks polos
+// (reuse detailRow/cardRows), tetapi baris "Kedaluwarsa" bisa membawa badge
+// penanda kedaluwarsa (BL-17) → tak lewat detailCard (khusus teks). Draft &
+// tanggal sah tak menampilkan badge (v.Expired sudah di-precompute handler).
+func quoteIdentityCard(v QuoteDetailView) g.Node {
+	expVal := g.Node(g.Text(orDash(v.Expiration)))
+	if v.Expired {
+		expVal = h.Span(h.Class("flex flex-wrap items-center gap-2"),
+			g.Text(orDash(v.Expiration)), quoteExpiredBadge())
+	}
+	return cardRows("Identitas Quote", "",
+		detailRow("Desa", g.Text(orDash(v.AccountLabel))),
+		detailRow("Kedaluwarsa", expVal),
+		detailRow("Disusun oleh", g.Text(orDash(v.PreparedBy))),
+		detailRow("Catatan Pembayaran", g.Text(orDash(v.PaymentTerms))),
+		detailRow("Catatan / Syarat Lainnya", g.Text(orDash(v.NotesTerms))),
+	)
+}
 
 // QuoteDetail merender builder: header (nama+kode+status+aksi), kartu identitas,
 // tabel line items + total, lalu (bila boleh tulis) kelola item, tambah item, &
@@ -127,13 +150,7 @@ func QuoteDetail(v QuoteDetailView) g.Node {
 		body = append(body, ui.Alert(ui.VariantDefault, "quote-lock", g.Text(v.StageLockMsg)))
 	}
 	body = append(body,
-		detailCard("Identitas Quote", []detailField{
-			{"Desa", v.AccountLabel},
-			{"Kedaluwarsa", v.Expiration},
-			{"Disusun oleh", v.PreparedBy},
-			{"Catatan Pembayaran", v.PaymentTerms},
-			{"Catatan / Syarat Lainnya", v.NotesTerms},
-		}),
+		quoteIdentityCard(v),
 		quoteLineItems(v, quoteBase),
 	)
 	if v.CanMutate() {

@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -53,9 +54,10 @@ func (h *Handler) QuotesList(w http.ResponseWriter, r *http.Request) {
 	shown, nextCursor := splitPage(rows, func(q db.Quote) (pgtype.Timestamptz, int64) {
 		return q.CreatedAt, q.ID
 	})
+	today := todayInAppTZ() // BL-17: satu "hari ini" untuk semua baris halaman
 	items := make([]panel.QuoteRow, 0, len(shown))
 	for _, q := range shown {
-		items = append(items, quoteRowView(q))
+		items = append(items, quoteRowView(q, today))
 	}
 
 	base := wsPath(slugFromRequest(r), "")
@@ -106,6 +108,7 @@ func (h *Handler) QuoteNew(w http.ResponseWriter, r *http.Request) {
 		Err:    wsErrMsg(r.URL.Query().Get("err")),
 		// BL-15: pembuat quote hampir selalu = penyusunnya → default "Disusun oleh"
 		// ke user aktif (tetap bisa diganti manual). Edit prefill dari nilai tersimpan.
+		ExpMin:  todayInAppTZ().Format(dateLayout), // BL-17: min klien = hari ini
 		Fields:  panel.QuoteFormFields{PreparedBy: strconv.FormatInt(session.UserID(ctx), 10)},
 		Members: members,
 	}))
@@ -143,6 +146,7 @@ func (h *Handler) QuoteEdit(w http.ResponseWriter, r *http.Request) {
 		Action:  base + quoteSub(dealID, quoteID),
 		IsEdit:  true,
 		Err:     wsErrMsg(r.URL.Query().Get("err")),
+		ExpMin:  todayInAppTZ().Format(dateLayout), // BL-17: min klien = hari ini
 		Fields:  quoteFormFields(q),
 		Members: members,
 	}))
@@ -150,7 +154,7 @@ func (h *Handler) QuoteEdit(w http.ResponseWriter, r *http.Request) {
 
 // quoteRowView memetakan satu quote → baris daftar. Angka SUDAH diformat; status
 // mentah (badge diputuskan view). Dipakai daftar quote & kartu quote detail deal.
-func quoteRowView(q db.Quote) panel.QuoteRow {
+func quoteRowView(q db.Quote, today time.Time) panel.QuoteRow {
 	return panel.QuoteRow{
 		ID:         q.ID,
 		EntityCode: deref(q.EntityCode),
@@ -158,5 +162,6 @@ func quoteRowView(q db.Quote) panel.QuoteRow {
 		Status:     q.QuoteStatus,
 		GrandTotal: formatRupiah(q.GrandTotal),
 		Expiration: dateStr(q.ExpirationDate),
+		Expired:    quoteExpired(q.QuoteStatus, q.ExpirationDate, today), // BL-17
 	}
 }
