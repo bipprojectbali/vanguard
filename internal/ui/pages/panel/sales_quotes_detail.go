@@ -131,8 +131,8 @@ func QuoteDetail(v QuoteDetailView) g.Node {
 			{"Desa", v.AccountLabel},
 			{"Kedaluwarsa", v.Expiration},
 			{"Disusun oleh", v.PreparedBy},
-			{"Termin Pembayaran", v.PaymentTerms},
-			{"Catatan / Syarat", v.NotesTerms},
+			{"Catatan Pembayaran", v.PaymentTerms},
+			{"Catatan / Syarat Lainnya", v.NotesTerms},
 		}),
 		quoteLineItems(v, quoteBase),
 	)

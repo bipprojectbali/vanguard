@@ -196,3 +196,36 @@ func TestQuotes_NewFormDefaultsPreparedByToActor(t *testing.T) {
 		t.Errorf("form buat harus preselect prepared_by = aktor (%q), tak ditemukan di body", want)
 	}
 }
+
+// TestQuotes_FormUsesRefinedTermLabels: BL-16 — label field terms diperhalus
+// (tetap 2 field terpisah, kolom/name tak berubah): "Termin Pembayaran" →
+// "Catatan Pembayaran", "Catatan / Syarat" → "Catatan / Syarat Lainnya". Form
+// buat harus merender label baru & tak lagi label lama. Atribut name tetap
+// (payment_terms/notes_terms) → backend parse tak terpengaruh.
+func TestQuotes_FormUsesRefinedTermLabels(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
+	deal := env.seedDeal(t, acc.ID, &uid)
+	env.setDealStage(t, deal.ID, "Qualification")
+
+	req := quotesReq(http.MethodGet, quoteListSub(deal.ID)+"/new", nil, itoa(deal.ID), "", "")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.QuoteNew)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("QuoteNew harus 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"Catatan Pembayaran", "Catatan / Syarat Lainnya"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("form harus merender label baru %q", want)
+		}
+	}
+	if strings.Contains(body, "Termin Pembayaran") {
+		t.Errorf("label lama %q tak boleh muncul lagi", "Termin Pembayaran")
+	}
+	// Atribut name tetap → kontrak backend tak berubah.
+	for _, name := range []string{`name="payment_terms"`, `name="notes_terms"`} {
+		if !strings.Contains(body, name) {
+			t.Errorf("atribut %s wajib tetap ada (name tak berubah)", name)
+		}
+	}
+}
