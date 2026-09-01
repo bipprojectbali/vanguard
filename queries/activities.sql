@@ -44,6 +44,10 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 -- ActivitiesListFilter): scope_all → semua; is_own → owner_id = uid; keduanya
 -- false → NOL baris (fail-closed). context_filter menyaring view modul
 -- ('sales' untuk 4.4) — pemisah dari CS 6.5 / general M7.
+-- search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+-- insensitive) di ATAS ownership+context — tak pernah melebarkan baris (BL-6).
+-- Hanya subject (satu-satunya kolom teks bebas yang TAMPIL) jadi kunci cari;
+-- kind/status/target = enum/id (bukan teks bebas), owner = nama diresolusi handler.
 SELECT * FROM activities
 WHERE deleted_at IS NULL
   AND activity_context = sqlc.arg(context_filter)::text
@@ -52,6 +56,7 @@ WHERE deleted_at IS NULL
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND owner_id = sqlc.arg(uid))
   )
+  AND (sqlc.arg(search)::text = '' OR subject ILIKE '%' || sqlc.arg(search) || '%')
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
@@ -59,12 +64,15 @@ LIMIT sqlc.arg(page_size);
 -- Timeline satu entitas: semua aktivitas yang terkait ke target_type+target_id ini,
 -- keyset (created_at DESC, id DESC). Tanpa filter context (lintas sales/cs/general)
 -- dan tanpa F3 ownership — siapa pun yang boleh lihat entitasnya boleh lihat
--- timelinenya (gate ada di handler detail entitas masing-masing).
+-- timelinenya (gate ada di handler detail entitas masing-masing). search '' →
+-- tak menyaring; selain itu MEMPERSEMPIT subject (BL-6, ILIKE case-insensitive)
+-- di ATAS filter target — tak menembus ke entitas lain.
 SELECT * FROM activities
 WHERE deleted_at IS NULL
   AND target_type = sqlc.arg(target_type)::text
   AND target_id   = sqlc.arg(target_id)::bigint
   AND (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+  AND (sqlc.arg(search)::text = '' OR subject ILIKE '%' || sqlc.arg(search) || '%')
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
@@ -72,6 +80,8 @@ LIMIT sqlc.arg(page_size);
 -- Daftar SEMUA aktivitas lintas-context (sales+cs+general) — untuk halaman
 -- "Activities" top-level (M7). Ownership F3 sama dengan ListActivities (scope_all
 -- atau is_own); tanpa context_filter agar semua modul terwakili. Keyset identik.
+-- search '' → tak menyaring; selain itu MEMPERSEMPIT subject (BL-6, ILIKE case-
+-- insensitive) di ATAS F3 — tak pernah melebarkan baris di luar cakupan.
 SELECT * FROM activities
 WHERE deleted_at IS NULL
   AND (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
@@ -79,6 +89,7 @@ WHERE deleted_at IS NULL
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND owner_id = sqlc.arg(uid))
   )
+  AND (sqlc.arg(search)::text = '' OR subject ILIKE '%' || sqlc.arg(search) || '%')
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 

@@ -42,6 +42,7 @@ type ActivitiesListView struct {
 	Msg          string
 	Items        []ActivityRow
 	NextCursor   string
+	Query        string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	TargetFilter string // "type:id" saat difilter per-entitas; "" = semua
 	TargetLabel  string // nama entitas yang di-resolve handler (best-effort)
 }
@@ -74,6 +75,8 @@ func ActivitiesList(v ActivitiesListView) g.Node {
 			),
 			ui.When(v.CanWrite, activityNewButtons(v.Base, v.TargetFilter)),
 		),
+		searchBox(v.Base+"/activities", v.Query, "Cari aktivitas — subjek…", "Cari aktivitas",
+			hiddenField{"target", v.TargetFilter}),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "act-err", g.Text(v.Err)))
@@ -238,6 +241,18 @@ func activityTargetParts(targetType string, id int64) (seg, label string) {
 }
 
 func emptyActivities(v ActivitiesListView) g.Node {
+	// Pencarian tanpa hasil: pesan khusus + tautan reset (buang q, pertahankan target).
+	if v.Query != "" {
+		return h.Div(
+			h.Class("card bg-base-100 border border-base-300"),
+			h.Div(h.Class("card-body items-start"),
+				h.P(h.Class("text-base-content/70"),
+					g.Text("Tak ada aktivitas yang cocok pencarian.")),
+				h.A(h.Href(withQuery(v.Base+"/activities", "", hiddenField{"target", v.TargetFilter})),
+					h.Class("btn btn-ghost btn-sm min-h-11"), g.Text("Reset pencarian")),
+			),
+		)
+	}
 	if v.NextCursor == "" {
 		msg := "Belum ada aktivitas."
 		if v.TargetFilter != "" {
@@ -271,6 +286,7 @@ func activitiesPager(v ActivitiesListView) g.Node {
 	if v.TargetFilter != "" {
 		href += "&target=" + v.TargetFilter
 	}
+	href = appendQuery(href, v.Query) // q ikut ke halaman berikutnya (tetap dalam pencarian)
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
 		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),

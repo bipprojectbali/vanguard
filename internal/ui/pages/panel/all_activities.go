@@ -24,6 +24,7 @@ type AllActivitiesListView struct {
 	Msg        string
 	Items      []ActivityRow
 	NextCursor string
+	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
 }
 
 // AllActivitiesList merender halaman: header + tombol buat per-kind + alert +
@@ -39,6 +40,7 @@ func AllActivitiesList(v AllActivitiesListView) g.Node {
 			),
 			ui.When(v.CanWrite, allActivityNewButtons(v.Base)),
 		),
+		searchBox(v.Base+"/activity-log", v.Query, "Cari aktivitas — subjek…", "Cari aktivitas"),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "allact-err", g.Text(v.Err)))
@@ -148,6 +150,18 @@ func activityContextLabel(ctx string) string {
 }
 
 func emptyAllActivities(v AllActivitiesListView) g.Node {
+	// Pencarian tanpa hasil: pesan khusus + tautan reset (buang q).
+	if v.Query != "" {
+		return h.Div(
+			h.Class("card bg-base-100 border border-base-300"),
+			h.Div(h.Class("card-body items-start"),
+				h.P(h.Class("text-base-content/70"),
+					g.Text("Tak ada aktivitas yang cocok pencarian.")),
+				h.A(h.Href(v.Base+"/activity-log"), h.Class("btn btn-ghost btn-sm min-h-11"),
+					g.Text("Reset pencarian")),
+			),
+		)
+	}
 	if v.NextCursor == "" {
 		return h.Div(
 			h.Class("card bg-base-100 border border-base-300"),
@@ -171,9 +185,9 @@ func allActivitiesPager(v AllActivitiesListView) g.Node {
 		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
 			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
 	}
+	href := appendQuery(v.Base+"/activity-log?after="+v.NextCursor, v.Query)
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(v.Base+"/activity-log?after="+v.NextCursor), h.Class("btn min-h-11"),
-			g.Text("Berikutnya »")),
+		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
 	)
 }

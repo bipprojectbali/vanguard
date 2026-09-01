@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -29,6 +30,8 @@ func (h *Handler) ActivitiesList(w http.ResponseWriter, r *http.Request) {
 
 	cursorAt, cursorID := pageCursor(r)
 	base := wsPath(slugFromRequest(r), "")
+	// q = pencarian bebas (BL-6): MEMPERSEMPIT subject di atas F3/target, tak melebar.
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	// Cek ?target=type:id — dari tautan "Lihat semua" di kartu timeline entitas.
 	rawTarget := r.URL.Query().Get("target")
@@ -45,6 +48,7 @@ func (h *Handler) ActivitiesList(w http.ResponseWriter, r *http.Request) {
 			TargetID:        targetID,
 			CursorCreatedAt: cursorAt,
 			CursorID:        cursorID,
+			Search:          query,
 			PageSize:        pageSize + 1,
 		})
 		if err != nil {
@@ -65,6 +69,7 @@ func (h *Handler) ActivitiesList(w http.ResponseWriter, r *http.Request) {
 			ScopeAll:        filter.ScopeAll,
 			IsOwn:           filter.IsOwn,
 			Uid:             &uid,
+			Search:          query,
 			PageSize:        pageSize + 1,
 		})
 		if err != nil {
@@ -105,6 +110,7 @@ func (h *Handler) ActivitiesList(w http.ResponseWriter, r *http.Request) {
 			Msg:          activitiesMsg(r.URL.Query().Get("ok")),
 			Items:        items,
 			NextCursor:   nextCursor,
+			Query:        query,
 			TargetFilter: targetFilter,
 			TargetLabel:  targetLabel,
 		}))
