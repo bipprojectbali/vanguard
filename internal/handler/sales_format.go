@@ -52,6 +52,17 @@ const dateTimeLayout = "2006-01-02T15:04"
 // hari saat zona non-UTC (bertetangga gotcha #14: simpan UTC, banding berzona).
 func todayInAppTZ() time.Time { return time.Now().In(appTZ) }
 
+// dateOnly membangun pgtype.Date dari komponen kalender t (Y/M/D), dipatok midnight
+// UTC — pola simpan-tanggal yang sama dgn dashboard (gotcha #14: tanggal disimpan
+// date-only, tak membawa jam/zona). Dipakai create-from-deal (BL-21) menyetel
+// start_date/end_date langganan.
+func dateOnly(t time.Time) pgtype.Date {
+	return pgtype.Date{
+		Time:  time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC),
+		Valid: true,
+	}
+}
+
 // dateBefore membandingkan DUA tanggal secara date-only (Y/M/D) di zona masing-
 // masing: true bila a jatuh pada kalender SEBELUM b. Dipakai enforce expiration
 // quote (BL-17): expiration_date (midnight UTC dari optDate) vs todayInAppTZ.

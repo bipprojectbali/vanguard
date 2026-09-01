@@ -110,3 +110,14 @@ func numericGreater(a, b pgtype.Numeric) bool {
 func mulNumericInt(n pgtype.Numeric, k int64) pgtype.Numeric {
 	return ratToNumeric(new(big.Rat).Mul(ratFromNumeric(n), new(big.Rat).SetInt64(k)))
 }
+
+// divNumericInt membagi NUMERIC dengan bilangan bulat > 0 (EKSAK via big.Rat, lalu
+// dibulatkan ke moneyScale). Dipakai menurunkan MRR = amount / contract_term_months
+// saat create-from-deal (BL-21). k ≤ 0 dijaga pemanggil (peta termin→bulan selalu ≥ 1);
+// sebagai pengaman, k ≤ 0 mengembalikan 0 alih-alih panic pembagian nol.
+func divNumericInt(n pgtype.Numeric, k int64) pgtype.Numeric {
+	if k <= 0 {
+		return ratToNumeric(new(big.Rat))
+	}
+	return ratToNumeric(new(big.Rat).Quo(ratFromNumeric(n), new(big.Rat).SetInt64(k)))
+}

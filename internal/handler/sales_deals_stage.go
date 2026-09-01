@@ -25,9 +25,10 @@ func (h *Handler) DealStage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// Muat untuk menegakkan ownership (F3); isi baris tak dipakai — stage baru
-	// datang dari form, bukan dari nilai lama.
-	if _, ok := h.loadOwnedDeal(w, r, id); !ok {
+	// Muat untuk menegakkan ownership (F3); baris dipakai create-from-deal (BL-21)
+	// bila stage jadi Closed Won (account/owner/plan/amount/termin diturunkan darinya).
+	deal, ok := h.loadOwnedDeal(w, r, id)
+	if !ok {
 		return
 	}
 	idStr := strconv.FormatInt(id, 10)
@@ -52,6 +53,20 @@ func (h *Handler) DealStage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uid := session.UserID(ctx)
+
+	// BL-21: Closed Won → buat langganan LEBIH DULU. Atomik via urutan — gagal/validasi
+	// tak lolos → subscriptionFromWonDeal menulis ?err & return false → kita berhenti
+	// SEBELUM UpdateDealStage → deal tetap stage lama (keputusan d). newSub nil bila
+	// di-skip idempoten (deal sudah menautkan langganan).
+	var newSub *db.Subscription
+	if stage == "Closed Won" {
+		sub, ok := h.subscriptionFromWonDeal(w, r, deal, uid)
+		if !ok {
+			return
+		}
+		newSub = sub
+	}
+
 	if err := h.q(ctx).UpdateDealStage(ctx, db.UpdateDealStageParams{
 		Stage:         stage,
 		WinLossReason: winLoss,
@@ -64,7 +79,25 @@ func (h *Handler) DealStage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.auditWorkspace(ctx, uid, "deal.stage", session.TenantID(ctx), map[string]string{
+	tenantID := session.TenantID(ctx)
+	// Tautan balik deal→langganan + audit + notify hanya bila langganan benar-benar
+	// lahir dari transisi ini (dalam tx yang SAMA → tautan dua-arah atomik).
+	if newSub != nil {
+		subIDStr := strconv.FormatInt(newSub.ID, 10)
+		if err := h.q(ctx).SetDealCreatedSubscription(ctx, db.SetDealCreatedSubscriptionParams{
+			CreatedSubscriptionID: &newSub.ID, UpdatedBy: &uid, ID: id,
+		}); err != nil {
+			h.Log.Error("deals: link created subscription", "deal_id", id, "err", err)
+			wsRedirect(w, r, "/deals/"+idStr, "failed")
+			return
+		}
+		h.auditWorkspace(ctx, uid, "subscription.created.from_deal", tenantID, map[string]string{
+			"deal_id": idStr, "subscription_id": subIDStr,
+		})
+		h.notifyWonSubscription(ctx, tenantID, *newSub)
+	}
+
+	h.auditWorkspace(ctx, uid, "deal.stage", tenantID, map[string]string{
 		"deal_id": idStr, "stage": stage,
 	})
 	wsRedirectOK(w, r, "/deals/"+idStr, "staged")
