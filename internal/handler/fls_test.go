@@ -49,7 +49,7 @@ func TestFLS_Phone(t *testing.T) {
 		full bool
 	}{
 		{"sales", true},
-		{"admin", true}, // Admin CRM = pengelola workspace → akses penuh HP/WA
+		{"admin", true},    // Admin CRM = pengelola workspace → akses penuh HP/WA
 		{"manager", false}, // §8.3: nomor HP tetap tersamar bagi Manager
 		{"csm", false},
 		{"support", false},
