@@ -75,7 +75,7 @@ func dealFormFields(d db.Deal) panel.DealFormFields {
 		DealName:          d.DealName,
 		AccountID:         strconv.FormatInt(d.AccountID, 10),
 		DealType:          deref(d.DealType),
-		Amount:            numericStr(d.Amount),
+		Amount:            moneyRupiahStr(d.Amount),
 		Probability:       probabilityStr(d.Probability),
 		ExpectedCloseDate: dateStr(d.ExpectedCloseDate),
 		ForecastCategory:  deref(d.ForecastCategory),

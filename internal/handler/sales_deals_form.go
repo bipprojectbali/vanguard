@@ -92,8 +92,11 @@ func parseDealForm(fv func(string) string) (dealForm, string) {
 		f.SubscriptionTerm = &s
 	}
 
-	// Nilai deal (ARR): kosong = NULL; terisi wajib desimal sah.
-	amt, code := optNumeric(fv("amount"), "amount")
+	// Nilai deal (ARR): kosong = NULL; terisi wajib angka sah. Pemisah ribuan
+	// dibuang dulu (cleanThousands) agar input terkelompok "5.000.000" dari
+	// numgroup.js — atau ketikan manual tanpa JS — sama-sama sah (BL-8, sejajar
+	// estimated_value lead di BL-2). Rupiah bulat: titik = pemisah ribuan.
+	amt, code := optNumeric(cleanThousands(fv("amount")), "amount")
 	if code != "" {
 		return dealForm{}, code
 	}

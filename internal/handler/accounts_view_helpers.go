@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"go_starter/internal/authz"
 
@@ -87,5 +88,19 @@ func numericStr(n pgtype.Numeric) string {
 		return ""
 	}
 	s, _ := v.(string)
+	return s
+}
+
+// moneyRupiahStr = prefill untuk field UANG BULAT (moneyField + numgroup.js):
+// numericStr menjaga skala kolom NUMERIC(15,2) → "7500000.00", tapi numgroup.js
+// membuang SEMUA non-digit (titik desimal ikut) sehingga "7500000.00" akan
+// ditampilkan & disimpan ulang jadi "750000000" (100x). Buang bagian pecahan di
+// sini agar prefill = rupiah bulat murni ("7500000"), konsisten dgn formatRupiah
+// (tampilan juga membuang desimal). NULL → "".
+func moneyRupiahStr(n pgtype.Numeric) string {
+	s := numericStr(n)
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		s = s[:i]
+	}
 	return s
 }

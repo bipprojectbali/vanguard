@@ -1,6 +1,25 @@
 package handler
 
-import "testing"
+import (
+	"testing"
+
+	"go_starter/internal/db"
+)
+
+// TestLeadFormFields_EstimasiPrefillBulat mengunci perbaikan bug prefill (BL-8):
+// kolom NUMERIC(15,2) kembali sbg "7500000.00", tapi numgroup.js membuang titik
+// → tanpa moneyRupiahStr, menyunting & menyimpan lead menggandakan estimasi 100x.
+// Prefill WAJIB rupiah bulat tanpa skala.
+func TestLeadFormFields_EstimasiPrefillBulat(t *testing.T) {
+	f := leadFormFields(db.Lead{
+		LeadName:       "Desa Contoh",
+		LeadStatus:     "New",
+		EstimatedValue: numFrom(t, "7500000.00"),
+	}, true)
+	if f.EstimatedValue != "7500000" {
+		t.Errorf("prefill estimasi = %q, mau %q (skala .00 harus dibuang)", f.EstimatedValue, "7500000")
+	}
+}
 
 // sales_leads_form_test.go — unit parseLeadForm untuk BL-2 (field numerik lead).
 // Menjaga kontrak backend sebagai penjaga sesungguhnya: Nilai Estimasi menerima
