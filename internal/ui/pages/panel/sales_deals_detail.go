@@ -6,6 +6,7 @@ import (
 	"go_starter/internal/ui"
 
 	g "maragu.dev/gomponents"
+	data "maragu.dev/gomponents-datastar"
 	h "maragu.dev/gomponents/html"
 )
 
@@ -94,7 +95,7 @@ func DealDetail(v DealDetailView) g.Node {
 		header,
 		h.A(h.Href(v.Base+"/deals"), h.Class("text-sm text-base-content/60"),
 			g.Text("« Kembali ke pipeline")),
-		dealStepper(v.Stages, v.Stage),
+		dealStepper(displayStages(v.Stages, v.Stage), v.Stage),
 		ui.When(v.CanWrite, dealStageControl(v, base)),
 		dealIdentityCard(v, accountLink),
 		detailCard("Nilai & Peluang", []detailField{
@@ -201,6 +202,35 @@ func dealIdentityCard(v DealDetailView, accountLink g.Node) g.Node {
 	)
 }
 
+// Label tahap terminal — sumber kebenaran enum tetap dealStageOptions (handler).
+// Di sini HANYA untuk representasi VISUAL (BL-12): Closed Won/Closed Lost adalah
+// hasil terminal saling-eksklusif (satu deal berakhir di salah satu, bukan lewat
+// keduanya), jadi ditampilkan sebagai SATU langkah ke-6 di stepper.
+const (
+	stageClosedWon  = "Closed Won"
+	stageClosedLost = "Closed Lost"
+)
+
+// displayStages menurunkan 6 langkah TAMPILAN dari daftar pipeline penuh (7):
+// semua tahap aktif (kecuali dua terminal) + satu node terminal. Label node-6
+// mengikuti hasil aktual — Closed Won / Closed Lost bila deal sudah tertutup,
+// "Ditutup" bila masih terbuka. Sengaja TERPISAH dari dealStageOptions (validasi
+// + dropdown + enum DB tetap 7); yang berubah hanya yang dilihat mata.
+func displayStages(stages []string, current string) []string {
+	out := make([]string, 0, 6)
+	for _, s := range stages {
+		if s == stageClosedWon || s == stageClosedLost {
+			continue
+		}
+		out = append(out, s)
+	}
+	terminal := "Ditutup"
+	if current == stageClosedWon || current == stageClosedLost {
+		terminal = current
+	}
+	return append(out, terminal)
+}
+
 // dealStepper = penanda visual posisi stage di sepanjang pipeline. Discroll dalam
 // kontainer sendiri (overflow-x-auto) agar tak meluberkan halaman di mobile.
 func dealStepper(stages []string, current string) g.Node {
@@ -222,10 +252,29 @@ func dealStepper(stages []string, current string) g.Node {
 	)
 }
 
+// showWhen membungkus node dengan data-show Datastar (BL-12): field kondisional
+// muncul/lenyap mengikuti nilai <select> tahap. State form efemeral = ranah sah
+// Datastar (unsafe-eval sudah aktif; ekspresi hanya literal enum internal, bukan
+// input user). class opsional mempertahankan span grid pembungkus. Backend TETAP
+// penjaga sesungguhnya (guard terminal, sales_deals_stage.go) — toggle ini murni
+// UX; field tersembunyi tetap terkirim tapi dibersihkan backend saat non-terminal.
+func showWhen(expr, class string, node g.Node) g.Node {
+	attrs := []g.Node{data.Show(expr)}
+	if class != "" {
+		attrs = append(attrs, h.Class(class))
+	}
+	return h.Div(append(attrs, node)...)
+}
+
 // dealStageControl = kontrol ganti stage: NATIVE POST (gotcha #16). Menyediakan
 // field win/loss reason + catatan kekalahan yang WAJIB diisi backend saat stage
 // terminal (Closed Won/Lost) — select-onchange tak bisa mengumpulkannya, maka
 // bukan FormPostSelect. Backend tetap penjaga sesungguhnya (validDealStages + guard).
+//
+// Field kondisional (BL-12): <select> di-bind ke signal $stage (data.Bind) →
+// "Alasan Menang/Kalah" tampil saat Closed Won ATAU Closed Lost; "Catatan
+// Kekalahan" HANYA saat Closed Lost (selaras backend: loss_notes cuma relevan
+// saat kalah). Toggle klien murni UX — validasi & pembersihan tetap di handler.
 func dealStageControl(v DealDetailView, base string) g.Node {
 	opts := make([]g.Node, 0, len(v.Stages))
 	for _, s := range v.Stages {
@@ -244,6 +293,7 @@ func dealStageControl(v DealDetailView, base string) g.Node {
 				g.Text("Tahap Closed Won/Closed Lost wajib menyertakan alasan menang/kalah.")),
 			h.FormEl(
 				h.Method("post"), h.Action(base+"/stage"),
+				data.Signals(map[string]any{"stage": v.Stage}),
 				h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
 				h.Div(
 					h.Class("grid gap-1 min-w-0"),
@@ -251,12 +301,19 @@ func dealStageControl(v DealDetailView, base string) g.Node {
 					h.Select(
 						append([]g.Node{
 							h.ID("f-stage"), h.Name("stage"), h.Required(),
+							data.Bind("stage"),
 							h.Class("select text-base w-full"),
 						}, g.Group(opts))...,
 					),
 				),
-				field("Alasan Menang/Kalah", "win_loss_reason", v.WinLossReason, false, "text"),
-				textareaField("Catatan Kekalahan", "loss_notes", v.LossNotes),
+				showWhen(
+					"$stage == '"+stageClosedWon+"' || $stage == '"+stageClosedLost+"'",
+					"min-w-0", field("Alasan Menang/Kalah", "win_loss_reason", v.WinLossReason, false, "text"),
+				),
+				showWhen(
+					"$stage == '"+stageClosedLost+"'",
+					"sm:col-span-2 min-w-0", textareaField("Catatan Kekalahan", "loss_notes", v.LossNotes),
+				),
 				h.Div(
 					h.Class("sm:col-span-2"),
 					h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
