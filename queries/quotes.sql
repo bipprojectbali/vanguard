@@ -39,6 +39,16 @@ WHERE deleted_at IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListQuoteBucketsForDeal :many
+-- Semua quote HIDUP satu deal, hanya kolom untuk RINGKASAN agregat (BL-18):
+-- status + expiration_date. TANPA keyset — satu deal biasanya sedikit quote, dan
+-- bucket "kedaluwarsa" (Draft dikecualikan, banding date-only di zona aplikasi)
+-- adalah aturan APLIKASI (gotcha #14: hindari AT TIME ZONE di SQL) → dihitung di
+-- handler memakai quoteExpired yang SAMA dengan BL-17, bukan agregat DB. Dipakai
+-- kartu detail deal & header daftar quote untuk teks "N quote · M kedaluwarsa".
+SELECT quote_status, expiration_date FROM quotes
+WHERE deal_id = sqlc.arg(deal_id) AND deleted_at IS NULL;
+
 -- name: ListQuotes :many
 -- Daftar quote LINTAS-deal (menu Quotes global), keyset (created_at DESC, id DESC)
 -- + filter ownership F3 DIWARISI dari deal induk (JOIN deals → deal_owner). Dua flag

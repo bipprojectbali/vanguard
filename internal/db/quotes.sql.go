@@ -192,6 +192,42 @@ func (q *Queries) GetQuote(ctx context.Context, id int64) (Quote, error) {
 	return i, err
 }
 
+const listQuoteBucketsForDeal = `-- name: ListQuoteBucketsForDeal :many
+SELECT quote_status, expiration_date FROM quotes
+WHERE deal_id = $1 AND deleted_at IS NULL
+`
+
+type ListQuoteBucketsForDealRow struct {
+	QuoteStatus    string      `json:"quote_status"`
+	ExpirationDate pgtype.Date `json:"expiration_date"`
+}
+
+// Semua quote HIDUP satu deal, hanya kolom untuk RINGKASAN agregat (BL-18):
+// status + expiration_date. TANPA keyset — satu deal biasanya sedikit quote, dan
+// bucket "kedaluwarsa" (Draft dikecualikan, banding date-only di zona aplikasi)
+// adalah aturan APLIKASI (gotcha #14: hindari AT TIME ZONE di SQL) → dihitung di
+// handler memakai quoteExpired yang SAMA dengan BL-17, bukan agregat DB. Dipakai
+// kartu detail deal & header daftar quote untuk teks "N quote · M kedaluwarsa".
+func (q *Queries) ListQuoteBucketsForDeal(ctx context.Context, dealID *int64) ([]ListQuoteBucketsForDealRow, error) {
+	rows, err := q.db.Query(ctx, listQuoteBucketsForDeal, dealID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListQuoteBucketsForDealRow{}
+	for rows.Next() {
+		var i ListQuoteBucketsForDealRow
+		if err := rows.Scan(&i.QuoteStatus, &i.ExpirationDate); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listQuoteItems = `-- name: ListQuoteItems :many
 SELECT id, quote_id, tenant_id, plan_id, quantity, unit_price, discount_pct, subtotal, line_no FROM quote_items
 WHERE quote_id = $1

@@ -850,6 +850,13 @@ type Querier interface {
 	// Level 1 (Provinsi), dipakai isi opsi pertama dropdown wilayah server-side (fallback
 	// non-JS / SSR awal) sebelum static/regions.js mengambil alih interaksi client-side.
 	ListProvinces(ctx context.Context) ([]Region, error)
+	// Semua quote HIDUP satu deal, hanya kolom untuk RINGKASAN agregat (BL-18):
+	// status + expiration_date. TANPA keyset — satu deal biasanya sedikit quote, dan
+	// bucket "kedaluwarsa" (Draft dikecualikan, banding date-only di zona aplikasi)
+	// adalah aturan APLIKASI (gotcha #14: hindari AT TIME ZONE di SQL) → dihitung di
+	// handler memakai quoteExpired yang SAMA dengan BL-17, bukan agregat DB. Dipakai
+	// kartu detail deal & header daftar quote untuk teks "N quote · M kedaluwarsa".
+	ListQuoteBucketsForDeal(ctx context.Context, dealID *int64) ([]ListQuoteBucketsForDealRow, error)
 	// Baris item satu quote, urut tampil (line_no lalu id). Menopang detail quote &
 	// rekalkulasi total. Bounded per-quote (bukan daftar global) → tanpa keyset.
 	ListQuoteItems(ctx context.Context, quoteID int64) ([]QuoteItem, error)
