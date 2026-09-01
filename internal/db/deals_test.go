@@ -165,6 +165,91 @@ func TestListDeals_OwnershipFailClosed(t *testing.T) {
 	}
 }
 
+// TestListDeals_MineOnly — sumbu mine_only (BL-10, toggle "Deal Saya") memaksa
+// deal_owner = uid walau aktor ScopeAll, di KETIGA jalur (Tabel, Kanban, KPI)
+// agar papan & ringkasan seiring. Cermin TestListLeads_StatusFilterAndMineOnly.
+func TestListDeals_MineOnly(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	truncateCRM(t, ctx)
+
+	q := New(pool)
+	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
+	acc := seedAccount(t, ctx, pool, ten.ID, "Acc", nil)
+	sales, _ := q.CreateUser(ctx, CreateUserParams{Email: "s@x", PassHash: strPtr("x")})
+	other, _ := q.CreateUser(ctx, CreateUserParams{Email: "o@x", PassHash: strPtr("x")})
+
+	seedDeal(t, ctx, pool, ten.ID, acc.ID, "Ku-Open", func(p *CreateDealParams) { p.DealOwner = &sales.ID })
+	seedDeal(t, ctx, pool, ten.ID, acc.ID, "Ku-Won", func(p *CreateDealParams) {
+		p.DealOwner = &sales.ID
+		p.Stage = "Closed Won"
+	})
+	seedDeal(t, ctx, pool, ten.ID, acc.ID, "Lain-Open", func(p *CreateDealParams) { p.DealOwner = &other.ID })
+
+	// ── Tabel (ListDeals) ─────────────────────────────────────────────────────
+	c0, id0 := firstCursor()
+	listDeals := func(mine bool) []Deal {
+		var rows []Deal
+		if err := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
+			var e error
+			rows, e = q.ListDeals(ctx, ListDealsParams{
+				CursorCreatedAt: c0, CursorID: id0, ScopeAll: true,
+				Uid: &sales.ID, MineOnly: mine, PageSize: 50,
+			})
+			return e
+		}); err != nil {
+			t.Fatalf("list deals (mine=%v): %v", mine, err)
+		}
+		return rows
+	}
+	if got := listDeals(false); len(got) != 3 {
+		t.Errorf("ScopeAll tanpa mine harus 3 deal, got %d", len(got))
+	}
+	if got := listDeals(true); len(got) != 2 {
+		t.Errorf("mine_only sales harus 2 (miliknya saja), got %d", len(got))
+	}
+
+	// ── Kanban (ListDealsForPipeline) ─────────────────────────────────────────
+	var pipe []Deal
+	if err := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
+		var e error
+		pipe, e = q.ListDealsForPipeline(ctx, ListDealsForPipelineParams{
+			ScopeAll: true, Uid: &sales.ID, MineOnly: true, PageSize: 200,
+		})
+		return e
+	}); err != nil {
+		t.Fatalf("pipeline mine: %v", err)
+	}
+	if len(pipe) != 2 {
+		t.Errorf("pipeline mine_only harus 2 kartu, got %d", len(pipe))
+	}
+
+	// ── KPI (DealPipelineStats) bergerak bersama papan ────────────────────────
+	statsFor := func(mine bool) DealPipelineStatsRow {
+		var s DealPipelineStatsRow
+		if err := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
+			var e error
+			s, e = q.DealPipelineStats(ctx, DealPipelineStatsParams{
+				ScopeAll: true, Uid: &sales.ID, MineOnly: mine,
+			})
+			return e
+		}); err != nil {
+			t.Fatalf("stats mine=%v: %v", mine, err)
+		}
+		return s
+	}
+	if all := statsFor(false); all.OpenCount != 2 {
+		t.Errorf("open_count tanpa mine harus 2 (Ku-Open+Lain-Open), got %d", all.OpenCount)
+	}
+	mineStats := statsFor(true)
+	if mineStats.OpenCount != 1 {
+		t.Errorf("open_count mine harus 1 (Ku-Open saja), got %d", mineStats.OpenCount)
+	}
+	if mineStats.WonCount != 1 {
+		t.Errorf("won_count mine harus 1 (Ku-Won), got %d", mineStats.WonCount)
+	}
+}
+
 func TestListDeals_StageFilter(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()

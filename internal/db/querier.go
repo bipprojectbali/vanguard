@@ -683,16 +683,21 @@ type Querier interface {
 	// DealsListFilter): scope_all → semua; is_own → deal_owner = uid; keduanya false
 	// → NOL baris (fail-closed). stage_filter '' → semua stage.
 	//
+	// Filter tambahan (ortogonal dari ownership, BL-10):
+	//   mine_only → paksa deal_owner = uid (toggle "Deal Saya", walau aktor scope_all).
+	// Cermin mine_only di ListLeads; menyempitkan, tak pernah melebarkan.
+	//
 	// search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
 	// insensitive) di ATAS ownership+stage — tak pernah melebarkan baris. Hanya kolom
 	// tak-tersamar yang tampil di tabel (deal_name + entity_code); nilai ARR tersamar
-	// tak dijadikan kunci cari. Papan Kanban (ListDealsForPipeline) TAK ikut — di luar
-	// lingkup slice ini (board terbatas LIMIT, bukan daftar berkeyset).
+	// tak dijadikan kunci cari.
 	ListDeals(ctx context.Context, arg ListDealsParams) ([]Deal, error)
 	// Papan Kanban: seluruh deal hidup dalam cakupan ownership, diurutkan agar kartu
 	// rapi per-stage lalu terbaru dulu. Di-bucket per-stage di handler (bukan N query
 	// per kolom). LIMIT membatasi papan agar tak memuat seluruh tabel (guardrail
 	// pagination); deal di luar batas tetap terlihat lewat tampilan Tabel berkeyset.
+	// mine_only (BL-10) menyaring papan ke deal_owner = uid saat toggle "Deal Saya"
+	// aktif — KPI (DealPipelineStats) ikut tersaring agar papan & ringkasan seiring.
 	ListDealsForPipeline(ctx context.Context, arg ListDealsForPipelineParams) ([]Deal, error)
 	// Level 3 (Kecamatan) di bawah satu kabupaten/kota. Sama alasannya dgn
 	// ListRegenciesByProvince — bukan jalur utama (JS-side), cadangan validasi.
