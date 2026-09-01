@@ -131,10 +131,14 @@ func quoteTotals(v QuoteDetailView) g.Node {
 			h.Span(h.Class(valCls), g.Text(orDash(value))),
 		)
 	}
+	taxLabel := v.TaxLabel
+	if taxLabel == "" {
+		taxLabel = "Pajak"
+	}
 	return h.Div(
 		h.Class("ml-auto w-full sm:max-w-xs border-t border-base-300 pt-2"),
 		row("Subtotal", v.Subtotal, false),
-		row("Pajak", v.Tax, false),
+		row(taxLabel, v.Tax, false),
 		h.Div(h.Class("border-t border-base-300 mt-1 pt-1"),
 			row("Grand Total", v.GrandTotal, true)),
 	)

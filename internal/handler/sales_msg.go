@@ -55,6 +55,8 @@ func quotesMsg(code string) string {
 		return "Perubahan item disimpan."
 	case "item_deleted":
 		return "Item dihapus dari quote."
+	case "tax_saved":
+		return "Pajak quote diperbarui."
 	default:
 		return ""
 	}

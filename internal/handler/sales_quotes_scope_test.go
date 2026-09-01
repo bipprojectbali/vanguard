@@ -125,27 +125,17 @@ func TestQuotes_ItemHardDelete(t *testing.T) {
 // --- create ----------------------------------------------------------------
 
 // TestQuotes_CreateInheritsDealAccount: create dari deal → account_id & deal_id
-// DIWARISI dari deal induk; status awal Draft; prepared_by default = pembuat;
-// grand = tax (belum ada item). Input pajak negatif ditolak (err=tax, tak menyimpan).
+// DIWARISI dari deal induk; status awal Draft; prepared_by default = pembuat.
+// BL-14: pajak TAK lagi di form create (pindah ke builder) → grand_total NULL saat
+// belum ada item/pajak. Pajak negatif ditolak di endpoint /tax (err=tax, tak menyimpan).
 func TestQuotes_CreateInheritsDealAccount(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
 	deal := env.seedDeal(t, acc.ID, &uid)
 	env.setDealStage(t, deal.ID, "Qualification") // BL-13: masuk jendela quoting
 
-	// Pajak negatif → tolak sebelum DB.
-	bad := url.Values{"quote_name": {"Penawaran"}, "tax_amount": {"-1"}}
-	bReq := quotesReq(http.MethodPost, quoteListSub(deal.ID), bad, itoa(deal.ID), "", "")
-	bRec := env.runAccount(uid, "owner", "admin", bReq, env.h.QuoteCreate)
-	if loc := bRec.Header().Get("Location"); !strings.Contains(loc, "err=tax") {
-		t.Errorf("pajak negatif harus err=tax, got %q", loc)
-	}
-	if n := len(env.dealQuotes(t, deal.ID)); n != 0 {
-		t.Fatalf("create invalid tak boleh menyimpan, ada %d", n)
-	}
-
-	// Sah.
-	form := url.Values{"quote_name": {"Penawaran Uji"}, "tax_amount": {"1500"}}
+	// Create tanpa pajak (pajak dikelola di builder, BL-14).
+	form := url.Values{"quote_name": {"Penawaran Uji"}}
 	req := quotesReq(http.MethodPost, quoteListSub(deal.ID), form, itoa(deal.ID), "", "")
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.QuoteCreate)
 	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=created") {
@@ -168,8 +158,18 @@ func TestQuotes_CreateInheritsDealAccount(t *testing.T) {
 	if q.PreparedBy == nil || *q.PreparedBy != uid {
 		t.Errorf("prepared_by default harus pembuat (%d), got %v", uid, q.PreparedBy)
 	}
-	if !numEq(q.GrandTotal, "1500.00") {
-		t.Errorf("grand awal = %s, want 1500.00 (tax saja)", numericStr(q.GrandTotal))
+	if q.GrandTotal.Valid {
+		t.Errorf("grand awal harus NULL (belum ada item/pajak), got %s", numericStr(q.GrandTotal))
 	}
 	env.assertAudited(t, "quote.create")
+
+	// Pajak negatif di /tax → tolak sebelum DB (err=tax), grand tetap NULL.
+	bad := url.Values{"tax_mode": {"amount"}, "tax_amount": {"-1"}}
+	bRec := env.setTax(t, uid, deal.ID, q.ID, bad)
+	if loc := bRec.Header().Get("Location"); !strings.Contains(loc, "err=tax") {
+		t.Errorf("pajak negatif harus err=tax, got %q", loc)
+	}
+	if got := env.mustGetQuote(t, q.ID); got.GrandTotal.Valid {
+		t.Errorf("pajak negatif tak boleh menyimpan, grand=%s", numericStr(got.GrandTotal))
+	}
 }

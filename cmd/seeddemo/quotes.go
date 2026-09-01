@@ -111,7 +111,13 @@ func seedQuotes(ctx context.Context, q *db.Queries, tenantID int64, tag string, 
 		if err != nil {
 			return quoteCount, itemCount, err
 		}
+		rateNum, err := numFromFloat(taxRatePct) // BL-14: PPN = mode persen
+		if err != nil {
+			return quoteCount, itemCount, err
+		}
 		if err := q.UpdateQuoteTotals(ctx, db.UpdateQuoteTotalsParams{
+			TaxMode:    "percent",
+			TaxRate:    rateNum,
 			GrandTotal: grandNum,
 			TaxAmount:  taxNum,
 			UpdatedBy:  owner,

@@ -444,6 +444,8 @@ type Quote struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedBy      *int64             `json:"updated_by"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	TaxMode        string             `json:"tax_mode"`
+	TaxRate        pgtype.Numeric     `json:"tax_rate"`
 }
 
 type QuoteItem struct {

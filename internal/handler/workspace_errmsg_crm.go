@@ -50,6 +50,10 @@ func wsErrMsgCRM(code string) string {
 		return "Termin/catatan terlalu panjang (maks 2000 karakter)."
 	case "tax":
 		return "Pajak harus berupa angka ≥ 0."
+	case "tax_mode":
+		return "Jenis pajak tidak valid (pilih Persentase atau Nominal)."
+	case "tax_rate":
+		return "Tarif pajak harus berupa angka 0–100."
 	case "prepared_by":
 		return "Penyusun yang dipilih tidak valid."
 	case "plan_req":

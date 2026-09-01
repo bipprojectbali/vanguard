@@ -31,7 +31,7 @@ func TestQuotes_StageGate_CreateBlocked(t *testing.T) {
 		deal := env.seedDeal(t, acc.ID, &uid)
 		env.setDealStage(t, deal.ID, stage)
 
-		form := url.Values{"quote_name": {"Penawaran"}, "tax_amount": {"1000"}}
+		form := url.Values{"quote_name": {"Penawaran"}}
 		req := quotesReq(http.MethodPost, quoteListSub(deal.ID), form, itoa(deal.ID), "", "")
 		rec := env.runAccount(uid, "owner", "admin", req, env.h.QuoteCreate)
 		if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=quote_stage") {
@@ -53,7 +53,7 @@ func TestQuotes_StageGate_CreateAllowed(t *testing.T) {
 		deal := env.seedDeal(t, acc.ID, &uid)
 		env.setDealStage(t, deal.ID, stage)
 
-		form := url.Values{"quote_name": {"Penawaran"}, "tax_amount": {"1000"}}
+		form := url.Values{"quote_name": {"Penawaran"}}
 		req := quotesReq(http.MethodPost, quoteListSub(deal.ID), form, itoa(deal.ID), "", "")
 		rec := env.runAccount(uid, "owner", "admin", req, env.h.QuoteCreate)
 		if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=created") {

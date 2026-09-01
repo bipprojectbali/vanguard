@@ -98,9 +98,13 @@ UPDATE quotes SET
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 
 -- name: UpdateQuoteTotals :exec
--- Rekalkulasi total quote (snapshot) setelah item berubah. grand_total & tax_amount
--- dihitung app dari quote_items lalu ditulis di sini — bukan agregat live saat baca.
+-- Rekalkulasi total quote (snapshot) setelah item/pajak berubah. grand_total &
+-- tax_amount dihitung app dari quote_items + konfigurasi pajak lalu ditulis di sini
+-- — bukan agregat live saat baca. tax_mode/tax_rate menyimpan CARA pajak dihitung
+-- (BL-14): percent → tax_rate dipakai (tax_amount = subtotal×rate); amount → tetap.
 UPDATE quotes SET
+    tax_mode    = sqlc.arg(tax_mode),
+    tax_rate    = sqlc.narg(tax_rate),
     grand_total = sqlc.narg(grand_total),
     tax_amount  = sqlc.narg(tax_amount),
     updated_by  = sqlc.narg(updated_by),

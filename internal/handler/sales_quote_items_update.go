@@ -55,7 +55,7 @@ func (h *Handler) QuoteItemUpdate(w http.ResponseWriter, r *http.Request) {
 		wsRedirect(w, r, quoteSub(dealID, quoteID), "failed")
 		return
 	}
-	if err := h.recomputeTotals(ctx, quoteID, q.TaxAmount, uid); err != nil {
+	if err := h.recomputeTotals(ctx, quoteID, q.TaxMode, q.TaxRate, q.TaxAmount, uid); err != nil {
 		h.Log.Error("quotes: recompute", "err", err)
 		wsRedirect(w, r, quoteSub(dealID, quoteID), "failed")
 		return
@@ -97,7 +97,7 @@ func (h *Handler) QuoteItemDelete(w http.ResponseWriter, r *http.Request) {
 		wsRedirect(w, r, quoteSub(dealID, quoteID), "failed")
 		return
 	}
-	if err := h.recomputeTotals(ctx, quoteID, q.TaxAmount, uid); err != nil {
+	if err := h.recomputeTotals(ctx, quoteID, q.TaxMode, q.TaxRate, q.TaxAmount, uid); err != nil {
 		h.Log.Error("quotes: recompute", "err", err)
 		wsRedirect(w, r, quoteSub(dealID, quoteID), "failed")
 		return

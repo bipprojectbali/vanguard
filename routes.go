@@ -398,6 +398,7 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/deals/{id}/quotes/{quoteID}/edit", h.QuoteEdit)
 		r.Post("/deals/{id}/quotes/{quoteID}", h.QuoteUpdate)
 		r.Post("/deals/{id}/quotes/{quoteID}/status", h.QuoteStatus)
+		r.Post("/deals/{id}/quotes/{quoteID}/tax", h.QuoteTax)
 		r.Post("/deals/{id}/quotes/{quoteID}/delete", h.QuoteDelete)
 		r.Post("/deals/{id}/quotes/{quoteID}/items", h.QuoteItemAdd)
 		r.Post("/deals/{id}/quotes/{quoteID}/items/{itemID}", h.QuoteItemUpdate)

@@ -20,7 +20,8 @@ import (
 // bisnis "crm:deals"). Ownership F3 DIWARISI dari deal induk lewat loadOwnedQuote
 // (loadOwnedDeal → 404 di luar cakupan) — tak ada kolom quote_owner.
 // SNAPSHOT harga (acceptance M4): plans.base_price disalin ke quote_items.unit_price
-// & beku saat item ditambah; grand_total = Σ subtotal + tax_amount (input manual).
+// & beku saat item ditambah; grand_total = Σ subtotal + tax_amount, tax_amount kini
+// snapshot hasil konfigurasi pajak builder (BL-14), bukan input header.
 // Navigasi = native POST → 303 (gotcha #16), BUKAN sse.Redirect (diblokir CSP).
 
 // quoteListSub / quoteSub = pembentuk sub-path relatif /w/{slug} untuk redirect.
@@ -78,7 +79,8 @@ func (h *Handler) loadOwnedQuote(w http.ResponseWriter, r *http.Request, dealID,
 // QuoteCreate — POST /w/{workspace}/deals/{id}/quotes. Membuat quote untuk deal ini.
 // account_id & deal_id DIWARISI dari deal induk (bukan dari form). entity_code
 // dialokasikan DALAM tx ber-tenant (atomik). prepared_by default = pembuat bila
-// tak dipilih. Belum ada item → grand_total = tax_amount.
+// tak dipilih. Quote baru lahir TANPA pajak (grand_total/tax_amount NULL, tax_mode
+// default 'amount') — pajak diset di builder lewat QuoteTax setelah ada subtotal.
 func (h *Handler) QuoteCreate(w http.ResponseWriter, r *http.Request) {
 	if !h.requireDealWrite(w, r) {
 		return
@@ -127,9 +129,9 @@ func (h *Handler) QuoteCreate(w http.ResponseWriter, r *http.Request) {
 		PaymentTerms:   form.PaymentTerms,
 		NotesTerms:     form.NotesTerms,
 		PreparedBy:     preparedBy,
-		GrandTotal:     form.TaxAmount, // belum ada item → grand = tax
-		TaxAmount:      form.TaxAmount,
 		CreatedBy:      &uid,
+		// GrandTotal/TaxAmount sengaja tak diisi (NULL): quote baru tanpa item &
+		// tanpa pajak. tax_mode default DB 'amount'. Pajak diset lewat QuoteTax.
 	})
 	if err != nil {
 		h.Log.Error("quotes: create", "err", err)

@@ -20,8 +20,8 @@ import (
 // murni karena file health — lihat header di sana).
 //
 //   - SNAPSHOT harga (acceptance M4): unit_price BEKU walau plans.base_price berubah.
-//   - Pajak MANUAL + rekalkulasi: grand_total == Σ subtotal + tax setelah add/update/
-//     delete item & ubah tax header.
+//   - Pajak builder (BL-14): mode Nominal (rupiah tetap) & Persentase (PPN ikut
+//     subtotal); grand_total == Σ subtotal + tax setelah add/delete item & set /tax.
 //   - Status: transisi sah tersimpan; status liar ditolak (cermin CHECK), tak menyimpan.
 //
 // Koneksi test = superuser (bypass RLS) → uji LOGIKA handler; isolasi RLS diuji
@@ -160,6 +160,15 @@ func (e *testEnv) addQuoteItem(t *testing.T, uid, dealID, quoteID, planID int64,
 	return e.runAccount(uid, "owner", "admin", req, e.h.QuoteItemAdd)
 }
 
+// setTax menjalankan QuoteTax (POST .../tax) sebagai admin — set mode+nilai pajak
+// di builder (BL-14). form berisi tax_mode + tax_rate/tax_amount sesuai mode.
+func (e *testEnv) setTax(t *testing.T, uid, dealID, quoteID int64, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+	req := quotesReq(http.MethodPost, quoteSub(dealID, quoteID)+"/tax", form,
+		itoa(dealID), itoa(quoteID), "")
+	return e.runAccount(uid, "owner", "admin", req, e.h.QuoteTax)
+}
+
 // mustGetQuote membaca quote (fatal bila hilang) — assert total/status sesudah aksi.
 func (e *testEnv) mustGetQuote(t *testing.T, id int64) db.Quote {
 	t.Helper()
@@ -222,10 +231,11 @@ func TestQuotes_ItemPriceSnapshotFreeze(t *testing.T) {
 	env.assertAudited(t, "quote.item.add")
 }
 
-// --- pajak manual + rekalkulasi --------------------------------------------
+// --- pajak builder (BL-14): mode Nominal & Persentase + rekalkulasi ---------
 
-// TestQuotes_TaxRecompute: grand_total = Σ subtotal + tax, dihitung ulang tiap item
-// berubah & tiap tax header diubah. Pajak MANUAL (bukan konstanta PPN).
+// TestQuotes_TaxRecompute (mode NOMINAL): grand = Σsubtotal + tax tetap, dihitung
+// ulang tiap item berubah. Pajak di-set via builder /tax (BL-14: pindah dari header);
+// nilai rupiah tetap (materai) BERTAHAN saat item dihapus.
 func TestQuotes_TaxRecompute(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
@@ -241,17 +251,17 @@ func TestQuotes_TaxRecompute(t *testing.T) {
 		t.Fatalf("grand setelah 2 item = %s, want 200000.00", numericStr(got.GrandTotal))
 	}
 
-	// Ubah tax header → grand = Σsubtotal + tax baru.
-	form := url.Values{"quote_name": {"Quote Uji"}, "tax_amount": {"5000"}}
-	req := quotesReq(http.MethodPost, quoteSub(deal.ID, q.ID), form, itoa(deal.ID), itoa(q.ID), "")
-	if rec := env.runAccount(uid, "owner", "admin", req, env.h.QuoteUpdate); rec.Code != http.StatusSeeOther {
-		t.Fatalf("update header: status %d\n%s", rec.Code, rec.Body.String())
+	// Set pajak Nominal 5000 via builder → grand = Σsubtotal + 5000.
+	tax := url.Values{"tax_mode": {taxModeAmount}, "tax_amount": {"5000"}}
+	if rec := env.setTax(t, uid, deal.ID, q.ID, tax); rec.Code != http.StatusSeeOther {
+		t.Fatalf("set pajak: status %d\n%s", rec.Code, rec.Body.String())
 	}
-	if got := env.mustGetQuote(t, q.ID); !numEq(got.GrandTotal, "205000.00") {
-		t.Errorf("grand setelah tax 5000 = %s, want 205000.00", numericStr(got.GrandTotal))
+	if got := env.mustGetQuote(t, q.ID); !numEq(got.GrandTotal, "205000.00") || got.TaxMode != taxModeAmount {
+		t.Errorf("grand setelah tax 5000 = %s (mode %q), want 205000.00 amount",
+			numericStr(got.GrandTotal), got.TaxMode)
 	}
 
-	// Hapus item Plan B (100000) → grand = 100000 + 5000; tax bertahan.
+	// Hapus item Plan B (100000) → grand = 100000 + 5000; tax nominal BERTAHAN.
 	var delID int64
 	for _, it := range env.quoteItems(t, q.ID) {
 		if it.PlanID != nil && *it.PlanID == p2 {
@@ -264,7 +274,86 @@ func TestQuotes_TaxRecompute(t *testing.T) {
 		t.Fatalf("delete item: status %d\n%s", rec.Code, rec.Body.String())
 	}
 	if got := env.mustGetQuote(t, q.ID); !numEq(got.GrandTotal, "105000.00") {
-		t.Errorf("grand setelah hapus item = %s, want 105000.00", numericStr(got.GrandTotal))
+		t.Errorf("grand setelah hapus item = %s, want 105000.00 (tax nominal tetap)",
+			numericStr(got.GrandTotal))
+	}
+}
+
+// TestQuotes_TaxPercentFollowsSubtotal (mode PERSENTASE): tax = subtotal × rate/100,
+// MENGIKUTI subtotal otomatis saat item ditambah/dihapus (inti BL-14 — PPN tak perlu
+// dihitung ulang manual). Rate & mode tersimpan; subtotal 0 → tax 0.
+func TestQuotes_TaxPercentFollowsSubtotal(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
+	deal := env.seedDeal(t, acc.ID, &uid)
+	env.setDealStage(t, deal.ID, "Qualification")
+	p1 := env.seedPlan(t, "Plan A", "PLN-A", "100000.00")
+	p2 := env.seedPlan(t, "Plan B", "PLN-B", "50000.00")
+	q := env.seedQuote(t, deal.ID, acc.ID, "0")
+
+	env.addQuoteItem(t, uid, deal.ID, q.ID, p1, "1") // subtotal 100000
+
+	// Set PPN 11% → tax 11000, grand 111000; mode & rate tersimpan.
+	tax := url.Values{"tax_mode": {taxModePercent}, "tax_rate": {"11"}}
+	if rec := env.setTax(t, uid, deal.ID, q.ID, tax); rec.Code != http.StatusSeeOther {
+		t.Fatalf("set PPN: status %d\n%s", rec.Code, rec.Body.String())
+	}
+	got := env.mustGetQuote(t, q.ID)
+	if got.TaxMode != taxModePercent || !numEq(got.TaxRate, "11.00") {
+		t.Errorf("mode/rate tak tersimpan: mode=%q rate=%s", got.TaxMode, numericStr(got.TaxRate))
+	}
+	if !numEq(got.TaxAmount, "11000.00") || !numEq(got.GrandTotal, "111000.00") {
+		t.Errorf("PPN 11%% dari 100000: tax=%s grand=%s, want 11000/111000",
+			numericStr(got.TaxAmount), numericStr(got.GrandTotal))
+	}
+
+	// Tambah item (subtotal → 200000) → pajak IKUT naik ke 22000 tanpa set ulang.
+	env.addQuoteItem(t, uid, deal.ID, q.ID, p2, "2") // +100000
+	if got := env.mustGetQuote(t, q.ID); !numEq(got.TaxAmount, "22000.00") || !numEq(got.GrandTotal, "222000.00") {
+		t.Errorf("tax harus ikut subtotal: tax=%s grand=%s, want 22000/222000",
+			numericStr(got.TaxAmount), numericStr(got.GrandTotal))
+	}
+
+	// Hapus semua item (subtotal → 0) → tax 0, grand 0; mode persen tetap.
+	for _, it := range env.quoteItems(t, q.ID) {
+		dReq := quotesReq(http.MethodPost, quoteSub(deal.ID, q.ID)+"/items/"+itoa(it.ID)+"/delete",
+			url.Values{}, itoa(deal.ID), itoa(q.ID), itoa(it.ID))
+		env.runAccount(uid, "owner", "admin", dReq, env.h.QuoteItemDelete)
+	}
+	if got := env.mustGetQuote(t, q.ID); !numEq(got.TaxAmount, "0.00") || !numEq(got.GrandTotal, "0.00") {
+		t.Errorf("subtotal 0 → tax/grand harus 0: tax=%s grand=%s",
+			numericStr(got.TaxAmount), numericStr(got.GrandTotal))
+	}
+}
+
+// TestQuotes_TaxMigratedDefaultAmount: baris lama (pra-BL-14) = mode 'amount' default
+// DB dengan tax_amount rupiah tersimpan. Migrasi 00030 TAK menyentuh nilainya; item
+// berikutnya direkalkulasi sebagai Nominal (rupiah utuh), bukan tiba-tiba persen.
+func TestQuotes_TaxMigratedDefaultAmount(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
+	deal := env.seedDeal(t, acc.ID, &uid)
+	env.setDealStage(t, deal.ID, "Qualification")
+	plan := env.seedPlan(t, "Plan A", "PLN-A", "100000.00")
+	q := env.seedQuote(t, deal.ID, acc.ID, "2000") // cermin baris lama: nominal 2000
+
+	if q.TaxMode != taxModeAmount || !numEq(q.TaxAmount, "2000.00") {
+		t.Fatalf("baris warisan harus mode amount 2000: mode=%q tax=%s",
+			q.TaxMode, numericStr(q.TaxAmount))
+	}
+	// quoteTaxView menawarkan Nominal (bukan default persen) selama nilai tersimpan.
+	if mode, _, amt, _ := quoteTaxView(q); mode != taxModeAmount || amt != "2000" {
+		t.Errorf("view baris warisan: mode=%q amount=%q, want amount/2000", mode, amt)
+	}
+
+	// Tambah item → mode & nilai warisan utuh; grand = subtotal + 2000.
+	env.addQuoteItem(t, uid, deal.ID, q.ID, plan, "1") // subtotal 100000
+	got := env.mustGetQuote(t, q.ID)
+	if got.TaxMode != taxModeAmount || !numEq(got.TaxAmount, "2000.00") {
+		t.Errorf("mode/nilai warisan berubah: mode=%q tax=%s", got.TaxMode, numericStr(got.TaxAmount))
+	}
+	if !numEq(got.GrandTotal, "102000.00") {
+		t.Errorf("grand = %s, want 102000.00", numericStr(got.GrandTotal))
 	}
 }
 

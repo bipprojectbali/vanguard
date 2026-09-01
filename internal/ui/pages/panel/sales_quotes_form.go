@@ -13,7 +13,8 @@ import (
 // builder). Native POST → 303 (gotcha #16); validasi sesungguhnya di backend
 // (parseQuoteForm). Reuse formCard/field/textareaField/memberSelect dari
 // accounts_form.go. account_id & deal_id TAK di form — diwarisi dari deal induk.
-// tax_amount = INPUT MANUAL (keputusan scope); grand_total dihitung ulang app.
+// Pajak TIDAK lagi di header (BL-14) — dikelola di builder (kontrol Pajak) tempat
+// subtotal sudah hidup; header hanya identitas quote.
 
 // QuoteFormFields = nilai prefill (edit) atau kosong (buat). Semua string agar
 // view netral terhadap tipe DB. PreparedBy = id anggota terpilih (string).
@@ -22,7 +23,6 @@ type QuoteFormFields struct {
 	ExpirationDate string
 	PaymentTerms   string
 	NotesTerms     string
-	TaxAmount      string
 	PreparedBy     string
 }
 
@@ -67,7 +67,6 @@ func QuoteForm(v QuoteFormView) g.Node {
 			field("Nama Quote", "quote_name", v.Fields.QuoteName, false, "text"),
 			field("Tanggal Kedaluwarsa", "expiration_date", v.Fields.ExpirationDate, false, "date"),
 			memberSelect("Disusun oleh", "prepared_by", v.Fields.PreparedBy, v.Members),
-			field("Pajak (Rp)", "tax_amount", v.Fields.TaxAmount, false, "text"),
 		),
 		formCard("Syarat & Catatan",
 			textareaField("Termin Pembayaran", "payment_terms", v.Fields.PaymentTerms),
