@@ -70,7 +70,7 @@ func notifCursorFrom(t *testing.T, html string) string {
 		return ""
 	}
 	rest := html[i+len(marker):]
-	end := strings.IndexAny(rest, `"'`)
+	end := strings.IndexAny(rest, `&"'`)
 	if end < 0 {
 		t.Fatalf("tautan berikutnya tak tertutup: %.60s", rest)
 	}

@@ -40,6 +40,8 @@ type ChurnView struct {
 	Err        string
 	Items      []ChurnRow
 	NextCursor string
+	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
 // ChurnList merender halaman: header + tab tipe + alert + tabel + pager.
@@ -139,13 +141,6 @@ func churnTableRow(base string, s ChurnRow) g.Node {
 }
 
 func churnPager(v ChurnView) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := v.Base + "/subscriptions/churn?type=" + v.Type + "&after=" + v.NextCursor
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	base := v.Base + "/subscriptions/churn?type=" + v.Type
+	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

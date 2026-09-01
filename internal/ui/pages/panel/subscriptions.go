@@ -50,6 +50,8 @@ type SubListView struct {
 	Err          string
 	Items        []SubRow
 	NextCursor   string
+	After        string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail        string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
 // SubList merender halaman daftar: header + filter status + alert + tabel + pager.
@@ -191,17 +193,6 @@ func subStatusBadge(status string) g.Node {
 }
 
 func subsPager(v SubListView) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := v.Base + "/subscriptions?after=" + v.NextCursor
-	if v.StatusFilter != "" {
-		href += "&status=" + v.StatusFilter
-	}
-	href = appendQuery(href, v.Query) // q bertahan ke halaman berikutnya
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	base := panelListHref(v.Base+"/subscriptions", [2]string{"status", v.StatusFilter}, [2]string{"q", v.Query})
+	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

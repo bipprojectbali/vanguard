@@ -60,6 +60,8 @@ type DealPipelineView struct {
 	Query       string // ?q= pencarian bebas (BL-6, hanya view Tabel); "" = tak mencari
 	Items       []DealRow
 	NextCursor  string
+	After       string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail       string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
 // dealMineParam = "1" bila toggle "Deal Saya" aktif, "" bila tidak — dipakai
@@ -334,20 +336,10 @@ func emptyDeals(v DealPipelineView) g.Node {
 }
 
 func dealsPager(v DealPipelineView) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := v.Base + "/deals?view=table&after=" + v.NextCursor
-	if v.StageFilter != "" {
-		href += "&stage=" + v.StageFilter
-	}
+	mine := ""
 	if v.Mine {
-		href += "&mine=1" // toggle "Deal Saya" bertahan ke halaman berikutnya
+		mine = "1"
 	}
-	href = appendQuery(href, v.Query) // q bertahan ke halaman berikutnya
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	base := panelListHref(v.Base+"/deals?view=table", [2]string{"stage", v.StageFilter}, [2]string{"mine", mine}, [2]string{"q", v.Query})
+	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

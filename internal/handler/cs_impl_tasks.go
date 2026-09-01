@@ -97,6 +97,8 @@ func (h *Handler) CSImplTasksList(w http.ResponseWriter, r *http.Request) {
 		Tab:        tab,
 		CanWrite:   canWrite,
 		NextCursor: nextCursor,
+		After:      r.URL.Query().Get("after"),
+		Trail:      pageTrail(r),
 		Err:        csImplTasksErrMsg(r.URL.Query().Get("err")),
 		Msg:        csImplTasksMsg(r.URL.Query().Get("ok")),
 	}))

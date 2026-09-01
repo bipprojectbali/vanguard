@@ -93,6 +93,8 @@ func (h *Handler) LeadsList(w http.ResponseWriter, r *http.Request) {
 		CanWrite:   canWriteLeads(ctx),
 		HideMyTab:  filter.IsOwn, // BL-1: cakupan 'own' → "Semua" ≡ "Lead Saya"
 		NextCursor: nextCursor,
+		After:      r.URL.Query().Get("after"),
+		Trail:      pageTrail(r),
 		Err:        wsErrMsg(r.URL.Query().Get("err")),
 		Msg:        leadsMsg(r.URL.Query().Get("ok")),
 	}))

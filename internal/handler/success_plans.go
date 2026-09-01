@@ -99,6 +99,8 @@ func (h *Handler) SuccessPlansList(w http.ResponseWriter, r *http.Request) {
 		Items:      items,
 		CanWrite:   canWrite,
 		NextCursor: nextCursor,
+		After:      r.URL.Query().Get("after"),
+		Trail:      pageTrail(r),
 		Err:        successPlansErrMsg(r.URL.Query().Get("err")),
 		Msg:        successPlansMsg(r.URL.Query().Get("ok")),
 	}))

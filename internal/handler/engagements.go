@@ -102,6 +102,8 @@ func (h *Handler) EngagementsList(w http.ResponseWriter, r *http.Request) {
 		Query:      query,
 		CanWrite:   canWrite,
 		NextCursor: nextCursor,
+		After:      r.URL.Query().Get("after"),
+		Trail:      pageTrail(r),
 		Err:        engagementsErrMsg(r.URL.Query().Get("err")),
 		Msg:        engagementsMsg(r.URL.Query().Get("ok")),
 	}))

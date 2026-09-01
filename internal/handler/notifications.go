@@ -36,8 +36,9 @@ func (h *Handler) NotificationsPage(w http.ResponseWriter, r *http.Request) {
 	cursorAt, cursorID := pageCursor(r)
 
 	vm := panel.NotifView{
-		ErrMsg:  notifErrMsg(r.URL.Query().Get("err")),
-		HasPrev: r.URL.Query().Get("after") != "",
+		ErrMsg: notifErrMsg(r.URL.Query().Get("err")),
+		After:  r.URL.Query().Get("after"),
+		Trail:  pageTrail(r),
 	}
 	// Fail-soft: gagal baca salah satu sumber tak boleh mengosongkan halaman
 	// diam-diam tanpa jejak — error dicatat, bagian yang berhasil tetap tampil.
@@ -60,7 +61,7 @@ func (h *Handler) NotificationsPage(w http.ResponseWriter, r *http.Request) {
 		// Undangan hanya di halaman PERTAMA: ia TUGAS, bukan riwayat. Mengulanginya
 		// di tiap halaman membuat orang mengira undangannya bertambah tiap kali
 		// menekan "lebih lama".
-		if !vm.HasPrev {
+		if vm.After == "" {
 			inv, e := q.ListPendingInvitesByEmail(ctx, email)
 			if e != nil {
 				return e

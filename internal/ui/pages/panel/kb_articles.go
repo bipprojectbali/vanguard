@@ -44,6 +44,8 @@ type KBArticleListView struct {
 	Msg        string
 	Items      []KBArticleRow
 	NextCursor string
+	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
 // KBArticleList merender halaman katalog: header + alert + tabel.
@@ -79,15 +81,8 @@ func KBArticleList(v KBArticleListView) g.Node {
 // kbArticlesPager = tautan keyset "Berikutnya »" (native <a>, lolos gotcha #16).
 // NextCursor kosong = ujung daftar. flex-wrap agar tak mendorong lebar di 375px.
 func kbArticlesPager(v KBArticleListView) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := v.Base + "/kb-articles?after=" + v.NextCursor
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	base := v.Base + "/kb-articles"
+	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }
 
 func emptyKBArticles() g.Node {

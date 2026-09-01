@@ -62,7 +62,7 @@ func (h *Handler) reportsSubscriptionsPage(ctx context.Context, r *http.Request,
 	br := session.BusinessRole(ctx)
 	cursorAt, cursorID := pageCursor(r)
 	q := h.q(ctx)
-	view := panel.ReportsSubscriptionsView{Section: section}
+	view := panel.ReportsSubscriptionsView{Section: section, After: r.URL.Query().Get("after"), Trail: pageTrail(r)}
 
 	if section == reportSectionChurn {
 		rows, err := q.ListChurned(ctx, db.ListChurnedParams{

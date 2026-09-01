@@ -52,3 +52,32 @@ func TestSubList_SearchNoMatchEmptyState(t *testing.T) {
 		t.Errorf("tautan reset harus tanpa q (status=Active saja):\n%s", out)
 	}
 }
+
+// TestSubList_PrevLinkThreadsFilters — regresi BL-7: di halaman ke-2 (After +
+// Trail terisi) tautan "« Sebelumnya" membawa status + q aktif TANPA after/trail
+// (mundur ke halaman pertama hasil terfilter, bukan melebar ke semua langganan).
+func TestSubList_PrevLinkThreadsFilters(t *testing.T) {
+	out := renderLeads(t, SubList(SubListView{
+		Base:         "/w/desa",
+		StatusFilter: "Active",
+		Statuses:     []string{"Active", "Trial"},
+		Query:        "kali muara",
+		Items:        []SubRow{{ID: 1, Village: "Desa Cocok"}},
+		NextCursor:   "200_2",
+		After:        "100_1",
+		Trail:        "-",
+	}))
+
+	if !strings.Contains(out, "« Sebelumnya") {
+		t.Errorf("halaman ke-2 harus punya tautan « Sebelumnya:\n%s", out)
+	}
+	if !strings.Contains(out, `href="/w/desa/subscriptions?status=Active&amp;q=kali+muara" class="btn btn-ghost min-h-11">« Sebelumnya`) {
+		t.Errorf("« Sebelumnya harus membawa status=Active + q tanpa after/trail:\n%s", out)
+	}
+	if !strings.Contains(out, "Hal 2") {
+		t.Errorf("harus menampilkan nomor halaman (Hal 2):\n%s", out)
+	}
+	if !strings.Contains(out, "after=200_2&amp;trail=-~100_1") {
+		t.Errorf("Berikutnya harus push cursor halaman ini ke jejak:\n%s", out)
+	}
+}

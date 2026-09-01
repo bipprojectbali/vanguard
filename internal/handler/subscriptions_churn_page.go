@@ -82,6 +82,8 @@ func (h *Handler) SubscriptionChurnList(w http.ResponseWriter, r *http.Request) 
 			Err:        wsErrMsg(r.URL.Query().Get("err")),
 			Items:      items,
 			NextCursor: nextCursor,
+			After:      r.URL.Query().Get("after"),
+			Trail:      pageTrail(r),
 		}))
 }
 

@@ -53,7 +53,8 @@ type TrailView struct {
 	Family     string // filter jenis aksi yang sedang aktif
 	ActorID    int64  // filter orang yang sedang aktif
 	NextCursor string
-	HasPrev    bool
+	After      string // BL-7: cursor pembuka halaman ini
+	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
 // trailURL merakit tautan panel dengan mempertahankan filter LAIN yang sedang
@@ -236,21 +237,7 @@ func familyBadge(fam string) string {
 // trailPager = jalan ke peristiwa yang lebih lama. Link biasa (navigasi, harus
 // bisa di-bookmark). Tap target 44px: ini kontrol utama, bukan aksi baris.
 func trailPager(v TrailView) g.Node {
-	if v.NextCursor == "" && !v.HasPrev {
-		return nil
-	}
-	return h.Div(
-		h.Class("mt-4 flex flex-wrap items-center gap-2"),
-		g.If(v.HasPrev, h.A(
-			h.Href(trailURL(v, v.Family, v.ActorID, "")),
-			h.Class("btn btn-ghost min-h-11"), g.Text("« Terbaru"),
-		)),
-		g.If(v.NextCursor != "", h.A(
-			h.Href(trailURL(v, v.Family, v.ActorID, v.NextCursor)),
-			h.Class("btn min-h-11"), g.Text("Lebih lama »"),
-		)),
-		g.If(v.NextCursor == "", h.Span(
-			h.Class("text-sm text-base-content/60"), g.Text("Ujung jejak pada rentang ini."),
-		)),
-	)
+	// baseHref = tautan kanonik yang mempertahankan filter range/act/by TANPA
+	// after (ditambah oleh helper pager). Trail memberi "Sebelumnya" sungguhan.
+	return ui.KeysetPager(trailURL(v, v.Family, v.ActorID, ""), v.After, v.Trail, v.NextCursor)
 }

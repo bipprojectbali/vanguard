@@ -25,6 +25,14 @@ func getDevUsers(t *testing.T, env *testEnv, actorID int64, after string) string
 	if after != "" {
 		url += "?after=" + after
 	}
+	return getDevUsersURL(t, env, actorID, url)
+}
+
+// getDevUsersURL memanggil halaman pada URL apa adanya (termasuk query trail).
+// Dipakai saat test perlu MENGIKUTI tautan pager sungguhan (after + trail),
+// bukan cuma menyodorkan cursor telanjang.
+func getDevUsersURL(t *testing.T, env *testEnv, actorID int64, url string) string {
+	t.Helper()
 	rec := httptest.NewRecorder()
 	env.sm.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		session.SetIdentity(r.Context(), actorID, "test@local", "super_admin", true,
@@ -32,6 +40,25 @@ func getDevUsers(t *testing.T, env *testEnv, actorID int64, after string) string
 		env.h.DevUsersList(w, r.WithContext(withQueries(r.Context(), env.q)))
 	})).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, url, nil))
 	return rec.Body.String()
+}
+
+// nextHrefFrom memungut href PENUH tautan "Berikutnya" (after + trail), meng-
+// unescape &amp;→& agar bisa langsung dipakai sebagai URL request berikutnya.
+// Berbeda dari nextCursorFrom yang hanya mengambil cursor: di sini kita ingin
+// membawa jejak agar halaman berikut tahu jalan mundurnya.
+func nextHrefFrom(t *testing.T, html string) string {
+	t.Helper()
+	const marker = `href="/dev/users?after=`
+	i := strings.Index(html, marker)
+	if i < 0 {
+		t.Fatalf("tak ada tautan Berikutnya di halaman")
+	}
+	rest := html[i+len(`href="`):]
+	end := strings.IndexByte(rest, '"')
+	if end < 0 {
+		t.Fatalf("tautan berikutnya tak tertutup: %.80s", rest)
+	}
+	return strings.ReplaceAll(rest[:end], "&amp;", "&")
 }
 
 // rowOf = penanda BARIS TABEL milik satu user (id yang dipakai UserRowNode).
@@ -53,7 +80,7 @@ func nextCursorFrom(t *testing.T, html string) string {
 		return ""
 	}
 	rest := html[i+len(marker):]
-	end := strings.IndexAny(rest, `"'`)
+	end := strings.IndexAny(rest, `&"'`)
 	if end < 0 {
 		t.Fatalf("tautan berikutnya tak tertutup: %.80s", rest)
 	}
@@ -103,7 +130,9 @@ func TestDevUsers_HalamanTerakhirMenyatakanUjung(t *testing.T) {
 	for i := range pageSize {
 		env.seedMember(t, "orang"+itoa(int64(i))+"@local", "member", 0)
 	}
-	last := getDevUsers(t, env, superID, nextCursorFrom(t, getDevUsers(t, env, superID, "")))
+	// Ikuti tautan Berikutnya SUNGGUHAN (bawa after + trail) agar halaman kedua
+	// tahu jalan mundurnya — bukan cuma menyodorkan cursor telanjang.
+	last := getDevUsersURL(t, env, superID, nextHrefFrom(t, getDevUsers(t, env, superID, "")))
 
 	if nextCursorFrom(t, last) != "" {
 		t.Error("halaman terakhir tak boleh menawarkan Berikutnya")
@@ -112,7 +141,7 @@ func TestDevUsers_HalamanTerakhirMenyatakanUjung(t *testing.T) {
 		t.Error("halaman terakhir harus menyatakan bahwa daftarnya habis")
 	}
 	if !strings.Contains(last, `href="/dev/users"`) {
-		t.Error("halaman kedua dst harus punya jalan kembali ke awal daftar")
+		t.Error("halaman kedua dst harus punya jalan kembali (« Sebelumnya) ke awal daftar")
 	}
 }
 

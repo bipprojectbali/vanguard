@@ -116,6 +116,7 @@ func trailViewOf(r *http.Request, rng string, rows []dev.TrailRow, next string,
 		Family:     f.family,
 		ActorID:    f.actorID,
 		NextCursor: next,
-		HasPrev:    r.URL.Query().Get("after") != "",
+		After:      r.URL.Query().Get("after"),
+		Trail:      pageTrail(r),
 	}
 }

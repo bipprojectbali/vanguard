@@ -47,11 +47,11 @@ type UsersView struct {
 	CanManageSuper bool     // aktor boleh mengangkat super-admin (opsi super_admin muncul)
 	// NextCursor = penanda halaman berikutnya; "" berarti ini halaman terakhir.
 	NextCursor string
-	// HasPrev = halaman ini BUKAN yang pertama. Cursor keyset tak bisa mundur
-	// (ia hanya tahu "sesudah X"), jadi jalan kembalinya ke awal daftar — dan
-	// itu harus dikatakan apa adanya lewat label, bukan disamarkan sebagai
-	// "Sebelumnya" yang melompat ke tempat tak terduga.
-	HasPrev bool
+	// After/Trail = jejak cursor untuk pager dua-arah (BL-7). Trail menyimpan
+	// cursor halaman-halaman sebelumnya di ?trail=, sehingga "Sebelumnya" bisa
+	// mundur SATU halaman sungguhan (bukan lagi lompat ke awal) + label "Hal N".
+	After string
+	Trail string
 }
 
 // UsersPage merender tabel user + kontrol role/status/hapus.
@@ -94,33 +94,7 @@ func UsersPage(v UsersView) g.Node {
 // Tak dirender saat hanya ada satu halaman: kontrol navigasi yang tak menuju ke
 // mana pun cuma mengundang klik yang tak berbuat apa-apa.
 func usersPager(v UsersView) g.Node {
-	if v.NextCursor == "" && !v.HasPrev {
-		return nil
-	}
-	// flex-wrap di BARIS TOMBOL: dua tombol + keterangan tak muat di 375px dan
-	// akan mendorong lebar halaman bila tak boleh membungkus (mobile-first).
-	//
-	// Ukuran penuh (`btn`, BUKAN `btn-sm`): ini navigasi utama halaman, dan
-	// `btn-sm` hanya 32px — di bawah ambang tap target 44px. Kontrol sekunder di
-	// dalam baris tabel boleh kecil; yang memindahkan halaman tidak.
-	return h.Div(
-		h.Class("mt-4 flex flex-wrap items-center gap-2"),
-		g.If(v.HasPrev, h.A(
-			h.Href("/dev/users"), h.Class("btn btn-ghost min-h-11"),
-			g.Text("« Awal daftar"),
-		)),
-		g.If(v.NextCursor != "", h.A(
-			h.Href("/dev/users?after="+v.NextCursor), h.Class("btn min-h-11"),
-			g.Text("Berikutnya »"),
-		)),
-		// Ujung daftar dikatakan eksplisit. Tanpa ini, halaman terakhir tampak
-		// sama dengan halaman yang tombolnya gagal dirender — dan operator akan
-		// mengira masih ada user yang tak bisa ia jangkau.
-		g.If(v.NextCursor == "", h.Span(
-			h.Class("text-sm text-base-content/60"),
-			g.Text("Ujung daftar."),
-		)),
-	)
+	return ui.KeysetPager("/dev/users", v.After, v.Trail, v.NextCursor)
 }
 
 // UserRowNode merender satu baris user. Di-export agar handler bisa me-render

@@ -54,6 +54,8 @@ type QuotesListView struct {
 	Msg          string
 	Items        []QuoteRow
 	NextCursor   string
+	After        string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail        string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 	// Summary (BL-18) = ringkasan agregat quote deal ini, di-precompute handler
 	// (dari SEMUA quote hidup, bukan hanya halaman termuat).
 	Summary QuotesSummary
@@ -200,13 +202,5 @@ func emptyQuotes() g.Node {
 }
 
 func quotesPager(v QuotesListView, dealBase string) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(dealBase+"/quotes?after="+v.NextCursor), h.Class("btn min-h-11"),
-			g.Text("Berikutnya »")),
-	)
+	return ui.KeysetPager(dealBase+"/quotes", v.After, v.Trail, v.NextCursor)
 }

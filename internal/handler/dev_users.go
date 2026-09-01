@@ -54,7 +54,8 @@ func (h *Handler) DevUsersList(w http.ResponseWriter, r *http.Request) {
 			Roles:          authz.AssignableRoles(appmode.IsSingle()),
 			CanManageSuper: canManageSuper,
 			NextCursor:     next,
-			HasPrev:        r.URL.Query().Get("after") != "",
+			After:          r.URL.Query().Get("after"),
+			Trail:          pageTrail(r),
 		}))
 }
 
