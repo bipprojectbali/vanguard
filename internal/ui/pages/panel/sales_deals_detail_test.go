@@ -1,0 +1,117 @@
+package panel
+
+import (
+	"strings"
+	"testing"
+)
+
+// sales_deals_detail_test.go — regresi BL-12: stepper detail deal menampilkan 6
+// langkah (Closed Won/Lost jadi SATU node terminal), dan field alasan menang/kalah
+// + catatan kekalahan hanya tampil (data-show Datastar) saat tahap terminal.
+// dealStageOptions (enum handler) tetap 7 — di sini kita jaga representasi visual.
+
+// pipelineStages = tiruan dealStageOptions (7) untuk uji view tanpa impor handler.
+var pipelineStages = []string{
+	"Prospecting", "Qualification", "Demo", "Proposal", "Negotiation",
+	"Closed Won", "Closed Lost",
+}
+
+// TestDisplayStages_SixSteps: 7 tahap pipeline → 6 langkah tampilan; dua terminal
+// digabung jadi satu node.
+func TestDisplayStages_SixSteps(t *testing.T) {
+	got := displayStages(pipelineStages, "Demo")
+	if len(got) != 6 {
+		t.Fatalf("stepper harus 6 langkah, dapat %d: %v", len(got), got)
+	}
+	want5 := []string{"Prospecting", "Qualification", "Demo", "Proposal", "Negotiation"}
+	for i, s := range want5 {
+		if got[i] != s {
+			t.Errorf("langkah[%d] = %q, mau %q", i, got[i], s)
+		}
+	}
+	// Tahap masih terbuka → node ke-6 = "Ditutup" (bukan Won/Lost harfiah).
+	if got[5] != "Ditutup" {
+		t.Errorf("node terminal saat terbuka = %q, mau %q", got[5], "Ditutup")
+	}
+	// Tak boleh ada dua node terminal terpisah.
+	for _, s := range got {
+		if s == "Closed Won" || s == "Closed Lost" {
+			t.Errorf("node terminal terpisah %q bocor ke display stages: %v", s, got)
+		}
+	}
+}
+
+// TestDisplayStages_TerminalLabel: node ke-6 mengikuti hasil aktual saat tertutup.
+func TestDisplayStages_TerminalLabel(t *testing.T) {
+	cases := map[string]string{
+		"Closed Won":  "Closed Won",
+		"Closed Lost": "Closed Lost",
+		"Negotiation": "Ditutup",
+	}
+	for current, wantLast := range cases {
+		got := displayStages(pipelineStages, current)
+		if got[len(got)-1] != wantLast {
+			t.Errorf("current=%q → node terminal %q, mau %q", current, got[len(got)-1], wantLast)
+		}
+	}
+}
+
+// TestDealStepper_RendersSixNodes: stepper merender tepat 6 <li> dan menandai
+// node terminal "Closed Won" sebagai posisi saat ini (deal menang).
+func TestDealStepper_RendersSixNodes(t *testing.T) {
+	out := renderLeads(t, dealStepper(displayStages(pipelineStages, "Closed Won"), "Closed Won"))
+	if n := strings.Count(out, "<li"); n != 6 {
+		t.Errorf("stepper harus 6 <li>, dapat %d:\n%s", n, out)
+	}
+	if strings.Contains(out, "Closed Lost") {
+		t.Errorf("deal menang tak boleh menampilkan node 'Closed Lost':\n%s", out)
+	}
+	if !strings.Contains(out, "Closed Won") {
+		t.Errorf("node terminal 'Closed Won' harus tampil saat menang:\n%s", out)
+	}
+}
+
+// stageControlFixture = view minimal untuk merender kontrol Ubah Tahap.
+func stageControlFixture(stage string) DealDetailView {
+	return DealDetailView{
+		Base:   "/w/acme",
+		ID:     42,
+		Stage:  stage,
+		Stages: pipelineStages,
+	}
+}
+
+// TestDealStageControl_ConditionalFields: <select> di-bind ke signal $stage;
+// "Alasan Menang/Kalah" data-show saat Won ATAU Lost; "Catatan Kekalahan" HANYA
+// saat Lost. Nilai atribut ter-escape (&#39;) — browser mengembalikannya ke ' saat
+// dibaca Datastar (verifikasi bentuk ter-render benar, bukan lewat helper dsx.go).
+func TestDealStageControl_ConditionalFields(t *testing.T) {
+	out := renderLeads(t, dealStageControl(stageControlFixture("Negotiation"), "/w/acme/deals/42"))
+
+	for _, want := range []string{
+		`data-signals=`,     // sinyal $stage diinisialisasi
+		`data-bind="stage"`, // <select> menyetir $stage
+		`name="win_loss_reason"`,
+		`name="loss_notes"`,
+		// win_loss tampil saat Won ATAU Lost
+		`data-show="$stage == &#39;Closed Won&#39; || $stage == &#39;Closed Lost&#39;"`,
+		// loss_notes HANYA saat Lost
+		`data-show="$stage == &#39;Closed Lost&#39;"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("kontrol tahap harus memuat %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestDealStageControl_NativePost: aksi ganti tahap tetap NATIVE POST (gotcha #16),
+// bukan @post Datastar — data-bind hanya untuk toggle klien, tak menggeser submit.
+func TestDealStageControl_NativePost(t *testing.T) {
+	out := renderLeads(t, dealStageControl(stageControlFixture("Demo"), "/w/acme/deals/42"))
+	if !strings.Contains(out, `method="post"`) || !strings.Contains(out, `action="/w/acme/deals/42/stage"`) {
+		t.Errorf("form ganti tahap harus native POST ke .../stage:\n%s", out)
+	}
+	if strings.Contains(out, "@post") {
+		t.Errorf("ganti tahap tak boleh pakai @post Datastar (gotcha #16):\n%s", out)
+	}
+}
