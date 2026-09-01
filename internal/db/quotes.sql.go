@@ -76,7 +76,7 @@ INSERT INTO quotes (
     $10, $11, $12,
     $13
 )
-RETURNING id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at
+RETURNING id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate
 `
 
 type CreateQuoteParams struct {
@@ -140,6 +140,8 @@ func (q *Queries) CreateQuote(ctx context.Context, arg CreateQuoteParams) (Quote
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.TaxMode,
+		&i.TaxRate,
 	)
 	return i, err
 }
@@ -156,7 +158,7 @@ func (q *Queries) DeleteQuoteItem(ctx context.Context, id int64) error {
 }
 
 const getQuote = `-- name: GetQuote :one
-SELECT id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at FROM quotes
+SELECT id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate FROM quotes
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -184,6 +186,8 @@ func (q *Queries) GetQuote(ctx context.Context, id int64) (Quote, error) {
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.TaxMode,
+		&i.TaxRate,
 	)
 	return i, err
 }
@@ -227,7 +231,7 @@ func (q *Queries) ListQuoteItems(ctx context.Context, quoteID int64) ([]QuoteIte
 }
 
 const listQuotes = `-- name: ListQuotes :many
-SELECT q.id, q.tenant_id, q.entity_code, q.deal_id, q.account_id, q.quote_name, q.quote_status, q.expiration_date, q.payment_terms, q.notes_terms, q.prepared_by, q.grand_total, q.tax_amount, q.deleted_at, q.created_by, q.created_at, q.updated_by, q.updated_at, d.deal_name
+SELECT q.id, q.tenant_id, q.entity_code, q.deal_id, q.account_id, q.quote_name, q.quote_status, q.expiration_date, q.payment_terms, q.notes_terms, q.prepared_by, q.grand_total, q.tax_amount, q.deleted_at, q.created_by, q.created_at, q.updated_by, q.updated_at, q.tax_mode, q.tax_rate, d.deal_name
 FROM quotes q
 JOIN deals d ON d.id = q.deal_id
 WHERE q.deleted_at IS NULL
@@ -276,6 +280,8 @@ type ListQuotesRow struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedBy      *int64             `json:"updated_by"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	TaxMode        string             `json:"tax_mode"`
+	TaxRate        pgtype.Numeric     `json:"tax_rate"`
 	DealName       string             `json:"deal_name"`
 }
 
@@ -326,6 +332,8 @@ func (q *Queries) ListQuotes(ctx context.Context, arg ListQuotesParams) ([]ListQ
 			&i.CreatedAt,
 			&i.UpdatedBy,
 			&i.UpdatedAt,
+			&i.TaxMode,
+			&i.TaxRate,
 			&i.DealName,
 		); err != nil {
 			return nil, err
@@ -339,7 +347,7 @@ func (q *Queries) ListQuotes(ctx context.Context, arg ListQuotesParams) ([]ListQ
 }
 
 const listQuotesForDeal = `-- name: ListQuotesForDeal :many
-SELECT id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at FROM quotes
+SELECT id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate FROM quotes
 WHERE deleted_at IS NULL
   AND deal_id = $1
   AND (created_at, id) < ($2::timestamptz, $3::bigint)
@@ -390,6 +398,8 @@ func (q *Queries) ListQuotesForDeal(ctx context.Context, arg ListQuotesForDealPa
 			&i.CreatedAt,
 			&i.UpdatedBy,
 			&i.UpdatedAt,
+			&i.TaxMode,
+			&i.TaxRate,
 		); err != nil {
 			return nil, err
 		}
@@ -447,7 +457,7 @@ UPDATE quotes SET
     updated_by      = $8,
     updated_at      = now()
 WHERE id = $9 AND deleted_at IS NULL
-RETURNING id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at
+RETURNING id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate
 `
 
 type UpdateQuoteParams struct {
@@ -497,6 +507,8 @@ func (q *Queries) UpdateQuote(ctx context.Context, arg UpdateQuoteParams) (Quote
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.TaxMode,
+		&i.TaxRate,
 	)
 	return i, err
 }
@@ -568,24 +580,32 @@ func (q *Queries) UpdateQuoteStatus(ctx context.Context, arg UpdateQuoteStatusPa
 
 const updateQuoteTotals = `-- name: UpdateQuoteTotals :exec
 UPDATE quotes SET
-    grand_total = $1,
-    tax_amount  = $2,
-    updated_by  = $3,
+    tax_mode    = $1,
+    tax_rate    = $2,
+    grand_total = $3,
+    tax_amount  = $4,
+    updated_by  = $5,
     updated_at  = now()
-WHERE id = $4 AND deleted_at IS NULL
+WHERE id = $6 AND deleted_at IS NULL
 `
 
 type UpdateQuoteTotalsParams struct {
+	TaxMode    string         `json:"tax_mode"`
+	TaxRate    pgtype.Numeric `json:"tax_rate"`
 	GrandTotal pgtype.Numeric `json:"grand_total"`
 	TaxAmount  pgtype.Numeric `json:"tax_amount"`
 	UpdatedBy  *int64         `json:"updated_by"`
 	ID         int64          `json:"id"`
 }
 
-// Rekalkulasi total quote (snapshot) setelah item berubah. grand_total & tax_amount
-// dihitung app dari quote_items lalu ditulis di sini — bukan agregat live saat baca.
+// Rekalkulasi total quote (snapshot) setelah item/pajak berubah. grand_total &
+// tax_amount dihitung app dari quote_items + konfigurasi pajak lalu ditulis di sini
+// — bukan agregat live saat baca. tax_mode/tax_rate menyimpan CARA pajak dihitung
+// (BL-14): percent → tax_rate dipakai (tax_amount = subtotal×rate); amount → tetap.
 func (q *Queries) UpdateQuoteTotals(ctx context.Context, arg UpdateQuoteTotalsParams) error {
 	_, err := q.db.Exec(ctx, updateQuoteTotals,
+		arg.TaxMode,
+		arg.TaxRate,
 		arg.GrandTotal,
 		arg.TaxAmount,
 		arg.UpdatedBy,

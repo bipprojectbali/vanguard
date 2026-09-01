@@ -76,6 +76,15 @@ func addNumeric(a, b pgtype.Numeric) pgtype.Numeric {
 	return ratToNumeric(sum)
 }
 
+// percentOfNumeric = base × pct / 100 (EKSAK via big.Rat, dibulatkan moneyScale).
+// Dipakai pajak mode 'percent' (BL-14): tax_amount = subtotal × tax_rate/100. NULL
+// pada salah satu operand = 0 → hasil 0 (subtotal/rate belum ada = tanpa pajak).
+func percentOfNumeric(base, pct pgtype.Numeric) pgtype.Numeric {
+	res := new(big.Rat).Mul(ratFromNumeric(base), ratFromNumeric(pct))
+	res.Quo(res, big.NewRat(100, 1))
+	return ratToNumeric(res)
+}
+
 // numericNonNegative benar bila n ≥ 0 (atau NULL/invalid = 0, dianggap non-negatif).
 // Dipakai validasi form: pajak & harga tak boleh negatif (di luar CHECK DB → dijaga app).
 func numericNonNegative(n pgtype.Numeric) bool {

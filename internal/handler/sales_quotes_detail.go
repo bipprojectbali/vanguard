@@ -81,6 +81,8 @@ func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64
 		h.Log.Error("quotes: members", "err", err)
 	}
 
+	taxMode, taxRateInput, taxAmountInput, taxLabel := quoteTaxView(q)
+
 	return panel.QuoteDetailView{
 		Base:         base,
 		DealID:       dealID,
@@ -97,6 +99,12 @@ func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64
 		Subtotal:     maskARR(formatRupiah(subtotal), br),
 		Tax:          maskARR(formatRupiah(q.TaxAmount), br),
 		GrandTotal:   maskARR(formatRupiah(q.GrandTotal), br),
+
+		TaxMode:        taxMode,
+		TaxRateInput:   taxRateInput,
+		TaxAmountInput: taxAmountInput,
+		TaxLabel:       taxLabel,
+
 		Items:        itemRows,
 		Plans:        planOpts,
 		CanWrite:     canWriteDeals(ctx),

@@ -17,8 +17,9 @@ import (
 // edit tak boleh menerima nilai yang berbeda sahnya untuk kolom yang sama.
 //
 // Status quote di sini = CERMIN CHECK constraint migrasi 00010 (quotes_status_chk):
-// penolakan terjadi di sini SEBELUM DB; CHECK jaring terakhir. Pajak = INPUT MANUAL
-// (keputusan scope terkunci) → field form, bukan konstanta PPN.
+// penolakan terjadi di sini SEBELUM DB; CHECK jaring terakhir. Pajak TIDAK lagi di
+// header (BL-14) — dipindah ke builder item (QuoteTax) tempat subtotal sudah hidup;
+// header hanya identitas quote (nama, tanggal, termin, penyusun).
 
 const (
 	maxQuoteNameLen  = 200  // quote_name (nullable)
@@ -50,14 +51,13 @@ var _ = func() struct{} {
 }()
 
 // quoteForm = nilai form HEADER quote yang SUDAH divalidasi. Semua kolom opsional
-// (quote menempel ke deal induk untuk account/deal_id). TaxAmount pgtype.Numeric
-// (nil-valid = NULL). PreparedBy *int64 (nil = tak ditunjuk).
+// (quote menempel ke deal induk untuk account/deal_id). PreparedBy *int64 (nil = tak
+// ditunjuk). Pajak bukan lagi bagian header (BL-14) → dikelola QuoteTax di builder.
 type quoteForm struct {
 	QuoteName      *string
 	ExpirationDate pgtype.Date
 	PaymentTerms   *string
 	NotesTerms     *string
-	TaxAmount      pgtype.Numeric
 	PreparedBy     *int64
 }
 
@@ -96,16 +96,6 @@ func parseQuoteForm(fv func(string) string) (quoteForm, string) {
 		f.NotesTerms = nt
 	}
 
-	// tax_amount MANUAL: kosong = NULL; terisi wajib desimal ≥ 0.
-	tax, code := optNumeric(fv("tax_amount"), "tax")
-	if code != "" {
-		return quoteForm{}, code
-	}
-	if tax.Valid && !numericNonNegative(tax) {
-		return quoteForm{}, "tax"
-	}
-	f.TaxAmount = tax
-
 	// prepared_by opsional: kosong = NULL; terisi wajib id positif. Picker hanya
 	// menawarkan anggota workspace; id tak dikenal ternetralkan saat resolusi nama.
 	pb, code := optPositiveID(fv("prepared_by"), "prepared_by")
@@ -128,7 +118,6 @@ func quoteFormFields(q db.Quote) panel.QuoteFormFields {
 		ExpirationDate: dateStr(q.ExpirationDate),
 		PaymentTerms:   deref(q.PaymentTerms),
 		NotesTerms:     deref(q.NotesTerms),
-		TaxAmount:      numericStr(q.TaxAmount),
 		PreparedBy:     preparedBy,
 	}
 }

@@ -16,9 +16,12 @@ func TestUpdateQuoteTotals(t *testing.T) {
 	deal := seedDeal(t, ctx, pool, ten.ID, acc.ID, "Deal", nil)
 	quote := seedQuote(t, ctx, pool, ten.ID, acc.ID, &deal.ID, "Q")
 
+	// BL-14: UpdateQuoteTotals kini juga menyimpan tax_mode (+ tax_rate saat percent).
+	// Mode 'amount' → rate NULL, tax_amount = nilai flat.
 	var got Quote
 	if err := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
 		if e := q.UpdateQuoteTotals(ctx, UpdateQuoteTotalsParams{
+			TaxMode:    "amount",
 			GrandTotal: numeric(t, "1500.00"),
 			TaxAmount:  numeric(t, "150.00"),
 			ID:         quote.ID,
@@ -31,9 +34,31 @@ func TestUpdateQuoteTotals(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("totals: %v", err)
 	}
-	if numStr(t, got.GrandTotal) != "1500.00" || numStr(t, got.TaxAmount) != "150.00" {
-		t.Errorf("total harus tersimpan (grand=1500.00,tax=150.00), got grand=%q tax=%q",
-			numStr(t, got.GrandTotal), numStr(t, got.TaxAmount))
+	if got.TaxMode != "amount" || numStr(t, got.GrandTotal) != "1500.00" || numStr(t, got.TaxAmount) != "150.00" {
+		t.Errorf("total harus tersimpan (mode=amount,grand=1500.00,tax=150.00), got mode=%q grand=%q tax=%q",
+			got.TaxMode, numStr(t, got.GrandTotal), numStr(t, got.TaxAmount))
+	}
+
+	// Mode 'percent' → tax_rate tersimpan (snapshot tax_amount tetap dihitung app).
+	if err := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
+		if e := q.UpdateQuoteTotals(ctx, UpdateQuoteTotalsParams{
+			TaxMode:    "percent",
+			TaxRate:    numeric(t, "11.00"),
+			GrandTotal: numeric(t, "1110.00"),
+			TaxAmount:  numeric(t, "110.00"),
+			ID:         quote.ID,
+		}); e != nil {
+			return e
+		}
+		var e error
+		got, e = q.GetQuote(ctx, quote.ID)
+		return e
+	}); err != nil {
+		t.Fatalf("totals percent: %v", err)
+	}
+	if got.TaxMode != "percent" || numStr(t, got.TaxRate) != "11.00" {
+		t.Errorf("mode/rate percent harus tersimpan, got mode=%q rate=%q",
+			got.TaxMode, numStr(t, got.TaxRate))
 	}
 }
 

@@ -1211,8 +1211,10 @@ type Querier interface {
 	// constraint DB) agar pesan bisa diperbaiki user; CHECK di DB hanya membatasi
 	// himpunan nilai legal.
 	UpdateQuoteStatus(ctx context.Context, arg UpdateQuoteStatusParams) error
-	// Rekalkulasi total quote (snapshot) setelah item berubah. grand_total & tax_amount
-	// dihitung app dari quote_items lalu ditulis di sini — bukan agregat live saat baca.
+	// Rekalkulasi total quote (snapshot) setelah item/pajak berubah. grand_total &
+	// tax_amount dihitung app dari quote_items + konfigurasi pajak lalu ditulis di sini
+	// — bukan agregat live saat baca. tax_mode/tax_rate menyimpan CARA pajak dihitung
+	// (BL-14): percent → tax_rate dipakai (tax_amount = subtotal×rate); amount → tetap.
 	UpdateQuoteTotals(ctx context.Context, arg UpdateQuoteTotalsParams) error
 	// Sunting profil kebijakan. is_active TAK di sini (SetSLAPolicyActive) —
 	// pensiun/aktifkan adalah aksi tersendiri, bukan efek samping edit.
