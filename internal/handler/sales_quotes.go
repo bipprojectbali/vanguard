@@ -46,31 +46,33 @@ func (h *Handler) parseQuoteRef(w http.ResponseWriter, r *http.Request) (dealID,
 	return dealID, quoteID, true
 }
 
-// loadOwnedQuote memuat satu quote & menegakkan F3 lewat DEAL INDUK. Quote tak
-// menyaring ownership sendiri; keputusan "boleh lihat?" diambil dari deal induknya
+// loadOwnedQuote memuat satu quote & DEAL INDUKNYA, menegakkan F3 lewat deal. Quote
+// tak menyaring ownership sendiri; keputusan "boleh lihat?" diambil dari deal induk
 // (loadOwnedDeal → 404 di luar cakupan) — sumber yang sama dengan halaman deal.
-// dealID dari URL WAJIB cocok dengan quote.deal_id: quote dari deal lain → 404.
-func (h *Handler) loadOwnedQuote(w http.ResponseWriter, r *http.Request, dealID, quoteID int64) (db.Quote, bool) {
+// dealID dari URL WAJIB cocok dengan quote.deal_id: quote dari deal lain → 404. Deal
+// dikembalikan agar pemanggil punya deal.Stage (gerbang quotable BL-13) tanpa query ulang.
+func (h *Handler) loadOwnedQuote(w http.ResponseWriter, r *http.Request, dealID, quoteID int64) (db.Quote, db.Deal, bool) {
 	ctx := r.Context()
 	q, err := h.q(ctx).GetQuote(ctx, quoteID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			http.NotFound(w, r)
-			return db.Quote{}, false
+			return db.Quote{}, db.Deal{}, false
 		}
 		h.Log.Error("quotes: get", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
-		return db.Quote{}, false
+		return db.Quote{}, db.Deal{}, false
 	}
 	if q.DealID == nil || *q.DealID != dealID {
 		http.NotFound(w, r)
-		return db.Quote{}, false
+		return db.Quote{}, db.Deal{}, false
 	}
 	// Warisan F3: keputusan atas DEAL INDUK (loadOwnedDeal → 404 bila di luar cakupan).
-	if _, ok := h.loadOwnedDeal(w, r, dealID); !ok {
-		return db.Quote{}, false
+	d, ok := h.loadOwnedDeal(w, r, dealID)
+	if !ok {
+		return db.Quote{}, db.Deal{}, false
 	}
-	return q, true
+	return q, d, true
 }
 
 // QuoteCreate — POST /w/{workspace}/deals/{id}/quotes. Membuat quote untuk deal ini.
@@ -88,6 +90,10 @@ func (h *Handler) QuoteCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	d, ok := h.loadOwnedDeal(w, r, dealID)
 	if !ok {
+		return
+	}
+	// BL-13: quote hanya boleh dibuat saat deal di jendela quoting (Qualification–Negotiation).
+	if !h.requireQuotableStage(w, r, d.Stage, quoteListSub(dealID)) {
 		return
 	}
 	form, errCode := parseQuoteForm(r.FormValue)

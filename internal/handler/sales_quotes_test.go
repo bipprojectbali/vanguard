@@ -79,6 +79,20 @@ func (e *testEnv) seedDeal(t *testing.T, accountID int64, owner *int64) db.Deal 
 	return d
 }
 
+// setDealStage memindah deal ke stage tertentu (BL-13). seedDeal mulai di
+// Prospecting yang DILUAR jendela quoting (mutasi quote diblokir gate), jadi test
+// yang membuat/mengubah quote via handler memanggil ini dulu ke stage quotable
+// (Qualification–Negotiation). Lewat UpdateDealStage: satu-satunya jalur pindah
+// pipeline (bukan CreateDeal, yang mengunci stage awal).
+func (e *testEnv) setDealStage(t *testing.T, dealID int64, stage string) {
+	t.Helper()
+	if err := e.q.UpdateDealStage(t.Context(), db.UpdateDealStageParams{
+		Stage: stage, ID: dealID,
+	}); err != nil {
+		t.Fatalf("set deal stage %s: %v", stage, err)
+	}
+}
+
 // seedPlan menaruh satu plan langsung lewat pool (tak ada CreatePlan sqlc — plan
 // dikelola di luar modul ini). base_price = harga yang akan di-SNAPSHOT saat item
 // ditambah; category 'Core' (cermin plans_category_chk).
@@ -178,6 +192,7 @@ func TestQuotes_ItemPriceSnapshotFreeze(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
 	deal := env.seedDeal(t, acc.ID, &uid)
+	env.setDealStage(t, deal.ID, "Qualification") // BL-13: masuk jendela quoting
 	plan := env.seedPlan(t, "Plan A", "PLN-A", "100000.00")
 	q := env.seedQuote(t, deal.ID, acc.ID, "0")
 
@@ -215,6 +230,7 @@ func TestQuotes_TaxRecompute(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
 	deal := env.seedDeal(t, acc.ID, &uid)
+	env.setDealStage(t, deal.ID, "Qualification") // BL-13: masuk jendela quoting
 	p1 := env.seedPlan(t, "Plan A", "PLN-A", "100000.00")
 	p2 := env.seedPlan(t, "Plan B", "PLN-B", "50000.00")
 	q := env.seedQuote(t, deal.ID, acc.ID, "0")
@@ -260,6 +276,7 @@ func TestQuotes_StatusValidAndRejected(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
 	deal := env.seedDeal(t, acc.ID, &uid)
+	env.setDealStage(t, deal.ID, "Qualification") // BL-13: masuk jendela quoting
 	q := env.seedQuote(t, deal.ID, acc.ID, "0")
 
 	// Valid: Draft → Sent.

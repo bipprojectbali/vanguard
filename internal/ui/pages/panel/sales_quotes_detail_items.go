@@ -24,7 +24,7 @@ func quoteLineItems(v QuoteDetailView, quoteBase string) g.Node {
 		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Diskon %")),
 		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Subtotal")),
 	}
-	if v.CanWrite {
+	if v.CanMutate() {
 		head = append(head, h.Th(h.Class("py-2 font-medium"), g.Text("Aksi")))
 	}
 
@@ -34,7 +34,7 @@ func quoteLineItems(v QuoteDetailView, quoteBase string) g.Node {
 	}
 	if len(rows) == 0 {
 		span := 5
-		if v.CanWrite {
+		if v.CanMutate() {
 			span = 6
 		}
 		rows = append(rows, h.Tr(h.Td(
@@ -74,7 +74,7 @@ func quoteItemTableRow(v QuoteDetailView, it QuoteItemRow, quoteBase string) g.N
 		h.Td(h.Class("py-2 pr-4"), g.Text(discount)),
 		h.Td(h.Class("py-2 pr-4 font-medium"), g.Text(orDash(it.Subtotal))),
 	}
-	if v.CanWrite {
+	if v.CanMutate() {
 		cells = append(cells, h.Td(h.Class("py-2"), quoteItemActions(it, quoteBase)))
 	}
 	return h.Tr(h.Class("border-b border-base-300/50 align-top"), g.Group(cells))

@@ -23,8 +23,12 @@ func (h *Handler) QuoteItemUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	q, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
+	q, d, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
 	if !ok {
+		return
+	}
+	// BL-13: ubah/hapus item hanya di jendela quoting.
+	if !h.requireQuotableStage(w, r, d.Stage, quoteSub(dealID, quoteID)) {
 		return
 	}
 	item, ok := h.loadQuoteItem(w, r, quoteID)
@@ -74,8 +78,12 @@ func (h *Handler) QuoteItemDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	q, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
+	q, d, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
 	if !ok {
+		return
+	}
+	// BL-13: ubah/hapus item hanya di jendela quoting.
+	if !h.requireQuotableStage(w, r, d.Stage, quoteSub(dealID, quoteID)) {
 		return
 	}
 	item, ok := h.loadQuoteItem(w, r, quoteID)

@@ -25,16 +25,20 @@ type QuoteRow struct {
 	Expiration string
 }
 
-// QuotesListView = data halaman daftar quote satu deal.
+// QuotesListView = data halaman daftar quote satu deal. Quotable (BL-13) =
+// deal di jendela quoting → boleh buat quote; StageLockMsg = alasan terkunci
+// (dipakai banner saat pemegang tulis diblokir stage). Flag di-precompute handler.
 type QuotesListView struct {
-	Base       string
-	DealID     int64
-	DealName   string
-	CanWrite   bool
-	Err        string
-	Msg        string
-	Items      []QuoteRow
-	NextCursor string
+	Base         string
+	DealID       int64
+	DealName     string
+	CanWrite     bool
+	Quotable     bool
+	StageLockMsg string
+	Err          string
+	Msg          string
+	Items        []QuoteRow
+	NextCursor   string
 }
 
 // QuotesList merender header + alert + tabel quote (atau state kosong) + pager.
@@ -49,13 +53,17 @@ func QuotesList(v QuotesListView) g.Node {
 				h.P(h.Class("text-base-content/70 truncate"),
 					g.Text("Penawaran untuk deal "+v.DealName+".")),
 			),
-			ui.When(v.CanWrite, h.A(
+			ui.When(v.CanWrite && v.Quotable, h.A(
 				h.Href(dealBase+"/quotes/new"), h.Class("btn btn-primary min-h-11"),
 				g.Text("Buat Quote"),
 			)),
 		),
 		h.A(h.Href(dealBase), h.Class("text-sm text-base-content/60"),
 			g.Text("« Kembali ke deal")),
+	}
+	// BL-13: pemegang tulis yang diblokir stage diberi alasan (bukan tombol hilang senyap).
+	if v.CanWrite && !v.Quotable && v.StageLockMsg != "" {
+		body = append(body, ui.Alert(ui.VariantDefault, "quotes-lock", g.Text(v.StageLockMsg)))
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "quotes-err", g.Text(v.Err)))

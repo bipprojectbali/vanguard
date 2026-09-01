@@ -61,7 +61,17 @@ type QuoteDetailView struct {
 	Plans []QuotePlanOption
 
 	CanWrite bool
+	// Quotable (BL-13) = deal di jendela quoting (Qualification–Negotiation) →
+	// mutasi diizinkan. Di luar itu builder READ-ONLY (arsip): kontrol tulis
+	// disembunyikan, StageLockMsg jadi banner. Flag di-precompute handler.
+	Quotable     bool
+	StageLockMsg string
 }
+
+// CanMutate = boleh mengubah quote/item (punya izin tulis DAN deal di jendela
+// quoting). Gerbang tunggal untuk semua kontrol tulis builder (BL-13); backend
+// tetap penjaga sesungguhnya.
+func (v QuoteDetailView) CanMutate() bool { return v.CanWrite && v.Quotable }
 
 // QuoteDetail merender builder: header (nama+kode+status+aksi), kartu identitas,
 // tabel line items + total, lalu (bila boleh tulis) kelola item, tambah item, &
@@ -90,7 +100,7 @@ func QuoteDetail(v QuoteDetailView) g.Node {
 				quoteStatusBadge(v.Status),
 			),
 		),
-		ui.When(v.CanWrite, h.Div(
+		ui.When(v.CanMutate(), h.Div(
 			h.Class("flex flex-wrap items-center gap-2"),
 			h.A(h.Href(quoteBase+"/edit"), h.Class("btn btn-sm min-h-11"), g.Text("Sunting")),
 			deleteQuoteForm(quoteBase),
@@ -101,6 +111,12 @@ func QuoteDetail(v QuoteDetailView) g.Node {
 		header,
 		h.A(h.Href(dealBase+"/quotes"), h.Class("text-sm text-base-content/60"),
 			g.Text("« Kembali ke daftar quote")),
+	}
+	// BL-13: pemegang tulis yang diblokir stage diberi alasan (read-only jujur).
+	if v.CanWrite && !v.Quotable && v.StageLockMsg != "" {
+		body = append(body, ui.Alert(ui.VariantDefault, "quote-lock", g.Text(v.StageLockMsg)))
+	}
+	body = append(body,
 		detailCard("Identitas Quote", []detailField{
 			{"Desa", v.AccountLabel},
 			{"Kedaluwarsa", v.Expiration},
@@ -109,8 +125,8 @@ func QuoteDetail(v QuoteDetailView) g.Node {
 			{"Catatan / Syarat", v.NotesTerms},
 		}),
 		quoteLineItems(v, quoteBase),
-	}
-	if v.CanWrite {
+	)
+	if v.CanMutate() {
 		body = append(body,
 			quoteAddItemForm(v, quoteBase),
 			quoteStatusControl(v, quoteBase),
