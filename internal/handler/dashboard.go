@@ -51,7 +51,6 @@ func (h *Handler) dashboardData(ctx context.Context) (panel.DashboardView, error
 	uid := session.UserID(ctx)
 	q := h.q(ctx)
 
-	dealsFilter := db.DealsListFilterFor(dataScope)
 	subsFilter := db.SubscriptionsListFilterFor(dataScope)
 
 	arrTotal, err := q.DashboardARRTotal(ctx, db.DashboardARRTotalParams{
@@ -61,11 +60,20 @@ func (h *Handler) dashboardData(ctx context.Context) (panel.DashboardView, error
 		return panel.DashboardView{}, err
 	}
 
-	stages, err := q.DashboardPipelineByStage(ctx, db.DashboardPipelineByStageParams{
-		ScopeAll: dealsFilter.ScopeAll, IsOwn: dealsFilter.IsOwn, Uid: &uid,
-	})
-	if err != nil {
-		return panel.DashboardView{}, err
+	// BL-11: chart Pipeline per-Stage bersumber Deals — gerbangi pada
+	// canViewDeals (crm:deals read, bukan cek role khusus). Role tanpa izin
+	// (CS pasca-BL-11, Support) melewati query ini (hemat 1 round-trip);
+	// PipelineChart tetap "" → kartu tak dirender (dashboard.go view).
+	pipelineChart := ""
+	if canViewDeals(ctx) {
+		dealsFilter := db.DealsListFilterFor(dataScope)
+		stages, err := q.DashboardPipelineByStage(ctx, db.DashboardPipelineByStageParams{
+			ScopeAll: dealsFilter.ScopeAll, IsOwn: dealsFilter.IsOwn, Uid: &uid,
+		})
+		if err != nil {
+			return panel.DashboardView{}, err
+		}
+		pipelineChart = h.marshalChart(pipelineChartOption(stages))
 	}
 
 	now := time.Now().In(appTZ)
@@ -87,7 +95,7 @@ func (h *Handler) dashboardData(ctx context.Context) (panel.DashboardView, error
 
 	return panel.DashboardView{
 		ARRTotal:       maskSubscriptionARR(formatRupiah(arrTotal), businessRole),
-		PipelineChart:  h.marshalChart(pipelineChartOption(stages)),
+		PipelineChart:  pipelineChart,
 		HealthChart:    h.marshalChart(healthChartOption(health)),
 		HealthTotal:    health.Total,
 		HealthScored:   health.Scored,

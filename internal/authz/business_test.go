@@ -87,7 +87,9 @@ func TestBusinessPolicy_MatrixEnforcement(t *testing.T) {
 		{"sales", "crm:accounts", "read", true, "write mencakup read"},
 		{"sales", "crm:accounts", "write", true, "sales ubah desa yang ditugaskan (◐ubah)"},
 		{"csm", "crm:leads", "read", false, "csm nol akses leads (kolom CSM ✕)"},
+		{"csm", "crm:deals", "read", false, "csm nol akses deals — pipeline pra-jual bukan wilayah CS (BL-11)"},
 		{"csm", "crm:quotes", "read", false, "csm nol akses quotes (✕)"},
+		{"csm", "crm:subscriptions", "read", true, "csm LIHAT subscription — cermin pasca-jual kontrak (BL-11)"},
 
 		// --- approve BERDIRI SENDIRI: Sales buat quote tapi TAK approve diskon ---
 		{"sales", "crm:quotes", "write", true, "sales BUAT quote (◐)"},
