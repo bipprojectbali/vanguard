@@ -60,6 +60,8 @@ func wsErrMsgCRM(code string) string {
 		return "Diskon harus berupa angka 0–100."
 	case "status":
 		return "Status quote tidak valid."
+	case "quote_stage":
+		return "Quote hanya dapat dibuat/diubah saat deal di tahap Qualification–Negotiation."
 	// ── Sales: Activity Log (4.4) ───────────────────────────────────────────
 	case "activity_kind":
 		return "Jenis aktivitas tidak valid."

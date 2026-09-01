@@ -27,8 +27,12 @@ func (h *Handler) QuoteUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	q, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
+	q, d, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
 	if !ok {
+		return
+	}
+	// BL-13: simpan sunting header hanya di jendela quoting.
+	if !h.requireQuotableStage(w, r, d.Stage, quoteSub(dealID, quoteID)) {
 		return
 	}
 	form, errCode := parseQuoteForm(r.FormValue)
@@ -78,7 +82,12 @@ func (h *Handler) QuoteStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, ok := h.loadOwnedQuote(w, r, dealID, quoteID); !ok {
+	_, d, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
+	if !ok {
+		return
+	}
+	// BL-13: transisi status quote ikut di-gate agar terminal benar-benar beku.
+	if !h.requireQuotableStage(w, r, d.Stage, quoteSub(dealID, quoteID)) {
 		return
 	}
 	status := r.FormValue("quote_status")
@@ -113,7 +122,12 @@ func (h *Handler) QuoteDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, ok := h.loadOwnedQuote(w, r, dealID, quoteID); !ok {
+	_, d, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
+	if !ok {
+		return
+	}
+	// BL-13: hapus quote hanya di jendela quoting (terminal = arsip, read-only).
+	if !h.requireQuotableStage(w, r, d.Stage, quoteSub(dealID, quoteID)) {
 		return
 	}
 

@@ -30,13 +30,13 @@ func (h *Handler) QuoteDetail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	q, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
+	q, d, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
 	if !ok {
 		return
 	}
 	base := wsPath(slugFromRequest(r), "")
 	h.renderWorkspaceShell(w, r, quoteTitle(q), "/deals",
-		panel.QuoteDetail(h.quoteDetailView(ctx, base, dealID, q)))
+		panel.QuoteDetail(h.quoteDetailView(ctx, base, dealID, q, d.Stage)))
 }
 
 // quoteDetailView merakit builder lengkap: header, identitas (deal/account/
@@ -45,7 +45,7 @@ func (h *Handler) QuoteDetail(w http.ResponseWriter, r *http.Request) {
 // F4: Subtotal/Tax/GrandTotal/UnitPrice nilai komersial → maskARR (kebijakan
 // umum kecuali Support). Diperbaiki audit FLS M9-1; laten krn Support F2-blocked
 // total dari crm:deals (business_policy.csv) — defense in depth.
-func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64, q db.Quote) panel.QuoteDetailView {
+func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64, q db.Quote, stage string) panel.QuoteDetailView {
 	br := session.BusinessRole(ctx)
 	items, err := h.q(ctx).ListQuoteItems(ctx, q.ID)
 	if err != nil {
@@ -100,6 +100,8 @@ func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64
 		Items:        itemRows,
 		Plans:        planOpts,
 		CanWrite:     canWriteDeals(ctx),
+		Quotable:     quotableStage(stage), // BL-13: gate stage (mutasi vs arsip)
+		StageLockMsg: stageLockMsg(stage),
 	}
 }
 

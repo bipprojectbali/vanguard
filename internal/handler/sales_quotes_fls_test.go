@@ -23,6 +23,7 @@ func TestQuoteDetailView_AmountMasked(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Quote", &uid, nil, nil)
 	deal := env.seedDeal(t, acc.ID, &uid)
+	env.setDealStage(t, deal.ID, "Qualification") // BL-13: masuk jendela quoting agar addItem lolos
 	quote := env.seedQuote(t, deal.ID, acc.ID, "0")
 	planID := env.seedPlan(t, "Paket Quote", "PLAN-Q", "1000000")
 	if rec := env.addQuoteItem(t, uid, deal.ID, quote.ID, planID, "2"); rec.Code != http.StatusSeeOther {
@@ -34,7 +35,7 @@ func TestQuoteDetailView_AmountMasked(t *testing.T) {
 	view := func(role string) (subtotal, tax, grand, itemUnit, itemSub string) {
 		req := quotesReq(http.MethodGet, quoteSub(deal.ID, quote.ID), nil, itoa(deal.ID), itoa(quote.ID), "")
 		env.runAccount(uid, "owner", role, req, func(w http.ResponseWriter, r *http.Request) {
-			v := env.h.quoteDetailView(r.Context(), "", deal.ID, q)
+			v := env.h.quoteDetailView(r.Context(), "", deal.ID, q, "Qualification")
 			subtotal, tax, grand = v.Subtotal, v.Tax, v.GrandTotal
 			if len(v.Items) > 0 {
 				itemUnit, itemSub = v.Items[0].UnitPrice, v.Items[0].Subtotal

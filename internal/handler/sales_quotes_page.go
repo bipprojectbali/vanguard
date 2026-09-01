@@ -58,14 +58,16 @@ func (h *Handler) QuotesList(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slugFromRequest(r), "")
 	h.renderWorkspaceShell(w, r, "Quote — "+d.DealName, "/deals", panel.QuotesList(panel.QuotesListView{
-		Base:       base,
-		DealID:     dealID,
-		DealName:   d.DealName,
-		CanWrite:   canWriteDeals(ctx),
-		Err:        wsErrMsg(r.URL.Query().Get("err")),
-		Msg:        quotesMsg(r.URL.Query().Get("ok")),
-		Items:      items,
-		NextCursor: nextCursor,
+		Base:         base,
+		DealID:       dealID,
+		DealName:     d.DealName,
+		CanWrite:     canWriteDeals(ctx),
+		Quotable:     quotableStage(d.Stage), // BL-13: gate stage
+		StageLockMsg: stageLockMsg(d.Stage),
+		Err:          wsErrMsg(r.URL.Query().Get("err")),
+		Msg:          quotesMsg(r.URL.Query().Get("ok")),
+		Items:        items,
+		NextCursor:   nextCursor,
 	}))
 }
 
@@ -79,7 +81,12 @@ func (h *Handler) QuoteNew(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, ok := h.loadOwnedDeal(w, r, dealID); !ok {
+	d, ok := h.loadOwnedDeal(w, r, dealID)
+	if !ok {
+		return
+	}
+	// BL-13: form buat quote tak berguna di luar jendela quoting → PRG ke daftar.
+	if !h.requireQuotableStage(w, r, d.Stage, quoteListSub(dealID)) {
 		return
 	}
 	members, err := h.assignableMembers(ctx)
@@ -110,8 +117,12 @@ func (h *Handler) QuoteEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	q, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
+	q, d, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
 	if !ok {
+		return
+	}
+	// BL-13: sunting header hanya di jendela quoting → PRG ke detail (arsip terbaca).
+	if !h.requireQuotableStage(w, r, d.Stage, quoteSub(dealID, quoteID)) {
 		return
 	}
 	members, err := h.assignableMembers(ctx)

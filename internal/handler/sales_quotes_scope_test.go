@@ -68,6 +68,7 @@ func TestQuotes_SoftDeleteHidesQuote(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
 	deal := env.seedDeal(t, acc.ID, &uid)
+	env.setDealStage(t, deal.ID, "Qualification") // BL-13: masuk jendela quoting
 	q := env.seedQuote(t, deal.ID, acc.ID, "0")
 	code := deref(q.EntityCode)
 
@@ -94,6 +95,7 @@ func TestQuotes_ItemHardDelete(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
 	deal := env.seedDeal(t, acc.ID, &uid)
+	env.setDealStage(t, deal.ID, "Qualification") // BL-13: masuk jendela quoting
 	plan := env.seedPlan(t, "Plan A", "PLN-A", "100000.00")
 	q := env.seedQuote(t, deal.ID, acc.ID, "1000")
 
@@ -129,6 +131,7 @@ func TestQuotes_CreateInheritsDealAccount(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Q", &uid, nil, nil)
 	deal := env.seedDeal(t, acc.ID, &uid)
+	env.setDealStage(t, deal.ID, "Qualification") // BL-13: masuk jendela quoting
 
 	// Pajak negatif → tolak sebelum DB.
 	bad := url.Values{"quote_name": {"Penawaran"}, "tax_amount": {"-1"}}

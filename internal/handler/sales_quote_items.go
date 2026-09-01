@@ -30,8 +30,12 @@ func (h *Handler) QuoteItemAdd(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	q, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
+	q, d, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
 	if !ok {
+		return
+	}
+	// BL-13: tambah item hanya di jendela quoting (Qualification–Negotiation).
+	if !h.requireQuotableStage(w, r, d.Stage, quoteSub(dealID, quoteID)) {
 		return
 	}
 	form, errCode := parseQuoteItemForm(r.FormValue)
