@@ -194,8 +194,9 @@ WHERE deleted_at IS NULL
       $4::boolean
       OR ($5::boolean AND owner_id = $6)
   )
+  AND ($7::text = '' OR subject ILIKE '%' || $7 || '%')
 ORDER BY created_at DESC, id DESC
-LIMIT $7
+LIMIT $8
 `
 
 type ListActivitiesParams struct {
@@ -205,6 +206,7 @@ type ListActivitiesParams struct {
 	ScopeAll        bool               `json:"scope_all"`
 	IsOwn           bool               `json:"is_own"`
 	Uid             *int64             `json:"uid"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -213,6 +215,10 @@ type ListActivitiesParams struct {
 // ActivitiesListFilter): scope_all → semua; is_own → owner_id = uid; keduanya
 // false → NOL baris (fail-closed). context_filter menyaring view modul
 // ('sales' untuk 4.4) — pemisah dari CS 6.5 / general M7.
+// search ” → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+// insensitive) di ATAS ownership+context — tak pernah melebarkan baris (BL-6).
+// Hanya subject (satu-satunya kolom teks bebas yang TAMPIL) jadi kunci cari;
+// kind/status/target = enum/id (bukan teks bebas), owner = nama diresolusi handler.
 func (q *Queries) ListActivities(ctx context.Context, arg ListActivitiesParams) ([]Activity, error) {
 	rows, err := q.db.Query(ctx, listActivities,
 		arg.ContextFilter,
@@ -221,6 +227,7 @@ func (q *Queries) ListActivities(ctx context.Context, arg ListActivitiesParams) 
 		arg.ScopeAll,
 		arg.IsOwn,
 		arg.Uid,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {
@@ -285,8 +292,9 @@ WHERE deleted_at IS NULL
   AND target_type = $1::text
   AND target_id   = $2::bigint
   AND (created_at, id) < ($3::timestamptz, $4::bigint)
+  AND ($5::text = '' OR subject ILIKE '%' || $5 || '%')
 ORDER BY created_at DESC, id DESC
-LIMIT $5
+LIMIT $6
 `
 
 type ListActivitiesByTargetParams struct {
@@ -294,19 +302,23 @@ type ListActivitiesByTargetParams struct {
 	TargetID        int64              `json:"target_id"`
 	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
 	CursorID        int64              `json:"cursor_id"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
 // Timeline satu entitas: semua aktivitas yang terkait ke target_type+target_id ini,
 // keyset (created_at DESC, id DESC). Tanpa filter context (lintas sales/cs/general)
 // dan tanpa F3 ownership — siapa pun yang boleh lihat entitasnya boleh lihat
-// timelinenya (gate ada di handler detail entitas masing-masing).
+// timelinenya (gate ada di handler detail entitas masing-masing). search ” →
+// tak menyaring; selain itu MEMPERSEMPIT subject (BL-6, ILIKE case-insensitive)
+// di ATAS filter target — tak menembus ke entitas lain.
 func (q *Queries) ListActivitiesByTarget(ctx context.Context, arg ListActivitiesByTargetParams) ([]Activity, error) {
 	rows, err := q.db.Query(ctx, listActivitiesByTarget,
 		arg.TargetType,
 		arg.TargetID,
 		arg.CursorCreatedAt,
 		arg.CursorID,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {
@@ -373,8 +385,9 @@ WHERE deleted_at IS NULL
       $3::boolean
       OR ($4::boolean AND owner_id = $5)
   )
+  AND ($6::text = '' OR subject ILIKE '%' || $6 || '%')
 ORDER BY created_at DESC, id DESC
-LIMIT $6
+LIMIT $7
 `
 
 type ListAllActivitiesParams struct {
@@ -383,12 +396,15 @@ type ListAllActivitiesParams struct {
 	ScopeAll        bool               `json:"scope_all"`
 	IsOwn           bool               `json:"is_own"`
 	Uid             *int64             `json:"uid"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
 // Daftar SEMUA aktivitas lintas-context (sales+cs+general) — untuk halaman
 // "Activities" top-level (M7). Ownership F3 sama dengan ListActivities (scope_all
 // atau is_own); tanpa context_filter agar semua modul terwakili. Keyset identik.
+// search ” → tak menyaring; selain itu MEMPERSEMPIT subject (BL-6, ILIKE case-
+// insensitive) di ATAS F3 — tak pernah melebarkan baris di luar cakupan.
 func (q *Queries) ListAllActivities(ctx context.Context, arg ListAllActivitiesParams) ([]Activity, error) {
 	rows, err := q.db.Query(ctx, listAllActivities,
 		arg.CursorCreatedAt,
@@ -396,6 +412,7 @@ func (q *Queries) ListAllActivities(ctx context.Context, arg ListAllActivitiesPa
 		arg.ScopeAll,
 		arg.IsOwn,
 		arg.Uid,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -38,6 +39,8 @@ func (h *Handler) AllActivitiesList(w http.ResponseWriter, r *http.Request) {
 	}
 	uid := session.UserID(ctx)
 	cursorAt, cursorID := pageCursor(r)
+	// q = pencarian bebas (BL-6): MEMPERSEMPIT subject di atas F3, tak melebarkan.
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	rows, err := h.q(ctx).ListAllActivities(ctx, db.ListAllActivitiesParams{
 		CursorCreatedAt: cursorAt,
@@ -45,6 +48,7 @@ func (h *Handler) AllActivitiesList(w http.ResponseWriter, r *http.Request) {
 		ScopeAll:        filter.ScopeAll,
 		IsOwn:           filter.IsOwn,
 		Uid:             &uid,
+		Search:          query,
 		PageSize:        pageSize + 1,
 	})
 	if err != nil {
@@ -75,6 +79,7 @@ func (h *Handler) AllActivitiesList(w http.ResponseWriter, r *http.Request) {
 			Msg:        activitiesMsg(r.URL.Query().Get("ok")),
 			Items:      items,
 			NextCursor: nextCursor,
+			Query:      query,
 		}))
 }
 

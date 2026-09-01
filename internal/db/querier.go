@@ -544,11 +544,17 @@ type Querier interface {
 	// ActivitiesListFilter): scope_all → semua; is_own → owner_id = uid; keduanya
 	// false → NOL baris (fail-closed). context_filter menyaring view modul
 	// ('sales' untuk 4.4) — pemisah dari CS 6.5 / general M7.
+	// search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
+	// insensitive) di ATAS ownership+context — tak pernah melebarkan baris (BL-6).
+	// Hanya subject (satu-satunya kolom teks bebas yang TAMPIL) jadi kunci cari;
+	// kind/status/target = enum/id (bukan teks bebas), owner = nama diresolusi handler.
 	ListActivities(ctx context.Context, arg ListActivitiesParams) ([]Activity, error)
 	// Timeline satu entitas: semua aktivitas yang terkait ke target_type+target_id ini,
 	// keyset (created_at DESC, id DESC). Tanpa filter context (lintas sales/cs/general)
 	// dan tanpa F3 ownership — siapa pun yang boleh lihat entitasnya boleh lihat
-	// timelinenya (gate ada di handler detail entitas masing-masing).
+	// timelinenya (gate ada di handler detail entitas masing-masing). search '' →
+	// tak menyaring; selain itu MEMPERSEMPIT subject (BL-6, ILIKE case-insensitive)
+	// di ATAS filter target — tak menembus ke entitas lain.
 	ListActivitiesByTarget(ctx context.Context, arg ListActivitiesByTargetParams) ([]Activity, error)
 	// Orang yang punya jejak pada rentang ini — isi dropdown "filter per-orang".
 	//
@@ -582,6 +588,8 @@ type Querier interface {
 	// Daftar SEMUA aktivitas lintas-context (sales+cs+general) — untuk halaman
 	// "Activities" top-level (M7). Ownership F3 sama dengan ListActivities (scope_all
 	// atau is_own); tanpa context_filter agar semua modul terwakili. Keyset identik.
+	// search '' → tak menyaring; selain itu MEMPERSEMPIT subject (BL-6, ILIKE case-
+	// insensitive) di ATAS F3 — tak pernah melebarkan baris di luar cakupan.
 	ListAllActivities(ctx context.Context, arg ListAllActivitiesParams) ([]Activity, error)
 	// Query sumbu RBAC bisnis (F2/F3) yang bisa diedit per-workspace. Dua tabel:
 	// business_roles (definisi peran + data_scope) & business_role_permissions
