@@ -36,12 +36,16 @@ func (h *Handler) DealEdit(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slugFromRequest(r), "")
 	idStr := strconv.FormatInt(d.ID, 10)
+	fields := dealFormFields(d)
+	// Prefill nama desa terpilih untuk input teks pemilih typeahead (BL-9); juga
+	// menjamin opsi desa ini hadir di <datalist> walau di luar batas picker.
+	fields.SelectedAccountLabel = h.accountLabel(ctx, d.AccountID)
 	v := panel.DealFormView{
 		Base:     base,
 		Action:   base + "/deals/" + idStr,
 		IsEdit:   true,
 		Err:      wsErrMsg(r.URL.Query().Get("err")),
-		Fields:   dealFormFields(d),
+		Fields:   fields,
 		Types:    dealTypeOptions,
 		Terms:    subscriptionTermOptions,
 		Accounts: accounts,

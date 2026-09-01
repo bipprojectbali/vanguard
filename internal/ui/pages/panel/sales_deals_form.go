@@ -18,16 +18,20 @@ import (
 // DealFormFields = nilai prefill form (edit) atau kosong (buat). Semua string agar
 // view netral terhadap tipe DB. AccountID = id desa terpilih (string).
 type DealFormFields struct {
-	DealName          string
-	AccountID         string
-	DealType          string
-	Amount            string
-	Probability       string
-	ExpectedCloseDate string
-	ForecastCategory  string
-	NextStep          string
-	SubscriptionTerm  string
-	Competitor        string
+	DealName  string
+	AccountID string
+	// SelectedAccountLabel = nama desa terpilih (prefill edit). Kosong saat buat.
+	// Dipakai mengisi input teks tampak pemilih & menjamin opsi desa terpilih
+	// hadir di <datalist> walau di luar batas dealAccountPickerLimit.
+	SelectedAccountLabel string
+	DealType             string
+	Amount               string
+	Probability          string
+	ExpectedCloseDate    string
+	ForecastCategory     string
+	NextStep             string
+	SubscriptionTerm     string
+	Competitor           string
 }
 
 // DealFormView = data halaman form. Action = URL POST tujuan. IsEdit mengubah
@@ -69,7 +73,7 @@ func DealForm(v DealFormView) g.Node {
 
 		formCard("Identitas Deal",
 			field("Nama Deal", "deal_name", v.Fields.DealName, true, "text"),
-			accountSelectField("Desa", "account_id", v.Fields.AccountID, v.Accounts),
+			dealAccountPickerField(v.Fields.AccountID, v.Fields.SelectedAccountLabel, v.Accounts),
 			selectField("Tipe Deal", "deal_type", v.Fields.DealType, v.Types, false),
 			selectField("Termin Langganan", "subscription_term", v.Fields.SubscriptionTerm, v.Terms, false),
 		),
@@ -94,35 +98,79 @@ func DealForm(v DealFormView) g.Node {
 	// tampilan & menormalkan jadi digit polos saat submit. Same-origin CSP-safe
 	// (gotcha #16). Sejajar sales_leads_form (BL-2/BL-8).
 	body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
+	// Pemilih desa bisa diketik/dicari (BL-9) — typeahead di file same-origin
+	// (CSP script-src 'self'), pola & skrip yang SAMA dengan BL-5 (kontrak markup
+	// [data-account-picker]). Lihat dealAccountPickerField di bawah.
+	body = append(body, h.Script(h.Src("/static/accountpicker.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
-// accountSelectField = dropdown WAJIB pilih desa (deal selalu menempel ke satu
-// desa). Berbeda dari memberSelect (opsional): opsi pertama = placeholder disabled
-// agar submit kosong tertangkap jaring klien, backend tetap penjaga sesungguhnya.
-func accountSelectField(label, name, current string, accounts []AccountMemberOption) g.Node {
-	placeholder := []g.Node{h.Value(""), h.Disabled(), g.Text("— Pilih desa —")}
-	if current == "" {
-		placeholder = append(placeholder, h.Selected())
-	}
-	nodes := []g.Node{h.Option(placeholder...)}
+// dealAccountPickerField = pemilih desa WAJIB yang BISA DIKETIK/DICARI (BL-9),
+// menggantikan <select> polos yang sulit dinavigasi saat desa banyak. Pola &
+// skrip SAMA dengan BL-5 (kontrak markup [data-account-picker], dipandu
+// static/accountpicker.js same-origin — CSP-safe tanpa lib pihak-ketiga).
+//
+// Dua kontrol, satu tampak satu tersembunyi:
+//   - input teks tampak (data-account-search) TAK bernama → tak ter-submit
+//     sendiri; hanya alat ketik/cari yang memfilter <datalist>. required =
+//     jaring klien agar tak submit kosong.
+//   - input hidden name="account_id" (data-account-value) = nilai SEBENARNYA
+//     yang ter-submit; diisi accountpicker.js dari data-account-id opsi yang
+//     LABEL-nya cocok persis dgn ketikan. Ketikan tak cocok → hidden kosong +
+//     setCustomValidity → submit ditahan. Backend tetap penjaga: loadOwnedDeal/
+//     loadOwnedAccount → 404 di luar cakupan, memalsu id tak menembus F3.
+//
+// Prefill EDIT: current = id desa terpilih, currentLabel = namanya. Input teks
+// diisi label; hidden diisi id. Opsi desa terpilih DISISIPKAN ke <datalist> bila
+// belum ada (bisa di luar batas dealAccountPickerLimit) agar sync klien tak
+// mengosongkan id yang sah.
+func dealAccountPickerField(current, currentLabel string, accounts []AccountMemberOption) g.Node {
+	opts := make([]g.Node, 0, len(accounts)+1)
+	inList := false
 	for _, a := range accounts {
 		id := strconv.FormatInt(a.ID, 10)
-		attrs := []g.Node{h.Value(id)}
 		if id == current {
-			attrs = append(attrs, h.Selected())
+			inList = true
 		}
-		nodes = append(nodes, h.Option(append(attrs, g.Text(a.Label))...))
+		opts = append(opts, h.Option(
+			h.Value(a.Label),
+			g.Attr("data-account-id", id),
+		))
 	}
+	// Desa terpilih di luar batas picker → sisipkan agar preselect tetap cocok.
+	if current != "" && currentLabel != "" && !inList {
+		opts = append(opts, h.Option(
+			h.Value(currentLabel),
+			g.Attr("data-account-id", current),
+		))
+	}
+
+	search := []g.Node{
+		h.ID("f-account_id_search"), h.Type("text"),
+		h.List("account-options"), h.Placeholder("Ketik nama desa…"),
+		g.Attr("autocomplete", "off"), g.Attr("data-account-search", ""),
+		h.Class("input text-base w-full min-h-11"), h.Required(),
+	}
+	hidden := []g.Node{
+		h.Type("hidden"), h.ID("f-account_id"), h.Name("account_id"),
+		g.Attr("data-account-value", ""),
+	}
+	if current != "" {
+		hidden = append(hidden, h.Value(current))
+	}
+	if currentLabel != "" {
+		search = append(search, h.Value(currentLabel))
+	}
+
 	return h.Div(
 		h.Class("grid gap-1 min-w-0"),
-		labelFor(label, "f-"+name, true),
-		h.Select(
-			append([]g.Node{
-				h.ID("f-" + name), h.Name(name), h.Required(),
-				h.Class("select text-base w-full"),
-			}, g.Group(nodes))...,
-		),
+		g.Attr("data-account-picker", ""),
+		labelFor("Desa", "f-account_id_search", true),
+		ui.Input(search...),
+		h.Input(hidden...),
+		h.DataList(append([]g.Node{h.ID("account-options")}, opts...)...),
+		h.P(h.Class("text-xs text-base-content/60"),
+			g.Text("Ketik untuk mencari, lalu pilih desa dari daftar yang muncul.")),
 	)
 }
