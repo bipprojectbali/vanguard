@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// subscriptions_page.go — HALAMAN baca daftar Active Subscriptions (Modul 5).
+// subscriptions_page.go — HALAMAN baca daftar Subscription Lists (Modul 5).
 // GET-only slice (M5-3b): renew/churn/create menyusul di slice berikutnya.
 // Meniru sales_deals_page.go (dealsTable): gerbang F2 read → F3 ownership di
 // layer query → F4 masking ARR di baris. Keyset (created_at DESC, id DESC) +
@@ -31,7 +31,19 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 	br := session.BusinessRole(ctx)
 
 	cursorAt, cursorID := pageCursor(r)
-	statusFilter := r.URL.Query().Get("status")
+	// Default tab = Active (BL-20): menu bernama "Subscription Lists" tetap
+	// mendarat pada langganan Active, bukan SEMUA status. Bedakan tak-ada-param
+	// (landing murni → default Active) dari pilih-Semua eksplisit (?status=all →
+	// tak menyaring). Tanpa pembedaan ini, memetakan "" ke Active membuat tab
+	// "Semua" tak terjangkau.
+	statusSel := r.URL.Query().Get("status")
+	if !r.URL.Query().Has("status") {
+		statusSel = "Active"
+	}
+	statusFilter := statusSel // yang disaring di query
+	if statusSel == panel.SubStatusAll {
+		statusFilter = "" // "Semua" eksplisit → tak menyaring status
+	}
 	// q = pencarian bebas (BL-6): MEMPERSEMPIT di atas F3+status, tak melebarkan.
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	rows, err := h.q(ctx).ListSubscriptions(ctx, db.ListSubscriptionsParams{
@@ -64,10 +76,10 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	base := wsPath(slugFromRequest(r), "")
-	h.renderWorkspaceShell(w, r, "Active Subscriptions", "/subscriptions",
+	h.renderWorkspaceShell(w, r, "Subscription Lists", "/subscriptions",
 		panel.SubList(panel.SubListView{
 			Base:         base,
-			StatusFilter: statusFilter,
+			StatusFilter: statusSel, // penanda pilihan (Active/…/all) utk tab & tautan
 			Statuses:     subscriptionStatuses,
 			Query:        query,
 			Err:          wsErrMsg(r.URL.Query().Get("err")),
@@ -79,8 +91,8 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 // renderSubscriptionsForbidden — 403 + penjelasan bagi anggota tanpa peran CRM.
 func (h *Handler) renderSubscriptionsForbidden(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusForbidden)
-	h.renderWorkspaceShell(w, r, "Active Subscriptions", "/subscriptions",
-		panel.SalesForbidden("Active Subscriptions"))
+	h.renderWorkspaceShell(w, r, "Subscription Lists", "/subscriptions",
+		panel.SalesForbidden("Subscription Lists"))
 }
 
 // subRowView memetakan satu baris daftar → baris tabel + F4. ARR: hanya

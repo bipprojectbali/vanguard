@@ -161,7 +161,7 @@ func TestWorkspaceNav_SalesGroup(t *testing.T) {
 }
 
 // TestWorkspaceNav_SubscriptionsGroup: Subscriptions = grup bersarang yang SELALU
-// tampil (peta jalan). Semua anak berbackend (Active Subscriptions/Renewals/Churn
+// tampil (peta jalan). Semua anak berbackend (Subscription Lists/Renewals/Churn
 // via canSubs objek crm:subscriptions; Plans & Pricing via canPlans objek crm:plans)
 // enabled mengikuti izinnya masing-masing — sejak M5-4 tak ada lagi placeholder.
 func TestWorkspaceNav_SubscriptionsGroup(t *testing.T) {
@@ -176,7 +176,7 @@ func TestWorkspaceNav_SubscriptionsGroup(t *testing.T) {
 	}
 	wantEnabled := map[string]string{
 		"Plans & Pricing":       "/w/acme/plans",
-		"Active Subscriptions":  "/w/acme/subscriptions",
+		"Subscription Lists":    "/w/acme/subscriptions",
 		"Renewals":              "/w/acme/subscriptions/renewals",
 		"Churn / Cancellations": "/w/acme/subscriptions/churn",
 	}
@@ -198,7 +198,7 @@ func TestWorkspaceNav_SubscriptionsGroup(t *testing.T) {
 	if !ok {
 		t.Fatal("grup Subscriptions tetap tampil walau tanpa izin")
 	}
-	for _, label := range []string{"Plans & Pricing", "Active Subscriptions", "Renewals", "Churn / Cancellations"} {
+	for _, label := range []string{"Plans & Pricing", "Subscription Lists", "Renewals", "Churn / Cancellations"} {
 		ch, ok := findItem(grpNone.Children, label)
 		if !ok {
 			t.Errorf("anak %q harus tetap tampil (disabled)", label)

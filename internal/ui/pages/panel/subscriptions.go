@@ -9,11 +9,18 @@ import (
 	h "maragu.dev/gomponents/html"
 )
 
-// subscriptions.go — view daftar Active Subscriptions (Modul 5, M5-3b GET-only).
+// subscriptions.go — view daftar Subscription Lists (Modul 5, M5-3b GET-only).
 // Murni-data: MRR/ARR SUDAH diformat & disamarkan F4 di handler (ARR bisa berupa
 // penanda tersembunyi flsHidden). Meniru sales_deals.go (tabel + pager keyset).
 // Filter status = LINK <a> (navigasi bookmarkable, lolos gotcha #16), bukan
 // Datastar. Aksi (renew/churn) belum ada di slice ini.
+
+// SubStatusAll = penanda "Semua" eksplisit di ?status= (BL-20). Handler
+// menerjemahkannya ke "tak menyaring status", DIBEDAKAN dari param status yang
+// absen (landing murni → default Active). Sengaja bukan "" agar tab "Semua"
+// punya URL kanonik & tetap terjangkau. Bukan status legal (subStatusChk) → tak
+// bertabrakan dengan enum status langganan.
+const SubStatusAll = "all"
 
 // SubRow = satu langganan untuk baris tabel. MRR/ARR SUDAH diformat & disamarkan
 // F4 di handler. Owner = nama orang.
@@ -30,9 +37,11 @@ type SubRow struct {
 	Owner      string
 }
 
-// SubListView = data halaman /subscriptions. StatusFilter = status aktif terpilih
-// (kosong = semua); Statuses = opsi filter dioper handler (view tak memutuskan
-// enum). Keyset lewat NextCursor.
+// SubListView = data halaman /subscriptions. StatusFilter = penanda pilihan tab
+// yang diterima dari handler (status legal "Active"/… ATAU SubStatusAll="all"),
+// dipakai menandai tab aktif & menyusun tautan/pager — BUKAN nilai saring DB
+// (handler menerjemahkan "all" → tak menyaring). Statuses = opsi filter dioper
+// handler (view tak memutuskan enum). Keyset lewat NextCursor.
 type SubListView struct {
 	Base         string
 	StatusFilter string
@@ -49,7 +58,7 @@ func SubList(v SubListView) g.Node {
 		h.Div(
 			h.Class("flex flex-wrap items-center justify-between gap-2 mb-2"),
 			h.Div(
-				h.H1(h.Class("text-xl font-semibold"), g.Text("Active Subscriptions")),
+				h.H1(h.Class("text-xl font-semibold"), g.Text("Subscription Lists")),
 				h.P(h.Class("text-base-content/70"),
 					g.Text("Langganan berjalan — paket, nilai berulang, dan masa berlaku.")),
 			),
@@ -83,7 +92,9 @@ func subStatusFilter(v SubListView) g.Node {
 		return h.A(h.Href(href), h.Class(cls+" min-h-11"), g.Text(label))
 	}
 	tabs := make([]g.Node, 0, len(v.Statuses)+1)
-	tabs = append(tabs, tab("Semua", ""))
+	// "Semua" mengirim penanda eksplisit SubStatusAll (bukan ""), agar tab tetap
+	// terjangkau ketika landing murni default ke Active (BL-20).
+	tabs = append(tabs, tab("Semua", SubStatusAll))
 	for _, s := range v.Statuses {
 		tabs = append(tabs, tab(s, s))
 	}
@@ -91,11 +102,13 @@ func subStatusFilter(v SubListView) g.Node {
 }
 
 func emptySubs(v SubListView) g.Node {
+	// "all" = tab Semua (tak menyaring status) → diperlakukan seperti tanpa filter.
+	statusScoped := v.StatusFilter != "" && v.StatusFilter != SubStatusAll
 	msg := "Belum ada langganan."
 	switch {
 	case v.Query != "":
 		msg = "Belum ada langganan yang cocok pencarian."
-	case v.NextCursor == "" && v.StatusFilter != "":
+	case v.NextCursor == "" && statusScoped:
 		msg = "Belum ada langganan dengan status ini."
 	}
 	// Reset mempertahankan status aktif tapi membuang q (kembali ke awal filter).
@@ -104,7 +117,7 @@ func emptySubs(v SubListView) g.Node {
 		h.Class("card bg-base-100 border border-base-300"),
 		h.Div(h.Class("card-body items-start"),
 			h.P(h.Class("text-base-content/70"), g.Text(msg)),
-			ui.When(v.StatusFilter != "" || v.Query != "", h.A(
+			ui.When(statusScoped || v.Query != "", h.A(
 				h.Href(reset), h.Class("btn btn-ghost btn-sm min-h-11"),
 				g.Text("« Semua langganan"))),
 		),
