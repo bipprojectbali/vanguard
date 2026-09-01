@@ -106,6 +106,7 @@ func (h *Handler) dealDetailView(ctx context.Context, base string, d db.Deal, na
 		PrimaryContact:   contactLabel,
 		Stage:            d.Stage,
 		Stages:           dealStageOptions,
+		WonSubStatuses:   wonSubStatusOptions,
 		DealType:         deref(d.DealType),
 		Amount:           maskARR(formatRupiah(d.Amount), br),
 		Probability:      probabilityStr(d.Probability),

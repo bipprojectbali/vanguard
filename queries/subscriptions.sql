@@ -45,6 +45,19 @@ INSERT INTO subscriptions (
 )
 RETURNING *;
 
+-- name: HasActiveSubscriptionForPlan :one
+-- Benar bila sudah ADA langganan Active hidup untuk (account, plan) di tenant ini —
+-- cermin partial-unique idx_subs_one_active (1 Active per account+plan). Dipakai
+-- create-from-deal (BL-21) untuk menolak lebih dini dengan pesan ramah SEBELUM INSERT
+-- (index tetap penjaga keras bila balapan). RLS menjamin tenant_id lewat GUC.
+SELECT EXISTS (
+    SELECT 1 FROM subscriptions
+    WHERE account_id = sqlc.arg(account_id)
+      AND plan_id    = sqlc.arg(plan_id)
+      AND status     = 'Active'
+      AND deleted_at IS NULL
+);
+
 -- name: GetSubscription :one
 -- Satu langganan hidup. RLS menjamin tenant_id; ownership (F3) diputuskan handler
 -- atas baris (SubscriptionsListFilter.Allows), bukan di sini.

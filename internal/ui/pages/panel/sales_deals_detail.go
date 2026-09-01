@@ -28,9 +28,13 @@ type DealDetailView struct {
 	AccountID    int64
 	AccountLabel string
 
-	PrimaryContact   string
-	Stage            string
-	Stages           []string
+	PrimaryContact string
+	Stage          string
+	Stages         []string
+	// WonSubStatuses (BL-21) = pilihan status langganan awal (Active/Trial) untuk
+	// dropdown yang muncul saat memilih Closed Won; diisi handler dari enum
+	// autoritatif (validInitialSubStatuses). Kosong → dropdown tak dirender.
+	WonSubStatuses   []string
 	DealType         string
 	Amount           string
 	Probability      string
@@ -318,6 +322,19 @@ func dealStageControl(v DealDetailView, base string) g.Node {
 					"$stage == '"+stageClosedWon+"' || $stage == '"+stageClosedLost+"'",
 					"min-w-0", field("Alasan Menang/Kalah", "win_loss_reason", v.WinLossReason, false, "text"),
 				),
+				// BL-21: Closed Won membuat langganan otomatis — user memilih status awalnya
+				// (Active/Trial). Default (opsi pertama = Active) selalu terisi → select tetap
+				// valid meski tersembunyi di stage lain (tak memblok submit). g.Iff (bukan
+				// g.If): argumen g.If dievaluasi eager, jadi WonSubStatuses[0] panic saat slice
+				// kosong — bungkus dalam closure agar hanya diakses bila ada opsi.
+				g.Iff(len(v.WonSubStatuses) > 0, func() g.Node {
+					return showWhen(
+						"$stage == '"+stageClosedWon+"'",
+						"min-w-0", selectField("Status Langganan Awal", "subscription_status",
+							v.WonSubStatuses[0], v.WonSubStatuses, true,
+							"Deal menang membuat langganan otomatis untuk desa & paket deal ini."),
+					)
+				}),
 				showWhen(
 					"$stage == '"+stageClosedLost+"'",
 					"sm:col-span-2 min-w-0", textareaField("Catatan Kekalahan", "loss_notes", v.LossNotes),

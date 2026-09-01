@@ -43,6 +43,15 @@ func wsErrMsgCRM(code string) string {
 		return "Desa (account) wajib dipilih untuk deal ini."
 	case "convert_guard":
 		return "Lead ini tak bisa dikonversi — harus berstatus Qualified dan belum pernah dikonversi."
+	// ── Sales: Deal Closed Won → auto-create Subscription (BL-21) ────────────
+	case "plan_required":
+		return "Deal harus punya Plan sebelum dimenangkan — langganan tak bisa dibuat tanpa paket."
+	case "term_required":
+		return "Termin Langganan wajib diisi sebelum deal dimenangkan — nilai langganan diturunkan darinya."
+	case "sub_status":
+		return "Status langganan awal tidak valid (pilih Active atau Trial)."
+	case "sub_active_exists":
+		return "Sudah ada langganan Active untuk desa & paket ini — perpanjang lewat menu renewal, bukan dari deal."
 	// ── Sales: Quote (Modul 4) ──────────────────────────────────────────────
 	case "quote_name":
 		return "Nama quote terlalu panjang (maks 200 karakter)."

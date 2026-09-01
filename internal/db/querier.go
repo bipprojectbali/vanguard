@@ -502,6 +502,11 @@ type Querier interface {
 	GetUser(ctx context.Context, id int64) (User, error)
 	// Soft-delete gotcha: user terhapus tak boleh login.
 	GetUserByEmail(ctx context.Context, email string) (User, error)
+	// Benar bila sudah ADA langganan Active hidup untuk (account, plan) di tenant ini —
+	// cermin partial-unique idx_subs_one_active (1 Active per account+plan). Dipakai
+	// create-from-deal (BL-21) untuk menolak lebih dini dengan pesan ramah SEBELUM INSERT
+	// (index tetap penjaga keras bila balapan). RLS menjamin tenant_id lewat GUC.
+	HasActiveSubscriptionForPlan(ctx context.Context, arg HasActiveSubscriptionForPlanParams) (bool, error)
 	// Tambah satu baris matriks (role,obj,act). Idempoten via UNIQUE. Dipakai seed
 	// dan saat matriks disunting (handler menghitung selisih, sisipkan yang baru).
 	InsertBusinessRolePermission(ctx context.Context, arg InsertBusinessRolePermissionParams) error

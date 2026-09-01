@@ -447,6 +447,32 @@ func (q *Queries) GetSubscription(ctx context.Context, id int64) (Subscription, 
 	return i, err
 }
 
+const hasActiveSubscriptionForPlan = `-- name: HasActiveSubscriptionForPlan :one
+SELECT EXISTS (
+    SELECT 1 FROM subscriptions
+    WHERE account_id = $1
+      AND plan_id    = $2
+      AND status     = 'Active'
+      AND deleted_at IS NULL
+)
+`
+
+type HasActiveSubscriptionForPlanParams struct {
+	AccountID int64 `json:"account_id"`
+	PlanID    int64 `json:"plan_id"`
+}
+
+// Benar bila sudah ADA langganan Active hidup untuk (account, plan) di tenant ini —
+// cermin partial-unique idx_subs_one_active (1 Active per account+plan). Dipakai
+// create-from-deal (BL-21) untuk menolak lebih dini dengan pesan ramah SEBELUM INSERT
+// (index tetap penjaga keras bila balapan). RLS menjamin tenant_id lewat GUC.
+func (q *Queries) HasActiveSubscriptionForPlan(ctx context.Context, arg HasActiveSubscriptionForPlanParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveSubscriptionForPlan, arg.AccountID, arg.PlanID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listCSRenewals = `-- name: ListCSRenewals :many
 SELECT
     s.id,

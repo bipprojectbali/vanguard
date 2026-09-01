@@ -115,3 +115,36 @@ func TestDealStageControl_NativePost(t *testing.T) {
 		t.Errorf("ganti tahap tak boleh pakai @post Datastar (gotcha #16):\n%s", out)
 	}
 }
+
+// TestDealStageControl_WonSubscriptionStatus: BL-21 — saat WonSubStatuses terisi,
+// kontrol tahap merender <select name="subscription_status"> yang data-show HANYA
+// pada Closed Won (deal menang membuat langganan otomatis). Opsi pertama = default
+// terpilih. Ini juga regresi panik "index out of range": g.Iff (bukan g.If) menjaga
+// WonSubStatuses[0] tak diakses saat slice kosong.
+func TestDealStageControl_WonSubscriptionStatus(t *testing.T) {
+	fx := stageControlFixture("Closed Won")
+	fx.WonSubStatuses = []string{"Active", "Trial"}
+	out := renderLeads(t, dealStageControl(fx, "/w/acme/deals/42"))
+
+	for _, want := range []string{
+		`name="subscription_status"`,
+		// tampil hanya saat Closed Won
+		`data-show="$stage == &#39;Closed Won&#39;"`,
+		// dua opsi status awal terisi
+		`>Active<`,
+		`>Trial<`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("kontrol Won harus memuat %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestDealStageControl_NoWonSubStatuses_NoPanic: WonSubStatuses kosong → field
+// status langganan TIDAK dirender dan TIDAK panik (g.Iff menunda akses [0]).
+func TestDealStageControl_NoWonSubStatuses_NoPanic(t *testing.T) {
+	out := renderLeads(t, dealStageControl(stageControlFixture("Closed Won"), "/w/acme/deals/42"))
+	if strings.Contains(out, `name="subscription_status"`) {
+		t.Errorf("tanpa WonSubStatuses, field subscription_status tak boleh dirender:\n%s", out)
+	}
+}

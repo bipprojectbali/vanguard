@@ -68,6 +68,8 @@ func notifText(kind, workspace string, p notifPayload) string {
 		return "Renewal " + orDefault(p.EntityCode, "langganan") + " Anda telah disetujui."
 	case "renewal.rejected":
 		return "Renewal " + orDefault(p.EntityCode, "langganan") + " Anda ditolak."
+	case "subscription.created.from_deal":
+		return "Langganan " + orDefault(p.EntityCode, "baru") + " dibuat dari deal yang dimenangkan."
 	default:
 		return "Ada pembaruan pada keanggotaan Anda."
 	}
