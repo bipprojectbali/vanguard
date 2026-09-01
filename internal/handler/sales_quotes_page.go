@@ -2,8 +2,10 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"go_starter/internal/db"
+	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -97,11 +99,14 @@ func (h *Handler) QuoteNew(w http.ResponseWriter, r *http.Request) {
 	}
 	base := wsPath(slugFromRequest(r), "")
 	h.renderWorkspaceShell(w, r, "Buat Quote", "/deals", panel.QuoteForm(panel.QuoteFormView{
-		Base:    base,
-		DealID:  dealID,
-		Action:  base + quoteListSub(dealID),
-		IsEdit:  false,
-		Err:     wsErrMsg(r.URL.Query().Get("err")),
+		Base:   base,
+		DealID: dealID,
+		Action: base + quoteListSub(dealID),
+		IsEdit: false,
+		Err:    wsErrMsg(r.URL.Query().Get("err")),
+		// BL-15: pembuat quote hampir selalu = penyusunnya → default "Disusun oleh"
+		// ke user aktif (tetap bisa diganti manual). Edit prefill dari nilai tersimpan.
+		Fields:  panel.QuoteFormFields{PreparedBy: strconv.FormatInt(session.UserID(ctx), 10)},
 		Members: members,
 	}))
 }

@@ -69,8 +69,8 @@ func QuoteForm(v QuoteFormView) g.Node {
 			memberSelect("Disusun oleh", "prepared_by", v.Fields.PreparedBy, v.Members),
 		),
 		formCard("Syarat & Catatan",
-			textareaField("Termin Pembayaran", "payment_terms", v.Fields.PaymentTerms),
-			textareaField("Catatan / Syarat", "notes_terms", v.Fields.NotesTerms),
+			textareaField("Catatan Pembayaran", "payment_terms", v.Fields.PaymentTerms),
+			textareaField("Catatan / Syarat Lainnya", "notes_terms", v.Fields.NotesTerms),
 		),
 
 		h.Div(
