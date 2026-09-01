@@ -18,6 +18,7 @@ INSERT INTO activities (
     owner_id, activity_context, status, notes,
     due_date, priority, reminder_at,
     contact_id, direction, activity_at, duration_min, call_result,
+    start_at, end_at, location, meeting_type, channel,
     body,
     created_by
 ) VALUES (
@@ -27,8 +28,10 @@ INSERT INTO activities (
     $10, $11, $12,
     $13, $14, $15,
     $16, $17,
-    $18,
-    $19
+    $18, $19, $20,
+    $21, $22,
+    $23,
+    $24
 )
 RETURNING id, tenant_id, kind, subject, target_type, target_id, owner_id, activity_context, status, notes, due_date, priority, reminder_at, start_at, end_at, all_day, location, meeting_type, contact_id, direction, activity_at, duration_min, call_result, email_from, email_to, email_status, body, engagement_type, frequency, channel, scheduled_date, next_due_date, deleted_at, created_by, created_at, updated_by, updated_at
 `
@@ -51,6 +54,11 @@ type CreateActivityParams struct {
 	ActivityAt      pgtype.Timestamptz `json:"activity_at"`
 	DurationMin     *int32             `json:"duration_min"`
 	CallResult      *string            `json:"call_result"`
+	StartAt         pgtype.Timestamptz `json:"start_at"`
+	EndAt           pgtype.Timestamptz `json:"end_at"`
+	Location        *string            `json:"location"`
+	MeetingType     *string            `json:"meeting_type"`
+	Channel         *string            `json:"channel"`
 	Body            *string            `json:"body"`
 	CreatedBy       *int64             `json:"created_by"`
 }
@@ -87,6 +95,11 @@ func (q *Queries) CreateActivity(ctx context.Context, arg CreateActivityParams) 
 		arg.ActivityAt,
 		arg.DurationMin,
 		arg.CallResult,
+		arg.StartAt,
+		arg.EndAt,
+		arg.Location,
+		arg.MeetingType,
+		arg.Channel,
 		arg.Body,
 		arg.CreatedBy,
 	)
@@ -501,10 +514,15 @@ UPDATE activities SET
     activity_at  = $9,
     duration_min = $10,
     call_result  = $11,
-    body         = $12,
-    updated_by   = $13,
+    start_at     = $12,
+    end_at       = $13,
+    location     = $14,
+    meeting_type = $15,
+    channel      = $16,
+    body         = $17,
+    updated_by   = $18,
     updated_at   = now()
-WHERE id = $14 AND deleted_at IS NULL
+WHERE id = $19 AND deleted_at IS NULL
 RETURNING id, tenant_id, kind, subject, target_type, target_id, owner_id, activity_context, status, notes, due_date, priority, reminder_at, start_at, end_at, all_day, location, meeting_type, contact_id, direction, activity_at, duration_min, call_result, email_from, email_to, email_status, body, engagement_type, frequency, channel, scheduled_date, next_due_date, deleted_at, created_by, created_at, updated_by, updated_at
 `
 
@@ -520,6 +538,11 @@ type UpdateActivityParams struct {
 	ActivityAt  pgtype.Timestamptz `json:"activity_at"`
 	DurationMin *int32             `json:"duration_min"`
 	CallResult  *string            `json:"call_result"`
+	StartAt     pgtype.Timestamptz `json:"start_at"`
+	EndAt       pgtype.Timestamptz `json:"end_at"`
+	Location    *string            `json:"location"`
+	MeetingType *string            `json:"meeting_type"`
+	Channel     *string            `json:"channel"`
 	Body        *string            `json:"body"`
 	UpdatedBy   *int64             `json:"updated_by"`
 	ID          int64              `json:"id"`
@@ -541,6 +564,11 @@ func (q *Queries) UpdateActivity(ctx context.Context, arg UpdateActivityParams) 
 		arg.ActivityAt,
 		arg.DurationMin,
 		arg.CallResult,
+		arg.StartAt,
+		arg.EndAt,
+		arg.Location,
+		arg.MeetingType,
+		arg.Channel,
 		arg.Body,
 		arg.UpdatedBy,
 		arg.ID,

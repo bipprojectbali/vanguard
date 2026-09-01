@@ -77,9 +77,9 @@ func (h *Handler) activityTargetOptions(ctx context.Context) ([]panel.ActivityTa
 }
 
 // activityContactOptions memuat kontak dalam cakupan aktor (F3 desa induk) untuk
-// dropdown contact_id pada Call. Kind selain "call" → nil (field tak dirender).
+// dropdown contact_id pada Call & Chat. Kind lain → nil (field tak dirender).
 func (h *Handler) activityContactOptions(ctx context.Context, kind string) ([]panel.AccountMemberOption, error) {
-	if kind != "call" {
+	if kind != "call" && kind != "chat" {
 		return nil, nil
 	}
 	filter := db.AccountsListFilterFor(session.BusinessDataScope(ctx))

@@ -18,6 +18,7 @@ INSERT INTO activities (
     owner_id, activity_context, status, notes,
     due_date, priority, reminder_at,
     contact_id, direction, activity_at, duration_min, call_result,
+    start_at, end_at, location, meeting_type, channel,
     body,
     created_by
 ) VALUES (
@@ -27,6 +28,8 @@ INSERT INTO activities (
     sqlc.narg(due_date), sqlc.narg(priority), sqlc.narg(reminder_at),
     sqlc.narg(contact_id), sqlc.narg(direction), sqlc.narg(activity_at),
     sqlc.narg(duration_min), sqlc.narg(call_result),
+    sqlc.narg(start_at), sqlc.narg(end_at), sqlc.narg(location),
+    sqlc.narg(meeting_type), sqlc.narg(channel),
     sqlc.narg(body),
     sqlc.narg(created_by)
 )
@@ -109,6 +112,11 @@ UPDATE activities SET
     activity_at  = sqlc.narg(activity_at),
     duration_min = sqlc.narg(duration_min),
     call_result  = sqlc.narg(call_result),
+    start_at     = sqlc.narg(start_at),
+    end_at       = sqlc.narg(end_at),
+    location     = sqlc.narg(location),
+    meeting_type = sqlc.narg(meeting_type),
+    channel      = sqlc.narg(channel),
     body         = sqlc.narg(body),
     updated_by   = sqlc.narg(updated_by),
     updated_at   = now()

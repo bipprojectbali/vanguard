@@ -9,16 +9,19 @@ import (
 // panjang, angka, tanggal) punya SATU tempat: create & edit tak boleh menerima
 // nilai yang berbeda sahnya untuk kolom yang sama. Meniru sales_deals_form.go.
 //
-// Enum di sini = CERMIN CHECK constraint migrasi 00011 (kind/target_type/status/
-// priority/direction/call_result) — penolakan terjadi di sini SEBELUM DB; CHECK
-// jaring terakhir. UI hanya menyurfacekan 3 kind Inti (task/call/note); kolom
-// per-kind lain (meeting/email/CS) tak ber-form v1.
+// Enum di sini = CERMIN CHECK constraint migrasi 00011 + 00031 (kind/target_type/
+// status/priority/direction/call_result/meeting_type/channel) — penolakan terjadi
+// di sini SEBELUM DB; CHECK jaring terakhir. UI kini menyurfacekan 5 kind
+// (task/meeting/call/chat/note); email & kolom CS-only belum ber-form.
 
 const maxActivitySubjectLen = 200
 
 var (
-	// validActivityKinds = kind yang ber-UI v1 (Inti-3). Cermin subset kind_chk.
-	validActivityKinds = map[string]struct{}{"task": {}, "call": {}, "note": {}}
+	// validActivityKinds = kind yang ber-UI. Cermin subset kind_chk (email belum
+	// ber-form → tak ditawarkan).
+	validActivityKinds = map[string]struct{}{
+		"task": {}, "meeting": {}, "call": {}, "chat": {}, "note": {},
+	}
 	// validActivityTargetTypes = tipe target yang ber-picker v1 (Deal/Account/
 	// Contact). Cermin subset target_type_chk (ticket/subscription belum ber-UI).
 	validActivityTargetTypes = map[string]struct{}{"deal": {}, "account": {}, "contact": {}}
@@ -29,23 +32,39 @@ var (
 	validTaskStatuses = map[string]struct{}{
 		"Not Started": {}, "In Progress": {}, "Completed": {}, "Deferred": {},
 	}
-	// validActivityDirections = arah Call. Cermin direction_chk.
+	// validMeetingStatuses = daur hidup Pertemuan (subset status_chk 00011:
+	// Planned/Held/Cancelled/No-Show) — tak butuh migrasi baru.
+	validMeetingStatuses = map[string]struct{}{
+		"Planned": {}, "Held": {}, "Cancelled": {}, "No-Show": {},
+	}
+	// validMeetingTypes = tipe Pertemuan. Cermin meeting_type_chk (00031).
+	validMeetingTypes = map[string]struct{}{"Tatap Muka": {}, "Daring": {}}
+	// validActivityDirections = arah Call/Chat. Cermin direction_chk.
 	validActivityDirections = map[string]struct{}{"Inbound": {}, "Outbound": {}}
 	// validCallResults = hasil Call. Cermin call_result_chk.
 	validCallResults = map[string]struct{}{
 		"Connected": {}, "No Answer": {}, "Busy": {}, "Voicemail": {},
 		"Follow-up": {}, "No Respond": {},
 	}
+	// validChannels = kanal Chat. Cermin channel_chk (00031).
+	validChannels = map[string]struct{}{
+		"WhatsApp": {}, "Telegram": {}, "SMS": {}, "Lainnya": {},
+	}
 )
 
 // Opsi enum untuk dropdown — slice BERURUT (map validasi tak berurutan). Nilai
-// HARUS himpunan yang sama dengan map validasi & CHECK 00011; urutan untuk tampilan.
+// HARUS himpunan yang sama dengan map validasi & CHECK 00011/00031; urutan untuk
+// tampilan. Urutan kind mengelompokkan yang serumpun (task, lalu interaksi
+// berwaktu meeting/call/chat, lalu note).
 var (
-	activityKindOptions      = []string{"task", "call", "note"}
+	activityKindOptions      = []string{"task", "meeting", "call", "chat", "note"}
 	activityPriorityOptions  = []string{"Low", "Normal", "High"}
 	taskStatusOptions        = []string{"Not Started", "In Progress", "Completed", "Deferred"}
+	meetingStatusOptions     = []string{"Planned", "Held", "Cancelled", "No-Show"}
+	meetingTypeOptions       = []string{"Tatap Muka", "Daring"}
 	activityDirectionOptions = []string{"Inbound", "Outbound"}
 	callResultOptions        = []string{"Connected", "No Answer", "Busy", "Voicemail", "Follow-up", "No Respond"}
+	channelOptions           = []string{"WhatsApp", "Telegram", "SMS", "Lainnya"}
 )
 
 // compile-time: opsi & map validasi sepakat (panjang sama). Berbeda = dropdown
@@ -54,8 +73,11 @@ var _ = func() struct{} {
 	if len(activityKindOptions) != len(validActivityKinds) ||
 		len(activityPriorityOptions) != len(validActivityPriorities) ||
 		len(taskStatusOptions) != len(validTaskStatuses) ||
+		len(meetingStatusOptions) != len(validMeetingStatuses) ||
+		len(meetingTypeOptions) != len(validMeetingTypes) ||
 		len(activityDirectionOptions) != len(validActivityDirections) ||
-		len(callResultOptions) != len(validCallResults) {
+		len(callResultOptions) != len(validCallResults) ||
+		len(channelOptions) != len(validChannels) {
 		panic("activities: opsi enum tak sinkron dengan map validasi")
 	}
 	return struct{}{}
@@ -76,5 +98,13 @@ type activityForm struct {
 	ActivityAt  pgtype.Timestamptz
 	DurationMin *int32
 	CallResult  *string
-	Body        *string
+	// Meeting
+	StartAt     pgtype.Timestamptz
+	EndAt       pgtype.Timestamptz
+	Location    *string
+	MeetingType *string
+	// Chat
+	Channel *string
+	// Note
+	Body *string
 }

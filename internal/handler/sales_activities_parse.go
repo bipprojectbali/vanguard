@@ -70,6 +70,55 @@ func parseActivityForm(fv func(string) string, kind string) (activityForm, strin
 			f.CallResult = &s
 		}
 		f.Notes = optTrim(fv("notes"))
+	case "meeting":
+		st, code := optDateTime(fv("start_at"))
+		if code != "" {
+			return activityForm{}, code
+		}
+		f.StartAt = st
+		et, code := optDateTime(fv("end_at"))
+		if code != "" {
+			return activityForm{}, code
+		}
+		f.EndAt = et
+		f.Location = optTrim(fv("location"))
+		if s := strings.TrimSpace(fv("meeting_type")); s != "" {
+			if _, ok := validMeetingTypes[s]; !ok {
+				return activityForm{}, "activity_meeting_type"
+			}
+			f.MeetingType = &s
+		}
+		if s := strings.TrimSpace(fv("status")); s != "" {
+			if _, ok := validMeetingStatuses[s]; !ok {
+				return activityForm{}, "activity_status"
+			}
+			f.Status = &s
+		}
+		f.Notes = optTrim(fv("notes"))
+	case "chat":
+		cid, code := optActivityInt64(fv("contact_id"))
+		if code != "" {
+			return activityForm{}, code
+		}
+		f.ContactID = cid
+		if s := strings.TrimSpace(fv("direction")); s != "" {
+			if _, ok := validActivityDirections[s]; !ok {
+				return activityForm{}, "activity_direction"
+			}
+			f.Direction = &s
+		}
+		if s := strings.TrimSpace(fv("channel")); s != "" {
+			if _, ok := validChannels[s]; !ok {
+				return activityForm{}, "activity_channel"
+			}
+			f.Channel = &s
+		}
+		at, code := optDateTime(fv("activity_at"))
+		if code != "" {
+			return activityForm{}, code
+		}
+		f.ActivityAt = at
+		f.Notes = optTrim(fv("notes"))
 	case "note":
 		f.Body = optTrim(fv("body"))
 	default:
