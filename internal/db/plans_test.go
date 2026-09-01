@@ -2,7 +2,10 @@ package db
 
 import (
 	"context"
+	"math"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // plans_test.go — bukti query katalog master Plan (M5 slice 2). Sifat yang, bila
@@ -109,7 +112,11 @@ func TestSetPlanActive_HidesFromPicker(t *testing.T) {
 		if picker, e = q.ListPlans(ctx); e != nil {
 			return e
 		}
-		all, e = q.ListPlansAll(ctx)
+		all, e = q.ListPlansAll(ctx, ListPlansAllParams{
+			CursorCreatedAt: pgtype.Timestamptz{Valid: true, InfinityModifier: pgtype.Infinity},
+			CursorID:        math.MaxInt64,
+			PageSize:        1000,
+		})
 		return e
 	}); err != nil {
 		t.Fatalf("list: %v", err)

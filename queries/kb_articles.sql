@@ -6,11 +6,16 @@
 -- leads_status_chk/subs_status_chk.
 
 -- name: ListKBArticlesAll :many
--- Seluruh katalog untuk tampilan kelola (semua status). Terbaru diperbarui
--- dulu — perilaku umum KB admin view. Bounded katalog master per-workspace
--- → tanpa keyset.
+-- Seluruh katalog untuk tampilan kelola (semua status). Keyset (created_at DESC,
+-- id DESC) + LIMIT (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi
+-- & tetap konsisten walau ada sisipan. Urutan pindah dari updated_at ke
+-- created_at (kolom kursor STABIL: updated_at berubah saat artikel disunting →
+-- baris bisa lompat antar-halaman saat paging; created_at tetap, sesuai konvensi
+-- keyset app). Status tampak dari badge per baris.
 SELECT * FROM kb_articles
-ORDER BY updated_at DESC, id DESC;
+WHERE (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(page_size);
 
 -- name: GetKBArticle :one
 -- Satu artikel (baca detail/isi). RLS menjamin tenant_id.

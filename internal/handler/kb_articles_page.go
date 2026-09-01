@@ -5,6 +5,8 @@ import (
 
 	"go_starter/internal/db"
 	"go_starter/internal/ui/pages/panel"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // kb_articles_page.go — HALAMAN baca katalog Knowledge Base (Modul 6 slice
@@ -12,8 +14,9 @@ import (
 // halaman tumbuh dengan aturan LIHAT (F2 read), aksi dengan aturan TULIS
 // (F2 write). Meniru playbooks_page.go (slice A2).
 //
-// Katalog master bounded per-workspace (ListKBArticlesAll, TERMASUK draf) →
-// TANPA keyset & TANPA F3: RLS satu-satunya pengurung.
+// Katalog master per-workspace (ListKBArticlesAll, TERMASUK draf) → keyset
+// (created_at DESC, id DESC) lewat ?after=, TANPA F3: RLS satu-satunya
+// pengurung. Urutan pindah dari updated_at ke created_at (kursor keyset STABIL).
 //
 // KPI cards wireframe 6.10 ("Artikel Terbit"/"Dilihat 30 Hr"/"Tiket
 // Ter-deflect"/"Perlu Review") & filter tab (Semua/Terpopuler/Perlu
@@ -36,24 +39,33 @@ func (h *Handler) KBArticlesList(w http.ResponseWriter, r *http.Request) {
 		h.renderKBArticlesForbidden(w, r)
 		return
 	}
-	rows, err := h.q(ctx).ListKBArticlesAll(ctx)
+	cursorAt, cursorID := pageCursor(r)
+	rows, err := h.q(ctx).ListKBArticlesAll(ctx, db.ListKBArticlesAllParams{
+		CursorCreatedAt: cursorAt,
+		CursorID:        cursorID,
+		PageSize:        pageSize + 1,
+	})
 	if err != nil {
 		h.Log.Error("kb_articles: list", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	items := make([]panel.KBArticleRow, 0, len(rows))
-	for _, a := range rows {
+	shown, nextCursor := splitPage(rows, func(a db.KbArticle) (pgtype.Timestamptz, int64) {
+		return a.CreatedAt, a.ID
+	})
+	items := make([]panel.KBArticleRow, 0, len(shown))
+	for _, a := range shown {
 		items = append(items, kbArticleRowView(a))
 	}
 
 	base := wsPath(slugFromRequest(r), "")
 	h.renderWorkspaceShell(w, r, "Knowledge Base", "/kb-articles", panel.KBArticleList(panel.KBArticleListView{
-		Base:     base,
-		CanWrite: canWriteKBArticles(ctx),
-		Err:      kbArticlesErrMsg(r.URL.Query().Get("err")),
-		Msg:      kbArticlesMsg(r.URL.Query().Get("ok")),
-		Items:    items,
+		Base:       base,
+		CanWrite:   canWriteKBArticles(ctx),
+		Err:        kbArticlesErrMsg(r.URL.Query().Get("err")),
+		Msg:        kbArticlesMsg(r.URL.Query().Get("ok")),
+		Items:      items,
+		NextCursor: nextCursor,
 	}))
 }
 

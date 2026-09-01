@@ -167,18 +167,29 @@ func (q *Queries) ListPlans(ctx context.Context) ([]Plan, error) {
 const listPlansAll = `-- name: ListPlansAll :many
 
 SELECT id, tenant_id, plan_name, plan_code, description, plan_category, is_active, base_price, billing_frequency, setup_fee, currency, included_features, created_by, created_at, updated_by, updated_at FROM plans
-ORDER BY is_active DESC, plan_name ASC, id ASC
+WHERE (created_at, id) < ($1::timestamptz, $2::bigint)
+ORDER BY created_at DESC, id DESC
+LIMIT $3
 `
+
+type ListPlansAllParams struct {
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	PageSize        int32              `json:"page_size"`
+}
 
 // ── Katalog master CRUD (M5-2) — kelola plan di /plans ───────────────────────
 // plans TANPA soft-delete: is_active=false = pensiun (harga historis aman via
 // snapshot quote_items). SetPlanActive = pensiunkan/aktifkan; UpdatePlan menyunting
 // profil (is_active punya jalur sendiri agar pensiun terlihat sebagai aksi khusus).
 // Seluruh katalog untuk tampilan kelola (TERMASUK yang pensiun) — beda dari
-// ListPlans (hanya aktif, untuk picker quote). Aktif dulu lalu urut nama. Bounded
-// katalog master per-workspace → tanpa keyset.
-func (q *Queries) ListPlansAll(ctx context.Context) ([]Plan, error) {
-	rows, err := q.db.Query(ctx, listPlansAll)
+// ListPlans (hanya aktif, untuk picker quote). Keyset (created_at DESC, id DESC)
+// + LIMIT (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+// konsisten walau ada sisipan (OFFSET akan menggeser). Status aktif/pensiun
+// tampak dari badge per baris, bukan lagi dari urutan (grouping is_active dilepas
+// demi kursor keyset satu-kolom yang dipakai seluruh app).
+func (q *Queries) ListPlansAll(ctx context.Context, arg ListPlansAllParams) ([]Plan, error) {
+	rows, err := q.db.Query(ctx, listPlansAll, arg.CursorCreatedAt, arg.CursorID, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}

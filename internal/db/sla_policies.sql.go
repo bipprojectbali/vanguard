@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createSLAPolicy = `-- name: CreateSLAPolicy :one
@@ -150,14 +152,25 @@ func (q *Queries) ListSLAPolicies(ctx context.Context) ([]SlaPolicy, error) {
 
 const listSLAPoliciesAll = `-- name: ListSLAPoliciesAll :many
 SELECT id, tenant_id, sla_name, applies_to_priority, first_response_target_minutes, resolution_target_minutes, business_hours, escalation_rule, is_active, created_by, created_at, updated_by, updated_at FROM sla_policies
-ORDER BY is_active DESC, sla_name ASC, id ASC
+WHERE (created_at, id) < ($1::timestamptz, $2::bigint)
+ORDER BY created_at DESC, id DESC
+LIMIT $3
 `
 
+type ListSLAPoliciesAllParams struct {
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	PageSize        int32              `json:"page_size"`
+}
+
 // Seluruh katalog untuk tampilan kelola (TERMASUK yang pensiun) — beda dari
-// ListSLAPolicies (hanya aktif). Aktif dulu lalu urut nama. Bounded katalog
-// master per-workspace → tanpa keyset.
-func (q *Queries) ListSLAPoliciesAll(ctx context.Context) ([]SlaPolicy, error) {
-	rows, err := q.db.Query(ctx, listSLAPoliciesAll)
+// ListSLAPolicies (hanya aktif). Keyset (created_at DESC, id DESC) + LIMIT
+// (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+// konsisten walau ada sisipan. Status aktif/pensiun tampak dari badge per
+// baris, bukan lagi dari urutan (grouping is_active dilepas demi kursor keyset
+// satu-kolom yang dipakai seluruh app).
+func (q *Queries) ListSLAPoliciesAll(ctx context.Context, arg ListSLAPoliciesAllParams) ([]SlaPolicy, error) {
+	rows, err := q.db.Query(ctx, listSLAPoliciesAll, arg.CursorCreatedAt, arg.CursorID, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}

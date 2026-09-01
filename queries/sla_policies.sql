@@ -22,10 +22,15 @@ WHERE id = sqlc.arg(id);
 
 -- name: ListSLAPoliciesAll :many
 -- Seluruh katalog untuk tampilan kelola (TERMASUK yang pensiun) — beda dari
--- ListSLAPolicies (hanya aktif). Aktif dulu lalu urut nama. Bounded katalog
--- master per-workspace → tanpa keyset.
+-- ListSLAPolicies (hanya aktif). Keyset (created_at DESC, id DESC) + LIMIT
+-- (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+-- konsisten walau ada sisipan. Status aktif/pensiun tampak dari badge per
+-- baris, bukan lagi dari urutan (grouping is_active dilepas demi kursor keyset
+-- satu-kolom yang dipakai seluruh app).
 SELECT * FROM sla_policies
-ORDER BY is_active DESC, sla_name ASC, id ASC;
+WHERE (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(page_size);
 
 -- name: CreateSLAPolicy :one
 -- Buat kebijakan SLA. tenant_id eksplisit (RLS WITH CHECK memverifikasinya =

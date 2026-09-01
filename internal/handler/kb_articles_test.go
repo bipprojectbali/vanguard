@@ -58,7 +58,10 @@ func (e *testEnv) seedKBArticleRow(t *testing.T, title string) db.KbArticle {
 // RLS) → satu tenant test.
 func (e *testEnv) allKBArticles(t *testing.T) []db.KbArticle {
 	t.Helper()
-	rows, err := e.q.ListKBArticlesAll(t.Context())
+	cAt, cID := firstPageCursor()
+	rows, err := e.q.ListKBArticlesAll(t.Context(), db.ListKBArticlesAllParams{
+		CursorCreatedAt: cAt, CursorID: cID, PageSize: allCatalogPageSize,
+	})
 	if err != nil {
 		t.Fatalf("list kb articles: %v", err)
 	}
