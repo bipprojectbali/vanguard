@@ -14,17 +14,23 @@ import (
 // wiring (dealRowView/dealDetailView sudah memanggil maskARR sejak awal),
 // melainkan gap CAKUPAN TEST (M9-2 gap 4, plan eager-doodling-sutherland.md).
 //
-// Support TAK punya crm:deals sama sekali (business_policy.csv) → canViewDeals
-// selalu menolak SEBELUM dealDetailView/DealDetail pernah dipanggil lewat HTTP
-// (F2-blocked total, sama pola sales_quotes_fls_test.go). Amount di baris
-// list/pipeline diuji LANGSUNG atas dealRowView (murni data, tanpa HTTP) utk
-// kelima role; Amount di detail diuji lewat HTTP nyata utk admin/manager/
-// sales/csm (semua reachable — write mencakup read, business.conf:35; csm
-// punya crm:deals read eksplisit) lalu LANGSUNG atas dealDetailView utk
-// Support.
+// Support & CS (csm, sejak BL-11) TAK punya crm:deals sama sekali
+// (business_policy.csv) → canViewDeals menolak SEBELUM dealDetailView/DealDetail
+// pernah dipanggil lewat HTTP (F2-blocked total, sama pola
+// sales_quotes_fls_test.go). Amount di baris list/pipeline diuji LANGSUNG atas
+// dealRowView (murni data, tanpa HTTP): F4 (canSeeARR) TEGAK LURUS terhadap F2
+// — csm tetap di sisi "boleh lihat Amount" seandainya bisa mencapai baris,
+// jadi cabut-akses BL-11 murni soal gate modul, bukan masking field. Amount di
+// detail diuji lewat HTTP nyata utk admin/manager/sales (reachable — write
+// mencakup read, business.conf:35); csm & Support (F2-blocked) diuji sesuai
+// jalurnya: csm → 403 nyata (bukti gate BL-11), Support → dealDetailView
+// langsung utk masking.
 
 // TestDealRowView_AmountMasked: Amount tersamar utk Support, tampil apa adanya
-// utk role lain (admin/manager/sales/csm) di baris daftar/pipeline Deal.
+// utk role lain (admin/manager/sales/csm) di baris daftar/pipeline Deal. csm
+// TETAP diuji di sini walau F2-blocked sejak BL-11: ini menguji F4 (canSeeARR,
+// masking field) yang TEGAK LURUS terhadap F2 (gate modul) — csm ada di sisi
+// "boleh lihat Amount" seandainya mencapai baris; cabut-akses BL-11 murni gate.
 func TestDealRowView_AmountMasked(t *testing.T) {
 	d := db.Deal{
 		DealName: "Deal Baris",
@@ -47,15 +53,16 @@ func TestDealRowView_AmountMasked(t *testing.T) {
 }
 
 // TestDealDetailView_AmountMasked: Amount di halaman detail Deal — matriks
-// 5-role. admin/manager/sales/csm lewat HTTP nyata (DealDetail); Support
-// (F2-blocked total, tak punya crm:deals) diuji langsung atas dealDetailView.
+// 5-role. admin/manager/sales lewat HTTP nyata (DealDetail, Amount tampil);
+// csm & Support F2-blocked (tak punya crm:deals): csm diuji 403 nyata (bukti
+// gate BL-11), Support diuji langsung atas dealDetailView utk masking.
 func TestDealDetailView_AmountMasked(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Deal", &uid, nil, nil)
 	deal := env.seedReportDeal(t, acc.ID, &uid, "Prospecting", "8200000")
 	const wantAmount = "Rp 8.200.000"
 
-	for _, role := range []string{"admin", "manager", "sales", "csm"} {
+	for _, role := range []string{"admin", "manager", "sales"} {
 		t.Run("role="+role, func(t *testing.T) {
 			req := accountsReq(http.MethodGet, "/w/test/deals/"+itoa(deal.ID), nil, itoa(deal.ID))
 			rec := env.runAccount(uid, "owner", role, req, env.h.DealDetail)
@@ -68,6 +75,19 @@ func TestDealDetailView_AmountMasked(t *testing.T) {
 			}
 		})
 	}
+
+	// csm (BL-11): F2-blocked — DealDetail menolak 403 SEBELUM Amount pernah
+	// dirakit. Bukti gate modul dicabut utk CS, bukan sekadar field tersamar.
+	t.Run("role=csm", func(t *testing.T) {
+		req := accountsReq(http.MethodGet, "/w/test/deals/"+itoa(deal.ID), nil, itoa(deal.ID))
+		rec := env.runAccount(uid, "owner", "csm", req, env.h.DealDetail)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("csm harus 403 di DealDetail (BL-11), got %d\n%s", rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), wantAmount) {
+			t.Errorf("csm: Amount %q BOCOR di body 403 — deal tak boleh terekspos sama sekali", wantAmount)
+		}
+	})
 
 	t.Run("role=support", func(t *testing.T) {
 		req := accountsReq(http.MethodGet, "/w/test/deals/"+itoa(deal.ID), nil, itoa(deal.ID))

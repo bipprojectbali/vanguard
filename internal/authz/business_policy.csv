@@ -65,11 +65,10 @@ p, sales, crm:kb, read
 p, sales, crm:activities, write
 p, sales, crm:reports, read
 
-# --- CSM: jaga desa pelanggan. Pemilik Customer Success; nol akses Leads/Quotes (✕) ---
+# --- CSM: jaga desa pelanggan. Pemilik Customer Success; nol akses Leads/Deals/Quotes (✕, BL-11) ---
 p, csm, crm:dashboard, read
 p, csm, crm:accounts, write
 p, csm, crm:contacts, write
-p, csm, crm:deals, read
 p, csm, crm:subscriptions, read
 p, csm, crm:renewals, read
 p, csm, crm:plans, read

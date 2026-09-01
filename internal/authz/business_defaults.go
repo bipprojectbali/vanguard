@@ -106,7 +106,10 @@ func DefaultBusinessRoles() []DefaultRole {
 			Perms: []DefaultPerm{
 				{"crm:dashboard", "read"},
 				{"crm:accounts", "write"}, {"crm:contacts", "write"},
-				{"crm:deals", "read"}, {"crm:subscriptions", "read"},
+				// BL-11: CS = peran pasca-jual; pipeline pra-jual (Deals) bukan
+				// wilayahnya. Konteks kontrak TETAP lewat crm:subscriptions
+				// (cermin pasca-jual dari deal menang: source_deal_id+nilai+plan).
+				{"crm:subscriptions", "read"},
 				{"crm:renewals", "read"}, {"crm:plans", "read"},
 				{"crm:churn", "write"}, {"crm:health", "write"},
 				{"crm:journey", "write"}, {"crm:success_plans", "write"},

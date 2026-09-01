@@ -142,6 +142,37 @@ func TestDashboard_PipelineExcludesClosedStages(t *testing.T) {
 	}
 }
 
+// TestDashboard_PipelineChartGatedByDeals (BL-11): kartu Pipeline per-Stage
+// hanya untuk role dgn crm:deals read. Role dgn izin (admin) melihat
+// "chart-pipeline"; role tanpa izin (csm pasca-BL-11, support) tidak — tapi
+// TETAP melihat dashboard + chart Health (bukti gate selektif, bukan halaman
+// kosong). Efek samping DISENGAJA: Support pun kehilangan chart deal yang
+// selama ini bocor tanpa crm:deals.
+func TestDashboard_PipelineChartGatedByDeals(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa Gate", &uid, nil, nil)
+	env.seedDeal(t, acc.ID, &uid) // stage Prospecting → pipeline non-kosong utk yg berhak
+
+	t.Run("admin melihat chart pipeline", func(t *testing.T) {
+		body := env.dashboardBody(t, uid, "owner", "admin")
+		if !strings.Contains(body, "chart-pipeline") {
+			t.Errorf("admin (crm:deals read) harus melihat chart-pipeline, body:\n%s", body)
+		}
+	})
+
+	for _, role := range []string{"csm", "support"} {
+		t.Run(role+" tak melihat chart pipeline", func(t *testing.T) {
+			body := env.dashboardBody(t, uid, "owner", role)
+			if strings.Contains(body, "chart-pipeline") {
+				t.Errorf("role %q (tanpa crm:deals) TAK boleh melihat chart-pipeline, body:\n%s", role, body)
+			}
+			if !strings.Contains(body, "chart-health") {
+				t.Errorf("role %q tetap harus melihat chart-health (dashboard tak kosong), body:\n%s", role, body)
+			}
+		})
+	}
+}
+
 // TestDashboard_RenewalsDueWindow: hanya subscription Active/PendingApproval
 // dengan end_date dalam 30 hari ke depan yang terhitung — di luar jendela atau
 // status lain tak ikut.

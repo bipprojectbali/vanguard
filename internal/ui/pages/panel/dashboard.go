@@ -57,8 +57,12 @@ func dashboardKPICard(label, value, valueClass string) g.Node {
 }
 
 func dashboardCharts(v DashboardView) g.Node {
+	// BL-11: kartu Pipeline per-Stage hanya untuk role dgn crm:deals read.
+	// Handler mengosongkan PipelineChart bila tak berhak (CS pasca-BL-11,
+	// Support) → kartu tak dirender di sini; grid menyusut ke satu kolom.
 	return h.Div(h.Class("grid grid-cols-1 md:grid-cols-2 gap-4"),
-		dashboardChartCard("Pipeline per-Stage", "chart-pipeline", v.PipelineChart),
+		g.If(v.PipelineChart != "",
+			dashboardChartCard("Pipeline per-Stage", "chart-pipeline", v.PipelineChart)),
 		dashboardChartCard("Distribusi Health", "chart-health", v.HealthChart),
 	)
 }
