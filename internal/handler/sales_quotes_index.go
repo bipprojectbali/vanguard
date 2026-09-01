@@ -62,6 +62,8 @@ func (h *Handler) QuotesIndex(w http.ResponseWriter, r *http.Request) {
 		Query:      query,
 		Items:      items,
 		NextCursor: nextCursor,
+		After:      r.URL.Query().Get("after"),
+		Trail:      pageTrail(r),
 	}))
 }
 

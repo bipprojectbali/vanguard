@@ -106,3 +106,33 @@ func TestAccountsList_SearchEmptyState(t *testing.T) {
 		t.Errorf("tautan hapus pencarian harus menuju daftar tanpa q (view=my saja):\n%s", out)
 	}
 }
+
+// TestAccountsList_PrevLinkThreadsFilters — regresi BL-7: di halaman ke-2 (After +
+// Trail terisi) tautan "« Sebelumnya" wajib membawa filter aktif (view=my + q
+// ter-escape) TANPA after/trail (kembali ke halaman pertama hasil yang sama).
+// Tanpa ini, mundur satu halaman diam-diam melebar ke seluruh desa.
+func TestAccountsList_PrevLinkThreadsFilters(t *testing.T) {
+	v := accountsSearchView()
+	v.After = "100_1"      // cursor pembuka halaman ini
+	v.Trail = "-"          // jejak: halaman 1 (sentinel)
+	v.NextCursor = "200_2" // masih ada halaman berikutnya
+	out := renderLeads(t, AccountsList(v))
+
+	if !strings.Contains(out, "« Sebelumnya") {
+		t.Errorf("halaman ke-2 harus punya tautan « Sebelumnya:\n%s", out)
+	}
+	// Prev dari halaman 2 kembali ke halaman 1: buang after & trail, pertahankan
+	// filter. Dicek pada tautan ITU SENDIRI (HTML lain memang membawa after/trail
+	// di tautan Berikutnya).
+	if !strings.Contains(out, `href="/w/desa/accounts?view=my&amp;q=kali+muara" class="btn btn-ghost min-h-11">« Sebelumnya`) {
+		t.Errorf("« Sebelumnya harus membawa view=my + q tanpa after/trail:\n%s", out)
+	}
+	// Label halaman saat ini turun dari panjang jejak (Hal 2).
+	if !strings.Contains(out, "Hal 2") {
+		t.Errorf("harus menampilkan nomor halaman (Hal 2):\n%s", out)
+	}
+	// Berikutnya mendorong cursor halaman ini ke jejak.
+	if !strings.Contains(out, "after=200_2&amp;trail=-~100_1") {
+		t.Errorf("Berikutnya harus push cursor halaman ini ke jejak:\n%s", out)
+	}
+}

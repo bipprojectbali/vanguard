@@ -76,6 +76,8 @@ type CSTrainingsListView struct {
 	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	CanWrite   bool
 	NextCursor string
+	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 	Err        string
 	Msg        string
 }
@@ -280,17 +282,6 @@ func csTrainingActionBtn(base, id, targetStatus, label, extraCls string) g.Node 
 }
 
 func csTrainingsPager(v CSTrainingsListView) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := v.Base + "/trainings?after=" + v.NextCursor
-	if v.Tab != "" {
-		href += "&tab=" + v.Tab
-	}
-	href = appendQuery(href, v.Query) // q bertahan ke halaman berikutnya
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	base := panelListHref(v.Base+"/trainings", [2]string{"tab", v.Tab}, [2]string{"q", v.Query})
+	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

@@ -101,6 +101,8 @@ func (h *Handler) CSTrainingsList(w http.ResponseWriter, r *http.Request) {
 		Query:      query,
 		CanWrite:   canWrite,
 		NextCursor: nextCursor,
+		After:      r.URL.Query().Get("after"),
+		Trail:      pageTrail(r),
 		Err:        csTrainingsErrMsg(r.URL.Query().Get("err")),
 		Msg:        csTrainingsMsg(r.URL.Query().Get("ok")),
 	}))

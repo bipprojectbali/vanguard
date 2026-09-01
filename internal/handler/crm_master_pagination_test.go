@@ -95,7 +95,7 @@ func nextAfter(html, path string) string {
 		return ""
 	}
 	rest := html[i+len(marker):]
-	end := strings.IndexAny(rest, `"'`)
+	end := strings.IndexAny(rest, `&"'`)
 	if end < 0 {
 		return ""
 	}

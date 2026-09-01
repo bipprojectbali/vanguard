@@ -52,6 +52,8 @@ type ContactsListView struct {
 	Items       []ContactRow
 	CanWrite    bool
 	NextCursor  string
+	After       string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail       string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 	Err         string
 	Msg         string
 }
@@ -70,6 +72,8 @@ type ContactsAllView struct {
 	ActiveView string
 	Query      string // ?q= pencarian bebas (BL-6, hanya daftar global); "" = tak mencari
 	NextCursor string
+	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 	// CanWrite = tombol "Tambah Kontak" tampil. Handler menyalakannya HANYA bila
 	// aktor boleh menulis DAN punya ≥1 desa dalam cakupannya (ada induk yang bisa
 	// dipilih); tanpa desa, tombol menuju form kosong tanpa pilihan → disembunyikan.
@@ -110,7 +114,7 @@ func ContactsList(v ContactsListView) g.Node {
 	} else {
 		// Daftar per-desa: tanpa kolom Desa (redundan — sudah di judul halaman).
 		body = append(body, contactsTable(v.AccountBase, v.Items, false))
-		body = append(body, contactsPager(v.AccountBase+"/contacts", "", v.NextCursor, ""))
+		body = append(body, contactsPager(v.AccountBase+"/contacts", "", v.NextCursor, "", v.After, v.Trail))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
@@ -156,7 +160,7 @@ func ContactsAll(v ContactsAllView) g.Node {
 	} else {
 		// base per-baris = URL desa induk masing-masing (dirakit dari AccountID).
 		body = append(body, contactsGlobalTable(v.Base, v.Items))
-		body = append(body, contactsPager(v.Base+"/contacts", v.ActiveView, v.NextCursor, v.Query))
+		body = append(body, contactsPager(v.Base+"/contacts", v.ActiveView, v.NextCursor, v.Query, v.After, v.Trail))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
@@ -217,20 +221,13 @@ func emptyContacts(backHref, nextCursor, msg string) g.Node {
 // bookmarkable + dimuat ulang, lolos gotcha #16), tap target 44px, flex-wrap 375px.
 // view (opsional, "" di daftar per-desa) diteruskan agar tab aktif bertahan antar
 // halaman: ?after= lebih dulu, lalu &view= (kembaran accountsPager).
-func contactsPager(listHref, view, nextCursor, query string) g.Node {
-	if nextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := listHref + "?after=" + nextCursor
+func contactsPager(listHref, view, nextCursor, query, after, trail string) g.Node {
+	viewKeep := ""
 	if view != "" && view != ContactViewAll {
-		href += "&view=" + view
+		viewKeep = view
 	}
-	href = appendQuery(href, query) // q bertahan ke halaman berikutnya (daftar global)
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	base := panelListHref(listHref, [2]string{"view", viewKeep}, [2]string{"q", query})
+	return ui.KeysetPager(base, after, trail, nextCursor)
 }
 
 // ContactsForbidden = penolakan 403 bagi anggota tanpa peran CRM (kembaran

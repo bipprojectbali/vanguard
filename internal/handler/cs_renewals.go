@@ -72,6 +72,8 @@ func (h *Handler) CSRenewalsList(w http.ResponseWriter, r *http.Request) {
 			Items:      items,
 			CanWrite:   canWrite,
 			NextCursor: nextCursor,
+			After:      r.URL.Query().Get("after"),
+			Trail:      pageTrail(r),
 		}))
 }
 

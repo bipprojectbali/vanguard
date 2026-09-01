@@ -2,6 +2,7 @@ package panel
 
 import (
 	"net/url"
+	"strings"
 
 	g "maragu.dev/gomponents"
 	h "maragu.dev/gomponents/html"
@@ -89,4 +90,24 @@ func appendQuery(href, q string) string {
 		return href
 	}
 	return href + "&q=" + url.QueryEscape(q)
+}
+
+// panelListHref merakit URL kanonik daftar untuk baseHref ui.KeysetPager (BL-7):
+// path diikuti param filter non-kosong dengan pemisah ?/& yang benar, TANPA
+// after/trail (ditambah helper pager sendiri). Nilai di-escape; berbeda dari
+// appendQuery yang mengasumsikan href sudah punya "?". Bila path sudah berparam
+// (mis. ".../reports?section=x"), param berikutnya otomatis pakai &.
+func panelListHref(path string, params ...[2]string) string {
+	out := path
+	for _, p := range params {
+		if p[1] == "" {
+			continue
+		}
+		sep := "?"
+		if strings.Contains(out, "?") {
+			sep = "&"
+		}
+		out += sep + p[0] + "=" + url.QueryEscape(p[1])
+	}
+	return out
 }

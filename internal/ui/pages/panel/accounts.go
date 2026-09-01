@@ -60,6 +60,8 @@ type AccountsListView struct {
 	ActiveView string
 	Query      string
 	NextCursor string
+	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 	Err        string
 	Msg        string
 }
@@ -285,21 +287,7 @@ func accountRow(base string, a AccountRow) g.Node {
 // bookmarkable + dimuat ulang, lolos gotcha #16), tap target 44px, flex-wrap
 // untuk 375px. Ujung daftar dikatakan eksplisit.
 func accountsPager(v AccountsListView) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := v.Base + "/accounts?after=" + v.NextCursor
-	if v.ActiveView != "" && v.ActiveView != AccViewAll {
-		href += "&view=" + v.ActiveView
-	}
-	if v.Query != "" {
-		href += "&q=" + url.QueryEscape(v.Query)
-	}
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	return ui.KeysetPager(accountsListHref(v.Base, v.ActiveView, v.Query), v.After, v.Trail, v.NextCursor)
 }
 
 // AccountsForbidden = penolakan 403 bagi anggota tanpa peran CRM. Menyebut SIAPA

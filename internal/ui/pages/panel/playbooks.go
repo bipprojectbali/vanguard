@@ -43,6 +43,8 @@ type PlaybookListView struct {
 	Msg        string
 	Items      []PlaybookRow
 	NextCursor string
+	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
 // PlaybookList merender halaman katalog: header + alert + tabel.
@@ -78,15 +80,8 @@ func PlaybookList(v PlaybookListView) g.Node {
 // playbooksPager = tautan keyset "Berikutnya »" (native <a>, lolos gotcha #16).
 // NextCursor kosong = ujung daftar. flex-wrap agar tak mendorong lebar di 375px.
 func playbooksPager(v PlaybookListView) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := v.Base + "/playbooks?after=" + v.NextCursor
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	base := v.Base + "/playbooks"
+	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }
 
 func emptyPlaybooks() g.Node {

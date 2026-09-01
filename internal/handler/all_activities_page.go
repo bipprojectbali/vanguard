@@ -79,6 +79,8 @@ func (h *Handler) AllActivitiesList(w http.ResponseWriter, r *http.Request) {
 			Msg:        activitiesMsg(r.URL.Query().Get("ok")),
 			Items:      items,
 			NextCursor: nextCursor,
+			After:      r.URL.Query().Get("after"),
+			Trail:      pageTrail(r),
 			Query:      query,
 		}))
 }

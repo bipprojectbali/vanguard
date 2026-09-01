@@ -35,6 +35,8 @@ type QuotesIndexView struct {
 	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	Items      []QuoteIndexRow
 	NextCursor string
+	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
 // QuotesIndex merender header + alert + tabel quote lintas-deal (atau state kosong)
@@ -137,13 +139,6 @@ func emptyQuotesIndex(v QuotesIndexView) g.Node {
 }
 
 func quotesIndexPager(v QuotesIndexView) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := appendQuery(v.Base+"/quotes?after="+v.NextCursor, v.Query) // q bertahan antar halaman
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	base := panelListHref(v.Base+"/quotes", [2]string{"q", v.Query})
+	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

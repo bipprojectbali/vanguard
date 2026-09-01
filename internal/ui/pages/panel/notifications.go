@@ -35,7 +35,8 @@ type NotifView struct {
 	ErrMsg  string
 	// NextCursor = penanda peristiwa lebih lama; "" berarti ini yang terakhir.
 	NextCursor string
-	HasPrev    bool
+	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
 // Notifications merender umpan notifikasi user. Undangan DI ATAS karena butuh
@@ -60,7 +61,7 @@ func Notifications(v NotifView) g.Node {
 	// Halaman kedua yang kosong TETAP menampilkan jalan kembali, bukan pesan
 	// "belum ada notifikasi" — yang terakhir itu berbohong kepada orang yang
 	// jelas-jelas baru saja melihat daftarnya di halaman sebelumnya.
-	if len(v.Events) == 0 && v.HasPrev {
+	if len(v.Events) == 0 && v.After != "" {
 		body = append(body,
 			h.P(h.Class("text-base-content/70"), g.Text("Tak ada peristiwa lebih lama.")),
 			notifPager(v))
@@ -73,23 +74,7 @@ func Notifications(v NotifView) g.Node {
 // notifPager = jalan ke peristiwa lebih lama. Link biasa (navigasi: harus bisa
 // di-bookmark & dimuat ulang), tap target 44px, flex-wrap untuk 375px.
 func notifPager(v NotifView) g.Node {
-	if v.NextCursor == "" && !v.HasPrev {
-		return nil
-	}
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		g.If(v.HasPrev, h.A(
-			h.Href("/notifications"), h.Class("btn btn-ghost min-h-11"),
-			g.Text("« Terbaru"),
-		)),
-		g.If(v.NextCursor != "", h.A(
-			h.Href("/notifications?after="+v.NextCursor), h.Class("btn min-h-11"),
-			g.Text("Lebih lama »"),
-		)),
-		g.If(v.NextCursor == "", h.Span(
-			h.Class("text-sm text-base-content/60"), g.Text("Ujung riwayat."),
-		)),
-	)
+	return ui.KeysetPager("/notifications", v.After, v.Trail, v.NextCursor)
 }
 
 // inviteInbox = undangan menunggu keputusan. Terima/Tolak = form NATIVE POST →

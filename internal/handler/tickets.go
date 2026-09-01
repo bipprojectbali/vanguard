@@ -108,6 +108,8 @@ func (h *Handler) TicketsList(w http.ResponseWriter, r *http.Request) {
 		Query:      query,
 		CanWrite:   canWrite,
 		NextCursor: nextCursor,
+		After:      r.URL.Query().Get("after"),
+		Trail:      pageTrail(r),
 		Err:        ticketsErrMsg(r.URL.Query().Get("err")),
 		Msg:        ticketsMsg(r.URL.Query().Get("ok")),
 	}))

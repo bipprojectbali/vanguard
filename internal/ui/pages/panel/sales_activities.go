@@ -42,6 +42,8 @@ type ActivitiesListView struct {
 	Msg          string
 	Items        []ActivityRow
 	NextCursor   string
+	After        string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail        string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 	Query        string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	TargetFilter string // "type:id" saat difilter per-entitas; "" = semua
 	TargetLabel  string // nama entitas yang di-resolve handler (best-effort)
@@ -278,17 +280,6 @@ func emptyActivities(v ActivitiesListView) g.Node {
 // activitiesPager = navigasi halaman berikutnya. Saat TargetFilter aktif,
 // menyertakan ?target= agar halaman berikut tetap terfilter entitas yang sama.
 func activitiesPager(v ActivitiesListView) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := v.Base + "/activities?after=" + v.NextCursor
-	if v.TargetFilter != "" {
-		href += "&target=" + v.TargetFilter
-	}
-	href = appendQuery(href, v.Query) // q ikut ke halaman berikutnya (tetap dalam pencarian)
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	base := panelListHref(v.Base+"/activities", [2]string{"target", v.TargetFilter}, [2]string{"q", v.Query})
+	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

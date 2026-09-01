@@ -66,6 +66,8 @@ func (h *Handler) HealthScoreList(w http.ResponseWriter, r *http.Request) {
 		ActiveTab:  tab,
 		Query:      query,
 		NextCursor: nextCursor,
+		After:      r.URL.Query().Get("after"),
+		Trail:      pageTrail(r),
 		KPIs: panel.HealthScoreKPIs{
 			Total:    kpis.Total,
 			Healthy:  kpis.Healthy,

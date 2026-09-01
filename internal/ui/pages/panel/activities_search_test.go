@@ -29,7 +29,9 @@ func TestActivitiesList_SearchBoxAndThreading(t *testing.T) {
 		t.Errorf("form cari harus menjaga target aktif via input tersembunyi target=account:42:\n%s", out)
 	}
 	// Pager membawa after + target + q agar halaman 2 tak keluar dari pencarian/filter.
-	for _, want := range []string{"after=99_9", "target=account:42"} {
+	// target di-escape di query (`:`→`%3A`) karena panelListHref pakai url.QueryEscape;
+	// hidden input di atas tetap `account:42` (itu nilai form, bukan URL).
+	for _, want := range []string{"after=99_9", "target=account%3A42"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("pager harus membawa %q:\n%s", want, out)
 		}

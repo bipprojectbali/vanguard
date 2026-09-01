@@ -76,6 +76,8 @@ func (h *Handler) ContactsList(w http.ResponseWriter, r *http.Request) {
 			Items:       items,
 			CanWrite:    canWriteContacts(ctx),
 			NextCursor:  nextCursor,
+			After:       r.URL.Query().Get("after"),
+			Trail:       pageTrail(r),
 			Err:         wsErrMsg(r.URL.Query().Get("err")),
 			Msg:         contactsMsg(r.URL.Query().Get("ok")),
 		}))
@@ -140,6 +142,8 @@ func (h *Handler) ContactsAll(w http.ResponseWriter, r *http.Request) {
 			ActiveView: view,
 			Query:      query,
 			NextCursor: nextCursor,
+			After:      r.URL.Query().Get("after"),
+			Trail:      pageTrail(r),
 			CanWrite:   canWrite,
 			Err:        wsErrMsg(r.URL.Query().Get("err")),
 			Msg:        contactsMsg(r.URL.Query().Get("ok")),

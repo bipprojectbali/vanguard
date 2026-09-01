@@ -42,6 +42,8 @@ type RenewalsView struct {
 	Err        string
 	Items      []RenewalRow
 	NextCursor string
+	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
 // RenewalsList merender halaman: header + tab jendela + alert + tabel + pager.
@@ -142,13 +144,6 @@ func renewalTableRow(base string, s RenewalRow) g.Node {
 }
 
 func renewalsPager(v RenewalsView) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := v.Base + "/subscriptions/renewals?window=" + v.Window + "&after=" + v.NextCursor
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	base := v.Base + "/subscriptions/renewals?window=" + v.Window
+	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

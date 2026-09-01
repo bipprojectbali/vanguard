@@ -101,6 +101,8 @@ func (h *Handler) AccountsList(w http.ResponseWriter, r *http.Request) {
 		ActiveView: view,
 		Query:      query,
 		NextCursor: nextCursor,
+		After:      r.URL.Query().Get("after"),
+		Trail:      pageTrail(r),
 		Err:        wsErrMsg(r.URL.Query().Get("err")),
 		Msg:        accountsMsg(r.URL.Query().Get("ok")),
 	}))

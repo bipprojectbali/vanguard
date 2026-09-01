@@ -41,6 +41,24 @@ func pageCursor(r *http.Request) (pgtype.Timestamptz, int64) {
 	return at, id
 }
 
+// pageTrail membaca ?trail= mentah dari request — jejak cursor halaman-halaman
+// sebelumnya (BL-7), diteruskan apa adanya ke view lalu ke ui.KeysetPager yang
+// memparse & memvalidasinya. Dibatasi panjang di sini sebagai pagar pertama
+// (helper render juga mem-validasi lenient); nilai kelewat panjang → "" agar tak
+// terbawa ke URL halaman berikutnya. Sama filosofi dengan pageCursor: masukan
+// dari URL yang bisa disunting tak boleh menggagalkan render.
+func pageTrail(r *http.Request) string {
+	raw := r.URL.Query().Get("trail")
+	if len(raw) > pageTrailMax {
+		return ""
+	}
+	return raw
+}
+
+// pageTrailMax = pagar panjang jejak (selaras ui.pagerTrailMax). Jejak jauh lebih
+// panjang dari ini hampir pasti diarang, bukan navigasi wajar.
+const pageTrailMax = 4096
+
 func parseCursor(raw string) (pgtype.Timestamptz, int64, bool) {
 	tsRaw, idRaw, found := strings.Cut(raw, cursorSep)
 	if !found {

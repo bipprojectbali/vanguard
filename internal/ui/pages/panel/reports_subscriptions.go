@@ -1,6 +1,8 @@
 package panel
 
 import (
+	"go_starter/internal/ui"
+
 	g "maragu.dev/gomponents"
 	h "maragu.dev/gomponents/html"
 )
@@ -28,6 +30,8 @@ type ReportsSubscriptionsView struct {
 	RenewalItems []RenewalRow
 	ChurnItems   []ChurnRow
 	NextCursor   string
+	After        string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail        string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
 // ReportsSubscriptionsBody merender header + tab section + tabel aktif +
@@ -79,13 +83,6 @@ func reportSectionTabsView(v ReportsSubscriptionsView) g.Node {
 }
 
 func reportsSubscriptionsPager(v ReportsSubscriptionsView) g.Node {
-	if v.NextCursor == "" {
-		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
-	}
-	href := v.Base + "/reports/subscriptions?section=" + v.Section + "&after=" + v.NextCursor
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
-	)
+	base := v.Base + "/reports/subscriptions?section=" + v.Section
+	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

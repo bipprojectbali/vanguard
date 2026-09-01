@@ -39,6 +39,8 @@ type HealthScoreListView struct {
 	ActiveTab  string
 	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	NextCursor string
+	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 	KPIs       HealthScoreKPIs
 	Rows       []HealthScoreRowView
 }
@@ -114,7 +116,7 @@ func healthScoreTable(v HealthScoreListView) g.Node {
 				)),
 				h.TBody(healthScoreRows(v.Rows, v.Base, v.ActiveTab, v.Query)),
 			)),
-			healthScorePager(v.Base, v.ActiveTab, v.NextCursor, v.Query),
+			healthScorePager(v.Base, v.ActiveTab, v.NextCursor, v.Query, v.After, v.Trail),
 		),
 	)
 }
@@ -155,16 +157,12 @@ func healthScoreRows(rows []HealthScoreRowView, base, tab, query string) g.Node 
 	return g.Group(nodes)
 }
 
-func healthScorePager(base, tab, nextCursor, query string) g.Node {
-	if nextCursor == "" {
+func healthScorePager(base, tab, nextCursor, query, after, trail string) g.Node {
+	// Ujung daftar pada satu halaman: tanpa footer (perilaku lama dipertahankan).
+	if nextCursor == "" && trail == "" {
 		return nil
 	}
-	href := base + "/health-scores?after=" + nextCursor
-	if tab != "" {
-		href += "&tab=" + tab
-	}
-	href = appendQuery(href, query) // q bertahan ke halaman berikutnya
-	return h.Div(h.Class("flex justify-end p-3 border-t border-base-200"),
-		h.A(h.Href(href), h.Class("btn btn-sm btn-ghost"), g.Text("Berikutnya →")),
-	)
+	href := panelListHref(base+"/health-scores", [2]string{"tab", tab}, [2]string{"q", query})
+	return h.Div(h.Class("p-3 border-t border-base-200"),
+		ui.KeysetPager(href, after, trail, nextCursor))
 }
