@@ -12,17 +12,17 @@ import (
 // nested bertambah.
 
 // workspaceSubscriptionsGroup merakit grup Subscriptions (wireframe 5). Seperti
-// Sales, SELALU tampil (peta jalan). Active Subscriptions → /subscriptions &
+// Sales, SELALU tampil (peta jalan). Subscription Lists → /subscriptions &
 // Plans & Pricing → /plans enabled per izin (sumber izin SAMA dengan
 // canViewSubscriptions/canViewPlans — nol menu hantu). Renewals & Churn = dasbor
 // read-only Menu 5.2 (M5-4), enabled mengikuti crm:subscriptions read. Urutan
 // mengikuti nomor menu §4 (crmModules).
 func workspaceSubscriptionsGroup(slug string, canPlans, canSubs bool) ui.NavItem {
 	children := make([]ui.NavItem, 0, 4)
-	// Active Subscriptions → /subscriptions (canViewSubscriptions, objek
+	// Subscription Lists → /subscriptions (canViewSubscriptions, objek
 	// crm:subscriptions). Berbackend sejak M5-3b; disabled bila tak berhak, tetap
 	// tampil agar posisi modul di peta jalan terlihat.
-	active := ui.NavItem{Label: "Active Subscriptions", Icon: lucide.RefreshCw(html.Class("size-4"))}
+	active := ui.NavItem{Label: "Subscription Lists", Icon: lucide.RefreshCw(html.Class("size-4"))}
 	if canSubs {
 		active.Href = wsPath(slug, "/subscriptions")
 	} else {
