@@ -192,3 +192,8 @@ func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
 // ptr mengembalikan pointer ke nilai — untuk field nullable sqlc (mis. PassHash *string).
 func ptr[T any](v T) *T { return &v }
+
+// allCatalogPageSize = LIMIT besar untuk helper test yang butuh SELURUH katalog
+// master (mis. allPlans/allPlaybooks) lewat query keyset ListXAll — katalog test
+// selalu jauh di bawah ambang ini, jadi efektif "ambil semua baris".
+const allCatalogPageSize = 1000

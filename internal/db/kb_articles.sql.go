@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createKBArticle = `-- name: CreateKBArticle :one
@@ -101,8 +103,16 @@ func (q *Queries) GetKBArticle(ctx context.Context, id int64) (KbArticle, error)
 const listKBArticlesAll = `-- name: ListKBArticlesAll :many
 
 SELECT id, tenant_id, article_title, article_body, category, keywords, status, visibility, author_id, view_count, helpful_votes, created_by, created_at, updated_by, updated_at FROM kb_articles
-ORDER BY updated_at DESC, id DESC
+WHERE (created_at, id) < ($1::timestamptz, $2::bigint)
+ORDER BY created_at DESC, id DESC
+LIMIT $3
 `
+
+type ListKBArticlesAllParams struct {
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	PageSize        int32              `json:"page_size"`
+}
 
 // kb_articles.sql — katalog master (Knowledge Base), Modul 6 Customer
 // Success slice A3. Isolasi WORKSPACE ditegakkan RLS (GUC app.tenant_id di
@@ -110,11 +120,14 @@ ORDER BY updated_at DESC, id DESC
 // soft-delete: status='Draft' = draf, bukan terhapus. Meniru pola
 // playbooks.sql (A2), status 3-nilai (bukan is_active boolean) meniru
 // leads_status_chk/subs_status_chk.
-// Seluruh katalog untuk tampilan kelola (semua status). Terbaru diperbarui
-// dulu — perilaku umum KB admin view. Bounded katalog master per-workspace
-// → tanpa keyset.
-func (q *Queries) ListKBArticlesAll(ctx context.Context) ([]KbArticle, error) {
-	rows, err := q.db.Query(ctx, listKBArticlesAll)
+// Seluruh katalog untuk tampilan kelola (semua status). Keyset (created_at DESC,
+// id DESC) + LIMIT (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi
+// & tetap konsisten walau ada sisipan. Urutan pindah dari updated_at ke
+// created_at (kolom kursor STABIL: updated_at berubah saat artikel disunting →
+// baris bisa lompat antar-halaman saat paging; created_at tetap, sesuai konvensi
+// keyset app). Status tampak dari badge per baris.
+func (q *Queries) ListKBArticlesAll(ctx context.Context, arg ListKBArticlesAllParams) ([]KbArticle, error) {
+	rows, err := q.db.Query(ctx, listKBArticlesAll, arg.CursorCreatedAt, arg.CursorID, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}

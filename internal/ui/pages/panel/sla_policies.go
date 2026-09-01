@@ -33,14 +33,15 @@ type SLAPolicyRow struct {
 }
 
 // SLAPolicyListView = data halaman /sla-policies. CanWrite (manager/admin)
-// memunculkan tombol tulis & aksi baris. Katalog master bounded per-workspace
-// → tanpa keyset.
+// memunculkan tombol tulis & aksi baris. Keyset lewat NextCursor (BL-6):
+// "" = ujung daftar.
 type SLAPolicyListView struct {
-	Base     string
-	CanWrite bool
-	Err      string
-	Msg      string
-	Items    []SLAPolicyRow
+	Base       string
+	CanWrite   bool
+	Err        string
+	Msg        string
+	Items      []SLAPolicyRow
+	NextCursor string
 }
 
 // SLAPolicyList merender halaman katalog: header + alert + tabel.
@@ -68,9 +69,23 @@ func SLAPolicyList(v SLAPolicyListView) g.Node {
 	if len(v.Items) == 0 {
 		body = append(body, emptySLAPolicies())
 	} else {
-		body = append(body, slaPoliciesTable(v))
+		body = append(body, slaPoliciesTable(v), slaPoliciesPager(v))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// slaPoliciesPager = tautan keyset "Berikutnya »" (native <a>, lolos gotcha #16).
+// NextCursor kosong = ujung daftar. flex-wrap agar tak mendorong lebar di 375px.
+func slaPoliciesPager(v SLAPolicyListView) g.Node {
+	if v.NextCursor == "" {
+		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
+			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
+	}
+	href := v.Base + "/sla-policies?after=" + v.NextCursor
+	return h.Div(
+		h.Class("flex flex-wrap items-center gap-2"),
+		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
+	)
 }
 
 func emptySLAPolicies() g.Node {

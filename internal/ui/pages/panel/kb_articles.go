@@ -35,14 +35,15 @@ type KBArticleRow struct {
 }
 
 // KBArticleListView = data halaman /kb-articles. CanWrite (admin/manager/
-// support) memunculkan tombol tulis & aksi baris. Katalog master bounded
-// per-workspace → tanpa keyset.
+// support) memunculkan tombol tulis & aksi baris. Keyset lewat NextCursor
+// (BL-6): "" = ujung daftar.
 type KBArticleListView struct {
-	Base     string
-	CanWrite bool
-	Err      string
-	Msg      string
-	Items    []KBArticleRow
+	Base       string
+	CanWrite   bool
+	Err        string
+	Msg        string
+	Items      []KBArticleRow
+	NextCursor string
 }
 
 // KBArticleList merender halaman katalog: header + alert + tabel.
@@ -70,9 +71,23 @@ func KBArticleList(v KBArticleListView) g.Node {
 	if len(v.Items) == 0 {
 		body = append(body, emptyKBArticles())
 	} else {
-		body = append(body, kbArticlesTable(v))
+		body = append(body, kbArticlesTable(v), kbArticlesPager(v))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// kbArticlesPager = tautan keyset "Berikutnya »" (native <a>, lolos gotcha #16).
+// NextCursor kosong = ujung daftar. flex-wrap agar tak mendorong lebar di 375px.
+func kbArticlesPager(v KBArticleListView) g.Node {
+	if v.NextCursor == "" {
+		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
+			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
+	}
+	href := v.Base + "/kb-articles?after=" + v.NextCursor
+	return h.Div(
+		h.Class("flex flex-wrap items-center gap-2"),
+		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
+	)
 }
 
 func emptyKBArticles() g.Node {

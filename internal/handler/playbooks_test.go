@@ -57,7 +57,10 @@ func (e *testEnv) seedPlaybookRow(t *testing.T, name string) db.Playbook {
 // RLS) → satu tenant test.
 func (e *testEnv) allPlaybooks(t *testing.T) []db.Playbook {
 	t.Helper()
-	rows, err := e.q.ListPlaybooksAll(t.Context())
+	cAt, cID := firstPageCursor()
+	rows, err := e.q.ListPlaybooksAll(t.Context(), db.ListPlaybooksAllParams{
+		CursorCreatedAt: cAt, CursorID: cID, PageSize: allCatalogPageSize,
+	})
 	if err != nil {
 		t.Fatalf("list playbooks: %v", err)
 	}

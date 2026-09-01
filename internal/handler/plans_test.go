@@ -19,8 +19,10 @@ import (
 //     galat spesifik; kategori wajib enum; is_active hanya lewat retire/activate
 //     (tak tersentuh saat update profil).
 //
-// TANPA F3/F4/keyset (katalog bounded, tak ada kolom pemilik). Koneksi test =
-// superuser (bypass RLS) → uji LOGIKA handler; isolasi RLS diuji di rls_test.go.
+// TANPA F3/F4 (tak ada kolom pemilik). Keyset paginasi daftar kelola diuji
+// terpisah di crm_master_pagination_test.go (BL-6, keempat katalog master).
+// Koneksi test = superuser (bypass RLS) → uji LOGIKA handler; isolasi RLS diuji
+// di rls_test.go.
 // Setup & helper request memakai ulang setupAccounts/accountsReq/runAccount
 // (generik: memuat kedua enforcer + session ber-scope).
 
@@ -59,7 +61,10 @@ func (e *testEnv) seedPlanRow(t *testing.T, name, code, category string) db.Plan
 // aksi menyimpan / tak menyimpan baris. Superuser (bypass RLS) → satu tenant test.
 func (e *testEnv) allPlans(t *testing.T) []db.Plan {
 	t.Helper()
-	rows, err := e.q.ListPlansAll(t.Context())
+	cAt, cID := firstPageCursor()
+	rows, err := e.q.ListPlansAll(t.Context(), db.ListPlansAllParams{
+		CursorCreatedAt: cAt, CursorID: cID, PageSize: allCatalogPageSize,
+	})
 	if err != nil {
 		t.Fatalf("list plans: %v", err)
 	}

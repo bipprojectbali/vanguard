@@ -21,10 +21,15 @@ WHERE id = sqlc.arg(id);
 
 -- name: ListPlaybooksAll :many
 -- Seluruh katalog untuk tampilan kelola (TERMASUK draf) — beda dari
--- ListPlaybooks (hanya aktif). Aktif dulu lalu urut nama. Bounded katalog
--- master per-workspace → tanpa keyset.
+-- ListPlaybooks (hanya aktif). Keyset (created_at DESC, id DESC) + LIMIT
+-- (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+-- konsisten walau ada sisipan. Status aktif/draf tampak dari badge per baris,
+-- bukan lagi dari urutan (grouping is_active dilepas demi kursor keyset satu-
+-- kolom yang dipakai seluruh app).
 SELECT * FROM playbooks
-ORDER BY is_active DESC, playbook_name ASC, id ASC;
+WHERE (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(page_size);
 
 -- name: CreatePlaybook :one
 -- Buat playbook. tenant_id eksplisit (RLS WITH CHECK memverifikasinya = GUC).

@@ -5,6 +5,8 @@ import (
 
 	"go_starter/internal/db"
 	"go_starter/internal/ui/pages/panel"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // sla_policies_page.go — HALAMAN baca katalog SLA Policies (Modul 6 slice A1).
@@ -12,8 +14,8 @@ import (
 // tumbuh dengan aturan LIHAT (F2 read), aksi dengan aturan TULIS (F2 write).
 // Meniru plans_page.go.
 //
-// Katalog master bounded per-workspace (ListSLAPoliciesAll, TERMASUK pensiun)
-// → TANPA keyset & TANPA F3: RLS satu-satunya pengurung.
+// Katalog master per-workspace (ListSLAPoliciesAll, TERMASUK pensiun) → keyset
+// (created_at DESC, id DESC) lewat ?after=, TANPA F3: RLS satu-satunya pengurung.
 //
 // KPI kepatuhan SLA (30 hari) & kolom "Kepatuhan" per baris di wireframe
 // 6.11 DIHILANGKAN dari slice ini SENGAJA — keduanya dihitung dari data tiket
@@ -28,24 +30,33 @@ func (h *Handler) SLAPoliciesList(w http.ResponseWriter, r *http.Request) {
 		h.renderSLAPoliciesForbidden(w, r)
 		return
 	}
-	rows, err := h.q(ctx).ListSLAPoliciesAll(ctx)
+	cursorAt, cursorID := pageCursor(r)
+	rows, err := h.q(ctx).ListSLAPoliciesAll(ctx, db.ListSLAPoliciesAllParams{
+		CursorCreatedAt: cursorAt,
+		CursorID:        cursorID,
+		PageSize:        pageSize + 1,
+	})
 	if err != nil {
 		h.Log.Error("sla_policies: list", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	items := make([]panel.SLAPolicyRow, 0, len(rows))
-	for _, p := range rows {
+	shown, nextCursor := splitPage(rows, func(p db.SlaPolicy) (pgtype.Timestamptz, int64) {
+		return p.CreatedAt, p.ID
+	})
+	items := make([]panel.SLAPolicyRow, 0, len(shown))
+	for _, p := range shown {
 		items = append(items, slaPolicyRowView(p))
 	}
 
 	base := wsPath(slugFromRequest(r), "")
 	h.renderWorkspaceShell(w, r, "SLA Management", "/sla-policies", panel.SLAPolicyList(panel.SLAPolicyListView{
-		Base:     base,
-		CanWrite: canWriteSLAPolicies(ctx),
-		Err:      slaPoliciesErrMsg(r.URL.Query().Get("err")),
-		Msg:      slaPoliciesMsg(r.URL.Query().Get("ok")),
-		Items:    items,
+		Base:       base,
+		CanWrite:   canWriteSLAPolicies(ctx),
+		Err:        slaPoliciesErrMsg(r.URL.Query().Get("err")),
+		Msg:        slaPoliciesMsg(r.URL.Query().Get("ok")),
+		Items:      items,
+		NextCursor: nextCursor,
 	}))
 }
 

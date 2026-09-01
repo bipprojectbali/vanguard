@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createPlaybook = `-- name: CreatePlaybook :one
@@ -142,14 +144,25 @@ func (q *Queries) ListPlaybooks(ctx context.Context) ([]Playbook, error) {
 
 const listPlaybooksAll = `-- name: ListPlaybooksAll :many
 SELECT id, tenant_id, playbook_name, trigger_scenario, description, steps, recommended_owner, is_active, created_by, created_at, updated_by, updated_at FROM playbooks
-ORDER BY is_active DESC, playbook_name ASC, id ASC
+WHERE (created_at, id) < ($1::timestamptz, $2::bigint)
+ORDER BY created_at DESC, id DESC
+LIMIT $3
 `
 
+type ListPlaybooksAllParams struct {
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	PageSize        int32              `json:"page_size"`
+}
+
 // Seluruh katalog untuk tampilan kelola (TERMASUK draf) — beda dari
-// ListPlaybooks (hanya aktif). Aktif dulu lalu urut nama. Bounded katalog
-// master per-workspace → tanpa keyset.
-func (q *Queries) ListPlaybooksAll(ctx context.Context) ([]Playbook, error) {
-	rows, err := q.db.Query(ctx, listPlaybooksAll)
+// ListPlaybooks (hanya aktif). Keyset (created_at DESC, id DESC) + LIMIT
+// (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+// konsisten walau ada sisipan. Status aktif/draf tampak dari badge per baris,
+// bukan lagi dari urutan (grouping is_active dilepas demi kursor keyset satu-
+// kolom yang dipakai seluruh app).
+func (q *Queries) ListPlaybooksAll(ctx context.Context, arg ListPlaybooksAllParams) ([]Playbook, error) {
+	rows, err := q.db.Query(ctx, listPlaybooksAll, arg.CursorCreatedAt, arg.CursorID, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}

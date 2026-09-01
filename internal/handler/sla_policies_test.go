@@ -56,7 +56,10 @@ func (e *testEnv) seedSLAPolicyRow(t *testing.T, name string) db.SlaPolicy {
 // RLS) → satu tenant test.
 func (e *testEnv) allSLAPolicies(t *testing.T) []db.SlaPolicy {
 	t.Helper()
-	rows, err := e.q.ListSLAPoliciesAll(t.Context())
+	cAt, cID := firstPageCursor()
+	rows, err := e.q.ListSLAPoliciesAll(t.Context(), db.ListSLAPoliciesAllParams{
+		CursorCreatedAt: cAt, CursorID: cID, PageSize: allCatalogPageSize,
+	})
 	if err != nil {
 		t.Fatalf("list sla policies: %v", err)
 	}

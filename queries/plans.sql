@@ -27,10 +27,15 @@ WHERE id = sqlc.arg(id);
 
 -- name: ListPlansAll :many
 -- Seluruh katalog untuk tampilan kelola (TERMASUK yang pensiun) — beda dari
--- ListPlans (hanya aktif, untuk picker quote). Aktif dulu lalu urut nama. Bounded
--- katalog master per-workspace → tanpa keyset.
+-- ListPlans (hanya aktif, untuk picker quote). Keyset (created_at DESC, id DESC)
+-- + LIMIT (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+-- konsisten walau ada sisipan (OFFSET akan menggeser). Status aktif/pensiun
+-- tampak dari badge per baris, bukan lagi dari urutan (grouping is_active dilepas
+-- demi kursor keyset satu-kolom yang dipakai seluruh app).
 SELECT * FROM plans
-ORDER BY is_active DESC, plan_name ASC, id ASC;
+WHERE (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(page_size);
 
 -- name: CreatePlan :one
 -- Buat plan katalog. tenant_id eksplisit (RLS WITH CHECK memverifikasinya = GUC).

@@ -28,13 +28,14 @@ type PlanRow struct {
 }
 
 // PlanListView = data halaman /plans. CanWrite (admin) memunculkan tombol tulis
-// & aksi baris. Katalog master bounded per-workspace → tanpa keyset.
+// & aksi baris. Keyset lewat NextCursor (BL-6): "" = ujung daftar.
 type PlanListView struct {
-	Base     string
-	CanWrite bool
-	Err      string
-	Msg      string
-	Items    []PlanRow
+	Base       string
+	CanWrite   bool
+	Err        string
+	Msg        string
+	Items      []PlanRow
+	NextCursor string
 }
 
 // PlanList merender halaman katalog: header + alert + tabel.
@@ -62,9 +63,23 @@ func PlanList(v PlanListView) g.Node {
 	if len(v.Items) == 0 {
 		body = append(body, emptyPlans())
 	} else {
-		body = append(body, plansTable(v))
+		body = append(body, plansTable(v), plansPager(v))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// plansPager = tautan keyset "Berikutnya »" (native <a>, lolos gotcha #16).
+// NextCursor kosong = ujung daftar. flex-wrap agar tak mendorong lebar di 375px.
+func plansPager(v PlanListView) g.Node {
+	if v.NextCursor == "" {
+		return h.Div(h.Class("flex flex-wrap items-center gap-2"),
+			h.Span(h.Class("text-sm text-base-content/60"), g.Text("Ujung daftar.")))
+	}
+	href := v.Base + "/plans?after=" + v.NextCursor
+	return h.Div(
+		h.Class("flex flex-wrap items-center gap-2"),
+		h.A(h.Href(href), h.Class("btn min-h-11"), g.Text("Berikutnya »")),
+	)
 }
 
 func emptyPlans() g.Node {

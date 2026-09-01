@@ -728,10 +728,13 @@ type Querier interface {
 	// soft-delete: status='Draft' = draf, bukan terhapus. Meniru pola
 	// playbooks.sql (A2), status 3-nilai (bukan is_active boolean) meniru
 	// leads_status_chk/subs_status_chk.
-	// Seluruh katalog untuk tampilan kelola (semua status). Terbaru diperbarui
-	// dulu — perilaku umum KB admin view. Bounded katalog master per-workspace
-	// → tanpa keyset.
-	ListKBArticlesAll(ctx context.Context) ([]KbArticle, error)
+	// Seluruh katalog untuk tampilan kelola (semua status). Keyset (created_at DESC,
+	// id DESC) + LIMIT (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi
+	// & tetap konsisten walau ada sisipan. Urutan pindah dari updated_at ke
+	// created_at (kolom kursor STABIL: updated_at berubah saat artikel disunting →
+	// baris bisa lompat antar-halaman saat paging; created_at tetap, sesuai konvensi
+	// keyset app). Status tampak dari badge per baris.
+	ListKBArticlesAll(ctx context.Context, arg ListKBArticlesAllParams) ([]KbArticle, error)
 	// Daftar lead, keyset (created_at DESC, id DESC) + filter ownership F3 + tab.
 	//
 	// Ownership sebagai dua flag boolean (bukan SQL dinamis) supaya query tetap sqlc
@@ -810,9 +813,12 @@ type Querier interface {
 	// snapshot quote_items). SetPlanActive = pensiunkan/aktifkan; UpdatePlan menyunting
 	// profil (is_active punya jalur sendiri agar pensiun terlihat sebagai aksi khusus).
 	// Seluruh katalog untuk tampilan kelola (TERMASUK yang pensiun) — beda dari
-	// ListPlans (hanya aktif, untuk picker quote). Aktif dulu lalu urut nama. Bounded
-	// katalog master per-workspace → tanpa keyset.
-	ListPlansAll(ctx context.Context) ([]Plan, error)
+	// ListPlans (hanya aktif, untuk picker quote). Keyset (created_at DESC, id DESC)
+	// + LIMIT (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+	// konsisten walau ada sisipan (OFFSET akan menggeser). Status aktif/pensiun
+	// tampak dari badge per baris, bukan lagi dari urutan (grouping is_active dilepas
+	// demi kursor keyset satu-kolom yang dipakai seluruh app).
+	ListPlansAll(ctx context.Context, arg ListPlansAllParams) ([]Plan, error)
 	ListPlatformStaff(ctx context.Context) ([]PlatformStaff, error)
 	// playbooks.sql — katalog master (Playbooks), Modul 6 Customer Success
 	// slice A2. Isolasi WORKSPACE ditegakkan RLS (GUC app.tenant_id di
@@ -825,9 +831,12 @@ type Querier interface {
 	// is_active=true. Bounded katalog master per-workspace → tanpa keyset.
 	ListPlaybooks(ctx context.Context) ([]Playbook, error)
 	// Seluruh katalog untuk tampilan kelola (TERMASUK draf) — beda dari
-	// ListPlaybooks (hanya aktif). Aktif dulu lalu urut nama. Bounded katalog
-	// master per-workspace → tanpa keyset.
-	ListPlaybooksAll(ctx context.Context) ([]Playbook, error)
+	// ListPlaybooks (hanya aktif). Keyset (created_at DESC, id DESC) + LIMIT
+	// (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+	// konsisten walau ada sisipan. Status aktif/draf tampak dari badge per baris,
+	// bukan lagi dari urutan (grouping is_active dilepas demi kursor keyset satu-
+	// kolom yang dipakai seluruh app).
+	ListPlaybooksAll(ctx context.Context, arg ListPlaybooksAllParams) ([]Playbook, error)
 	// regions.sql — master wilayah administratif GLOBAL (Provinsi → Kabupaten/Kota →
 	// Kecamatan), lihat migrations/00026_crm_regions.sql & docs/decisions/0009. Tabel ini
 	// TANPA tenant_id/RLS (data sama utk semua tenant, pola sama dgn platform_staff) —
@@ -890,9 +899,12 @@ type Querier interface {
 	// per-workspace → tanpa keyset.
 	ListSLAPolicies(ctx context.Context) ([]SlaPolicy, error)
 	// Seluruh katalog untuk tampilan kelola (TERMASUK yang pensiun) — beda dari
-	// ListSLAPolicies (hanya aktif). Aktif dulu lalu urut nama. Bounded katalog
-	// master per-workspace → tanpa keyset.
-	ListSLAPoliciesAll(ctx context.Context) ([]SlaPolicy, error)
+	// ListSLAPolicies (hanya aktif). Keyset (created_at DESC, id DESC) + LIMIT
+	// (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+	// konsisten walau ada sisipan. Status aktif/pensiun tampak dari badge per
+	// baris, bukan lagi dari urutan (grouping is_active dilepas demi kursor keyset
+	// satu-kolom yang dipakai seluruh app).
+	ListSLAPoliciesAll(ctx context.Context, arg ListSLAPoliciesAllParams) ([]SlaPolicy, error)
 	// Semua pengaturan sekaligus — dipakai halaman /dev/settings dan pemuatan cache
 	// saat boot. Jumlahnya sedikit, jadi tak dipaginasi (beda dari daftar user).
 	ListSettings(ctx context.Context) ([]PlatformSetting, error)
