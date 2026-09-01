@@ -74,7 +74,7 @@ func DealForm(v DealFormView) g.Node {
 			selectField("Termin Langganan", "subscription_term", v.Fields.SubscriptionTerm, v.Terms, false),
 		),
 		formCard("Nilai & Peluang",
-			field("Nilai (Rp)", "amount", v.Fields.Amount, false, "text"),
+			moneyField("Nilai (Rp)", "amount", v.Fields.Amount),
 			field("Probabilitas (%)", "probability", v.Fields.Probability, false, "number"),
 			field("Perkiraan Tutup", "expected_close_date", v.Fields.ExpectedCloseDate, false, "date"),
 			field("Kategori Forecast", "forecast_category", v.Fields.ForecastCategory, false, "text"),
@@ -90,6 +90,10 @@ func DealForm(v DealFormView) g.Node {
 			h.A(h.Href(v.Base+"/deals"), h.Class("btn btn-ghost min-h-11"), g.Text("Batal")),
 		),
 	))
+	// Pengelompokan ribuan utk Nilai (Rp) (data-numgroup di moneyField): memformat
+	// tampilan & menormalkan jadi digit polos saat submit. Same-origin CSP-safe
+	// (gotcha #16). Sejajar sales_leads_form (BL-2/BL-8).
+	body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
