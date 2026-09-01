@@ -98,7 +98,7 @@ func (h *Handler) QuoteCreate(w http.ResponseWriter, r *http.Request) {
 	if !h.requireQuotableStage(w, r, d.Stage, quoteListSub(dealID)) {
 		return
 	}
-	form, errCode := parseQuoteForm(r.FormValue)
+	form, errCode := parseQuoteForm(r.FormValue, todayInAppTZ())
 	if errCode != "" {
 		wsRedirect(w, r, quoteListSub(dealID)+"/new", errCode)
 		return

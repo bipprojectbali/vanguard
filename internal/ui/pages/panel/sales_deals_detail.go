@@ -145,8 +145,9 @@ func dealQuotesCard(v DealDetailView) g.Node {
 					"border-b border-base-300/50 last:border-0 hover:bg-base-200/50"),
 				h.Span(h.Class("min-w-0 truncate font-medium"),
 					g.Text(quoteRowLabel(q))),
-				h.Span(h.Class("flex items-center gap-2 shrink-0"),
+				h.Span(h.Class("flex flex-wrap items-center gap-2 shrink-0"),
 					quoteStatusBadge(q.Status),
+					ui.When(q.Expired, quoteExpiredBadge()),
 					h.Span(h.Class("text-sm text-base-content/70"), g.Text(orDash(q.GrandTotal)))),
 			))
 		}

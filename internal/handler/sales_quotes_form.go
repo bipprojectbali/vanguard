@@ -3,6 +3,7 @@ package handler
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"go_starter/internal/db"
 	"go_starter/internal/ui/pages/panel"
@@ -63,8 +64,10 @@ type quoteForm struct {
 
 // parseQuoteForm membaca & memvalidasi form header. (form, "") bila sah, atau
 // (zero, kode) yang dipetakan wsErrMsg. account_id & deal_id TAK di sini —
-// diwarisi dari deal induk oleh handler (alur nest).
-func parseQuoteForm(fv func(string) string) (quoteForm, string) {
+// diwarisi dari deal induk oleh handler (alur nest). today = "hari ini" (zona
+// aplikasi) dioper masuk agar parser tetap murni & create/edit pakai SATU aturan
+// kedaluwarsa (BL-17): expiration_date < today ditolak (termasuk saat Draft).
+func parseQuoteForm(fv func(string) string, today time.Time) (quoteForm, string) {
 	var f quoteForm
 
 	// quote_name opsional: kosong = NULL; terisi wajib ≤ batas.
@@ -79,6 +82,12 @@ func parseQuoteForm(fv func(string) string) (quoteForm, string) {
 	ed, code := optDate(fv("expiration_date"))
 	if code != "" {
 		return quoteForm{}, code
+	}
+	// BL-17: tanggal kedaluwarsa terisi tak boleh SEBELUM hari ini (banding date-
+	// only; == hari ini boleh, berlaku s/d akhir hari). Penjaga sesungguhnya di
+	// backend; input date juga diberi min di klien (jaring, bukan pengaman).
+	if ed.Valid && dateBefore(ed.Time, today) {
+		return quoteForm{}, "expiration_past"
 	}
 	f.ExpirationDate = ed
 
@@ -120,4 +129,17 @@ func quoteFormFields(q db.Quote) panel.QuoteFormFields {
 		NotesTerms:     deref(q.NotesTerms),
 		PreparedBy:     preparedBy,
 	}
+}
+
+// quoteExpired = penanda kedaluwarsa computed-on-read (BL-17), di-precompute di
+// handler (view murni-data). Draft SELALU dikecualikan (masih WIP, belum
+// ditawarkan). True hanya bila status non-Draft, expiration_date terisi, DAN
+// tanggalnya SEBELUM hari ini (banding date-only). Karena parseQuoteForm memblok
+// simpan tanggal lampau, sebuah quote hanya bisa menjadi kedaluwarsa akibat waktu
+// berjalan setelah disimpan dengan tanggal depan.
+func quoteExpired(status string, exp pgtype.Date, today time.Time) bool {
+	if status == "Draft" || !exp.Valid {
+		return false
+	}
+	return dateBefore(exp.Time, today)
 }

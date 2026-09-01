@@ -56,6 +56,8 @@ func wsErrMsgCRM(code string) string {
 		return "Tarif pajak harus berupa angka 0–100."
 	case "prepared_by":
 		return "Penyusun yang dipilih tidak valid."
+	case "expiration_past":
+		return "Tanggal kedaluwarsa tidak boleh tanggal yang sudah lewat."
 	case "plan_req":
 		return "Plan wajib dipilih untuk item ini."
 	case "qty":

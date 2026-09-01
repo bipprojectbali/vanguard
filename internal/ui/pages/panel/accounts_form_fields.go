@@ -77,6 +77,26 @@ func field(label, name, val string, required bool, typ string, hint ...string) g
 	)
 }
 
+// dateFieldMin = input tanggal opsional dgn atribut `min` (batas bawah klien).
+// field() generik tak menyetel `min` untuk type=date (hanya auto `min=0` utk
+// number) → helper kecil ini menutup celah tanpa membebani semua pemanggil field.
+// Dipakai BL-17: min = hari ini agar picker tak menawarkan tanggal lampau (jaring
+// klien; parseQuoteForm tetap penjaga backend). min kosong = tanpa batas.
+func dateFieldMin(label, name, val, min string) g.Node {
+	attrs := []g.Node{
+		h.ID("f-" + name), h.Name(name), h.Type("date"),
+		h.Value(val), h.Class("input text-base w-full"),
+	}
+	if min != "" {
+		attrs = append(attrs, g.Attr("min", min))
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor(label, "f-"+name, false),
+		ui.Input(attrs...),
+	)
+}
+
 // entityCodeField = override OPSIONAL kode sistem (entity_code), HANYA di form
 // tambah. Kosong → dibuat otomatis (mis. DESA-001); diisi → menetapkan kode
 // sendiri. Disembunyikan saat sunting: entity_code adalah identitas stabil yang
