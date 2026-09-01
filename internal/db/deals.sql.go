@@ -137,12 +137,14 @@ WHERE deleted_at IS NULL
       $1::boolean
       OR ($2::boolean AND deal_owner = $3)
   )
+  AND (NOT $4::boolean OR deal_owner = $3)
 `
 
 type DealPipelineStatsParams struct {
 	ScopeAll bool   `json:"scope_all"`
 	IsOwn    bool   `json:"is_own"`
 	Uid      *int64 `json:"uid"`
+	MineOnly bool   `json:"mine_only"`
 }
 
 type DealPipelineStatsRow struct {
@@ -157,7 +159,12 @@ type DealPipelineStatsRow struct {
 // sqlc tak meng-emit interface{} (gotcha #14). Win rate dihitung di Go dari
 // won_count/(won_count+lost_count) — pembagian nol ditangani di sana.
 func (q *Queries) DealPipelineStats(ctx context.Context, arg DealPipelineStatsParams) (DealPipelineStatsRow, error) {
-	row := q.db.QueryRow(ctx, dealPipelineStats, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	row := q.db.QueryRow(ctx, dealPipelineStats,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+	)
 	var i DealPipelineStatsRow
 	err := row.Scan(
 		&i.OpenCount,
@@ -261,14 +268,15 @@ WHERE deleted_at IS NULL
       $3::boolean
       OR ($4::boolean AND deal_owner = $5)
   )
-  AND ($6::text = '' OR stage = $6::text)
+  AND (NOT $6::boolean OR deal_owner = $5)
+  AND ($7::text = '' OR stage = $7::text)
   AND (
-      $7::text = ''
-      OR deal_name ILIKE '%' || $7 || '%'
-      OR entity_code ILIKE '%' || $7 || '%'
+      $8::text = ''
+      OR deal_name ILIKE '%' || $8 || '%'
+      OR entity_code ILIKE '%' || $8 || '%'
   )
 ORDER BY created_at DESC, id DESC
-LIMIT $8
+LIMIT $9
 `
 
 type ListDealsParams struct {
@@ -277,6 +285,7 @@ type ListDealsParams struct {
 	ScopeAll        bool               `json:"scope_all"`
 	IsOwn           bool               `json:"is_own"`
 	Uid             *int64             `json:"uid"`
+	MineOnly        bool               `json:"mine_only"`
 	StageFilter     string             `json:"stage_filter"`
 	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
@@ -287,11 +296,16 @@ type ListDealsParams struct {
 // DealsListFilter): scope_all → semua; is_own → deal_owner = uid; keduanya false
 // → NOL baris (fail-closed). stage_filter ” → semua stage.
 //
+// Filter tambahan (ortogonal dari ownership, BL-10):
+//
+//	mine_only → paksa deal_owner = uid (toggle "Deal Saya", walau aktor scope_all).
+//
+// Cermin mine_only di ListLeads; menyempitkan, tak pernah melebarkan.
+//
 // search ” → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
 // insensitive) di ATAS ownership+stage — tak pernah melebarkan baris. Hanya kolom
 // tak-tersamar yang tampil di tabel (deal_name + entity_code); nilai ARR tersamar
-// tak dijadikan kunci cari. Papan Kanban (ListDealsForPipeline) TAK ikut — di luar
-// lingkup slice ini (board terbatas LIMIT, bukan daftar berkeyset).
+// tak dijadikan kunci cari.
 func (q *Queries) ListDeals(ctx context.Context, arg ListDealsParams) ([]Deal, error) {
 	rows, err := q.db.Query(ctx, listDeals,
 		arg.CursorCreatedAt,
@@ -299,6 +313,7 @@ func (q *Queries) ListDeals(ctx context.Context, arg ListDealsParams) ([]Deal, e
 		arg.ScopeAll,
 		arg.IsOwn,
 		arg.Uid,
+		arg.MineOnly,
 		arg.StageFilter,
 		arg.Search,
 		arg.PageSize,
@@ -355,14 +370,16 @@ WHERE deleted_at IS NULL
       $1::boolean
       OR ($2::boolean AND deal_owner = $3)
   )
+  AND (NOT $4::boolean OR deal_owner = $3)
 ORDER BY created_at DESC, id DESC
-LIMIT $4
+LIMIT $5
 `
 
 type ListDealsForPipelineParams struct {
 	ScopeAll bool   `json:"scope_all"`
 	IsOwn    bool   `json:"is_own"`
 	Uid      *int64 `json:"uid"`
+	MineOnly bool   `json:"mine_only"`
 	PageSize int32  `json:"page_size"`
 }
 
@@ -370,11 +387,14 @@ type ListDealsForPipelineParams struct {
 // rapi per-stage lalu terbaru dulu. Di-bucket per-stage di handler (bukan N query
 // per kolom). LIMIT membatasi papan agar tak memuat seluruh tabel (guardrail
 // pagination); deal di luar batas tetap terlihat lewat tampilan Tabel berkeyset.
+// mine_only (BL-10) menyaring papan ke deal_owner = uid saat toggle "Deal Saya"
+// aktif — KPI (DealPipelineStats) ikut tersaring agar papan & ringkasan seiring.
 func (q *Queries) ListDealsForPipeline(ctx context.Context, arg ListDealsForPipelineParams) ([]Deal, error) {
 	rows, err := q.db.Query(ctx, listDealsForPipeline,
 		arg.ScopeAll,
 		arg.IsOwn,
 		arg.Uid,
+		arg.MineOnly,
 		arg.PageSize,
 	)
 	if err != nil {

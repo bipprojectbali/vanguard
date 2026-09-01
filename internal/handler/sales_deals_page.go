@@ -22,6 +22,15 @@ import (
 // terlihat lewat tampilan Tabel berkeyset.
 const dealPipelineLimit = 200
 
+// dealMineOnly menerjemahkan ?mine=1 → sumbu filter kepemilikan ORTOGONAL dari
+// F3: paksa deal_owner = uid walau aktor ScopeAll (toggle "Deal Saya", BL-10).
+// Cermin leadTab (sales_leads_page.go) tapi sumbu tunggal — Deal tak punya tab
+// status/stage berbasis tab. Toggle hanya bermakna bagi ScopeAll (cakupan 'own'
+// sudah otomatis milik sendiri → redundan; gate tampil di handler, lihat DealsList*).
+func dealMineOnly(r *http.Request) bool {
+	return r.URL.Query().Get("mine") == "1"
+}
+
 // DealsList — GET /w/{workspace}/deals. Default = pipeline (KPI + Kanban per-stage);
 // ?view=table = tampilan Tabel berkeyset. Bukan pemegang peran CRM → 403 + penjelasan.
 func (h *Handler) DealsList(w http.ResponseWriter, r *http.Request) {
@@ -45,9 +54,10 @@ func (h *Handler) dealsPipeline(w http.ResponseWriter, r *http.Request) {
 	filter := db.DealsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
 	br := session.BusinessRole(ctx)
+	mineOnly := dealMineOnly(r)
 
 	stats, err := h.q(ctx).DealPipelineStats(ctx, db.DealPipelineStatsParams{
-		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid, MineOnly: mineOnly,
 	})
 	if err != nil {
 		h.Log.Error("deals: stats", "err", err)
@@ -55,7 +65,7 @@ func (h *Handler) dealsPipeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.q(ctx).ListDealsForPipeline(ctx, db.ListDealsForPipelineParams{
-		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid, MineOnly: mineOnly,
 		PageSize: dealPipelineLimit,
 	})
 	if err != nil {
@@ -84,15 +94,17 @@ func (h *Handler) dealsPipeline(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slugFromRequest(r), "")
 	h.renderWorkspaceShell(w, r, "Deals", "/deals", panel.DealPipeline(panel.DealPipelineView{
-		Base:          base,
-		View:          "",
-		CanWrite:      canWriteDeals(ctx),
-		Err:           wsErrMsg(r.URL.Query().Get("err")),
-		Msg:           dealsMsg(r.URL.Query().Get("ok")),
-		OpenCount:     strconv.FormatInt(stats.OpenCount, 10),
-		PipelineValue: maskARR(formatRupiah(stats.PipelineValue), br),
-		WinRate:       winRate(stats.WonCount, stats.LostCount),
-		Stages:        cols,
+		Base:           base,
+		View:           "",
+		CanWrite:       canWriteDeals(ctx),
+		Mine:           mineOnly,
+		ShowMineToggle: filter.ScopeAll, // BL-10: 'own' sudah milik sendiri → redundan
+		Err:            wsErrMsg(r.URL.Query().Get("err")),
+		Msg:            dealsMsg(r.URL.Query().Get("ok")),
+		OpenCount:      strconv.FormatInt(stats.OpenCount, 10),
+		PipelineValue:  maskARR(formatRupiah(stats.PipelineValue), br),
+		WinRate:        winRate(stats.WonCount, stats.LostCount),
+		Stages:         cols,
 	}))
 }
 
@@ -106,6 +118,7 @@ func (h *Handler) dealsTable(w http.ResponseWriter, r *http.Request) {
 
 	// q = pencarian bebas (BL-6): MEMPERSEMPIT di atas F3+stage, tak melebarkan.
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	mineOnly := dealMineOnly(r)
 	cursorAt, cursorID := pageCursor(r)
 	rows, err := h.q(ctx).ListDeals(ctx, db.ListDealsParams{
 		CursorCreatedAt: cursorAt,
@@ -113,6 +126,7 @@ func (h *Handler) dealsTable(w http.ResponseWriter, r *http.Request) {
 		ScopeAll:        filter.ScopeAll,
 		IsOwn:           filter.IsOwn,
 		Uid:             &uid,
+		MineOnly:        mineOnly,
 		StageFilter:     r.URL.Query().Get("stage"),
 		Search:          query,
 		PageSize:        pageSize + 1,
@@ -138,14 +152,16 @@ func (h *Handler) dealsTable(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slugFromRequest(r), "")
 	h.renderWorkspaceShell(w, r, "Deals", "/deals", panel.DealPipeline(panel.DealPipelineView{
-		Base:        base,
-		View:        "table",
-		CanWrite:    canWriteDeals(ctx),
-		Err:         wsErrMsg(r.URL.Query().Get("err")),
-		Msg:         dealsMsg(r.URL.Query().Get("ok")),
-		StageFilter: r.URL.Query().Get("stage"),
-		Query:       query,
-		Items:       items,
-		NextCursor:  nextCursor,
+		Base:           base,
+		View:           "table",
+		CanWrite:       canWriteDeals(ctx),
+		Mine:           mineOnly,
+		ShowMineToggle: filter.ScopeAll, // BL-10: 'own' sudah milik sendiri → redundan
+		Err:            wsErrMsg(r.URL.Query().Get("err")),
+		Msg:            dealsMsg(r.URL.Query().Get("ok")),
+		StageFilter:    r.URL.Query().Get("stage"),
+		Query:          query,
+		Items:          items,
+		NextCursor:     nextCursor,
 	}))
 }

@@ -44,6 +44,13 @@ type DealPipelineView struct {
 	Err      string
 	Msg      string
 
+	// Mine (BL-10) = toggle "Deal Saya" aktif (?mine=1) → papan/tabel/KPI menyempit
+	// ke deal milik sendiri. ShowMineToggle = render toggle-nya; HANYA saat cakupan
+	// aktor 'all' (bagi 'own' redundan — sudah otomatis milik sendiri). Keduanya
+	// diputuskan HANDLER (dari filter.ScopeAll), bukan view.
+	Mine           bool
+	ShowMineToggle bool
+
 	OpenCount     string
 	PipelineValue string
 	WinRate       string
@@ -53,6 +60,16 @@ type DealPipelineView struct {
 	Query       string // ?q= pencarian bebas (BL-6, hanya view Tabel); "" = tak mencari
 	Items       []DealRow
 	NextCursor  string
+}
+
+// dealMineParam = "1" bila toggle "Deal Saya" aktif, "" bila tidak — dipakai
+// sebagai nilai hiddenField/param URL agar `mine` bertahan lintas view, search,
+// dan halaman keyset. "" dilewati oleh withQuery/searchBox (URL kanonik).
+func dealMineParam(mine bool) string {
+	if mine {
+		return "1"
+	}
+	return ""
 }
 
 // DealPipeline merender halaman: header + toggle tampilan + alert + (Kanban+KPI
@@ -73,6 +90,11 @@ func DealPipeline(v DealPipelineView) g.Node {
 		),
 		dealViewToggle(v),
 	}
+	// Toggle "Deal Saya" (BL-10): hanya bagi cakupan 'all'. Ditaruh di bawah toggle
+	// view agar berlaku untuk KEDUA tampilan (pipeline & tabel).
+	if v.ShowMineToggle {
+		body = append(body, dealMineToggle(v))
+	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "deals-err", g.Text(v.Err)))
 	}
@@ -82,9 +104,11 @@ func DealPipeline(v DealPipelineView) g.Node {
 
 	if v.View == "table" {
 		// Search hanya di view Tabel (berkeyset); papan Kanban di luar lingkup slice.
+		// mine dipertahankan lintas submit search agar toggle tak tereset.
 		body = append(body, searchBox(v.Base+"/deals", v.Query,
 			"Cari deal — nama atau kode…", "Cari deal",
-			hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter}))
+			hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
+			hiddenField{"mine", dealMineParam(v.Mine)}))
 		if len(v.Items) == 0 {
 			body = append(body, emptyDeals(v))
 		} else {
@@ -97,13 +121,14 @@ func DealPipeline(v DealPipelineView) g.Node {
 }
 
 // dealViewToggle = dua LINK <a> (Pipeline / Tabel) — navigasi bookmarkable
-// (lolos gotcha #16). Tampilan aktif ditandai.
+// (lolos gotcha #16). Tampilan aktif ditandai. mine dibawa lintas view agar
+// toggle "Deal Saya" tak tereset saat berpindah Pipeline↔Tabel; stage/q TIDAK
+// dibawa (khusus Tabel, tak bermakna di Pipeline).
 func dealViewToggle(v DealPipelineView) g.Node {
+	mine := dealMineParam(v.Mine)
 	tab := func(label, view string) g.Node {
-		href := v.Base + "/deals"
-		if view != "" {
-			href += "?view=" + view
-		}
+		keep := []hiddenField{{"view", view}, {"mine", mine}}
+		href := withQuery(v.Base+"/deals", "", keep...)
 		cls := "tab"
 		if v.View == view {
 			cls += " tab-active font-medium"
@@ -112,6 +137,30 @@ func dealViewToggle(v DealPipelineView) g.Node {
 	}
 	return h.Div(h.Role("tablist"), h.Class("tabs tabs-bordered flex-wrap"),
 		tab("Pipeline", ""), tab("Tabel", "table"))
+}
+
+// dealMineToggle = filter kepemilikan "Semua / Deal Saya" (BL-10) sebagai dua
+// LINK <a> (navigasi bookmarkable, lolos gotcha #16). Ortogonal dari toggle view:
+// mempertahankan view + stage + q aktif, hanya menukar sumbu ?mine=. Ganti sumbu
+// mereset cursor (halaman pertama) — konsisten dgn ganti tab di Leads. Dirender
+// HANYA saat ShowMineToggle (cakupan 'all'); gate diputuskan handler.
+func dealMineToggle(v DealPipelineView) g.Node {
+	link := func(label string, mine bool) g.Node {
+		keep := []hiddenField{{"view", v.View}, {"stage", v.StageFilter}}
+		if mine {
+			keep = append(keep, hiddenField{"mine", "1"})
+		}
+		href := withQuery(v.Base+"/deals", v.Query, keep...)
+		cls := "tab"
+		if v.Mine == mine {
+			cls += " tab-active font-medium"
+		}
+		return h.A(h.Href(href), h.Class(cls+" min-h-11"), g.Text(label))
+	}
+	// tabs-box (daisyUI v5) = gaya pill/kotak — sengaja BEDA dari toggle view di
+	// atasnya agar terbaca sebagai filter kepemilikan, bukan sumbu tampilan.
+	return h.Div(h.Role("tablist"), h.Class("tabs tabs-box flex-wrap w-fit"),
+		link("Semua", false), link("Deal Saya", true))
 }
 
 // dealKPIs = tiga kartu ringkas: deal terbuka, nilai pipeline (F4), win rate.
@@ -259,16 +308,20 @@ func dealStageBadge(stage string) g.Node {
 }
 
 func emptyDeals(v DealPipelineView) g.Node {
-	if v.NextCursor == "" && v.StageFilter == "" && v.Query == "" {
+	// "Belum ada deal" (kosong sejati) HANYA saat tanpa penyaring apa pun. mine
+	// aktif = tersaring → pakai pesan "tak cocok" + jalan kembali (ada deal, tapi
+	// bukan milik aktor).
+	if v.NextCursor == "" && v.StageFilter == "" && v.Query == "" && !v.Mine {
 		return h.Div(
 			h.Class("card bg-base-100 border border-base-300"),
 			h.Div(h.Class("card-body"),
 				h.P(h.Class("text-base-content/70"), g.Text("Belum ada deal."))),
 		)
 	}
-	// Kembali ke awal mempertahankan view=table + stage + q agar tak melompat keluar.
+	// Kembali ke awal mempertahankan view=table + stage + q + mine agar tak melompat keluar.
 	back := withQuery(v.Base+"/deals", v.Query,
-		hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter})
+		hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
+		hiddenField{"mine", dealMineParam(v.Mine)})
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300"),
 		h.Div(h.Class("card-body items-start"),
@@ -288,6 +341,9 @@ func dealsPager(v DealPipelineView) g.Node {
 	href := v.Base + "/deals?view=table&after=" + v.NextCursor
 	if v.StageFilter != "" {
 		href += "&stage=" + v.StageFilter
+	}
+	if v.Mine {
+		href += "&mine=1" // toggle "Deal Saya" bertahan ke halaman berikutnya
 	}
 	href = appendQuery(href, v.Query) // q bertahan ke halaman berikutnya
 	return h.Div(
