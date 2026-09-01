@@ -62,7 +62,7 @@ func TestActivityCreate_InvalidKindRejected(t *testing.T) {
 	acc := env.seedAccount(t, "Desa Invalid", &uid, nil, nil)
 
 	form := url.Values{}
-	form.Set("kind", "meeting") // belum ber-UI v1 → ditolak
+	form.Set("kind", "email") // ada di kind_chk DB tapi belum ber-form → ditolak handler
 	form.Set("target", "account:"+itoa(acc.ID))
 	form.Set("subject", "Kind Tak Sah")
 

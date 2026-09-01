@@ -80,9 +80,13 @@ func wsErrMsgCRM(code string) string {
 	case "activity_status":
 		return "Status tugas tidak valid."
 	case "activity_direction":
-		return "Arah panggilan tidak valid."
+		return "Arah panggilan/chat tidak valid."
 	case "activity_call_result":
 		return "Hasil panggilan tidak valid."
+	case "activity_meeting_type":
+		return "Tipe pertemuan tidak valid."
+	case "activity_channel":
+		return "Kanal chat tidak valid."
 	case "activity_contact":
 		return "Kontak yang dipilih tidak valid."
 	case "activity_duration":

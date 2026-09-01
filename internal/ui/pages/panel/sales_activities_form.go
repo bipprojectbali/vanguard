@@ -56,25 +56,35 @@ type ActivityFormView struct {
 	Priority string
 	Status   string
 
-	// Call
+	// Call / Chat
 	ContactID  string
 	Contacts   []AccountMemberOption
 	Direction  string
 	ActivityAt string
 	Duration   string
 	CallResult string
+	Channel    string
+
+	// Meeting
+	StartAt     string
+	EndAt       string
+	Location    string
+	MeetingType string
 
 	// Note
 	Body string
 
-	// Bersama (task/call)
+	// Bersama (task/call/meeting/chat)
 	Notes string
 
 	// Opsi enum (berurut) untuk dropdown
-	Priorities  []string
-	Statuses    []string
-	Directions  []string
-	CallResults []string
+	Priorities      []string
+	Statuses        []string
+	MeetingStatuses []string
+	MeetingTypes    []string
+	Directions      []string
+	CallResults     []string
+	Channels        []string
 }
 
 // ActivityForm merender halaman form: buat (dropdown Jenis + field per-kind
@@ -214,7 +224,9 @@ func activityKindFields(v ActivityFormView) g.Node {
 	}
 	return g.Group([]g.Node{
 		showWhen("$kind == 'task'", "min-w-0", activityKindFormCard(v, "task")),
+		showWhen("$kind == 'meeting'", "min-w-0", activityKindFormCard(v, "meeting")),
 		showWhen("$kind == 'call'", "min-w-0", activityKindFormCard(v, "call")),
+		showWhen("$kind == 'chat'", "min-w-0", activityKindFormCard(v, "chat")),
 		showWhen("$kind == 'note'", "min-w-0", activityKindFormCard(v, "note")),
 	})
 }
@@ -229,6 +241,15 @@ func activityKindFormCard(v ActivityFormView, kind string) g.Node {
 			selectField("Status", "status", v.Status, v.Statuses, false),
 			textareaField("Catatan", "notes", v.Notes),
 		)
+	case "meeting":
+		return formCard("Detail Pertemuan",
+			selectField("Tipe", "meeting_type", v.MeetingType, v.MeetingTypes, false),
+			field("Waktu Mulai", "start_at", v.StartAt, false, "datetime-local"),
+			field("Waktu Selesai", "end_at", v.EndAt, false, "datetime-local"),
+			field("Lokasi", "location", v.Location, false, "text"),
+			selectField("Status", "status", v.Status, v.MeetingStatuses, false),
+			textareaField("Catatan", "notes", v.Notes),
+		)
 	case "call":
 		return formCard("Detail Panggilan",
 			memberSelect("Kontak", "contact_id", v.ContactID, v.Contacts),
@@ -236,6 +257,14 @@ func activityKindFormCard(v ActivityFormView, kind string) g.Node {
 			field("Waktu", "activity_at", v.ActivityAt, false, "datetime-local"),
 			field("Durasi (menit)", "duration_min", v.Duration, false, "number"),
 			selectField("Hasil", "call_result", v.CallResult, v.CallResults, false),
+			textareaField("Catatan", "notes", v.Notes),
+		)
+	case "chat":
+		return formCard("Detail Chat",
+			memberSelect("Kontak", "contact_id", v.ContactID, v.Contacts),
+			selectField("Arah", "direction", v.Direction, v.Directions, false),
+			selectField("Kanal", "channel", v.Channel, v.Channels, false),
+			field("Waktu", "activity_at", v.ActivityAt, false, "datetime-local"),
 			textareaField("Catatan", "notes", v.Notes),
 		)
 	case "note":

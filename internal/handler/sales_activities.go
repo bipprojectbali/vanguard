@@ -97,6 +97,11 @@ func (h *Handler) ActivityCreate(w http.ResponseWriter, r *http.Request) {
 		ActivityAt:      form.ActivityAt,
 		DurationMin:     form.DurationMin,
 		CallResult:      form.CallResult,
+		StartAt:         form.StartAt,
+		EndAt:           form.EndAt,
+		Location:        form.Location,
+		MeetingType:     form.MeetingType,
+		Channel:         form.Channel,
 		Body:            form.Body,
 		CreatedBy:       &uid,
 	})
