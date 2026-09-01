@@ -93,7 +93,7 @@ func leadFormFields(l db.Lead, phoneEditable bool) panel.LeadFormFields {
 		LeadStatus:        l.LeadStatus,
 		Rating:            deref(l.Rating),
 		UnqualifiedReason: deref(l.UnqualifiedReason),
-		EstimatedValue:    numericStr(l.EstimatedValue),
+		EstimatedValue:    moneyRupiahStr(l.EstimatedValue),
 		DistrictID:        int64PtrStr(l.DistrictID),
 		MobilePhone:       mobile,
 		Whatsapp:          whatsapp,
