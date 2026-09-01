@@ -13,11 +13,14 @@ import (
 
 // activities.go — ±90 aktivitas polimorfik (target account/contact/deal/
 // ticket/subscription YANG SUDAH DIBUAT — id nyata per tabel, bukan
-// placeholder), tersebar ke seluruh nilai kind/status/priority/direction/
+// placeholder), tersebar ke nilai kind/status/priority/direction/
 // call_result (migrasi 00011). context sales/cs/general dipilih mengikuti
 // jenis target agar Sales/CS report tak silang data.
 
-var activityKinds = []string{"task", "meeting", "call", "chat", "email", "note"}
+// activityKinds = kind yang DEMO selaras dengan yang bisa dibuat UI (BL-19:
+// task/call/note). meeting/chat/email belum ber-form (menyusul Modul 7) → tak
+// diseed agar list tak menampilkan jenis yang tak bisa dibuat/disunting user.
+var activityKinds = []string{"task", "call", "note"}
 var activityStatuses = []string{"Not Started", "In Progress", "Completed", "Deferred", "Planned", "Held", "Cancelled", "No-Show"}
 
 const activityTotal = 90
@@ -77,6 +80,8 @@ func seedActivities(ctx context.Context, q *db.Queries, tenantID int64, rng *ran
 		var callResult *string
 		var durationMin *int32
 
+		// Hanya kind yang bisa dibuat UI (task/call/note, BL-19); meeting/chat/email
+		// menyusul M7 dengan field & CHECK-nya sendiri.
 		switch kind {
 		case "call":
 			direction = ptr(pick(rng, []string{"Inbound", "Outbound"}))
@@ -84,13 +89,6 @@ func seedActivities(ctx context.Context, q *db.Queries, tenantID int64, rng *ran
 			dur := intn32(rng, 3, 45)
 			durationMin = &dur
 			activityAt = pgtype.Timestamptz{Time: today.AddDate(0, 0, -rng.Intn(30)), Valid: true}
-		case "meeting":
-			dur := intn32(rng, 15, 90)
-			durationMin = &dur
-			activityAt = pgtype.Timestamptz{Time: today.AddDate(0, 0, rng.Intn(20)-10), Valid: true}
-		case "email", "chat":
-			direction = ptr(pick(rng, []string{"Inbound", "Outbound"}))
-			activityAt = pgtype.Timestamptz{Time: today.AddDate(0, 0, -rng.Intn(15)), Valid: true}
 		case "task":
 			dueDate = pgDate(today.AddDate(0, 0, rng.Intn(21)-7))
 		case "note":
@@ -130,15 +128,10 @@ func seedActivities(ctx context.Context, q *db.Queries, tenantID int64, rng *ran
 // subjectFor menyusun subjek aktivitas yang wajar dibaca sesuai kind+target,
 // bukan string generik "Activity #N".
 func subjectFor(kind, targetType string) string {
+	// Hanya kind yang diseed (task/call/note, BL-19); default = note.
 	switch kind {
 	case "call":
 		return "Telepon tindak lanjut " + targetLabel(targetType)
-	case "meeting":
-		return "Pertemuan dengan " + targetLabel(targetType)
-	case "email":
-		return "Email ke " + targetLabel(targetType)
-	case "chat":
-		return "Chat WhatsApp dengan " + targetLabel(targetType)
 	case "task":
 		return "Tindak lanjut " + targetLabel(targetType)
 	default:

@@ -73,7 +73,7 @@ func ActivitiesList(v ActivitiesListView) g.Node {
 				h.H1(h.Class("text-xl font-semibold"), g.Text(title)),
 				h.P(h.Class("text-base-content/70"), g.Text(subtitle)),
 			),
-			ui.When(v.CanWrite, activityNewButtons(v.Base, v.TargetFilter)),
+			ui.When(v.CanWrite, activityNewButton(v.Base, v.TargetFilter)),
 		),
 		searchBox(v.Base+"/activities", v.Query, "Cari aktivitas — subjek…", "Cari aktivitas",
 			hiddenField{"target", v.TargetFilter}),
@@ -93,21 +93,21 @@ func ActivitiesList(v ActivitiesListView) g.Node {
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
-// activityNewButtons = tiga tautan buat (satu per kind). Saat targetFilter terisi
-// (mode filter per-entitas), link menyertakan ?target= agar form langsung
-// pre-seleksi target tersebut. kind tetap per form (immutable) → tiap form
-// ramping & no-JS. Baris flex-wrap agar tak mendorong di mobile 375px.
-func activityNewButtons(base, targetFilter string) g.Node {
-	btn := func(label, kind string) g.Node {
-		href := base + "/activities/new?kind=" + kind
-		if targetFilter != "" {
-			href += "&target=" + targetFilter
-		}
-		return h.A(h.Href(href), h.Class("btn btn-sm btn-primary min-h-11"), g.Text(label))
+// activityNewButton = satu tautan "Tambah Aktivitas" → form tunggal (BL-19).
+// Jenis dipilih di dalam form (dropdown), bukan lagi 3 tombol per-kind — pola
+// per-tombol tak menskala saat kind tumbuh (M7: meeting/chat/email). Saat
+// targetFilter terisi (mode filter per-entitas), link menyertakan ?target= agar
+// form langsung pre-seleksi target tersebut. Baris flex-wrap agar tak mendorong
+// di mobile 375px.
+func activityNewButton(base, targetFilter string) g.Node {
+	href := base + "/activities/new"
+	if targetFilter != "" {
+		href += "?target=" + targetFilter
 	}
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),
-		btn("Tugas", "task"), btn("Panggilan", "call"), btn("Catatan", "note"),
+		h.A(h.Href(href), h.Class("btn btn-sm btn-primary min-h-11"),
+			g.Text("Tambah Aktivitas")),
 	)
 }
 
