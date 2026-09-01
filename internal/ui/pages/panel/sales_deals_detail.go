@@ -51,6 +51,10 @@ type DealDetailView struct {
 	// ListQuotesForDeal (dibatasi); daftar penuh di /deals/{id}/quotes.
 	Quotes []QuoteRow
 
+	// QuotesSummary (BL-18) = ringkasan agregat quote deal ini, di-precompute
+	// handler dari SEMUA quote hidup (bukan hanya pratinjau termuat).
+	QuotesSummary QuotesSummary
+
 	// Activities = timeline aktivitas deal ini (M7-A). Diisi handler via
 	// activitiesTimelineFor (dibatasi activityTimelineLimit baris terbaru).
 	Activities ActivityTimelineView
@@ -125,7 +129,10 @@ func dealQuotesCard(v DealDetailView) g.Node {
 
 	head := h.Div(
 		h.Class("flex flex-wrap items-center justify-between gap-2 mb-2"),
-		h.H2(h.Class("font-semibold"), g.Text("Quote")),
+		h.Div(h.Class("flex flex-wrap items-center gap-2 min-w-0"),
+			h.H2(h.Class("font-semibold"), g.Text("Quote")),
+			ui.When(v.QuotesSummary.Total > 0, quotesSummaryBadge(v.QuotesSummary)),
+		),
 		ui.When(v.CanWrite, h.A(
 			h.Href(quotesBase+"/new"), h.Class("btn btn-sm btn-primary min-h-11"),
 			g.Text("Buat Quote"))),

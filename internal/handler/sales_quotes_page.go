@@ -72,6 +72,7 @@ func (h *Handler) QuotesList(w http.ResponseWriter, r *http.Request) {
 		Msg:          quotesMsg(r.URL.Query().Get("ok")),
 		Items:        items,
 		NextCursor:   nextCursor,
+		Summary:      h.quotesSummaryForDeal(ctx, dealID),
 	}))
 }
 

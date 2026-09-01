@@ -29,6 +29,17 @@ type QuoteRow struct {
 	Expired bool
 }
 
+// QuotesSummary = ringkasan agregat quote satu deal (BL-18), di-precompute
+// handler. Total = quote hidup; Expired = kedaluwarsa (aturan BL-17, Draft
+// dikecualikan); Active = belum kedaluwarsa & status bukan Rejected/Expired.
+// Ditampilkan sebagai teks kecil ("N quote · M kedaluwarsa") di kartu detail deal
+// & header daftar penuh — TAK ada aksi baru (Opsi A: quote tetap independen).
+type QuotesSummary struct {
+	Total   int
+	Expired int
+	Active  int
+}
+
 // QuotesListView = data halaman daftar quote satu deal. Quotable (BL-13) =
 // deal di jendela quoting → boleh buat quote; StageLockMsg = alasan terkunci
 // (dipakai banner saat pemegang tulis diblokir stage). Flag di-precompute handler.
@@ -43,6 +54,9 @@ type QuotesListView struct {
 	Msg          string
 	Items        []QuoteRow
 	NextCursor   string
+	// Summary (BL-18) = ringkasan agregat quote deal ini, di-precompute handler
+	// (dari SEMUA quote hidup, bukan hanya halaman termuat).
+	Summary QuotesSummary
 }
 
 // QuotesList merender header + alert + tabel quote (atau state kosong) + pager.
@@ -56,6 +70,8 @@ func QuotesList(v QuotesListView) g.Node {
 				h.H1(h.Class("text-xl font-semibold truncate"), g.Text("Quote")),
 				h.P(h.Class("text-base-content/70 truncate"),
 					g.Text("Penawaran untuk deal "+v.DealName+".")),
+				ui.When(v.Summary.Total > 0, h.Div(h.Class("mt-1"),
+					quotesSummaryBadge(v.Summary))),
 			),
 			ui.When(v.CanWrite && v.Quotable, h.A(
 				h.Href(dealBase+"/quotes/new"), h.Class("btn btn-primary min-h-11"),
@@ -148,6 +164,31 @@ func quoteStatusBadge(status string) g.Node {
 // & baris identitas builder.
 func quoteExpiredBadge() g.Node {
 	return h.Span(h.Class("badge badge-warning badge-sm"), g.Text("Kedaluwarsa"))
+}
+
+// quotesSummaryLabel = teks ringkas ringkasan quote: "N quote" (+ " · M
+// kedaluwarsa" bila ada yang kedaluwarsa). Total nol → "" (pemanggil sudah punya
+// state kosong sendiri).
+func quotesSummaryLabel(s QuotesSummary) string {
+	if s.Total == 0 {
+		return ""
+	}
+	label := strconv.Itoa(s.Total) + " quote"
+	if s.Expired > 0 {
+		label += " · " + strconv.Itoa(s.Expired) + " kedaluwarsa"
+	}
+	return label
+}
+
+// quotesSummaryBadge = badge ringkasan agregat (BL-18). Token warning bila ada
+// yang kedaluwarsa (tarik perhatian, selaras quoteExpiredBadge), selain itu ghost
+// netral. Kosong bila tak ada quote (pemanggil menjaga via ui.When).
+func quotesSummaryBadge(s QuotesSummary) g.Node {
+	cls := "badge badge-ghost badge-sm"
+	if s.Expired > 0 {
+		cls = "badge badge-warning badge-sm"
+	}
+	return h.Span(h.Class(cls), g.Text(quotesSummaryLabel(s)))
 }
 
 func emptyQuotes() g.Node {
