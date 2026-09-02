@@ -58,7 +58,10 @@ func HealthScoreList(v HealthScoreListView) g.Node {
 	)
 }
 
-// healthScoreKPICards — 4 kartu KPI: Total / Sehat / Berisiko / Kritis.
+// healthScoreKPICards — 4 kartu KPI: Total / Sehat / Berisiko / Kritis. Ambang
+// di label (≥80 / 40–79 / <40) HARUS cermin healthHealthyMin/healthAtRiskMin
+// (handler/customer_success_view.go, sumber status turunan BL-24) — ubah salah
+// satu tanpa yang lain = UI menjanjikan pemetaan skor→status yang tak ditegakkan.
 func healthScoreKPICards(k HealthScoreKPIs) g.Node {
 	return h.Div(h.Class("grid grid-cols-2 md:grid-cols-4 gap-3"),
 		healthKPICard("Desa Total", strconv.FormatInt(k.Total, 10), "text-base-content"),

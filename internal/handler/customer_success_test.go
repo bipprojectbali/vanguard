@@ -30,6 +30,42 @@ import (
 // pun role dengan akses tulis SEBAGIAN dari 3 section (admin/manager/csm penuh,
 // sales/support nol) — jalur itu memang tak bisa dilatih lewat HTTP hari ini.
 
+// TestDeriveHealthStatus mengunci pemetaan skor→status (BL-24) di ambang
+// ≥80 Healthy · 40–79 At-Risk · <40 Critical. Batas atas/bawah tiap band diuji
+// eksplisit (79 vs 80, 39 vs 40) karena di situlah off-by-one paling mungkin;
+// nil (belum ada dasar hitung) HARUS nil, bukan default ke status apa pun.
+func TestDeriveHealthStatus(t *testing.T) {
+	i16 := func(v int16) *int16 { return &v }
+	cases := []struct {
+		name string
+		in   *int16
+		want *string // nil = harap nil
+	}{
+		{"nil belum dinilai", nil, nil},
+		{"0 kritis", i16(0), strptr("Critical")},
+		{"39 kritis (batas atas band)", i16(39), strptr("Critical")},
+		{"40 at-risk (batas bawah band)", i16(40), strptr("At-Risk")},
+		{"79 at-risk (batas atas band)", i16(79), strptr("At-Risk")},
+		{"80 healthy (batas bawah band)", i16(80), strptr("Healthy")},
+		{"100 healthy", i16(100), strptr("Healthy")},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := deriveHealthStatus(c.in)
+			switch {
+			case c.want == nil && got != nil:
+				t.Errorf("in=%v: harap nil, got %q", c.in, *got)
+			case c.want != nil && got == nil:
+				t.Errorf("in=%v: harap %q, got nil", c.in, *c.want)
+			case c.want != nil && got != nil && *got != *c.want:
+				t.Errorf("in=%v: harap %q, got %q", c.in, *c.want, *got)
+			}
+		})
+	}
+}
+
+func strptr(s string) *string { return &s }
+
 // customerSuccessFormValues merakit form values LENGKAP & SAH mencakup ketiga
 // section — dipakai admin/manager/csm (full-access) di test create/update/enum.
 // adoption+engagement+support+sentiment = 80+90+70+60 → overall_health_score

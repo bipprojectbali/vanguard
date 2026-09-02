@@ -122,6 +122,9 @@ func (h *Handler) CustomerSuccessEdit(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slugFromRequest(r), "")
 	accountBase := base + "/accounts/" + strconv.FormatInt(accountID, 10)
+	// Status kesehatan = badge read-only (BL-24): precompute label+kelas badge
+	// dari status TERSIMPAN di handler (view murni-data). nil → "—"/ghost.
+	healthLabel, healthBadge := healthScoreStatus(cs.HealthStatus)
 	v := panel.CustomerSuccessFormView{
 		Base:        accountBase,
 		AccountName: account.VillageName,
@@ -133,7 +136,8 @@ func (h *Handler) CustomerSuccessEdit(w http.ResponseWriter, r *http.Request) {
 		CanWriteJourney:  canWriteCSJourney(ctx),
 		CanWriteAdoption: canWriteCSAdoption(ctx),
 
-		HealthStatuses:     healthStatusOptions,
+		HealthStatusLabel:  healthLabel,
+		HealthStatusBadge:  healthBadge,
 		ScoreTrends:        scoreTrendOptions,
 		LifecycleStages:    lifecycleStageOptions,
 		OnboardingStatuses: onboardingStatusOptions,

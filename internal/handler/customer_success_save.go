@@ -69,6 +69,11 @@ func (h *Handler) CustomerSuccessSave(w http.ResponseWriter, r *http.Request) {
 	// ke sekarang bila section Health BENAR-BENAR ditulis kali ini (bukan di-mask
 	// ke nilai lama) — kolom berarti "kapan terakhir dihitung ulang".
 	overallScore := computeOverallHealthScore(form.AdoptionScore, form.EngagementScore, form.SupportScore, form.SentimentScore)
+	// health_status kini TURUNAN skor, bukan input operator (BL-24): apa pun
+	// yang dikirim form diabaikan, status mengikuti overall_health_score. Karena
+	// overallScore sudah dihitung dari komponen yang TER-MASK ke nilai lama saat
+	// section Health tak berhak ditulis, status ikut nilai lama tanpa special-case.
+	form.HealthStatus = deriveHealthStatus(overallScore)
 	healthLastCalculated := existing.HealthLastCalculated
 	if writeHealth {
 		healthLastCalculated = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
