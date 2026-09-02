@@ -188,29 +188,16 @@ func quoteRowLabel(q QuoteRow) string {
 }
 
 // dealIdentityCard = kartu inti; nilai Desa dirender sebagai TAUTAN (bukan teks
-// biasa) karena membuka detail desa, sisanya field biasa via detailCard.
+// biasa) karena membuka detail desa, sisanya field teks biasa. Lewat cardRows/
+// detailRow (accounts_detail_rollup.go) — bukan detailCard yang cuma menerima
+// nilai string — karena baris Desa membawa g.Node tautan.
 func dealIdentityCard(v DealDetailView, accountLink g.Node) g.Node {
-	row := func(label string, value g.Node) g.Node {
-		return h.Div(
-			h.Class("grid gap-1 sm:grid-cols-3 sm:gap-2 py-2 border-b border-base-300/50 last:border-0"),
-			h.Dt(h.Class("text-sm text-base-content/60"), g.Text(label)),
-			h.Dd(h.Class("sm:col-span-2 break-words"), value),
-		)
-	}
-	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body min-w-0"),
-			h.H2(h.Class("font-semibold mb-2"), g.Text("Identitas Deal")),
-			h.Dl(
-				h.Class("min-w-0"),
-				row("Desa", accountLink),
-				row("Kontak Utama", g.Text(orDash(v.PrimaryContact))),
-				row("Tipe Deal", g.Text(orDash(v.DealType))),
-				row("Langkah Berikutnya", g.Text(orDash(v.NextStep))),
-				row("Pemilik", g.Text(orDash(v.Owner))),
-			),
-		),
+	return cardRows("Identitas Deal", "",
+		detailRow("Desa", accountLink),
+		detailRow("Kontak Utama", g.Text(orDash(v.PrimaryContact))),
+		detailRow("Tipe Deal", g.Text(orDash(v.DealType))),
+		detailRow("Langkah Berikutnya", g.Text(orDash(v.NextStep))),
+		detailRow("Pemilik", g.Text(orDash(v.Owner))),
 	)
 }
 
@@ -278,6 +265,22 @@ func showWhen(expr, class string, node g.Node) g.Node {
 	return h.Div(append(attrs, node)...)
 }
 
+// selectedOptions membangun opsi <option value=…> untuk sebuah <select> manual:
+// tiap nilai jadi satu opsi, dengan `selected` pada yang cocok. Dipakai kontrol
+// ganti tahap deal & status quote (select manual yang tak lewat selectField karena
+// perlu atribut ekstra seperti data.Bind/ID kustom).
+func selectedOptions(values []string, selected string) []g.Node {
+	opts := make([]g.Node, 0, len(values))
+	for _, s := range values {
+		attrs := []g.Node{h.Value(s)}
+		if s == selected {
+			attrs = append(attrs, h.Selected())
+		}
+		opts = append(opts, h.Option(append(attrs, g.Text(s))...))
+	}
+	return opts
+}
+
 // dealStageControl = kontrol ganti stage: NATIVE POST (gotcha #16). Menyediakan
 // field win/loss reason + catatan kekalahan yang WAJIB diisi backend saat stage
 // terminal (Closed Won/Lost) — select-onchange tak bisa mengumpulkannya, maka
@@ -288,14 +291,7 @@ func showWhen(expr, class string, node g.Node) g.Node {
 // Kekalahan" HANYA saat Closed Lost (selaras backend: loss_notes cuma relevan
 // saat kalah). Toggle klien murni UX — validasi & pembersihan tetap di handler.
 func dealStageControl(v DealDetailView, base string) g.Node {
-	opts := make([]g.Node, 0, len(v.Stages))
-	for _, s := range v.Stages {
-		attrs := []g.Node{h.Value(s)}
-		if s == v.Stage {
-			attrs = append(attrs, h.Selected())
-		}
-		opts = append(opts, h.Option(append(attrs, g.Text(s))...))
-	}
+	opts := selectedOptions(v.Stages, v.Stage)
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
 		h.Div(

@@ -50,14 +50,40 @@ func seedDeal(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenantID, a
 	return out
 }
 
-func TestCreateAndGetDeal(t *testing.T) {
+// dealTestEnv = setup DB baku tiap test pipeline: pool bersih + satu tenant "T"
+// + satu account "Acc". Menyingkat blok truncate→tenant→account yang identik di
+// delapan test ber-DB. Test yang butuh Queries (mis. CreateUser) buat `New(pool)`
+// sendiri agar tak ada nilai kembalian menganggur.
+func dealTestEnv(t *testing.T) (context.Context, *pgxpool.Pool, Tenant, Account) {
+	t.Helper()
 	pool := testPool(t)
 	ctx := context.Background()
 	truncateCRM(t, ctx)
+	ten, err := New(pool).CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
+	if err != nil {
+		t.Fatalf("create tenant: %v", err)
+	}
+	acc := seedAccount(t, ctx, pool, ten.ID, "Acc", nil)
+	return ctx, pool, ten, acc
+}
 
-	q := New(pool)
-	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
-	acc := seedAccount(t, ctx, pool, ten.ID, "Sukamaju", nil)
+// readDeal = baca satu deal dalam tx ber-tenant; fatal bila gagal. Untuk test yang
+// MENGHARAP error (soft-delete) tetap pakai WithTenant langsung.
+func readDeal(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenantID, dealID int64) Deal {
+	t.Helper()
+	var out Deal
+	if err := WithTenant(ctx, pool, tenantID, func(q *Queries) error {
+		var e error
+		out, e = q.GetDeal(ctx, dealID)
+		return e
+	}); err != nil {
+		t.Fatalf("get deal %d: %v", dealID, err)
+	}
+	return out
+}
+
+func TestCreateAndGetDeal(t *testing.T) {
+	ctx, pool, ten, acc := dealTestEnv(t)
 
 	deal := seedDeal(t, ctx, pool, ten.ID, acc.ID, "Langganan Sukamaju", nil)
 	if deal.EntityCode == nil || *deal.EntityCode != "DEAL-001" {
@@ -70,27 +96,14 @@ func TestCreateAndGetDeal(t *testing.T) {
 		t.Errorf("stage awal harus Prospecting, got %q", deal.Stage)
 	}
 
-	var got Deal
-	if err := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
-		var e error
-		got, e = q.GetDeal(ctx, deal.ID)
-		return e
-	}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
+	got := readDeal(t, ctx, pool, ten.ID, deal.ID)
 	if got.ID != deal.ID || got.DealName != "Langganan Sukamaju" {
 		t.Errorf("get harus kembalikan deal sama, got id=%d name=%q", got.ID, got.DealName)
 	}
 }
 
 func TestListDeals_KeysetPagination(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	truncateCRM(t, ctx)
-
-	q := New(pool)
-	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
-	acc := seedAccount(t, ctx, pool, ten.ID, "Acc", nil)
+	ctx, pool, ten, acc := dealTestEnv(t)
 
 	for _, n := range []string{"Satu", "Dua", "Tiga"} {
 		seedDeal(t, ctx, pool, ten.ID, acc.ID, n, nil)
@@ -124,13 +137,8 @@ func TestListDeals_KeysetPagination(t *testing.T) {
 }
 
 func TestListDeals_OwnershipFailClosed(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	truncateCRM(t, ctx)
-
+	ctx, pool, ten, acc := dealTestEnv(t)
 	q := New(pool)
-	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
-	acc := seedAccount(t, ctx, pool, ten.ID, "Acc", nil)
 	sales, _ := q.CreateUser(ctx, CreateUserParams{Email: "s@x", PassHash: strPtr("x")})
 	other, _ := q.CreateUser(ctx, CreateUserParams{Email: "o@x", PassHash: strPtr("x")})
 
@@ -169,13 +177,8 @@ func TestListDeals_OwnershipFailClosed(t *testing.T) {
 // deal_owner = uid walau aktor ScopeAll, di KETIGA jalur (Tabel, Kanban, KPI)
 // agar papan & ringkasan seiring. Cermin TestListLeads_StatusFilterAndMineOnly.
 func TestListDeals_MineOnly(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	truncateCRM(t, ctx)
-
+	ctx, pool, ten, acc := dealTestEnv(t)
 	q := New(pool)
-	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
-	acc := seedAccount(t, ctx, pool, ten.ID, "Acc", nil)
 	sales, _ := q.CreateUser(ctx, CreateUserParams{Email: "s@x", PassHash: strPtr("x")})
 	other, _ := q.CreateUser(ctx, CreateUserParams{Email: "o@x", PassHash: strPtr("x")})
 
@@ -251,13 +254,7 @@ func TestListDeals_MineOnly(t *testing.T) {
 }
 
 func TestListDeals_StageFilter(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	truncateCRM(t, ctx)
-
-	q := New(pool)
-	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
-	acc := seedAccount(t, ctx, pool, ten.ID, "Acc", nil)
+	ctx, pool, ten, acc := dealTestEnv(t)
 
 	seedDeal(t, ctx, pool, ten.ID, acc.ID, "Awal", nil) // Prospecting
 	seedDeal(t, ctx, pool, ten.ID, acc.ID, "Nego", func(p *CreateDealParams) { p.Stage = "Negotiation" })
@@ -280,13 +277,7 @@ func TestListDeals_StageFilter(t *testing.T) {
 }
 
 func TestUpdateDealStage_ClosedDate(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	truncateCRM(t, ctx)
-
-	q := New(pool)
-	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
-	acc := seedAccount(t, ctx, pool, ten.ID, "Acc", nil)
+	ctx, pool, ten, acc := dealTestEnv(t)
 	deal := seedDeal(t, ctx, pool, ten.ID, acc.ID, "Deal", nil)
 
 	// Masih terbuka → closed_date NULL.
@@ -296,15 +287,7 @@ func TestUpdateDealStage_ClosedDate(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("stage→%s: %v", stage, err)
 		}
-		var got Deal
-		if err := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
-			var e error
-			got, e = q.GetDeal(ctx, deal.ID)
-			return e
-		}); err != nil {
-			t.Fatalf("get: %v", err)
-		}
-		return got
+		return readDeal(t, ctx, pool, ten.ID, deal.ID)
 	}
 
 	if g := moveStage("Demo", nil); g.ClosedDate.Valid {
@@ -324,13 +307,7 @@ func TestUpdateDealStage_ClosedDate(t *testing.T) {
 }
 
 func TestDealPipelineStats(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	truncateCRM(t, ctx)
-
-	q := New(pool)
-	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
-	acc := seedAccount(t, ctx, pool, ten.ID, "Acc", nil)
+	ctx, pool, ten, acc := dealTestEnv(t)
 
 	seedDeal(t, ctx, pool, ten.ID, acc.ID, "Open1", nil)
 	seedDeal(t, ctx, pool, ten.ID, acc.ID, "Open2", func(p *CreateDealParams) { p.Stage = "Demo" })
@@ -357,13 +334,7 @@ func TestDealPipelineStats(t *testing.T) {
 }
 
 func TestSoftDeleteDeal(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	truncateCRM(t, ctx)
-
-	q := New(pool)
-	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
-	acc := seedAccount(t, ctx, pool, ten.ID, "Acc", nil)
+	ctx, pool, ten, acc := dealTestEnv(t)
 	deal := seedDeal(t, ctx, pool, ten.ID, acc.ID, "Buang", nil)
 
 	if err := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
@@ -388,13 +359,7 @@ func TestSoftDeleteDeal(t *testing.T) {
 }
 
 func TestCreateDeal_StageCheckMenolakLiar(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	truncateCRM(t, ctx)
-
-	q := New(pool)
-	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
-	acc := seedAccount(t, ctx, pool, ten.ID, "Acc", nil)
+	ctx, pool, ten, acc := dealTestEnv(t)
 
 	err := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
 		code, e := q.GenerateEntityCode(ctx, ten.ID, codes.EntityDeal)

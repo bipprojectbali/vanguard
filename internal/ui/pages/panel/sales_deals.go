@@ -122,6 +122,17 @@ func DealPipeline(v DealPipelineView) g.Node {
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
+// pipelineTabLink = satu tautan tab papan Deal (dipakai toggle Pipeline/Tabel &
+// toggle Semua/Deal Saya). active menandai tab terpilih (tab-active font-medium);
+// href sudah dirakit pemanggil karena tiap toggle menyusun sumbu param berbeda.
+func pipelineTabLink(href, label string, active bool) g.Node {
+	cls := "tab"
+	if active {
+		cls += " tab-active font-medium"
+	}
+	return h.A(h.Href(href), h.Class(cls+" min-h-11"), g.Text(label))
+}
+
 // dealViewToggle = dua LINK <a> (Pipeline / Tabel) — navigasi bookmarkable
 // (lolos gotcha #16). Tampilan aktif ditandai. mine dibawa lintas view agar
 // toggle "Deal Saya" tak tereset saat berpindah Pipeline↔Tabel; stage/q TIDAK
@@ -129,13 +140,8 @@ func DealPipeline(v DealPipelineView) g.Node {
 func dealViewToggle(v DealPipelineView) g.Node {
 	mine := dealMineParam(v.Mine)
 	tab := func(label, view string) g.Node {
-		keep := []hiddenField{{"view", view}, {"mine", mine}}
-		href := withQuery(v.Base+"/deals", "", keep...)
-		cls := "tab"
-		if v.View == view {
-			cls += " tab-active font-medium"
-		}
-		return h.A(h.Href(href), h.Class(cls+" min-h-11"), g.Text(label))
+		href := withQuery(v.Base+"/deals", "", hiddenField{"view", view}, hiddenField{"mine", mine})
+		return pipelineTabLink(href, label, v.View == view)
 	}
 	return h.Div(h.Role("tablist"), h.Class("tabs tabs-bordered flex-wrap"),
 		tab("Pipeline", ""), tab("Tabel", "table"))
@@ -153,11 +159,7 @@ func dealMineToggle(v DealPipelineView) g.Node {
 			keep = append(keep, hiddenField{"mine", "1"})
 		}
 		href := withQuery(v.Base+"/deals", v.Query, keep...)
-		cls := "tab"
-		if v.Mine == mine {
-			cls += " tab-active font-medium"
-		}
-		return h.A(h.Href(href), h.Class(cls+" min-h-11"), g.Text(label))
+		return pipelineTabLink(href, label, v.Mine == mine)
 	}
 	// tabs-box (daisyUI v5) = gaya pill/kotak — sengaja BEDA dari toggle view di
 	// atasnya agar terbaca sebagai filter kepemilikan, bukan sumbu tampilan.

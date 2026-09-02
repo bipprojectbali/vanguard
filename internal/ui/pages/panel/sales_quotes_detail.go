@@ -216,14 +216,7 @@ func quoteAddItemForm(v QuoteDetailView, quoteBase string) g.Node {
 // quoteStatusControl = kontrol ganti status manual (approval flow ditunda). Native
 // POST; backend memvalidasi terhadap allowlist skema.
 func quoteStatusControl(v QuoteDetailView, quoteBase string) g.Node {
-	opts := make([]g.Node, 0, len(v.Statuses))
-	for _, s := range v.Statuses {
-		attrs := []g.Node{h.Value(s)}
-		if s == v.Status {
-			attrs = append(attrs, h.Selected())
-		}
-		opts = append(opts, h.Option(append(attrs, g.Text(s))...))
-	}
+	opts := selectedOptions(v.Statuses, v.Status)
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
 		h.Div(

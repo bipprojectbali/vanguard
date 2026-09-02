@@ -198,37 +198,37 @@ func accountsSearch(v AccountsListView) g.Node {
 
 // emptyAccounts = pesan kosong jujur. Halaman pertama benar-benar kosong vs
 // halaman kedua yang kosong (setelah cursor) dibedakan: yang kedua menawarkan
-// jalan kembali alih-alih "belum ada desa" yang berbohong.
+// jalan kembali alih-alih "belum ada desa" yang berbohong. reset selalu menuju
+// halaman pertama view aktif (tanpa pencarian).
 func emptyAccounts(v AccountsListView) g.Node {
+	reset := accountsListHref(v.Base, v.ActiveView, "")
 	if v.Query != "" {
 		// Pencarian tak berhasil: bukan "belum ada desa" (yang berbohong), tapi
 		// "tak ada yang cocok" + jalan keluar menghapus pencarian.
-		return h.Div(
-			h.Class("card bg-base-100 border border-base-300"),
-			h.Div(h.Class("card-body items-start"),
-				h.P(h.Class("text-base-content/70"),
-					g.Text("Tak ada desa yang cocok dengan pencarian Anda.")),
-				h.A(h.Href(accountsListHref(v.Base, v.ActiveView, "")), h.Class("btn btn-ghost btn-sm min-h-11"),
-					g.Text("« Hapus pencarian")),
-			),
-		)
+		return emptyAccountsCard("Tak ada desa yang cocok dengan pencarian Anda.",
+			reset, "« Hapus pencarian")
 	}
 	if v.NextCursor == "" {
 		// Bisa halaman-setelah-cursor yang kebetulan habis: tawarkan kembali.
-		return h.Div(
-			h.Class("card bg-base-100 border border-base-300"),
-			h.Div(h.Class("card-body items-start"),
-				h.P(h.Class("text-base-content/70"),
-					g.Text("Belum ada desa yang cocok. Tambah desa untuk memulai.")),
-				h.A(h.Href(accountsListHref(v.Base, v.ActiveView, "")), h.Class("btn btn-ghost btn-sm min-h-11"),
-					g.Text("« Kembali ke awal")),
-			),
-		)
+		return emptyAccountsCard("Belum ada desa yang cocok. Tambah desa untuk memulai.",
+			reset, "« Kembali ke awal")
 	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300"),
 		h.Div(h.Class("card-body"),
 			h.P(h.Class("text-base-content/70"), g.Text("Belum ada desa."))),
+	)
+}
+
+// emptyAccountsCard = kartu kosong bermuatan pesan + tautan balik (varian
+// tersaring/habis-cursor). backHref dirakit pemanggil (selalu ke halaman pertama).
+func emptyAccountsCard(msg, backHref, backLabel string) g.Node {
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300"),
+		h.Div(h.Class("card-body items-start"),
+			h.P(h.Class("text-base-content/70"), g.Text(msg)),
+			h.A(h.Href(backHref), h.Class("btn btn-ghost btn-sm min-h-11"), g.Text(backLabel)),
+		),
 	)
 }
 
