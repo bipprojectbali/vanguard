@@ -62,7 +62,22 @@ func (h *Handler) CustomerSuccessSave(w http.ResponseWriter, r *http.Request) {
 	// murni di applyCustomerSuccessMasking (customer_success_mask.go) agar bisa
 	// diuji langsung tanpa HTTP.
 	writeHealth := canWriteCSHealth(ctx)
-	form = applyCustomerSuccessMasking(form, existing, writeHealth, canWriteCSJourney(ctx), canWriteCSAdoption(ctx))
+	writeJourney := canWriteCSJourney(ctx)
+	form = applyCustomerSuccessMasking(form, existing, writeHealth, writeJourney, canWriteCSAdoption(ctx))
+
+	// BL-26: normalisasi & keselarasan onboarding ↔ lifecycle HANYA saat section
+	// Journey berhak ditulis aktor (F2) — bila di-mask ke nilai lama, jangan
+	// galat palsu atau normalisasi paksa nilai yang bukan milik aksi ini.
+	if writeJourney {
+		// (c) progress terminal mengikuti status: Not Started→0, Completed→100
+		// (field tersembunyi di UI tetap bisa kirim nilai basi — tegakkan di sini).
+		form.OnboardingProgress = normalizeOnboardingProgress(form.OnboardingStatus, form.OnboardingProgress)
+		// guard K1/K3 (kontradiksi mustahil) → tolak simpan, PRG ?err= (gotcha #16).
+		if code, ok := checkOnboardingLifecycleConsistency(form); !ok {
+			wsRedirect(w, r, accountPath+"/customer-success/edit", code)
+			return
+		}
+	}
 
 	// overall_health_score DIHITUNG, bukan dari form (tak ada field submit-nya):
 	// rata-rata komponen non-NULL, dibulatkan. health_last_calculated hanya maju

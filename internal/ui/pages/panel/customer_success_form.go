@@ -4,8 +4,23 @@ import (
 	"go_starter/internal/ui"
 
 	g "maragu.dev/gomponents"
+	data "maragu.dev/gomponents-datastar"
 	h "maragu.dev/gomponents/html"
 )
+
+// Status onboarding yang menampilkan field "Progres Onboarding" (BL-26 (c)):
+// hanya "In Progress"/"Stalled" yang progresnya bermakna sebagai input operator
+// (Not Started→0 & Completed→100 dinormalkan backend, tak perlu diketik). Cermin
+// nilai enum di customer_success_helpers.go; dipakai membangun ekspresi data-show.
+const (
+	onbInProgress = "In Progress"
+	onbStalled    = "Stalled"
+)
+
+// Ekspresi data-show field progres: tampil saat status onboarding "In Progress"
+// ATAU "Stalled". Dirakit dari const enum (bukan literal terpisah) agar satu
+// perubahan nilai enum tak menyisakan ekspresi klien basi.
+const onboardingProgressShowExpr = "$onbstatus == '" + onbInProgress + "' || $onbstatus == '" + onbStalled + "'"
 
 // customer_success_form.go — form sunting Customer Success (satu baris, tiga
 // section F2). Form NATIVE POST → 303 (gotcha #16). Validasi sesungguhnya di
@@ -50,6 +65,10 @@ type CustomerSuccessFormView struct {
 	Action      string
 	Err         string
 	Fields      CustomerSuccessFormFields
+	// Warnings = peringatan keselarasan onboarding↔lifecycle LUNAK (BL-26 K2/K4),
+	// sudah dihitung & di-gate F2-tulis Journey di handler (view murni-data);
+	// dirender banner alert-warning di atas form. Kosong = tak ada banner.
+	Warnings []string
 
 	CanWriteHealth   bool
 	CanWriteJourney  bool
@@ -83,6 +102,7 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "cs-form-err", g.Text(v.Err)))
 	}
+	body = append(body, onboardingWarningBanners(v.Warnings, "cs-form-warn"))
 
 	fields := []g.Node{
 		ui.When(v.CanWriteHealth, formCard("Health Score",
@@ -96,11 +116,17 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 		ui.When(v.CanWriteJourney, formCard("Journey & Onboarding",
 			selectField("Tahap Siklus Hidup", "lifecycle_stage", v.Fields.LifecycleStage, v.LifecycleStages, false),
 			field("Sejak Tanggal", "stage_entry_date", v.Fields.StageEntryDate, false, "date"),
-			selectField("Status Onboarding", "onboarding_status", v.Fields.OnboardingStatus, v.OnboardingStatuses, false),
+			onboardingStatusSelect(v.Fields.OnboardingStatus, v.OnboardingStatuses),
 			field("Tanggal Kickoff", "kickoff_date", v.Fields.KickoffDate, false, "date"),
 			field("Target Go-Live", "target_go_live_date", v.Fields.TargetGoLiveDate, false, "date"),
 			field("Go-Live Aktual", "actual_go_live_date", v.Fields.ActualGoLiveDate, false, "date"),
-			field("Progres Onboarding (0–100)", "onboarding_progress", v.Fields.OnboardingProgress, false, "number"),
+			// Progres onboarding HANYA saat status "In Progress"/"Stalled" (BL-26
+			// (c)): terminal (Not Started→0, Completed→100) dinormalkan backend, jadi
+			// ketikan operator tak relevan → sembunyikan agar tak menyesatkan.
+			// data-show = jaring UX klien; backend (normalizeOnboardingProgress)
+			// tetap penegak sesungguhnya walau field basi terkirim.
+			showWhen(onboardingProgressShowExpr, "min-w-0",
+				field("Progres Onboarding (0–100)", "onboarding_progress", v.Fields.OnboardingProgress, false, "number")),
 		)),
 		ui.When(v.CanWriteAdoption, formCard("Product Adoption",
 			field("Login Terakhir", "last_login_date", v.Fields.LastLoginDate, false, "date"),
@@ -113,9 +139,13 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 		)),
 	}
 
+	// Signal $onbstatus menggerakkan tampil/sembunyi field progres (data-show di
+	// onboardingStatusSelect + showWhen). Diinisialisasi dari nilai TERSIMPAN agar
+	// no-FOUC saat prefill. Ephemeral (state form), bukan data dikirim ke server.
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),
 		h.Class("grid gap-4 min-w-0"),
+		data.Signals(map[string]any{"onbstatus": v.Fields.OnboardingStatus}),
 		g.Group(fields),
 		h.Div(
 			h.Class("flex flex-wrap items-center gap-2"),
@@ -160,6 +190,25 @@ func scoreTrendReadOnly(label, badge string) g.Node {
 		),
 		h.P(h.Class("text-xs text-base-content/60"),
 			g.Text("Otomatis dari perubahan skor kesehatan — tak dapat disetel manual.")),
+	)
+}
+
+// onboardingStatusSelect — dropdown "Status Onboarding" yang di-bind ke signal
+// $onbstatus (data.Bind) sehingga memilih nilai men-toggle field "Progres
+// Onboarding" tanpa round-trip (BL-26 (c)). Selain binding, identik selectField
+// opsional (opsi kosong "—" di depan). Dibuat manual karena selectField tak
+// menyuntikkan atribut Datastar; enumOptions dipakai ulang agar markup opsi tak
+// bercabang jadi dua kebenaran.
+func onboardingStatusSelect(current string, opts []string) g.Node {
+	sel := []g.Node{
+		h.ID("f-onboarding_status"), h.Name("onboarding_status"),
+		data.Bind("onbstatus"),
+		h.Class("select text-base w-full"),
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor("Status Onboarding", "f-onboarding_status", false),
+		h.Select(append(sel, g.Group(enumOptions(current, opts, true)))...),
 	)
 }
 
