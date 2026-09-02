@@ -45,6 +45,11 @@ func computeOverallHealthScore(adoption, engagement, support, sentiment *int16) 
 const (
 	healthHealthyMin = 80 // skor ≥ ini → Healthy
 	healthAtRiskMin  = 40 // skor ≥ ini (dan < healthHealthyMin) → At-Risk; di bawah → Critical
+
+	// Dead-band tren skor (BL-25): |delta| ≤ ini → "Stable". Ambang bisnis (rule
+	// §15, keputusan v1 = 3 poin) — perubahan lebih kecil dianggap noise, bukan
+	// arah. delta > +T → Improving, delta < −T → Declining, selain itu Stable.
+	healthTrendDeadband = 3
 )
 
 // deriveHealthStatus memetakan overall_health_score → status kesehatan
@@ -65,6 +70,29 @@ func deriveHealthStatus(overall *int16) *string {
 		s = "At-Risk"
 	default:
 		s = "Critical"
+	}
+	return &s
+}
+
+// deriveScoreTrend menurunkan arah pergerakan skor kesehatan dari skor LAMA ke
+// skor SEKARANG (BL-25): tren kini turunan riwayat skor, bukan pilihan manual
+// operator — satu sumber kebenaran. prev/curr nil (belum ada pembanding: snapshot
+// pertama atau semua komponen kosong) → nil ("—", belum ada dasar), JANGAN
+// default "Stable". deadband = ambang |delta| di bawah mana dianggap Stable.
+// Nilai kembali tetap dalam 3-set enum sah (cs_score_trend_chk), jadi tanpa DDL.
+func deriveScoreTrend(prev, curr *int16, deadband int) *string {
+	if prev == nil || curr == nil {
+		return nil
+	}
+	delta := int(*curr) - int(*prev)
+	var s string
+	switch {
+	case delta > deadband:
+		s = "Improving"
+	case delta < -deadband:
+		s = "Declining"
+	default:
+		s = "Stable"
 	}
 	return &s
 }
@@ -142,7 +170,6 @@ func customerSuccessFormFields(cs db.CustomerSuccess) panel.CustomerSuccessFormF
 		EngagementScore: probabilityStr(cs.EngagementScore),
 		SupportScore:    probabilityStr(cs.SupportScore),
 		SentimentScore:  probabilityStr(cs.SentimentScore),
-		ScoreTrend:      deref(cs.ScoreTrend),
 
 		LifecycleStage: deref(cs.LifecycleStage),
 		StageEntryDate: dateStr(cs.StageEntryDate),

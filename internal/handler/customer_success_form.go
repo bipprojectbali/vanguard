@@ -40,12 +40,8 @@ func parseCustomerSuccessForm(fv func(string) string) (customerSuccessForm, stri
 		return customerSuccessForm{}, code
 	}
 	f.SentimentScore = sentiment
-	if s := strings.TrimSpace(fv("score_trend")); s != "" {
-		if _, ok := validScoreTrends[s]; !ok {
-			return customerSuccessForm{}, "score_trend"
-		}
-		f.ScoreTrend = &s
-	}
+	// score_trend TAK diparse (BL-25): kini turunan riwayat skor (deriveScoreTrend,
+	// customer_success_save.go), bukan input operator — nilai form apa pun diabaikan.
 
 	if s := strings.TrimSpace(fv("lifecycle_stage")); s != "" {
 		if _, ok := validLifecycleStages[s]; !ok {

@@ -74,9 +74,25 @@ func (h *Handler) CustomerSuccessSave(w http.ResponseWriter, r *http.Request) {
 	// overallScore sudah dihitung dari komponen yang TER-MASK ke nilai lama saat
 	// section Health tak berhak ditulis, status ikut nilai lama tanpa special-case.
 	form.HealthStatus = deriveHealthStatus(overallScore)
+
+	// score_trend TURUNAN riwayat skor (BL-25): saat section Health ditulis kali
+	// ini, geser overall_health_score LAMA → previous_* SEBELUM menyimpan nilai
+	// baru, lalu deriveScoreTrend(previous, sekarang) mengisi arah (Improving/
+	// Stable/Declining, dead-band healthTrendDeadband). Bila Health TAK ditulis
+	// (di-mask ke nilai lama) pertahankan trend & previous_* existing — tak ada
+	// perubahan skor untuk dibandingkan. Manual dari form DIABAIKAN (tak lagi
+	// diparse; badge read-only, pola BL-24 untuk health_status). Snapshot pertama
+	// (existing.OverallHealthScore NULL) → trend NULL ("—", belum ada dasar).
 	healthLastCalculated := existing.HealthLastCalculated
+	previousScore := existing.PreviousHealthScore
+	previousCalculatedAt := existing.PreviousHealthCalculatedAt
 	if writeHealth {
+		form.ScoreTrend = deriveScoreTrend(existing.OverallHealthScore, overallScore, healthTrendDeadband)
+		previousScore = existing.OverallHealthScore
+		previousCalculatedAt = existing.HealthLastCalculated
 		healthLastCalculated = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
+	} else {
+		form.ScoreTrend = existing.ScoreTrend
 	}
 
 	uid := session.UserID(ctx)
@@ -84,30 +100,32 @@ func (h *Handler) CustomerSuccessSave(w http.ResponseWriter, r *http.Request) {
 	okCode := "saved"
 	if !exists {
 		if _, err := h.q(ctx).CreateCustomerSuccess(ctx, db.CreateCustomerSuccessParams{
-			TenantID:             tenantID,
-			AccountID:            accountID,
-			OverallHealthScore:   overallScore,
-			HealthStatus:         form.HealthStatus,
-			AdoptionScore:        form.AdoptionScore,
-			EngagementScore:      form.EngagementScore,
-			SupportScore:         form.SupportScore,
-			SentimentScore:       form.SentimentScore,
-			ScoreTrend:           form.ScoreTrend,
-			HealthLastCalculated: healthLastCalculated,
-			LifecycleStage:       form.LifecycleStage,
-			StageEntryDate:       form.StageEntryDate,
-			OnboardingStatus:     form.OnboardingStatus,
-			KickoffDate:          form.KickoffDate,
-			TargetGoLiveDate:     form.TargetGoLiveDate,
-			ActualGoLiveDate:     form.ActualGoLiveDate,
-			OnboardingProgress:   form.OnboardingProgress,
-			LastLoginDate:        form.LastLoginDate,
-			ActiveUsers:          form.ActiveUsers,
-			LoginFrequency:       form.LoginFrequency,
-			FeatureAdoptionRate:  form.FeatureAdoptionRate,
-			KeyFeaturesUsed:      form.KeyFeaturesUsed,
-			UsageTrend:           form.UsageTrend,
-			CreatedBy:            &uid,
+			TenantID:                   tenantID,
+			AccountID:                  accountID,
+			OverallHealthScore:         overallScore,
+			HealthStatus:               form.HealthStatus,
+			AdoptionScore:              form.AdoptionScore,
+			EngagementScore:            form.EngagementScore,
+			SupportScore:               form.SupportScore,
+			SentimentScore:             form.SentimentScore,
+			ScoreTrend:                 form.ScoreTrend,
+			HealthLastCalculated:       healthLastCalculated,
+			PreviousHealthScore:        previousScore,
+			PreviousHealthCalculatedAt: previousCalculatedAt,
+			LifecycleStage:             form.LifecycleStage,
+			StageEntryDate:             form.StageEntryDate,
+			OnboardingStatus:           form.OnboardingStatus,
+			KickoffDate:                form.KickoffDate,
+			TargetGoLiveDate:           form.TargetGoLiveDate,
+			ActualGoLiveDate:           form.ActualGoLiveDate,
+			OnboardingProgress:         form.OnboardingProgress,
+			LastLoginDate:              form.LastLoginDate,
+			ActiveUsers:                form.ActiveUsers,
+			LoginFrequency:             form.LoginFrequency,
+			FeatureAdoptionRate:        form.FeatureAdoptionRate,
+			KeyFeaturesUsed:            form.KeyFeaturesUsed,
+			UsageTrend:                 form.UsageTrend,
+			CreatedBy:                  &uid,
 		}); err != nil {
 			h.Log.Error("customer_success: create", "err", err)
 			wsRedirect(w, r, accountPath+"/customer-success/edit", "failed")
@@ -116,29 +134,31 @@ func (h *Handler) CustomerSuccessSave(w http.ResponseWriter, r *http.Request) {
 		okCode = "created"
 	} else {
 		if _, err := h.q(ctx).UpdateCustomerSuccess(ctx, db.UpdateCustomerSuccessParams{
-			OverallHealthScore:   overallScore,
-			HealthStatus:         form.HealthStatus,
-			AdoptionScore:        form.AdoptionScore,
-			EngagementScore:      form.EngagementScore,
-			SupportScore:         form.SupportScore,
-			SentimentScore:       form.SentimentScore,
-			ScoreTrend:           form.ScoreTrend,
-			HealthLastCalculated: healthLastCalculated,
-			LifecycleStage:       form.LifecycleStage,
-			StageEntryDate:       form.StageEntryDate,
-			OnboardingStatus:     form.OnboardingStatus,
-			KickoffDate:          form.KickoffDate,
-			TargetGoLiveDate:     form.TargetGoLiveDate,
-			ActualGoLiveDate:     form.ActualGoLiveDate,
-			OnboardingProgress:   form.OnboardingProgress,
-			LastLoginDate:        form.LastLoginDate,
-			ActiveUsers:          form.ActiveUsers,
-			LoginFrequency:       form.LoginFrequency,
-			FeatureAdoptionRate:  form.FeatureAdoptionRate,
-			KeyFeaturesUsed:      form.KeyFeaturesUsed,
-			UsageTrend:           form.UsageTrend,
-			UpdatedBy:            &uid,
-			AccountID:            accountID,
+			OverallHealthScore:         overallScore,
+			HealthStatus:               form.HealthStatus,
+			AdoptionScore:              form.AdoptionScore,
+			EngagementScore:            form.EngagementScore,
+			SupportScore:               form.SupportScore,
+			SentimentScore:             form.SentimentScore,
+			ScoreTrend:                 form.ScoreTrend,
+			HealthLastCalculated:       healthLastCalculated,
+			PreviousHealthScore:        previousScore,
+			PreviousHealthCalculatedAt: previousCalculatedAt,
+			LifecycleStage:             form.LifecycleStage,
+			StageEntryDate:             form.StageEntryDate,
+			OnboardingStatus:           form.OnboardingStatus,
+			KickoffDate:                form.KickoffDate,
+			TargetGoLiveDate:           form.TargetGoLiveDate,
+			ActualGoLiveDate:           form.ActualGoLiveDate,
+			OnboardingProgress:         form.OnboardingProgress,
+			LastLoginDate:              form.LastLoginDate,
+			ActiveUsers:                form.ActiveUsers,
+			LoginFrequency:             form.LoginFrequency,
+			FeatureAdoptionRate:        form.FeatureAdoptionRate,
+			KeyFeaturesUsed:            form.KeyFeaturesUsed,
+			UsageTrend:                 form.UsageTrend,
+			UpdatedBy:                  &uid,
+			AccountID:                  accountID,
 		}); err != nil {
 			h.Log.Error("customer_success: update", "err", err)
 			wsRedirect(w, r, accountPath+"/customer-success/edit", "failed")

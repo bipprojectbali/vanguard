@@ -13,13 +13,11 @@ import (
 
 // Nilai enum sah — CERMIN persis CHECK constraint migrasi 00019. Urutan untuk
 // dropdown di slice terpisah (map tak berurutan) + cek sinkron compile-time.
-// validHealthStatuses DIHAPUS (BL-24): health_status tak lagi diparse dari
-// form — status turunan overall_health_score (deriveHealthStatus). Nilai sah
-// tetap ditegakkan CHECK cs_health_status_chk (migrasi 00019) di DB.
+// validHealthStatuses DIHAPUS (BL-24): health_status turunan overall_health_score
+// (deriveHealthStatus). validScoreTrends DIHAPUS (BL-25): score_trend turunan
+// riwayat skor (deriveScoreTrend) — keduanya tak lagi diparse dari form; nilai
+// sah tetap ditegakkan CHECK cs_health_status_chk / cs_score_trend_chk (00019).
 var (
-	validScoreTrends = map[string]struct{}{
-		"Improving": {}, "Stable": {}, "Declining": {},
-	}
 	validLifecycleStages = map[string]struct{}{
 		"Onboarding": {}, "Adoption": {}, "Retention": {}, "Renewal": {}, "Advocacy": {},
 	}
@@ -34,9 +32,9 @@ var (
 	}
 )
 
-// healthStatusOptions DIHAPUS (BL-24): dropdown status diganti badge read-only.
+// healthStatusOptions DIHAPUS (BL-24) & scoreTrendOptions DIHAPUS (BL-25):
+// kedua dropdown diganti badge read-only (nilai turunan, bukan input operator).
 var (
-	scoreTrendOptions       = []string{"Improving", "Stable", "Declining"}
 	lifecycleStageOptions   = []string{"Onboarding", "Adoption", "Retention", "Renewal", "Advocacy"}
 	onboardingStatusOptions = []string{"Not Started", "In Progress", "Completed", "Stalled"}
 	loginFrequencyOptions   = []string{"Daily", "Weekly", "Monthly", "Rarely", "Inactive"}
@@ -46,8 +44,7 @@ var (
 // compile-time: pastikan opsi & map validasi sepakat (panjang sama). Berbeda =
 // dropdown menawarkan nilai yang ditolak backend, atau sebaliknya.
 var _ = func() struct{} {
-	if len(scoreTrendOptions) != len(validScoreTrends) ||
-		len(lifecycleStageOptions) != len(validLifecycleStages) ||
+	if len(lifecycleStageOptions) != len(validLifecycleStages) ||
 		len(onboardingStatusOptions) != len(validOnboardingStatuses) ||
 		len(loginFrequencyOptions) != len(validLoginFrequencies) ||
 		len(usageTrendOptions) != len(validUsageTrends) {
@@ -110,8 +107,6 @@ func customerSuccessErrMsg(code string) string {
 	switch code {
 	case "score":
 		return "Skor harus bilangan bulat 0–100."
-	case "score_trend":
-		return "Tren skor harus salah satu: Improving, Stable, atau Declining."
 	case "lifecycle_stage":
 		return "Tahap siklus hidup tidak dikenal."
 	case "onboarding_status":
