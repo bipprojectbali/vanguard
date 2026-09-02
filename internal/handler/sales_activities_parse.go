@@ -1,15 +1,14 @@
 package handler
 
 import (
-	"strconv"
 	"strings"
 )
 
 // sales_activities_parse.go — parsing & validasi form aktivitas sales
-// (parseActivityForm) beserta helper leaf-nya (parseActivityTarget,
-// optActivityInt64, optDuration). Dipisah dari sales_activities_form.go (enum
-// sah + tipe activityForm) agar keduanya di bawah ambang tipe Route/Handler
-// (150). Satu paket: enum tetap SATU sumber, parser membacanya.
+// (parseActivityForm). Helper leaf-nya (parseActivityTarget, optActivityInt64,
+// optDuration) di sales_activities_parse_leaf.go; enum sah + tipe activityForm di
+// sales_activities_form.go — semua satu paket agar di bawah ambang tipe
+// Route/Handler (150). Enum tetap SATU sumber, parser membacanya.
 // parseActivityForm membaca & memvalidasi form untuk sebuah kind. (form, "") bila
 // sah, atau (zero, kode) yang dipetakan wsErrMsg. Cabang per-kind hanya mengisi
 // kolom yang relevan — sisanya tetap NULL. subject wajib untuk semua kind.
@@ -126,52 +125,4 @@ func parseActivityForm(fv func(string) string, kind string) (activityForm, strin
 	}
 
 	return f, ""
-}
-
-// parseActivityTarget mengurai nilai picker target "type:id" (mis. "deal:123").
-// Bentuk & enum type divalidasi di sini; KEBERADAAN & cakupan baris diverifikasi
-// handler (targetInScope) — nilai user-controlled, backend penjaga sesungguhnya.
-func parseActivityTarget(s string) (targetType string, id int64, ok bool) {
-	t, idStr, found := strings.Cut(strings.TrimSpace(s), ":")
-	if !found {
-		return "", 0, false
-	}
-	if _, valid := validActivityTargetTypes[t]; !valid {
-		return "", 0, false
-	}
-	n, err := strconv.ParseInt(strings.TrimSpace(idStr), 10, 64)
-	if err != nil || n <= 0 {
-		return "", 0, false
-	}
-	return t, n, true
-}
-
-// optActivityInt64 mengurai id referensi opsional (contact_id pada Call): kosong →
-// (nil, ""); terisi wajib bilangan bulat positif → (&v, ""); else (nil,
-// "activity_contact"). Keberadaan baris tak dicek di sini (ON DELETE SET NULL).
-func optActivityInt64(s string) (*int64, string) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil, ""
-	}
-	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil || n <= 0 {
-		return nil, "activity_contact"
-	}
-	return &n, ""
-}
-
-// optDuration mengurai durasi menit opsional (Call): kosong → (nil, ""); terisi
-// wajib bilangan bulat ≥ 0 → (&v, ""); else (nil, "activity_duration").
-func optDuration(s string) (*int32, string) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil, ""
-	}
-	n, err := strconv.ParseInt(s, 10, 32)
-	if err != nil || n < 0 {
-		return nil, "activity_duration"
-	}
-	v := int32(n)
-	return &v, ""
 }
