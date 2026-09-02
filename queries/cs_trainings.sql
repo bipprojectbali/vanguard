@@ -33,15 +33,20 @@ LEFT JOIN users u ON tr.trainer_id = u.id
 WHERE tr.id = sqlc.arg(id);
 
 -- name: UpdateCSTrainingStatus :one
--- Ubah status training + attendance (diisi setelah status = completed) +
--- participants (jumlah peserta aktual).
+-- Ubah status training. Field hasil (attendance/participants/notes) &
+-- training_date (jadwal ulang) OPSIONAL: COALESCE(narg, kolom) menjaga nilai
+-- lama saat form tak mengirim (BL-28 #1 — tombol status polos, mis. "Batal"/
+-- "Buka Ulang", TAK boleh menimpa peserta/attendance jadi NULL). Kirim
+-- non-NULL hanya bila operator memang mengisi (panel "Selesai"/"Jadwal Ulang").
 UPDATE cs_trainings
 SET
     training_status = sqlc.arg(training_status),
-    attendance       = sqlc.narg(attendance),
-    participants      = sqlc.narg(participants),
-    updated_by        = sqlc.narg(updated_by),
-    updated_at         = now()
+    attendance      = COALESCE(sqlc.narg(attendance), attendance),
+    participants    = COALESCE(sqlc.narg(participants), participants),
+    training_date   = COALESCE(sqlc.narg(training_date), training_date),
+    notes           = COALESCE(sqlc.narg(notes), notes),
+    updated_by      = sqlc.narg(updated_by),
+    updated_at      = now()
 WHERE id = sqlc.arg(id)
 RETURNING *;
 
@@ -58,7 +63,7 @@ RETURNING *;
 SELECT
     tr.id, tr.account_id, tr.training_topic,
     tr.training_date, tr.trainer_id, tr.participants,
-    tr.training_status, tr.attendance,
+    tr.training_status, tr.attendance, tr.notes,
     tr.created_at, tr.updated_at,
     a.village_name AS account_name,
     u.name AS trainer_name

@@ -98,24 +98,54 @@ func parseCSTrainingForm(fv func(string) string) (csTrainingForm, string) {
 	return f, ""
 }
 
-// parseCSTrainingStatusForm mengurai form mini status-update (dari baris
-// tabel). status wajib; attendance & participants opsional (kosong →
-// dikosongkan). attendance memakai optNumeric (pola FeatureAdoptionRate,
-// customer_success_helpers.go).
-func parseCSTrainingStatusForm(fv func(string) string) (status string, attendance pgtype.Numeric, participants *int32, errCode string) {
-	status = fv("status")
+// csTrainingStatusForm = data terurai dari form aksi status per-baris.
+// Semua field hasil OPSIONAL (kosong → nil/invalid → query COALESCE menjaga
+// nilai lama, BL-28 #1). TrainingDate hanya relevan untuk "Jadwal Ulang".
+type csTrainingStatusForm struct {
+	Status       string
+	Attendance   pgtype.Numeric
+	Participants *int32
+	TrainingDate pgtype.Timestamptz
+	Notes        *string
+}
+
+// parseCSTrainingStatusForm mengurai form aksi status per-baris. status wajib
+// & sahih; attendance/participants/notes/training_date opsional. attendance
+// memakai optNumeric (pola FeatureAdoptionRate) lalu divalidasi rentang 0–100.
+// training_date WAJIB bila status = rescheduled (inti "jadwal ulang" = tanggal
+// baru; tanpa itu aksi jadi no-op, BL-28 #2). Field kosong sengaja TAK menimpa
+// nilai lama — penjagaan sesungguhnya di query (COALESCE).
+func parseCSTrainingStatusForm(fv func(string) string) (csTrainingStatusForm, string) {
+	status := fv("status")
 	if !isValidEnum(status, csTrainingStatusValues) {
-		return "", pgtype.Numeric{}, nil, "status"
+		return csTrainingStatusForm{}, "status"
 	}
 	att, code := optNumeric(fv("attendance"), "attendance")
 	if code != "" {
-		return "", pgtype.Numeric{}, nil, code
+		return csTrainingStatusForm{}, code
 	}
+	if att.Valid {
+		if f8, err := att.Float64Value(); err == nil && (f8.Float64 < 0 || f8.Float64 > 100) {
+			return csTrainingStatusForm{}, "attendance"
+		}
+	}
+	f := csTrainingStatusForm{Status: status, Attendance: att}
 	if s := fv("participants"); s != "" {
 		if n, err := strconv.ParseInt(s, 10, 32); err == nil && n >= 0 {
 			p := int32(n)
-			participants = &p
+			f.Participants = &p
 		}
 	}
-	return status, att, participants, ""
+	td, code := optDateTime(fv("training_date"))
+	if code != "" {
+		return csTrainingStatusForm{}, "datetime"
+	}
+	if status == "rescheduled" && !td.Valid {
+		return csTrainingStatusForm{}, "required"
+	}
+	f.TrainingDate = td
+	if s := strings.TrimSpace(fv("notes")); s != "" {
+		f.Notes = &s
+	}
+	return f, ""
 }

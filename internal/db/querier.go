@@ -1167,8 +1167,11 @@ type Querier interface {
 	// milik CS yang disentuh; field inti langganan (status, MRR, dsb.) tidak berubah.
 	// Handler menegakkan F3 (loadCSRenewal) sebelum memanggil query ini.
 	UpdateCSRenewalAction(ctx context.Context, arg UpdateCSRenewalActionParams) (UpdateCSRenewalActionRow, error)
-	// Ubah status training + attendance (diisi setelah status = completed) +
-	// participants (jumlah peserta aktual).
+	// Ubah status training. Field hasil (attendance/participants/notes) &
+	// training_date (jadwal ulang) OPSIONAL: COALESCE(narg, kolom) menjaga nilai
+	// lama saat form tak mengirim (BL-28 #1 — tombol status polos, mis. "Batal"/
+	// "Buka Ulang", TAK boleh menimpa peserta/attendance jadi NULL). Kirim
+	// non-NULL hanya bila operator memang mengisi (panel "Selesai"/"Jadwal Ulang").
 	UpdateCSTrainingStatus(ctx context.Context, arg UpdateCSTrainingStatusParams) (CsTraining, error)
 	// Sunting kontak. is_primary_contact di-set pemanggil setelah mengosongkan primary
 	// lama (ClearAccountPrimaryContact) bila dinaikkan jadi utama. account_id TIDAK

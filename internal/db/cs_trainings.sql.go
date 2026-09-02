@@ -72,7 +72,7 @@ INSERT INTO cs_trainings (
     $5, $6, $7,
     $8
 )
-RETURNING id, tenant_id, account_id, training_topic, training_date, trainer_id, participants, training_status, attendance, created_by, created_at, updated_by, updated_at
+RETURNING id, tenant_id, account_id, training_topic, training_date, trainer_id, participants, training_status, attendance, created_by, created_at, updated_by, updated_at, notes
 `
 
 type CreateCSTrainingParams struct {
@@ -120,12 +120,13 @@ func (q *Queries) CreateCSTraining(ctx context.Context, arg CreateCSTrainingPara
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.Notes,
 	)
 	return i, err
 }
 
 const getCSTraining = `-- name: GetCSTraining :one
-SELECT tr.id, tr.tenant_id, tr.account_id, tr.training_topic, tr.training_date, tr.trainer_id, tr.participants, tr.training_status, tr.attendance, tr.created_by, tr.created_at, tr.updated_by, tr.updated_at, a.village_name AS account_name,
+SELECT tr.id, tr.tenant_id, tr.account_id, tr.training_topic, tr.training_date, tr.trainer_id, tr.participants, tr.training_status, tr.attendance, tr.created_by, tr.created_at, tr.updated_by, tr.updated_at, tr.notes, a.village_name AS account_name,
        u.name AS trainer_name
 FROM cs_trainings tr
 JOIN accounts a ON tr.account_id = a.id
@@ -147,6 +148,7 @@ type GetCSTrainingRow struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedBy      *int64             `json:"updated_by"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	Notes          *string            `json:"notes"`
 	AccountName    string             `json:"account_name"`
 	TrainerName    *string            `json:"trainer_name"`
 }
@@ -171,6 +173,7 @@ func (q *Queries) GetCSTraining(ctx context.Context, id int64) (GetCSTrainingRow
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.Notes,
 		&i.AccountName,
 		&i.TrainerName,
 	)
@@ -181,7 +184,7 @@ const listCSTrainings = `-- name: ListCSTrainings :many
 SELECT
     tr.id, tr.account_id, tr.training_topic,
     tr.training_date, tr.trainer_id, tr.participants,
-    tr.training_status, tr.attendance,
+    tr.training_status, tr.attendance, tr.notes,
     tr.created_at, tr.updated_at,
     a.village_name AS account_name,
     u.name AS trainer_name
@@ -225,6 +228,7 @@ type ListCSTrainingsRow struct {
 	Participants   *int32             `json:"participants"`
 	TrainingStatus string             `json:"training_status"`
 	Attendance     pgtype.Numeric     `json:"attendance"`
+	Notes          *string            `json:"notes"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	AccountName    string             `json:"account_name"`
@@ -269,6 +273,7 @@ func (q *Queries) ListCSTrainings(ctx context.Context, arg ListCSTrainingsParams
 			&i.Participants,
 			&i.TrainingStatus,
 			&i.Attendance,
+			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AccountName,
@@ -288,29 +293,38 @@ const updateCSTrainingStatus = `-- name: UpdateCSTrainingStatus :one
 UPDATE cs_trainings
 SET
     training_status = $1,
-    attendance       = $2,
-    participants      = $3,
-    updated_by        = $4,
-    updated_at         = now()
-WHERE id = $5
-RETURNING id, tenant_id, account_id, training_topic, training_date, trainer_id, participants, training_status, attendance, created_by, created_at, updated_by, updated_at
+    attendance      = COALESCE($2, attendance),
+    participants    = COALESCE($3, participants),
+    training_date   = COALESCE($4, training_date),
+    notes           = COALESCE($5, notes),
+    updated_by      = $6,
+    updated_at      = now()
+WHERE id = $7
+RETURNING id, tenant_id, account_id, training_topic, training_date, trainer_id, participants, training_status, attendance, created_by, created_at, updated_by, updated_at, notes
 `
 
 type UpdateCSTrainingStatusParams struct {
-	TrainingStatus string         `json:"training_status"`
-	Attendance     pgtype.Numeric `json:"attendance"`
-	Participants   *int32         `json:"participants"`
-	UpdatedBy      *int64         `json:"updated_by"`
-	ID             int64          `json:"id"`
+	TrainingStatus string             `json:"training_status"`
+	Attendance     pgtype.Numeric     `json:"attendance"`
+	Participants   *int32             `json:"participants"`
+	TrainingDate   pgtype.Timestamptz `json:"training_date"`
+	Notes          *string            `json:"notes"`
+	UpdatedBy      *int64             `json:"updated_by"`
+	ID             int64              `json:"id"`
 }
 
-// Ubah status training + attendance (diisi setelah status = completed) +
-// participants (jumlah peserta aktual).
+// Ubah status training. Field hasil (attendance/participants/notes) &
+// training_date (jadwal ulang) OPSIONAL: COALESCE(narg, kolom) menjaga nilai
+// lama saat form tak mengirim (BL-28 #1 — tombol status polos, mis. "Batal"/
+// "Buka Ulang", TAK boleh menimpa peserta/attendance jadi NULL). Kirim
+// non-NULL hanya bila operator memang mengisi (panel "Selesai"/"Jadwal Ulang").
 func (q *Queries) UpdateCSTrainingStatus(ctx context.Context, arg UpdateCSTrainingStatusParams) (CsTraining, error) {
 	row := q.db.QueryRow(ctx, updateCSTrainingStatus,
 		arg.TrainingStatus,
 		arg.Attendance,
 		arg.Participants,
+		arg.TrainingDate,
+		arg.Notes,
 		arg.UpdatedBy,
 		arg.ID,
 	)
@@ -329,6 +343,7 @@ func (q *Queries) UpdateCSTrainingStatus(ctx context.Context, arg UpdateCSTraini
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.Notes,
 	)
 	return i, err
 }
