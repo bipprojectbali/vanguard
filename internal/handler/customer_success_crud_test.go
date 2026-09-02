@@ -52,6 +52,10 @@ func TestCustomerSuccess_CreateThenOverallHealthScore(t *testing.T) {
 	if got.OverallHealthScore == nil || *got.OverallHealthScore != 75 {
 		t.Errorf("overall_health_score harus 75 (rata2 80/90/70/60), got %v", got.OverallHealthScore)
 	}
+	// BL-24: status turunan skor 75 → At-Risk, bukan "Healthy" yang dikirim form.
+	if got.HealthStatus == nil || *got.HealthStatus != "At-Risk" {
+		t.Errorf("health_status harus turunan skor (At-Risk untuk 75), got %v", got.HealthStatus)
+	}
 	if !got.HealthLastCalculated.Valid {
 		t.Error("health_last_calculated harus terisi saat section Health ditulis kali ini")
 	}
@@ -59,14 +63,16 @@ func TestCustomerSuccess_CreateThenOverallHealthScore(t *testing.T) {
 }
 
 // TestCustomerSuccess_UpdateSuccess: baris sudah ada → jalur Update (bukan
-// Create), field baru tersimpan, ok=saved (bukan ok=created).
+// Create), field baru tersimpan, ok=saved (bukan ok=created). health_status
+// manual di form (BL-24) DIABAIKAN — status mengikuti skor terhitung: komponen
+// 80/90/70/60 → overall 75 → At-Risk (40–79), bukan "Critical" yang dikirim.
 func TestCustomerSuccess_UpdateSuccess(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Ada", &uid, nil, nil)
 	env.seedCustomerSuccess(t, a.ID)
 
 	form := customerSuccessFormValues()
-	form.Set("health_status", "Critical")
+	form.Set("health_status", "Critical") // sengaja bertentangan skor — harus diabaikan
 	req := accountsReq(http.MethodPost, "/w/test/accounts/"+itoa(a.ID)+"/customer-success", form, itoa(a.ID))
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.CustomerSuccessSave)
 	if rec.Code != http.StatusSeeOther {
@@ -80,8 +86,8 @@ func TestCustomerSuccess_UpdateSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if got.HealthStatus == nil || *got.HealthStatus != "Critical" {
-		t.Errorf("health_status harus terupdate ke Critical, got %v", got.HealthStatus)
+	if got.HealthStatus == nil || *got.HealthStatus != "At-Risk" {
+		t.Errorf("health_status harus turunan skor (At-Risk untuk overall 75), manual 'Critical' diabaikan, got %v", got.HealthStatus)
 	}
 }
 
@@ -148,10 +154,12 @@ func TestApplyCustomerSuccessMasking(t *testing.T) {
 // ditolak parseCustomerSuccessForm dengan kode yang benar, PRG (?err=CODE),
 // dan TAK PERNAH menyentuh DB (baris tak tersimpan).
 func TestCustomerSuccess_EnumInvalidRejected(t *testing.T) {
+	// health_status TAK diuji di sini (BL-24): tak lagi diparse dari form, nilai
+	// apa pun diabaikan — bukan ditolak. Diuji tersendiri di TestDeriveHealthStatus
+	// & TestCustomerSuccess_UpdateSuccess (manual diabaikan, status ikut skor).
 	cases := []struct {
 		field, value, wantErr string
 	}{
-		{"health_status", "Bogus", "health_status"},
 		{"adoption_score", "150", "score"},
 		{"score_trend", "Sideways", "score_trend"},
 		{"lifecycle_stage", "Unknown", "lifecycle_stage"},

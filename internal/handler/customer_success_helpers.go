@@ -13,10 +13,10 @@ import (
 
 // Nilai enum sah — CERMIN persis CHECK constraint migrasi 00019. Urutan untuk
 // dropdown di slice terpisah (map tak berurutan) + cek sinkron compile-time.
+// validHealthStatuses DIHAPUS (BL-24): health_status tak lagi diparse dari
+// form — status turunan overall_health_score (deriveHealthStatus). Nilai sah
+// tetap ditegakkan CHECK cs_health_status_chk (migrasi 00019) di DB.
 var (
-	validHealthStatuses = map[string]struct{}{
-		"Healthy": {}, "At-Risk": {}, "Critical": {},
-	}
 	validScoreTrends = map[string]struct{}{
 		"Improving": {}, "Stable": {}, "Declining": {},
 	}
@@ -34,8 +34,8 @@ var (
 	}
 )
 
+// healthStatusOptions DIHAPUS (BL-24): dropdown status diganti badge read-only.
 var (
-	healthStatusOptions     = []string{"Healthy", "At-Risk", "Critical"}
 	scoreTrendOptions       = []string{"Improving", "Stable", "Declining"}
 	lifecycleStageOptions   = []string{"Onboarding", "Adoption", "Retention", "Renewal", "Advocacy"}
 	onboardingStatusOptions = []string{"Not Started", "In Progress", "Completed", "Stalled"}
@@ -46,8 +46,7 @@ var (
 // compile-time: pastikan opsi & map validasi sepakat (panjang sama). Berbeda =
 // dropdown menawarkan nilai yang ditolak backend, atau sebaliknya.
 var _ = func() struct{} {
-	if len(healthStatusOptions) != len(validHealthStatuses) ||
-		len(scoreTrendOptions) != len(validScoreTrends) ||
+	if len(scoreTrendOptions) != len(validScoreTrends) ||
 		len(lifecycleStageOptions) != len(validLifecycleStages) ||
 		len(onboardingStatusOptions) != len(validOnboardingStatuses) ||
 		len(loginFrequencyOptions) != len(validLoginFrequencies) ||
@@ -109,8 +108,6 @@ func customerSuccessMsg(code string) string {
 // enum CS terkumpul di satu tempat.
 func customerSuccessErrMsg(code string) string {
 	switch code {
-	case "health_status":
-		return "Status kesehatan harus salah satu: Healthy, At-Risk, atau Critical."
 	case "score":
 		return "Skor harus bilangan bulat 0–100."
 	case "score_trend":

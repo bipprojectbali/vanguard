@@ -18,7 +18,6 @@ import (
 // CustomerSuccessFormFields = nilai prefill (edit existing) atau kosong (baris
 // belum ada = jalur create). Semua string agar view netral terhadap tipe DB.
 type CustomerSuccessFormFields struct {
-	HealthStatus    string
 	AdoptionScore   string
 	EngagementScore string
 	SupportScore    string
@@ -57,7 +56,10 @@ type CustomerSuccessFormView struct {
 	CanWriteJourney  bool
 	CanWriteAdoption bool
 
-	HealthStatuses     []string
+	// HealthStatusLabel/Badge = status kesehatan TERSIMPAN sudah diformat di
+	// handler (BL-24: badge read-only, bukan dropdown — status turunan skor).
+	HealthStatusLabel  string
+	HealthStatusBadge  string
 	ScoreTrends        []string
 	LifecycleStages    []string
 	OnboardingStatuses []string
@@ -82,7 +84,7 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 
 	fields := []g.Node{
 		ui.When(v.CanWriteHealth, formCard("Health Score",
-			selectField("Status Kesehatan", "health_status", v.Fields.HealthStatus, v.HealthStatuses, false),
+			healthStatusReadOnly(v.HealthStatusLabel, v.HealthStatusBadge),
 			field("Skor Adopsi (0–100)", "adoption_score", v.Fields.AdoptionScore, false, "number"),
 			field("Skor Engagement (0–100)", "engagement_score", v.Fields.EngagementScore, false, "number"),
 			field("Skor Support (0–100)", "support_score", v.Fields.SupportScore, false, "number"),
@@ -121,6 +123,24 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 	))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// healthStatusReadOnly — "Status Kesehatan" sebagai badge READ-ONLY, bukan
+// dropdown (BL-24): status turunan overall_health_score, operator tak bisa
+// menyetelnya. Tak ada <input>/<select> → tak pernah terkirim POST; label
+// menjelaskan asal-nilai agar tak dikira field yang rusak. Badge selaras skor
+// aktual saat baris berikutnya disimpan (label = status TERSIMPAN saat ini).
+func healthStatusReadOnly(label, badge string) g.Node {
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		h.Span(h.Class("text-sm font-medium"), g.Text("Status Kesehatan")),
+		h.Div(
+			h.Class("flex flex-wrap items-center gap-2"),
+			h.Span(h.Class("badge "+badge), g.Text(label)),
+		),
+		h.P(h.Class("text-xs text-base-content/60"),
+			g.Text("Otomatis dari skor kesehatan keseluruhan — tak dapat disetel manual.")),
+	)
 }
 
 // usageDataSourceNote — usage_data_source TETAP "Manual" di v1 (tanpa input:

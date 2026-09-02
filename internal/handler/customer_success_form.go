@@ -17,12 +17,9 @@ import (
 func parseCustomerSuccessForm(fv func(string) string) (customerSuccessForm, string) {
 	var f customerSuccessForm
 
-	if s := strings.TrimSpace(fv("health_status")); s != "" {
-		if _, ok := validHealthStatuses[s]; !ok {
-			return customerSuccessForm{}, "health_status"
-		}
-		f.HealthStatus = &s
-	}
+	// health_status TIDAK diparse dari form (BL-24): status kini turunan
+	// overall_health_score, di-set server-side di customer_success_save.go
+	// (deriveHealthStatus). Field form apa pun diabaikan — badge read-only.
 	adoption, code := optScore(fv("adoption_score"))
 	if code != "" {
 		return customerSuccessForm{}, code

@@ -38,6 +38,37 @@ func computeOverallHealthScore(adoption, engagement, support, sentiment *int16) 
 	return &avg
 }
 
+// Ambang status kesehatan — CERMIN persis label kartu KPI di halaman Health
+// Score (health_score_list.go: "Sehat (≥80)" / "Berisiko (40–79)" / "Kritis
+// (<40)"). Konstanta bernama (bukan angka telanjang) agar ambang punya SATU
+// sumber; ubah di sini bila kelak label KPI ikut berubah.
+const (
+	healthHealthyMin = 80 // skor ≥ ini → Healthy
+	healthAtRiskMin  = 40 // skor ≥ ini (dan < healthHealthyMin) → At-Risk; di bawah → Critical
+)
+
+// deriveHealthStatus memetakan overall_health_score → status kesehatan
+// (Healthy/At-Risk/Critical) MENGIKUTI ambang label KPI. Status kini TURUNAN
+// skor, bukan pilihan manual operator (BL-24) — satu sumber kebenaran. nil
+// (belum ada dasar hitung, semua komponen kosong) → nil: JANGAN default ke
+// status apa pun, "belum dinilai" bukan "sehat". Nilai kembali tetap dalam
+// 3-set enum sah (cs_health_status_chk), jadi tanpa DDL.
+func deriveHealthStatus(overall *int16) *string {
+	if overall == nil {
+		return nil
+	}
+	var s string
+	switch {
+	case *overall >= healthHealthyMin:
+		s = "Healthy"
+	case *overall >= healthAtRiskMin:
+		s = "At-Risk"
+	default:
+		s = "Critical"
+	}
+	return &s
+}
+
 // daysInStageLabel = selisih hari (kalender) HARI INI terhadap stage_entry_date,
 // diformat "N hari di tahap ini". Kebalikan arah daysLeftLabel (subscriptions_
 // renewals.go: hitung SISA hari ke depan) — di sini menghitung MUNDUR sejak
@@ -107,7 +138,6 @@ func customerSuccessDetailView(
 // diisi (view menyembunyikan kartunya via CanWriteX, sama pola dgn detail).
 func customerSuccessFormFields(cs db.CustomerSuccess) panel.CustomerSuccessFormFields {
 	return panel.CustomerSuccessFormFields{
-		HealthStatus:    deref(cs.HealthStatus),
 		AdoptionScore:   probabilityStr(cs.AdoptionScore),
 		EngagementScore: probabilityStr(cs.EngagementScore),
 		SupportScore:    probabilityStr(cs.SupportScore),
