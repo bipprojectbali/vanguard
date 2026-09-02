@@ -59,6 +59,15 @@ func TestCustomerSuccess_CreateThenOverallHealthScore(t *testing.T) {
 	if !got.HealthLastCalculated.Valid {
 		t.Error("health_last_calculated harus terisi saat section Health ditulis kali ini")
 	}
+	// BL-25: simpan PERTAMA belum punya pembanding (previous NULL) → score_trend
+	// NULL ("—", belum ada dasar), BUKAN default "Stable"; manual "Improving" dari
+	// form diabaikan.
+	if got.ScoreTrend != nil {
+		t.Errorf("score_trend simpan pertama harus NULL (belum ada pembanding), got %v", *got.ScoreTrend)
+	}
+	if got.PreviousHealthScore != nil {
+		t.Errorf("previous_health_score simpan pertama harus NULL, got %v", *got.PreviousHealthScore)
+	}
 	env.assertAudited(t, "customer_success.save")
 }
 
@@ -88,6 +97,78 @@ func TestCustomerSuccess_UpdateSuccess(t *testing.T) {
 	}
 	if got.HealthStatus == nil || *got.HealthStatus != "At-Risk" {
 		t.Errorf("health_status harus turunan skor (At-Risk untuk overall 75), manual 'Critical' diabaikan, got %v", got.HealthStatus)
+	}
+	// BL-25: score_trend turunan riwayat skor. Seed overall=75, update komponen
+	// sama → 75, delta 0 (≤ dead-band) → "Stable"; manual "Improving" dari form
+	// DIABAIKAN. previous_health_score digeser dari overall LAMA (75).
+	if got.ScoreTrend == nil || *got.ScoreTrend != "Stable" {
+		t.Errorf("score_trend harus turunan (Stable untuk delta 0), manual 'Improving' diabaikan, got %v", got.ScoreTrend)
+	}
+	if got.PreviousHealthScore == nil || *got.PreviousHealthScore != 75 {
+		t.Errorf("previous_health_score harus digeser dari overall lama (75), got %v", got.PreviousHealthScore)
+	}
+}
+
+// TestCustomerSuccess_ScoreTrendDerivedOnSave: simpan berturut lewat HANDLER,
+// score_trend mengikuti ARAH perubahan overall_health_score (BL-25). Keempat
+// komponen diset SAMA tiap kali → overall = nilai itu (rata-rata 4 sama), delta
+// mudah dihitung terhadap dead-band (healthTrendDeadband = 3).
+func TestCustomerSuccess_ScoreTrendDerivedOnSave(t *testing.T) {
+	env, uid := setupAccounts(t)
+	a := env.seedAccount(t, "Desa Tren", &uid, nil, nil)
+
+	save := func(score int64) db.CustomerSuccess {
+		t.Helper()
+		form := customerSuccessFormValues()
+		for _, k := range []string{"adoption_score", "engagement_score", "support_score", "sentiment_score"} {
+			form.Set(k, itoa(score))
+		}
+		req := accountsReq(http.MethodPost, "/w/test/accounts/"+itoa(a.ID)+"/customer-success", form, itoa(a.ID))
+		rec := env.runAccount(uid, "owner", "admin", req, env.h.CustomerSuccessSave)
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("save skor %d harus 303, got %d\n%s", score, rec.Code, rec.Body.String())
+		}
+		got, err := env.q.GetCustomerSuccessByAccountID(t.Context(), a.ID)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		return got
+	}
+	wantTrend := func(got db.CustomerSuccess, want *string, label string) {
+		t.Helper()
+		switch {
+		case want == nil && got.ScoreTrend != nil:
+			t.Errorf("%s: harap trend nil, got %q", label, *got.ScoreTrend)
+		case want != nil && got.ScoreTrend == nil:
+			t.Errorf("%s: harap %q, got nil", label, *want)
+		case want != nil && got.ScoreTrend != nil && *got.ScoreTrend != *want:
+			t.Errorf("%s: harap %q, got %q", label, *want, *got.ScoreTrend)
+		}
+	}
+
+	// 1) simpan pertama overall 50 → belum ada pembanding → trend nil.
+	got := save(50)
+	if got.OverallHealthScore == nil || *got.OverallHealthScore != 50 {
+		t.Fatalf("overall harus 50, got %v", got.OverallHealthScore)
+	}
+	wantTrend(got, nil, "simpan#1")
+
+	// 2) naik ke 60 (delta +10 > dead-band) → Improving; previous digeser ke 50.
+	got = save(60)
+	wantTrend(got, strptr("Improving"), "50→60")
+	if got.PreviousHealthScore == nil || *got.PreviousHealthScore != 50 {
+		t.Errorf("previous harus 50, got %v", got.PreviousHealthScore)
+	}
+
+	// 3) naik tipis ke 62 (delta +2 ≤ dead-band) → Stable.
+	got = save(62)
+	wantTrend(got, strptr("Stable"), "60→62 (dalam dead-band)")
+
+	// 4) turun ke 50 (delta −12 < −dead-band) → Declining; previous 62.
+	got = save(50)
+	wantTrend(got, strptr("Declining"), "62→50")
+	if got.PreviousHealthScore == nil || *got.PreviousHealthScore != 62 {
+		t.Errorf("previous harus 62, got %v", got.PreviousHealthScore)
 	}
 }
 
@@ -154,14 +235,14 @@ func TestApplyCustomerSuccessMasking(t *testing.T) {
 // ditolak parseCustomerSuccessForm dengan kode yang benar, PRG (?err=CODE),
 // dan TAK PERNAH menyentuh DB (baris tak tersimpan).
 func TestCustomerSuccess_EnumInvalidRejected(t *testing.T) {
-	// health_status TAK diuji di sini (BL-24): tak lagi diparse dari form, nilai
-	// apa pun diabaikan — bukan ditolak. Diuji tersendiri di TestDeriveHealthStatus
-	// & TestCustomerSuccess_UpdateSuccess (manual diabaikan, status ikut skor).
+	// health_status & score_trend TAK diuji di sini (BL-24/BL-25): tak lagi diparse
+	// dari form, nilai apa pun diabaikan — bukan ditolak. Diuji tersendiri di
+	// TestDeriveHealthStatus/TestDeriveScoreTrend & TestCustomerSuccess_UpdateSuccess
+	// (manual diabaikan, status/tren ikut skor terhitung).
 	cases := []struct {
 		field, value, wantErr string
 	}{
 		{"adoption_score", "150", "score"},
-		{"score_trend", "Sideways", "score_trend"},
 		{"lifecycle_stage", "Unknown", "lifecycle_stage"},
 		{"onboarding_status", "Unknown", "onboarding_status"},
 		{"login_frequency", "Sometimes", "login_frequency"},

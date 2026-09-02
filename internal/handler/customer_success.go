@@ -125,6 +125,8 @@ func (h *Handler) CustomerSuccessEdit(w http.ResponseWriter, r *http.Request) {
 	// Status kesehatan = badge read-only (BL-24): precompute label+kelas badge
 	// dari status TERSIMPAN di handler (view murni-data). nil → "—"/ghost.
 	healthLabel, healthBadge := healthScoreStatus(cs.HealthStatus)
+	// Tren skor = badge read-only (BL-25): label panah + kelas dari nilai TERSIMPAN.
+	trendLabel, trendBadge := healthScoreTrend(cs.ScoreTrend), scoreTrendBadge(cs.ScoreTrend)
 	v := panel.CustomerSuccessFormView{
 		Base:        accountBase,
 		AccountName: account.VillageName,
@@ -138,7 +140,8 @@ func (h *Handler) CustomerSuccessEdit(w http.ResponseWriter, r *http.Request) {
 
 		HealthStatusLabel:  healthLabel,
 		HealthStatusBadge:  healthBadge,
-		ScoreTrends:        scoreTrendOptions,
+		ScoreTrendLabel:    trendLabel,
+		ScoreTrendBadge:    trendBadge,
 		LifecycleStages:    lifecycleStageOptions,
 		OnboardingStatuses: onboardingStatusOptions,
 		LoginFrequencies:   loginFrequencyOptions,

@@ -16,6 +16,7 @@ INSERT INTO customer_success (
     tenant_id, account_id,
     overall_health_score, health_status, adoption_score, engagement_score,
     support_score, sentiment_score, score_trend, health_last_calculated,
+    previous_health_score, previous_health_calculated_at,
     lifecycle_stage, stage_entry_date,
     onboarding_status, kickoff_date, target_go_live_date, actual_go_live_date,
     onboarding_progress,
@@ -27,40 +28,43 @@ INSERT INTO customer_success (
     $3, $4, $5, $6,
     $7, $8, $9, $10,
     $11, $12,
-    $13, $14, $15, $16,
-    $17,
-    $18, $19, $20, $21,
-    $22, $23,
-    $24
+    $13, $14,
+    $15, $16, $17, $18,
+    $19,
+    $20, $21, $22, $23,
+    $24, $25,
+    $26
 )
-RETURNING id, tenant_id, account_id, overall_health_score, health_status, adoption_score, engagement_score, support_score, sentiment_score, score_trend, health_last_calculated, lifecycle_stage, stage_entry_date, onboarding_status, kickoff_date, target_go_live_date, actual_go_live_date, onboarding_progress, last_login_date, active_users, login_frequency, feature_adoption_rate, key_features_used, usage_trend, usage_data_source, created_by, created_at, updated_by, updated_at
+RETURNING id, tenant_id, account_id, overall_health_score, health_status, adoption_score, engagement_score, support_score, sentiment_score, score_trend, health_last_calculated, lifecycle_stage, stage_entry_date, onboarding_status, kickoff_date, target_go_live_date, actual_go_live_date, onboarding_progress, last_login_date, active_users, login_frequency, feature_adoption_rate, key_features_used, usage_trend, usage_data_source, created_by, created_at, updated_by, updated_at, previous_health_score, previous_health_calculated_at
 `
 
 type CreateCustomerSuccessParams struct {
-	TenantID             int64              `json:"tenant_id"`
-	AccountID            int64              `json:"account_id"`
-	OverallHealthScore   *int16             `json:"overall_health_score"`
-	HealthStatus         *string            `json:"health_status"`
-	AdoptionScore        *int16             `json:"adoption_score"`
-	EngagementScore      *int16             `json:"engagement_score"`
-	SupportScore         *int16             `json:"support_score"`
-	SentimentScore       *int16             `json:"sentiment_score"`
-	ScoreTrend           *string            `json:"score_trend"`
-	HealthLastCalculated pgtype.Timestamptz `json:"health_last_calculated"`
-	LifecycleStage       *string            `json:"lifecycle_stage"`
-	StageEntryDate       pgtype.Date        `json:"stage_entry_date"`
-	OnboardingStatus     *string            `json:"onboarding_status"`
-	KickoffDate          pgtype.Date        `json:"kickoff_date"`
-	TargetGoLiveDate     pgtype.Date        `json:"target_go_live_date"`
-	ActualGoLiveDate     pgtype.Date        `json:"actual_go_live_date"`
-	OnboardingProgress   *int16             `json:"onboarding_progress"`
-	LastLoginDate        pgtype.Date        `json:"last_login_date"`
-	ActiveUsers          *int32             `json:"active_users"`
-	LoginFrequency       *string            `json:"login_frequency"`
-	FeatureAdoptionRate  pgtype.Numeric     `json:"feature_adoption_rate"`
-	KeyFeaturesUsed      *string            `json:"key_features_used"`
-	UsageTrend           *string            `json:"usage_trend"`
-	CreatedBy            *int64             `json:"created_by"`
+	TenantID                   int64              `json:"tenant_id"`
+	AccountID                  int64              `json:"account_id"`
+	OverallHealthScore         *int16             `json:"overall_health_score"`
+	HealthStatus               *string            `json:"health_status"`
+	AdoptionScore              *int16             `json:"adoption_score"`
+	EngagementScore            *int16             `json:"engagement_score"`
+	SupportScore               *int16             `json:"support_score"`
+	SentimentScore             *int16             `json:"sentiment_score"`
+	ScoreTrend                 *string            `json:"score_trend"`
+	HealthLastCalculated       pgtype.Timestamptz `json:"health_last_calculated"`
+	PreviousHealthScore        *int16             `json:"previous_health_score"`
+	PreviousHealthCalculatedAt pgtype.Timestamptz `json:"previous_health_calculated_at"`
+	LifecycleStage             *string            `json:"lifecycle_stage"`
+	StageEntryDate             pgtype.Date        `json:"stage_entry_date"`
+	OnboardingStatus           *string            `json:"onboarding_status"`
+	KickoffDate                pgtype.Date        `json:"kickoff_date"`
+	TargetGoLiveDate           pgtype.Date        `json:"target_go_live_date"`
+	ActualGoLiveDate           pgtype.Date        `json:"actual_go_live_date"`
+	OnboardingProgress         *int16             `json:"onboarding_progress"`
+	LastLoginDate              pgtype.Date        `json:"last_login_date"`
+	ActiveUsers                *int32             `json:"active_users"`
+	LoginFrequency             *string            `json:"login_frequency"`
+	FeatureAdoptionRate        pgtype.Numeric     `json:"feature_adoption_rate"`
+	KeyFeaturesUsed            *string            `json:"key_features_used"`
+	UsageTrend                 *string            `json:"usage_trend"`
+	CreatedBy                  *int64             `json:"created_by"`
 }
 
 // Buat baris pertama kali desa ini disimpan. tenant_id eksplisit (RLS WITH
@@ -78,6 +82,8 @@ func (q *Queries) CreateCustomerSuccess(ctx context.Context, arg CreateCustomerS
 		arg.SentimentScore,
 		arg.ScoreTrend,
 		arg.HealthLastCalculated,
+		arg.PreviousHealthScore,
+		arg.PreviousHealthCalculatedAt,
 		arg.LifecycleStage,
 		arg.StageEntryDate,
 		arg.OnboardingStatus,
@@ -124,13 +130,15 @@ func (q *Queries) CreateCustomerSuccess(ctx context.Context, arg CreateCustomerS
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.PreviousHealthScore,
+		&i.PreviousHealthCalculatedAt,
 	)
 	return i, err
 }
 
 const getCustomerSuccessByAccountID = `-- name: GetCustomerSuccessByAccountID :one
 
-SELECT id, tenant_id, account_id, overall_health_score, health_status, adoption_score, engagement_score, support_score, sentiment_score, score_trend, health_last_calculated, lifecycle_stage, stage_entry_date, onboarding_status, kickoff_date, target_go_live_date, actual_go_live_date, onboarding_progress, last_login_date, active_users, login_frequency, feature_adoption_rate, key_features_used, usage_trend, usage_data_source, created_by, created_at, updated_by, updated_at FROM customer_success
+SELECT id, tenant_id, account_id, overall_health_score, health_status, adoption_score, engagement_score, support_score, sentiment_score, score_trend, health_last_calculated, lifecycle_stage, stage_entry_date, onboarding_status, kickoff_date, target_go_live_date, actual_go_live_date, onboarding_progress, last_login_date, active_users, login_frequency, feature_adoption_rate, key_features_used, usage_trend, usage_data_source, created_by, created_at, updated_by, updated_at, previous_health_score, previous_health_calculated_at FROM customer_success
 WHERE account_id = $1
 `
 
@@ -177,6 +185,8 @@ func (q *Queries) GetCustomerSuccessByAccountID(ctx context.Context, accountID i
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.PreviousHealthScore,
+		&i.PreviousHealthCalculatedAt,
 	)
 	return i, err
 }
@@ -191,49 +201,53 @@ UPDATE customer_success SET
     sentiment_score          = $6,
     score_trend             = $7,
     health_last_calculated  = $8,
-    lifecycle_stage         = $9,
-    stage_entry_date        = $10,
-    onboarding_status       = $11,
-    kickoff_date            = $12,
-    target_go_live_date     = $13,
-    actual_go_live_date     = $14,
-    onboarding_progress     = $15,
-    last_login_date         = $16,
-    active_users            = $17,
-    login_frequency         = $18,
-    feature_adoption_rate   = $19,
-    key_features_used       = $20,
-    usage_trend             = $21,
-    updated_by              = $22,
+    previous_health_score          = $9,
+    previous_health_calculated_at  = $10,
+    lifecycle_stage         = $11,
+    stage_entry_date        = $12,
+    onboarding_status       = $13,
+    kickoff_date            = $14,
+    target_go_live_date     = $15,
+    actual_go_live_date     = $16,
+    onboarding_progress     = $17,
+    last_login_date         = $18,
+    active_users            = $19,
+    login_frequency         = $20,
+    feature_adoption_rate   = $21,
+    key_features_used       = $22,
+    usage_trend             = $23,
+    updated_by              = $24,
     updated_at              = now()
-WHERE account_id = $23
-RETURNING id, tenant_id, account_id, overall_health_score, health_status, adoption_score, engagement_score, support_score, sentiment_score, score_trend, health_last_calculated, lifecycle_stage, stage_entry_date, onboarding_status, kickoff_date, target_go_live_date, actual_go_live_date, onboarding_progress, last_login_date, active_users, login_frequency, feature_adoption_rate, key_features_used, usage_trend, usage_data_source, created_by, created_at, updated_by, updated_at
+WHERE account_id = $25
+RETURNING id, tenant_id, account_id, overall_health_score, health_status, adoption_score, engagement_score, support_score, sentiment_score, score_trend, health_last_calculated, lifecycle_stage, stage_entry_date, onboarding_status, kickoff_date, target_go_live_date, actual_go_live_date, onboarding_progress, last_login_date, active_users, login_frequency, feature_adoption_rate, key_features_used, usage_trend, usage_data_source, created_by, created_at, updated_by, updated_at, previous_health_score, previous_health_calculated_at
 `
 
 type UpdateCustomerSuccessParams struct {
-	OverallHealthScore   *int16             `json:"overall_health_score"`
-	HealthStatus         *string            `json:"health_status"`
-	AdoptionScore        *int16             `json:"adoption_score"`
-	EngagementScore      *int16             `json:"engagement_score"`
-	SupportScore         *int16             `json:"support_score"`
-	SentimentScore       *int16             `json:"sentiment_score"`
-	ScoreTrend           *string            `json:"score_trend"`
-	HealthLastCalculated pgtype.Timestamptz `json:"health_last_calculated"`
-	LifecycleStage       *string            `json:"lifecycle_stage"`
-	StageEntryDate       pgtype.Date        `json:"stage_entry_date"`
-	OnboardingStatus     *string            `json:"onboarding_status"`
-	KickoffDate          pgtype.Date        `json:"kickoff_date"`
-	TargetGoLiveDate     pgtype.Date        `json:"target_go_live_date"`
-	ActualGoLiveDate     pgtype.Date        `json:"actual_go_live_date"`
-	OnboardingProgress   *int16             `json:"onboarding_progress"`
-	LastLoginDate        pgtype.Date        `json:"last_login_date"`
-	ActiveUsers          *int32             `json:"active_users"`
-	LoginFrequency       *string            `json:"login_frequency"`
-	FeatureAdoptionRate  pgtype.Numeric     `json:"feature_adoption_rate"`
-	KeyFeaturesUsed      *string            `json:"key_features_used"`
-	UsageTrend           *string            `json:"usage_trend"`
-	UpdatedBy            *int64             `json:"updated_by"`
-	AccountID            int64              `json:"account_id"`
+	OverallHealthScore         *int16             `json:"overall_health_score"`
+	HealthStatus               *string            `json:"health_status"`
+	AdoptionScore              *int16             `json:"adoption_score"`
+	EngagementScore            *int16             `json:"engagement_score"`
+	SupportScore               *int16             `json:"support_score"`
+	SentimentScore             *int16             `json:"sentiment_score"`
+	ScoreTrend                 *string            `json:"score_trend"`
+	HealthLastCalculated       pgtype.Timestamptz `json:"health_last_calculated"`
+	PreviousHealthScore        *int16             `json:"previous_health_score"`
+	PreviousHealthCalculatedAt pgtype.Timestamptz `json:"previous_health_calculated_at"`
+	LifecycleStage             *string            `json:"lifecycle_stage"`
+	StageEntryDate             pgtype.Date        `json:"stage_entry_date"`
+	OnboardingStatus           *string            `json:"onboarding_status"`
+	KickoffDate                pgtype.Date        `json:"kickoff_date"`
+	TargetGoLiveDate           pgtype.Date        `json:"target_go_live_date"`
+	ActualGoLiveDate           pgtype.Date        `json:"actual_go_live_date"`
+	OnboardingProgress         *int16             `json:"onboarding_progress"`
+	LastLoginDate              pgtype.Date        `json:"last_login_date"`
+	ActiveUsers                *int32             `json:"active_users"`
+	LoginFrequency             *string            `json:"login_frequency"`
+	FeatureAdoptionRate        pgtype.Numeric     `json:"feature_adoption_rate"`
+	KeyFeaturesUsed            *string            `json:"key_features_used"`
+	UsageTrend                 *string            `json:"usage_trend"`
+	UpdatedBy                  *int64             `json:"updated_by"`
+	AccountID                  int64              `json:"account_id"`
 }
 
 // Sunting seluruh snapshot, key by account_id (semua lookup mulai dari {id}
@@ -250,6 +264,8 @@ func (q *Queries) UpdateCustomerSuccess(ctx context.Context, arg UpdateCustomerS
 		arg.SentimentScore,
 		arg.ScoreTrend,
 		arg.HealthLastCalculated,
+		arg.PreviousHealthScore,
+		arg.PreviousHealthCalculatedAt,
 		arg.LifecycleStage,
 		arg.StageEntryDate,
 		arg.OnboardingStatus,
@@ -297,6 +313,8 @@ func (q *Queries) UpdateCustomerSuccess(ctx context.Context, arg UpdateCustomerS
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.PreviousHealthScore,
+		&i.PreviousHealthCalculatedAt,
 	)
 	return i, err
 }

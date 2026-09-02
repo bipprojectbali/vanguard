@@ -22,7 +22,6 @@ type CustomerSuccessFormFields struct {
 	EngagementScore string
 	SupportScore    string
 	SentimentScore  string
-	ScoreTrend      string
 
 	LifecycleStage string
 	StageEntryDate string
@@ -58,9 +57,12 @@ type CustomerSuccessFormView struct {
 
 	// HealthStatusLabel/Badge = status kesehatan TERSIMPAN sudah diformat di
 	// handler (BL-24: badge read-only, bukan dropdown — status turunan skor).
-	HealthStatusLabel  string
-	HealthStatusBadge  string
-	ScoreTrends        []string
+	HealthStatusLabel string
+	HealthStatusBadge string
+	// ScoreTrendLabel/Badge = tren skor TERSIMPAN sudah diformat di handler
+	// (BL-25: badge read-only, bukan dropdown — tren turunan riwayat skor).
+	ScoreTrendLabel    string
+	ScoreTrendBadge    string
 	LifecycleStages    []string
 	OnboardingStatuses []string
 	LoginFrequencies   []string
@@ -89,7 +91,7 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 			field("Skor Engagement (0–100)", "engagement_score", v.Fields.EngagementScore, false, "number"),
 			field("Skor Support (0–100)", "support_score", v.Fields.SupportScore, false, "number"),
 			field("Skor Sentimen (0–100)", "sentiment_score", v.Fields.SentimentScore, false, "number"),
-			selectField("Tren Skor", "score_trend", v.Fields.ScoreTrend, v.ScoreTrends, false),
+			scoreTrendReadOnly(v.ScoreTrendLabel, v.ScoreTrendBadge),
 		)),
 		ui.When(v.CanWriteJourney, formCard("Journey & Onboarding",
 			selectField("Tahap Siklus Hidup", "lifecycle_stage", v.Fields.LifecycleStage, v.LifecycleStages, false),
@@ -140,6 +142,24 @@ func healthStatusReadOnly(label, badge string) g.Node {
 		),
 		h.P(h.Class("text-xs text-base-content/60"),
 			g.Text("Otomatis dari skor kesehatan keseluruhan — tak dapat disetel manual.")),
+	)
+}
+
+// scoreTrendReadOnly — "Tren Skor" sebagai badge READ-ONLY, bukan dropdown
+// (BL-25): tren turunan riwayat skor (deriveScoreTrend membandingkan skor lama
+// vs sekarang), operator tak bisa menyetelnya. Tak ada <select> → tak pernah
+// terkirim POST. Label = tren TERSIMPAN saat ini; badge selaras arah saat baris
+// berikutnya disimpan. "—" bila belum ada pembanding (snapshot pertama).
+func scoreTrendReadOnly(label, badge string) g.Node {
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		h.Span(h.Class("text-sm font-medium"), g.Text("Tren Skor")),
+		h.Div(
+			h.Class("flex flex-wrap items-center gap-2"),
+			h.Span(h.Class("badge "+badge), g.Text(label)),
+		),
+		h.P(h.Class("text-xs text-base-content/60"),
+			g.Text("Otomatis dari perubahan skor kesehatan — tak dapat disetel manual.")),
 	)
 }
 
