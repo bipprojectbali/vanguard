@@ -78,6 +78,11 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     updated_by                BIGINT REFERENCES users(id) ON DELETE SET NULL,
     updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- CHECK domain nilai (nullable → IS NULL OR IN). status NN → IN langsung.
+    -- 'Suspended' = nilai CADANGAN, BELUM di-wire (BL-22): tak ada aksi app yang
+    -- menghasilkannya, tak di-seed, tak ditawarkan di dropdown filter. Enum sengaja
+    -- dibiarkan menerima nilai ini agar pintu masa depan (aksi Tangguhkan/Unsuspend)
+    -- tak butuh migrasi. Untuk tunggakan pakai payment_status='Overdue'; untuk
+    -- penghentian pakai churn_type='Involuntary'.
     CONSTRAINT subs_status_chk CHECK (
         status IN ('Trial','Active','Suspended','Expired','Cancelled','Churned')),
     CONSTRAINT subs_billing_cycle_chk CHECK (

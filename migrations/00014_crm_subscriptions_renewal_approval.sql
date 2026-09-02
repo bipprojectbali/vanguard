@@ -43,6 +43,10 @@ ALTER TABLE subscriptions ADD CONSTRAINT subs_approval_status_chk CHECK (
 -- +goose StatementBegin
 ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subs_status_chk;
 -- +goose StatementEnd
+-- 'Suspended' = nilai CADANGAN, BELUM di-wire (BL-22): tak ada aksi app yang
+-- menghasilkannya, tak di-seed, tak ditawarkan di dropdown filter. Enum sengaja
+-- tetap menerima nilai ini (pintu masa depan). Untuk tunggakan pakai
+-- payment_status='Overdue'; untuk penghentian pakai churn_type='Involuntary'.
 -- +goose StatementBegin
 ALTER TABLE subscriptions ADD CONSTRAINT subs_status_chk CHECK (
     status IN ('Trial', 'Active', 'Suspended', 'Expired', 'Cancelled', 'Churned', 'PendingApproval'));

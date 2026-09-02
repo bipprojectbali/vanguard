@@ -381,7 +381,7 @@ tersendiri). Renewal & churn = kolom yang menempel (spec 5.2/5.4: "bukan objek b
 | subscription_owner | BIGINT → users | 5.A · CSM/AM |
 | source_deal_id | BIGINT → deals | 5.A |
 | **previous_subscription_id** | BIGINT → subscriptions | self-FK · rantai renewal (§ keputusan) |
-| status | TEXT NN | 5.B · Trial/Active/Suspended/Expired/Cancelled/Churned (CHECK) |
+| status | TEXT NN | 5.B · Trial/Active/Suspended/Expired/Cancelled/Churned (CHECK). **`Suspended` = nilai cadangan, BELUM di-wire (BL-22)** — tak dihasilkan aksi app, tak di-seed, tak di dropdown filter; pakai `payment_status=Overdue` (tunggakan) / `churn_type=Involuntary` (penghentian). |
 | start_date | DATE | 5.B |
 | end_date | DATE | 5.B |
 | billing_cycle | TEXT | 5.B · Monthly/Quarterly/Annual/Multi-year |

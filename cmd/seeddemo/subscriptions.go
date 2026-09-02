@@ -12,9 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// subscriptions.go — ~30 langganan tersebar ke SEMUA 7 status (lihat
-// subs_status_chk pasca migrasi 00014: Trial/Active/Suspended/Expired/
-// Cancelled/Churned/PendingApproval). Fokus dasbor Renewals: ≥10 Active
+// subscriptions.go — ~28 langganan tersebar ke status yang BISA DICAPAI app
+// (Trial/Active/Expired/Cancelled/Churned/PendingApproval). "Suspended" SENGAJA
+// TAK di-seed (BL-22): nilai cadangan belum di-wire, tak ada aksi yang
+// menghasilkannya — menyeed-nya cuma memunculkan baris di state mustahil saat QC.
+// Enum DB tetap menerima "Suspended". Fokus dasbor Renewals: ≥10 Active
 // dengan end_date di jendela 30 hari 2026-08-26..2026-09-25, sisanya Active
 // end_date jauh (baseline ARR, sebagian sudah 'Renewed'). idx_subs_one_active
 // (1 Active per tenant+account+plan) dijaga dgn memberi tiap baris Active
@@ -26,7 +28,6 @@ const dueSubsCount = 10      // Active dgn end_date di jendela due
 const farActiveCount = 3     // Active dgn end_date jauh (baseline ARR)
 const churnedCount = 6
 const trialCount = 3
-const suspendedCount = 2
 const expiredCount = 2
 const pendingApprovalCount = 2
 const cancelledCount = 2
@@ -139,19 +140,6 @@ func seedSubscriptions(ctx context.Context, q *db.Queries, tenantID int64, tag s
 		seq++
 	}
 
-	// ---- Suspended — pembayaran macet, langganan masih ada tapi ditahan ----
-	for i := 0; i < suspendedCount; i++ {
-		acc := accounts[seq%len(accounts)]
-		planID := plans[seq%len(plans)]
-		s, err := createSubscription(ctx, q, tenantID, seq, "Suspended", rng, owner, acc.ID, planID,
-			today.AddDate(0, -8, 0), today.AddDate(0, 4, 0))
-		if err != nil {
-			return ids, fmt.Errorf("subscription suspended #%d: %w", i+1, err)
-		}
-		ids = append(ids, s.ID)
-		seq++
-	}
-
 	// ---- Expired — end_date sudah lewat, tak diperpanjang (belum tercatat churn) ----
 	for i := 0; i < expiredCount; i++ {
 		acc := accounts[seq%len(accounts)]
@@ -239,8 +227,6 @@ func createSubscription(ctx context.Context, q *db.Queries, tenantID int64, seq 
 			renewalStatus = ptr("Renewed")
 		}
 		renewalType = ptr(pick(rng, []string{"Auto", "Manual", "Upsell"}))
-	case "Suspended":
-		paymentStatus = ptr("Overdue")
 	case "Expired", "Cancelled":
 		paymentStatus = ptr(pick(rng, []string{"Paid", "Partial"}))
 		renewalStatus = ptr("Not Renewed")

@@ -14,11 +14,18 @@ import (
 // F3 ownership (subscription_owner) ditegakkan di layer query (SubscriptionsListFilter,
 // ownership.go) untuk daftar dan per-baris untuk detail — bukan di sini.
 
-// subscriptionStatuses = himpunan status legal langganan (cermin subs_status_chk,
-// migrasi 00012). Dipakai HANYA untuk merakit dropdown filter di daftar — bukan
-// validasi transisi (itu urusan slice mutasi berikutnya). Urutan = daur hidup
-// alami (Trial → Active → … → Churned) agar filter terbaca logis.
-var subscriptionStatuses = []string{"Trial", "Active", "PendingApproval", "Suspended", "Expired", "Cancelled", "Churned"}
+// subscriptionStatuses = himpunan status langganan yang DITAWARKAN di dropdown
+// filter daftar. Dipakai HANYA untuk merakit dropdown filter — bukan validasi
+// transisi (itu urusan slice mutasi). Urutan = daur hidup alami (Trial → Active
+// → … → Churned) agar filter terbaca logis.
+//
+// SENGAJA tanpa "Suspended" (BL-22): status itu adalah nilai CADANGAN yang belum
+// di-wire — tak ada aksi app yang menghasilkannya, jadi tab filternya selalu
+// kosong dan menyesatkan. Enum DB (subs_status_chk) TETAP menerima "Suspended".
+// Untuk tunggakan pakai payment_status=Overdue; untuk penghentian pakai
+// churn_type=Involuntary. Bila kelak ada aksi Tangguhkan/Unsuspend, kembalikan
+// "Suspended" ke daftar ini.
+var subscriptionStatuses = []string{"Trial", "Active", "PendingApproval", "Expired", "Cancelled", "Churned"}
 
 // canViewSubscriptions = gerbang READ daftar langganan. Sumber tunggal untuk menu &
 // gate halaman SubscriptionsList/SubscriptionDetail. Admin (glob crm:*), manager,
