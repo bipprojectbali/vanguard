@@ -127,12 +127,19 @@ func (h *Handler) CustomerSuccessEdit(w http.ResponseWriter, r *http.Request) {
 	healthLabel, healthBadge := healthScoreStatus(cs.HealthStatus)
 	// Tren skor = badge read-only (BL-25): label panah + kelas dari nilai TERSIMPAN.
 	trendLabel, trendBadge := healthScoreTrend(cs.ScoreTrend), scoreTrendBadge(cs.ScoreTrend)
+	// BL-26: peringatan keselarasan (K2/K4) atas baris TERSIMPAN, HANYA bila
+	// aktor berhak menulis Journey (kartu itu memang dirender untuknya).
+	var warnings []string
+	if canWriteCSJourney(ctx) {
+		warnings = onboardingConsistencyWarnings(cs)
+	}
 	v := panel.CustomerSuccessFormView{
 		Base:        accountBase,
 		AccountName: account.VillageName,
 		Action:      accountBase + "/customer-success",
 		Err:         customerSuccessErrMsg(r.URL.Query().Get("err")),
 		Fields:      customerSuccessFormFields(cs),
+		Warnings:    warnings,
 
 		CanWriteHealth:   canWriteCSHealth(ctx),
 		CanWriteJourney:  canWriteCSJourney(ctx),

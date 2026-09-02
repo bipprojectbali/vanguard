@@ -122,12 +122,20 @@ func daysInStageLabel(now time.Time, entry pgtype.Date) string {
 func customerSuccessDetailView(
 	ctx context.Context, base string, a db.Account, cs db.CustomerSuccess, exists bool,
 ) panel.CustomerSuccessDetailView {
+	// BL-26: peringatan keselarasan onboarding↔lifecycle (K2/K4) HANYA bila
+	// aktor berhak membaca section Journey — jangan bocorkan keadaan section
+	// yang disembunyikan F2. Banner tak relevan sebelum baris ada (exists=false).
+	var warnings []string
+	if exists && canReadCSJourney(ctx) {
+		warnings = onboardingConsistencyWarnings(cs)
+	}
 	return panel.CustomerSuccessDetailView{
 		Base:        base,
 		ID:          a.ID,
 		AccountName: a.VillageName,
 		CanWrite:    canWriteCS(ctx) && !IsReadOnly(ctx),
 		Exists:      exists,
+		Warnings:    warnings,
 
 		CanReadHealth:   canReadCSHealth(ctx),
 		CanReadJourney:  canReadCSJourney(ctx),

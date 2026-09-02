@@ -26,6 +26,10 @@ type CustomerSuccessDetailView struct {
 	AccountName string
 	CanWrite    bool
 	Exists      bool
+	// Warnings = peringatan keselarasan onboarding↔lifecycle LUNAK (BL-26 K2/K4),
+	// sudah dihitung & di-gate F2-baca di handler (view murni-data). Dirender
+	// sebagai banner alert-warning di atas kartu; kosong = tak ada banner.
+	Warnings []string
 
 	CanReadHealth   bool
 	CanReadJourney  bool
@@ -106,6 +110,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 	return h.Div(
 		h.Class("grid gap-4 min-w-0"),
 		header, nav,
+		onboardingWarningBanners(v.Warnings, "cs-detail-warn"),
 		ui.When(v.CanReadHealth, detailCard("Health Score", []detailField{
 			{"Skor Kesehatan Keseluruhan", v.OverallHealthScore},
 			{"Status Kesehatan", v.HealthStatus},
@@ -136,6 +141,24 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 			{"Sumber Data", v.UsageDataSource},
 		})),
 	)
+}
+
+// onboardingWarningBanners merender peringatan keselarasan onboarding↔lifecycle
+// LUNAK (BL-26 K2/K4) sebagai alert-warning bertumpuk. Kosong → g.Text("") (bukan
+// wadah kosong: .alert selalu punya padding/warna, lihat komentar AlertSlot).
+// idPrefix membuat id tiap banner unik (detail vs form dua render berbeda di
+// halaman yang sama tak boleh bertabrakan id). Murni-data: pesan sudah dihitung
+// & di-gate F2 di handler (onboardingConsistencyWarnings).
+func onboardingWarningBanners(warnings []string, idPrefix string) g.Node {
+	if len(warnings) == 0 {
+		return g.Text("")
+	}
+	banners := make([]g.Node, 0, len(warnings))
+	for i, msg := range warnings {
+		banners = append(banners,
+			ui.Alert(ui.VariantWarning, idPrefix+"-"+strconv.Itoa(i), g.Text(msg)))
+	}
+	return h.Div(h.Class("grid gap-2 min-w-0"), g.Group(banners))
 }
 
 // CustomerSuccessForbidden — 403; menjelaskan siapa yang berhak (mirror

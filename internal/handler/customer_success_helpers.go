@@ -115,6 +115,10 @@ func customerSuccessErrMsg(code string) string {
 		return "Frekuensi login tidak dikenal."
 	case "usage_trend":
 		return "Tren penggunaan tidak dikenal."
+	case errOnboardingLifecycleMismatch:
+		return "Tahap siklus hidup sudah melewati Onboarding, tetapi status onboarding belum \"Completed\". Selesaikan onboarding dulu atau kembalikan tahap ke Onboarding."
+	case errOnboardingGoLiveMismatch:
+		return "Status onboarding \"Not Started\", tetapi Tanggal Go-Live Aktual sudah terisi. Perbarui status onboarding atau kosongkan tanggal go-live."
 	case "date":
 		return "Format tanggal tidak sah."
 	case "number":
