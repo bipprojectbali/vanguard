@@ -206,6 +206,7 @@ type CsTraining struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedBy      *int64             `json:"updated_by"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	Notes          *string            `json:"notes"`
 }
 
 type CustomerSuccess struct {

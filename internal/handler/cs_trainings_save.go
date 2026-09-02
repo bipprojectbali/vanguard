@@ -83,7 +83,7 @@ func (h *Handler) CSTrainingUpdateStatus(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	status, attendance, participants, errCode := parseCSTrainingStatusForm(r.FormValue)
+	form, errCode := parseCSTrainingStatusForm(r.FormValue)
 	if errCode != "" {
 		wsRedirect(w, r, "/trainings", errCode)
 		return
@@ -127,9 +127,11 @@ func (h *Handler) CSTrainingUpdateStatus(w http.ResponseWriter, r *http.Request)
 	}
 
 	if _, err := h.q(ctx).UpdateCSTrainingStatus(ctx, db.UpdateCSTrainingStatusParams{
-		TrainingStatus: status,
-		Attendance:     attendance,
-		Participants:   participants,
+		TrainingStatus: form.Status,
+		Attendance:     form.Attendance,
+		Participants:   form.Participants,
+		TrainingDate:   form.TrainingDate,
+		Notes:          form.Notes,
 		UpdatedBy:      &uid,
 		ID:             id,
 	}); err != nil {
@@ -140,7 +142,7 @@ func (h *Handler) CSTrainingUpdateStatus(w http.ResponseWriter, r *http.Request)
 
 	h.auditWorkspace(ctx, uid, "cs_training.status_update", session.TenantID(ctx), map[string]string{
 		"training_id": strconv.FormatInt(id, 10),
-		"status":      status,
+		"status":      form.Status,
 	})
 	wsRedirectOK(w, r, "/trainings", "updated")
 }

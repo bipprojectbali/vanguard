@@ -27,6 +27,10 @@ func csTrainingRowView(r db.ListCSTrainingsRow, slug string) panel.CSTrainingRow
 	if attendance == "" {
 		attendance = "—"
 	}
+	notes := ""
+	if r.Notes != nil {
+		notes = *r.Notes
+	}
 	return panel.CSTrainingRow{
 		ID:            r.ID,
 		AccountName:   r.AccountName,
@@ -37,6 +41,7 @@ func csTrainingRowView(r db.ListCSTrainingsRow, slug string) panel.CSTrainingRow
 		TrainingDate:  csTrainingDateLabel(r.TrainingDate),
 		Participants:  participants,
 		Attendance:    attendance,
+		Notes:         notes,
 	}
 }
 
