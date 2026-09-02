@@ -79,14 +79,16 @@ func parsePlanForm(fv func(string) string) (planForm, string) {
 		f.BillingFrequency = &s
 	}
 
-	// Harga dasar & biaya setup: kosong = NULL; terisi wajib desimal sah.
-	base, code := optNumeric(fv("base_price"), "base_price")
+	// Harga dasar & biaya setup: kosong = NULL; terisi wajib desimal sah. Pemisah
+	// ribuan dibuang dulu (cleanThousands) agar input terkelompok "5.000.000" dari
+	// numgroup.js — atau ketikan manual tanpa JS — sama-sama sah (BL-2/BL-8).
+	base, code := optNumeric(cleanThousands(fv("base_price")), "base_price")
 	if code != "" {
 		return planForm{}, code
 	}
 	f.BasePrice = base
 
-	setup, code := optNumeric(fv("setup_fee"), "setup_fee")
+	setup, code := optNumeric(cleanThousands(fv("setup_fee")), "setup_fee")
 	if code != "" {
 		return planForm{}, code
 	}
@@ -130,9 +132,9 @@ func planFormFields(p db.Plan) panel.PlanFormFields {
 		PlanCode:         p.PlanCode,
 		PlanCategory:     p.PlanCategory,
 		Description:      deref(p.Description),
-		BasePrice:        numericStr(p.BasePrice),
+		BasePrice:        moneyRupiahStr(p.BasePrice),
 		BillingFrequency: deref(p.BillingFrequency),
-		SetupFee:         numericStr(p.SetupFee),
+		SetupFee:         moneyRupiahStr(p.SetupFee),
 		Currency:         p.Currency,
 		IncludedFeatures: deref(p.IncludedFeatures),
 	}
