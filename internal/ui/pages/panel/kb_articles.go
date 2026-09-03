@@ -11,16 +11,19 @@ import (
 
 // kb_articles.go — view katalog Knowledge Base (Modul 6 Customer Success,
 // slice A3). Murni-data: ViewCount/HelpfulVotes/UpdatedAt sudah diformat
-// handler. Meniru playbooks.go (slice A2). kb_articles TANPA soft-delete:
-// status='Draft' = draf — baris tetap tampil di kelola, ditandai badge.
-// Transisi status = native POST (gotcha #16), aksi tersendiri per baris,
-// TOMBOL BERBEDA per status saat ini (lihat kbArticleRowActions).
+// handler. Meniru playbooks.go (slice A2). Status Draft/Published/Archived
+// (BL-34) — Archived (arsip) disembunyikan dari tab Aktif, tampil di tab
+// Arsip; status='Draft' = draf (baris tetap tampil di tab Aktif, ditandai
+// badge). Transisi status = native POST (gotcha #16), aksi tersendiri per
+// baris, TOMBOL BERBEDA per status saat ini (lihat kbArticleRowActions).
 //
-// KPI cards & filter tab wireframe 6.10 SENGAJA tak ada di slice ini — lihat
-// komentar kb_articles_page.go (handler) untuk alasan lengkap. Kolom
-// "Rating" menampilkan HITUNGAN suara mentah (bukan persentase — total suara
-// tak ada di skema). Badge status 3-nilai: Draf (ghost) / Review (warning) /
-// Terbit (success) — mengikuti warna badge wireframe.
+// KPI cards & filter tab kaya wireframe 6.10 SENGAJA tak ada di slice ini —
+// lihat komentar kb_articles_page.go (handler) untuk alasan lengkap (tab yang
+// ADA cuma Aktif/Arsip, BL-34). Kolom "Rating" menampilkan HITUNGAN suara
+// mentah (bukan persentase — total suara tak ada di skema). Badge status
+// 3-nilai: Draf (ghost) / Terbit (success) / Arsip (neutral). PENYIMPANGAN
+// SADAR dari wireframe (yang menampilkan Review) — keputusan user 3 Sep,
+// dicatat di docs/crm/sistem-dan-role.md §6.10.
 
 // KBArticleRow = satu artikel untuk baris tabel kelola. ViewCount/
 // HelpfulVotes/UpdatedAt SUDAH diformat handler.
@@ -40,6 +43,7 @@ type KBArticleRow struct {
 type KBArticleListView struct {
 	Base       string
 	CanWrite   bool
+	Tab        string // BL-34: "aktif" (default, non-Archived) | "arsip"
 	Err        string
 	Msg        string
 	Items      []KBArticleRow
@@ -63,6 +67,7 @@ func KBArticleList(v KBArticleListView) g.Node {
 				g.Text("Artikel Baru"),
 			)),
 		),
+		kbArticlesTabs(v),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "kb-articles-err", g.Text(v.Err)))
@@ -71,25 +76,60 @@ func KBArticleList(v KBArticleListView) g.Node {
 		body = append(body, ui.Alert(ui.VariantDefault, "kb-articles-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
-		body = append(body, emptyKBArticles())
+		body = append(body, emptyKBArticles(v.Tab))
 	} else {
 		body = append(body, kbArticlesTable(v), kbArticlesPager(v))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
+// kbArticlesTabs = tab LINK Aktif / Arsip (BL-34). Navigasi <a> biasa (lolos
+// gotcha #16). Arsip = artikel pensiun (status Archived), disembunyikan dari
+// tab Aktif. Meniru pola subStatusFilter (subscriptions.go).
+func kbArticlesTabs(v KBArticleListView) g.Node {
+	tab := func(label, key string) g.Node {
+		href := panelListHref(v.Base+"/kb-articles", [2]string{"tab", kbTabParam(key)})
+		cls := "tab min-h-11"
+		if v.Tab == key {
+			cls += " tab-active font-medium"
+		}
+		return h.A(h.Href(href), h.Class(cls), g.Text(label))
+	}
+	return h.Div(h.Role("tablist"), h.Class("tabs tabs-bordered flex-wrap"),
+		tab("Aktif", "aktif"),
+		tab("Arsip", "arsip"),
+	)
+}
+
+// kbTabParam = nilai ?tab= kanonik untuk sebuah tab. Aktif = default lenient →
+// param KOSONG (URL bersih `/kb-articles`, panelListHref melewatinya); hanya
+// "arsip" yang membawa ?tab=arsip. Menjaga URL default sama seperti sebelum
+// BL-34 (pager & tautan tetap `?after=` polos).
+func kbTabParam(tab string) string {
+	if tab == "arsip" {
+		return "arsip"
+	}
+	return ""
+}
+
 // kbArticlesPager = tautan keyset "Berikutnya »" (native <a>, lolos gotcha #16).
 // NextCursor kosong = ujung daftar. flex-wrap agar tak mendorong lebar di 375px.
 func kbArticlesPager(v KBArticleListView) g.Node {
-	base := v.Base + "/kb-articles"
+	// baseHref kanonik memuat ?tab= agar Berikutnya »/« Sebelumnya tetap di
+	// tab yang sama (BL-34 × BL-7). Aktif = default → param kosong (URL polos).
+	base := panelListHref(v.Base+"/kb-articles", [2]string{"tab", kbTabParam(v.Tab)})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }
 
-func emptyKBArticles() g.Node {
+func emptyKBArticles(tab string) g.Node {
+	msg := "Belum ada artikel di katalog."
+	if tab == "arsip" {
+		msg = "Arsip kosong — belum ada artikel yang diarsipkan."
+	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300"),
 		h.Div(h.Class("card-body"),
-			h.P(h.Class("text-base-content/70"), g.Text("Belum ada artikel di katalog."))),
+			h.P(h.Class("text-base-content/70"), g.Text(msg))),
 	)
 }
 
@@ -153,24 +193,26 @@ func helpfulVotesLabel(n int) string {
 }
 
 // kbArticleStatusBadge = badge status pakai token semantik daisyUI (bukan
-// absolut). Wording Draf/Review/Terbit (wireframe 6.10).
+// absolut). BL-34: Draf (ghost) / Terbit (success) / Arsip (neutral) —
+// gerbang Review dibuang, Arsip = pensiun-tanpa-hapus. PENYIMPANGAN SADAR dari
+// wireframe 6.10 (yang menampilkan Review); dicatat di sistem-dan-role.md §6.10.
 func kbArticleStatusBadge(status string) g.Node {
 	switch status {
 	case "Published":
 		return h.Span(h.Class("badge badge-success"), g.Text("Terbit"))
-	case "Review":
-		return h.Span(h.Class("badge badge-warning"), g.Text("Review"))
+	case "Archived":
+		return h.Span(h.Class("badge badge-neutral"), g.Text("Arsip"))
 	default:
 		return h.Span(h.Class("badge badge-ghost"), g.Text("Draf"))
 	}
 }
 
 // kbArticleRowActions = Sunting + tombol transisi status sesuai status saat
-// ini. flex-wrap agar tak mendorong lebar tabel di mobile.
+// ini (BL-34). flex-wrap agar tak mendorong lebar tabel di mobile.
 //
-//   - Draft   → Ajukan Review
-//   - Review  → Terbitkan, Kembalikan ke Draf
-//   - Published → Kembalikan ke Draf
+//   - Draft     → Terbitkan
+//   - Published → Kembalikan ke Draf, Arsipkan
+//   - Archived  → Pulihkan (→ Draf)
 func kbArticleRowActions(base string, a KBArticleRow) g.Node {
 	id := strconv.FormatInt(a.ID, 10)
 	nodes := []g.Node{
@@ -179,14 +221,14 @@ func kbArticleRowActions(base string, a KBArticleRow) g.Node {
 	}
 	switch a.Status {
 	case "Draft":
-		nodes = append(nodes, kbArticleActionForm(base, id, "submit-review", "Ajukan Review", "text-info"))
-	case "Review":
-		nodes = append(nodes,
-			kbArticleActionForm(base, id, "publish", "Terbitkan", "text-success"),
-			kbArticleActionForm(base, id, "return-to-draft", "Kembalikan ke Draf", "text-warning"),
-		)
+		nodes = append(nodes, kbArticleActionForm(base, id, "publish", "Terbitkan", "text-success"))
 	case "Published":
-		nodes = append(nodes, kbArticleActionForm(base, id, "return-to-draft", "Kembalikan ke Draf", "text-warning"))
+		nodes = append(nodes,
+			kbArticleActionForm(base, id, "return-to-draft", "Kembalikan ke Draf", "text-warning"),
+			kbArticleActionForm(base, id, "archive", "Arsipkan", "text-error"),
+		)
+	case "Archived":
+		nodes = append(nodes, kbArticleActionForm(base, id, "unarchive", "Pulihkan", "text-info"))
 	}
 	return h.Div(h.Class("flex flex-wrap items-center gap-2"), g.Group(nodes))
 }

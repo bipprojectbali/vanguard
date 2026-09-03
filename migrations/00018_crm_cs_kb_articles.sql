@@ -19,6 +19,13 @@
 -- kalau dibutuhkan nanti, tambah via migrasi baru (DROP+ADD CHECK, pola
 -- 00013/00014/00015), jangan sunting CHECK ini in-place setelah production.
 --
+-- LANJUTAN (2026-09-03, BL-34): keputusan 2026-08-13 di atas DIBALIK. Status
+-- kini Draft/Published/Archived — gerbang `Review` dibuang, `Archived`
+-- ditambah — via migrasi 00034 (DROP+ADD CHECK, backfill Review→Draft).
+-- CHECK di bawah SENGAJA dibiarkan apa adanya (jangan sunting in-place):
+-- 00034 yang menggantikannya saat migrate-up. Penyimpangan dari wireframe
+-- dicatat di docs/crm/sistem-dan-role.md §6.10.
+--
 -- `visibility` (Public/Internal/Portal Only) ADA di skema.md tapi TAK muncul
 -- di wireframe (kolom tabel maupun filter tab) — field form-only, disiapkan
 -- utk Portal v2 (portal-facing view SENGAJA ditunda v1, lihat plan A3).

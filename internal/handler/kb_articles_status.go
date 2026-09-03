@@ -8,37 +8,50 @@ import (
 	"go_starter/internal/session"
 )
 
-// kb_articles_status.go — AKSI transisi status katalog: ajukan review /
-// terbitkan / kembalikan ke draf. Dipisah dari sunting profil
+// kb_articles_status.go — AKSI transisi status katalog: terbitkan / kembalikan
+// ke draf / arsipkan / pulihkan dari arsip. Dipisah dari sunting profil
 // (kb_articles.go) karena status adalah aksi bisnis tersendiri
-// (SetKBArticleStatus), bukan efek samping edit — mengedit isi artikel
-// tak boleh diam-diam mengubah tahap editorialnya. Meniru
-// playbooks_status.go (slice A2). Gerbang = requireKBArticleWrite.
+// (SetKBArticleStatus), bukan efek samping edit — mengedit isi artikel tak
+// boleh diam-diam mengubah tahap editorialnya. Meniru playbooks_status.go
+// (slice A2). Gerbang = requireKBArticleWrite.
 //
-// Alur: Draft --ajukan review--> Review --terbitkan--> Published. Dari
-// Review atau Published bisa "kembalikan ke draf" (mis. artikel usang perlu
-// disunting ulang sebelum tampil lagi). Tombol yang ditawarkan per baris
-// ditentukan VIEW dari status saat ini (lihat kb_articles.go panel) — jalur
-// handler ini tak menolak transisi "tak wajar" (mis. Draft→Published
-// langsung) karena CHECK di DB hanya menjaga DOMAIN nilai, bukan urutan;
-// urutan cukup dijaga di UI (tak ada risiko keamanan, hanya alur kerja).
-
-// KBArticleSubmitReview — POST /w/{workspace}/kb-articles/{id}/submit-review.
-// Ajukan artikel draf untuk direview.
-func (h *Handler) KBArticleSubmitReview(w http.ResponseWriter, r *http.Request) {
-	h.setKBArticleStatus(w, r, "Review", "kb_article.submit_review", "submitted")
-}
+// BL-34 (redesain domain, keputusan user 3 Sep): status Draft/Published/
+// Archived — gerbang `Review` DIBUANG (terbit langsung), `Archived` ditambah
+// (pensiun-tanpa-hapus). Alur:
+//
+//	Draft --terbitkan--> Published --arsipkan--> Archived
+//	Published --kembalikan ke draf--> Draft   (revisi artikel usang)
+//	Archived --pulihkan--> Draft             (keluar arsip untuk disunting)
+//
+// Tombol yang ditawarkan per baris ditentukan VIEW dari status saat ini (lihat
+// kb_articles.go panel) — jalur handler ini tak menolak transisi "tak wajar"
+// karena CHECK di DB hanya menjaga DOMAIN nilai, bukan urutan; urutan cukup
+// dijaga di UI (tak ada risiko keamanan, hanya alur kerja).
 
 // KBArticlePublish — POST /w/{workspace}/kb-articles/{id}/publish. Terbitkan
-// artikel yang sudah direview.
+// artikel draf (BL-34: langsung, tanpa gerbang review).
 func (h *Handler) KBArticlePublish(w http.ResponseWriter, r *http.Request) {
 	h.setKBArticleStatus(w, r, "Published", "kb_article.publish", "published")
 }
 
 // KBArticleReturnToDraft — POST /w/{workspace}/kb-articles/{id}/return-to-draft.
-// Kembalikan artikel (review atau terbit) ke draf untuk disunting ulang.
+// Kembalikan artikel terbit ke draf untuk disunting ulang.
 func (h *Handler) KBArticleReturnToDraft(w http.ResponseWriter, r *http.Request) {
 	h.setKBArticleStatus(w, r, "Draft", "kb_article.return_to_draft", "returned_to_draft")
+}
+
+// KBArticleArchive — POST /w/{workspace}/kb-articles/{id}/archive. Arsipkan
+// artikel terbit (pensiun-tanpa-hapus) → hilang dari daftar Aktif, muncul di
+// tab Arsip.
+func (h *Handler) KBArticleArchive(w http.ResponseWriter, r *http.Request) {
+	h.setKBArticleStatus(w, r, "Archived", "kb_article.archive", "archived")
+}
+
+// KBArticleUnarchive — POST /w/{workspace}/kb-articles/{id}/unarchive. Pulihkan
+// artikel dari arsip → kembali ke Draft (bukan langsung Terbit: perlu ditinjau/
+// disunting sebelum tampil lagi).
+func (h *Handler) KBArticleUnarchive(w http.ResponseWriter, r *http.Request) {
+	h.setKBArticleStatus(w, r, "Draft", "kb_article.unarchive", "unarchived")
 }
 
 // setKBArticleStatus = jalur bersama transisi status: gate tulis → parse id

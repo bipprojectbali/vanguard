@@ -52,12 +52,14 @@ func kbArticlesMsg(code string) string {
 		return "Artikel ditambahkan ke katalog (draf)."
 	case "saved":
 		return "Perubahan artikel disimpan."
-	case "submitted":
-		return "Artikel diajukan untuk review."
 	case "published":
 		return "Artikel diterbitkan."
 	case "returned_to_draft":
 		return "Artikel dikembalikan ke draf."
+	case "archived":
+		return "Artikel diarsipkan."
+	case "unarchived":
+		return "Artikel dipulihkan dari arsip ke draf."
 	default:
 		return ""
 	}

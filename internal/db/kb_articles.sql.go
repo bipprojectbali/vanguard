@@ -104,13 +104,18 @@ const listKBArticlesAll = `-- name: ListKBArticlesAll :many
 
 SELECT id, tenant_id, article_title, article_body, category, keywords, status, visibility, author_id, view_count, helpful_votes, created_by, created_at, updated_by, updated_at FROM kb_articles
 WHERE (created_at, id) < ($1::timestamptz, $2::bigint)
+  AND (
+        ($3::bool AND status = 'Archived')
+     OR (NOT $3::bool AND status <> 'Archived')
+  )
 ORDER BY created_at DESC, id DESC
-LIMIT $3
+LIMIT $4
 `
 
 type ListKBArticlesAllParams struct {
 	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
 	CursorID        int64              `json:"cursor_id"`
+	OnlyArchived    bool               `json:"only_archived"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -120,14 +125,24 @@ type ListKBArticlesAllParams struct {
 // soft-delete: status='Draft' = draf, bukan terhapus. Meniru pola
 // playbooks.sql (A2), status 3-nilai (bukan is_active boolean) meniru
 // leads_status_chk/subs_status_chk.
-// Seluruh katalog untuk tampilan kelola (semua status). Keyset (created_at DESC,
-// id DESC) + LIMIT (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi
-// & tetap konsisten walau ada sisipan. Urutan pindah dari updated_at ke
-// created_at (kolom kursor STABIL: updated_at berubah saat artikel disunting →
-// baris bisa lompat antar-halaman saat paging; created_at tetap, sesuai konvensi
-// keyset app). Status tampak dari badge per baris.
+// Katalog untuk tampilan kelola. Keyset (created_at DESC, id DESC) + LIMIT
+// (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+// konsisten walau ada sisipan. Urutan pindah dari updated_at ke created_at
+// (kolom kursor STABIL: updated_at berubah saat artikel disunting → baris bisa
+// lompat antar-halaman saat paging; created_at tetap, sesuai konvensi keyset
+// app). Status tampak dari badge per baris.
+//
+// BL-34: tab Aktif vs Arsip via SATU boolean `only_archived` (tanpa query
+// kedua). only_archived=false → status <> 'Archived' (Draft+Published, tab
+// default "Aktif"); only_archived=true → status = 'Archived' (tab "Arsip").
+// Arsip = pensiun-tanpa-hapus → disembunyikan dari daftar default.
 func (q *Queries) ListKBArticlesAll(ctx context.Context, arg ListKBArticlesAllParams) ([]KbArticle, error) {
-	rows, err := q.db.Query(ctx, listKBArticlesAll, arg.CursorCreatedAt, arg.CursorID, arg.PageSize)
+	rows, err := q.db.Query(ctx, listKBArticlesAll,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.OnlyArchived,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -176,8 +191,9 @@ type SetKBArticleStatusParams struct {
 	ID        int64  `json:"id"`
 }
 
-// Transisi status (Draft/Review/Published — CHECK di DB menegakkan domain
-// nilai). Handler yang memutuskan transisi mana yang ditawarkan per baris.
+// Transisi status (Draft/Published/Archived — CHECK di DB menegakkan domain
+// nilai, BL-34). Handler yang memutuskan transisi mana yang ditawarkan per
+// baris (Draft→Published, Published→Draft/Archived, Archived→Draft).
 func (q *Queries) SetKBArticleStatus(ctx context.Context, arg SetKBArticleStatusParams) error {
 	_, err := q.db.Exec(ctx, setKBArticleStatus, arg.Status, arg.UpdatedBy, arg.ID)
 	return err

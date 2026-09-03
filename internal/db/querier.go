@@ -746,12 +746,17 @@ type Querier interface {
 	// soft-delete: status='Draft' = draf, bukan terhapus. Meniru pola
 	// playbooks.sql (A2), status 3-nilai (bukan is_active boolean) meniru
 	// leads_status_chk/subs_status_chk.
-	// Seluruh katalog untuk tampilan kelola (semua status). Keyset (created_at DESC,
-	// id DESC) + LIMIT (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi
-	// & tetap konsisten walau ada sisipan. Urutan pindah dari updated_at ke
-	// created_at (kolom kursor STABIL: updated_at berubah saat artikel disunting →
-	// baris bisa lompat antar-halaman saat paging; created_at tetap, sesuai konvensi
-	// keyset app). Status tampak dari badge per baris.
+	// Katalog untuk tampilan kelola. Keyset (created_at DESC, id DESC) + LIMIT
+	// (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+	// konsisten walau ada sisipan. Urutan pindah dari updated_at ke created_at
+	// (kolom kursor STABIL: updated_at berubah saat artikel disunting → baris bisa
+	// lompat antar-halaman saat paging; created_at tetap, sesuai konvensi keyset
+	// app). Status tampak dari badge per baris.
+	//
+	// BL-34: tab Aktif vs Arsip via SATU boolean `only_archived` (tanpa query
+	// kedua). only_archived=false → status <> 'Archived' (Draft+Published, tab
+	// default "Aktif"); only_archived=true → status = 'Archived' (tab "Arsip").
+	// Arsip = pensiun-tanpa-hapus → disembunyikan dari daftar default.
 	ListKBArticlesAll(ctx context.Context, arg ListKBArticlesAllParams) ([]KbArticle, error)
 	// Daftar lead, keyset (created_at DESC, id DESC) + filter ownership F3 + tab.
 	//
@@ -1086,8 +1091,9 @@ type Querier interface {
 	// FK ditutup di migrasi 00012). Dipanggil dalam tx yang SAMA dgn CreateSubscription
 	// agar deal Closed Won selalu menunjuk langganan yang lahir darinya (atomik).
 	SetDealCreatedSubscription(ctx context.Context, arg SetDealCreatedSubscriptionParams) error
-	// Transisi status (Draft/Review/Published — CHECK di DB menegakkan domain
-	// nilai). Handler yang memutuskan transisi mana yang ditawarkan per baris.
+	// Transisi status (Draft/Published/Archived — CHECK di DB menegakkan domain
+	// nilai, BL-34). Handler yang memutuskan transisi mana yang ditawarkan per
+	// baris (Draft→Published, Published→Draft/Archived, Archived→Draft).
 	SetKBArticleStatus(ctx context.Context, arg SetKBArticleStatusParams) error
 	// Pensiunkan (false) atau aktifkan kembali (true) plan. Plan pensiun hilang dari
 	// ListPlans (picker) tapi quote/langganan lama tetap sah (snapshot harga).

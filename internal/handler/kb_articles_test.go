@@ -20,8 +20,8 @@ import (
 //     (read-saja) & "" ditolak 403.
 //   - Aturan tulis: article_title wajib; visibility enum wajib (CHECK DB);
 //     category/keywords teks bebas opsional; status hanya lewat
-//     submit-review/publish/return-to-draft (tak tersentuh saat update
-//     profil, selalu lahir Draft saat create).
+//     publish/return-to-draft/archive/unarchive (BL-34, tak tersentuh saat
+//     update profil, selalu lahir Draft saat create).
 //
 // TANPA F3/F4/keyset (katalog bounded, tak ada kolom pemilik). Koneksi test
 // = superuser (bypass RLS) → uji LOGIKA handler; isolasi RLS diuji di
@@ -53,14 +53,27 @@ func (e *testEnv) seedKBArticleRow(t *testing.T, title string) db.KbArticle {
 	return a
 }
 
-// allKBArticles mendaftar seluruh katalog langsung dari pool — untuk
-// membuktikan sebuah aksi menyimpan / tak menyimpan baris. Superuser (bypass
-// RLS) → satu tenant test.
+// allKBArticles mendaftar katalog AKTIF (non-Archived) langsung dari pool —
+// cermin tab default. Untuk membuktikan sebuah aksi menyimpan / tak menyimpan
+// baris. Superuser (bypass RLS) → satu tenant test.
 func (e *testEnv) allKBArticles(t *testing.T) []db.KbArticle {
+	t.Helper()
+	return e.listKBArticles(t, false)
+}
+
+// archivedKBArticles mendaftar HANYA katalog Archived (cermin tab Arsip,
+// BL-34) — untuk membuktikan artikel diarsipkan hilang dari tab Aktif tapi
+// muncul di tab Arsip.
+func (e *testEnv) archivedKBArticles(t *testing.T) []db.KbArticle {
+	t.Helper()
+	return e.listKBArticles(t, true)
+}
+
+func (e *testEnv) listKBArticles(t *testing.T, onlyArchived bool) []db.KbArticle {
 	t.Helper()
 	cAt, cID := firstPageCursor()
 	rows, err := e.q.ListKBArticlesAll(t.Context(), db.ListKBArticlesAllParams{
-		CursorCreatedAt: cAt, CursorID: cID, PageSize: allCatalogPageSize,
+		CursorCreatedAt: cAt, CursorID: cID, OnlyArchived: onlyArchived, PageSize: allCatalogPageSize,
 	})
 	if err != nil {
 		t.Fatalf("list kb articles: %v", err)
@@ -247,44 +260,91 @@ func TestKBArticles_UpdateSuccess(t *testing.T) {
 	env.assertAudited(t, "kb_article.update")
 }
 
-// --- status: submit-review / publish / return-to-draft ------------------
+// --- status: publish / archive / unarchive / return-to-draft ------------
 
-// TestKBArticles_StatusLifecycle: Draft→Review (submit-review, ok=submitted)
-// →Published (publish, ok=published)→Draft (return-to-draft,
-// ok=returned_to_draft). Setiap transisi ter-audit.
+// kbTransition = satu langkah transisi status untuk tabel siklus (BL-34).
+type kbTransition struct {
+	path        string
+	handler     http.HandlerFunc
+	okCode      string
+	wantStatus  string
+	auditAction string
+}
+
+// TestKBArticles_StatusLifecycle: siklus penuh Draft→Published→Archived→Draft
+// (unarchive) lalu →Published→Draft (return-to-draft). Membuktikan alur BL-34:
+// terbit langsung tanpa gerbang Review, arsip & pulihkan, kembalikan-ke-draf.
+// Setiap transisi mendarat status benar, redirect ok=<kode>, & ter-audit.
 func TestKBArticles_StatusLifecycle(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedKBArticleRow(t, "Artikel Siklus")
 
-	req := accountsReq(http.MethodPost, "/w/test/kb-articles/"+itoa(a.ID)+"/submit-review", url.Values{}, itoa(a.ID))
-	rec := env.runAccount(uid, "owner", "admin", req, env.h.KBArticleSubmitReview)
-	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=submitted") {
-		t.Errorf("harus ok=submitted, got %q (status %d)", loc, rec.Code)
+	steps := []kbTransition{
+		{"publish", env.h.KBArticlePublish, "published", "Published", "kb_article.publish"},
+		{"archive", env.h.KBArticleArchive, "archived", "Archived", "kb_article.archive"},
+		{"unarchive", env.h.KBArticleUnarchive, "unarchived", "Draft", "kb_article.unarchive"},
+		{"publish", env.h.KBArticlePublish, "published", "Published", "kb_article.publish"},
+		{"return-to-draft", env.h.KBArticleReturnToDraft, "returned_to_draft", "Draft", "kb_article.return_to_draft"},
 	}
-	if got, _ := env.q.GetKBArticle(t.Context(), a.ID); got.Status != "Review" {
-		t.Errorf("harus status=Review, got %q", got.Status)
+	for _, s := range steps {
+		t.Run(s.path+"->"+s.wantStatus, func(t *testing.T) {
+			req := accountsReq(http.MethodPost, "/w/test/kb-articles/"+itoa(a.ID)+"/"+s.path, url.Values{}, itoa(a.ID))
+			rec := env.runAccount(uid, "owner", "admin", req, s.handler)
+			if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok="+s.okCode) {
+				t.Errorf("harus ok=%s, got %q (status %d)", s.okCode, loc, rec.Code)
+			}
+			if got, _ := env.q.GetKBArticle(t.Context(), a.ID); got.Status != s.wantStatus {
+				t.Errorf("harus status=%s, got %q", s.wantStatus, got.Status)
+			}
+			env.assertAudited(t, s.auditAction)
+		})
 	}
-	env.assertAudited(t, "kb_article.submit_review")
+}
 
-	req2 := accountsReq(http.MethodPost, "/w/test/kb-articles/"+itoa(a.ID)+"/publish", url.Values{}, itoa(a.ID))
-	rec2 := env.runAccount(uid, "owner", "admin", req2, env.h.KBArticlePublish)
-	if loc := rec2.Header().Get("Location"); !strings.Contains(loc, "ok=published") {
-		t.Errorf("harus ok=published, got %q (status %d)", loc, rec2.Code)
-	}
-	if got, _ := env.q.GetKBArticle(t.Context(), a.ID); got.Status != "Published" {
-		t.Errorf("harus status=Published, got %q", got.Status)
-	}
-	env.assertAudited(t, "kb_article.publish")
+// TestKBArticles_ArchivedHiddenFromDefaultList: artikel yang diarsipkan hilang
+// dari daftar Aktif (tab default) tapi muncul di daftar Arsip (BL-34) — bukti
+// filter only_archived memisahkan dua tab dengan benar.
+func TestKBArticles_ArchivedHiddenFromDefaultList(t *testing.T) {
+	env, uid := setupAccounts(t)
+	live := env.seedKBArticleRow(t, "Artikel Aktif")
+	arch := env.seedKBArticleRow(t, "Artikel Arsip")
 
-	req3 := accountsReq(http.MethodPost, "/w/test/kb-articles/"+itoa(a.ID)+"/return-to-draft", url.Values{}, itoa(a.ID))
-	rec3 := env.runAccount(uid, "owner", "admin", req3, env.h.KBArticleReturnToDraft)
-	if loc := rec3.Header().Get("Location"); !strings.Contains(loc, "ok=returned_to_draft") {
-		t.Errorf("harus ok=returned_to_draft, got %q (status %d)", loc, rec3.Code)
+	// Arsipkan `arch`: Draft→Published→Archived (arsip hanya dari Published).
+	for _, path := range []string{"publish", "archive"} {
+		h := env.h.KBArticlePublish
+		if path == "archive" {
+			h = env.h.KBArticleArchive
+		}
+		req := accountsReq(http.MethodPost, "/w/test/kb-articles/"+itoa(arch.ID)+"/"+path, url.Values{}, itoa(arch.ID))
+		if rec := env.runAccount(uid, "owner", "admin", req, h); rec.Code != http.StatusSeeOther {
+			t.Fatalf("%s harus 303, got %d", path, rec.Code)
+		}
 	}
-	if got, _ := env.q.GetKBArticle(t.Context(), a.ID); got.Status != "Draft" {
-		t.Errorf("harus status=Draft, got %q", got.Status)
+
+	active := env.allKBArticles(t)
+	if !containsKBArticle(active, live.ID) {
+		t.Error("artikel aktif harus tampil di daftar Aktif")
 	}
-	env.assertAudited(t, "kb_article.return_to_draft")
+	if containsKBArticle(active, arch.ID) {
+		t.Error("artikel diarsipkan TAK boleh tampil di daftar Aktif")
+	}
+
+	archived := env.archivedKBArticles(t)
+	if !containsKBArticle(archived, arch.ID) {
+		t.Error("artikel diarsipkan harus tampil di daftar Arsip")
+	}
+	if containsKBArticle(archived, live.ID) {
+		t.Error("artikel aktif TAK boleh tampil di daftar Arsip")
+	}
+}
+
+func containsKBArticle(rows []db.KbArticle, id int64) bool {
+	for _, r := range rows {
+		if r.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // TestKBArticles_StatusGateWrite: transisi status butuh act write — sales
@@ -293,12 +353,12 @@ func TestKBArticles_StatusGateWrite(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedKBArticleRow(t, "Artikel Jaga")
 
-	req := accountsReq(http.MethodPost, "/w/test/kb-articles/"+itoa(a.ID)+"/submit-review", url.Values{}, itoa(a.ID))
-	rec := env.runAccount(uid, "owner", "sales", req, env.h.KBArticleSubmitReview)
+	req := accountsReq(http.MethodPost, "/w/test/kb-articles/"+itoa(a.ID)+"/publish", url.Values{}, itoa(a.ID))
+	rec := env.runAccount(uid, "owner", "sales", req, env.h.KBArticlePublish)
 	if rec.Code != http.StatusForbidden {
-		t.Errorf("sales harus 403 di submit-review, got %d", rec.Code)
+		t.Errorf("sales harus 403 di publish, got %d", rec.Code)
 	}
 	if got, _ := env.q.GetKBArticle(t.Context(), a.ID); got.Status != "Draft" {
-		t.Error("submit-review yang ditolak tak boleh mengubah status")
+		t.Error("publish yang ditolak tak boleh mengubah status")
 	}
 }
