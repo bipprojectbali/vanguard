@@ -105,7 +105,23 @@ func (h *Handler) CSRenewalEdit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slug := slugFromRequest(r)
-	memberOpts, err := h.csRenewalMemberOptions(ctx)
+
+	// Default owner (BL-32): saat renewal_owner MASIH KOSONG, preselect ke CSM
+	// pemilik desa (assigned_csm) — bukan user aktif. Idempoten: bila owner sudah
+	// di-set, pakai nilai tersimpan & JANGAN timpa tiap buka. Desa tanpa
+	// assigned_csm → biarkan kosong (tak ada yang dipaksakan).
+	preselectOwner := sub.RenewalOwner
+	if preselectOwner == nil {
+		preselectOwner = acct.AssignedCsm
+	}
+	// ensureID = owner preselect WAJIB muncul di dropdown walau di luar himpunan
+	// CS tersaring (cegah data-loss saat re-save).
+	var ensureID int64
+	if preselectOwner != nil {
+		ensureID = *preselectOwner
+	}
+
+	memberOpts, err := h.csRenewalMemberOptions(ctx, ensureID)
 	if err != nil {
 		h.Log.Error("cs-renewals: members for form", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -124,7 +140,7 @@ func (h *Handler) CSRenewalEdit(w http.ResponseWriter, r *http.Request) {
 			CurrentRisk:       deref(sub.RenewalRisk),
 			CurrentActionPlan: deref(sub.RenewalActionPlan),
 			CurrentNextAction: dateStr(sub.RenewalNextActionDate),
-			CurrentOwnerID:    sub.RenewalOwner,
+			CurrentOwnerID:    preselectOwner,
 			Members:           memberOpts,
 			Stages:            csRenewalStageValues,
 			Risks:             csRenewalRiskValues,

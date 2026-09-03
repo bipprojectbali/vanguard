@@ -167,6 +167,24 @@ func CanBusiness(ctx context.Context, obj, act string) bool {
 	return ok
 }
 
+// RoleCanBusiness melaporkan apakah PERAN bernama role di tenant boleh act pada
+// objek CRM obj — varian CanBusiness untuk peran ARBITRER (bukan aktor aktif).
+// Dipakai menyaring kandidat berbasis KAPABILITAS (mis. owner renewal = peran
+// ber-`crm:renewal_mgmt write`) sehingga tahan terhadap nama peran custom
+// per-tenant, bukan mencocokkan nama 'csm' harfiah. role kosong / tenant 0 /
+// error Enforce → DITOLAK (fail-closed), konsisten dengan CanBusiness.
+func RoleCanBusiness(tenantID int64, role, obj, act string) bool {
+	if benf == nil || role == "" || tenantID == 0 {
+		return false
+	}
+	ok, err := benf.Enforce(foldSubject(tenantID, role), obj, act)
+	if err != nil {
+		slog.Error("authz business enforce (role)", "role", role, "obj", obj, "act", act, "err", err)
+		return false // fail-closed
+	}
+	return ok
+}
+
 // HasBusinessRole melaporkan apakah tenant punya peran bernama role dengan
 // setidaknya satu izin — validasi tenant-aware yang menggantikan switch 5-nama
 // tetap (peran kini per-workspace). Peran dengan matriks KOSONG tak muncul di
