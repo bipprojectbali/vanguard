@@ -14,7 +14,8 @@ import (
 //   - Lintas-context: aktivitas context=sales, context=cs, context=general
 //     semua muncul (berbeda dari ActivitiesList yang hanya context=sales).
 //   - Soft-delete: aktivitas terhapus tak tampil.
-//   - Gate izin: tanpa crm:sales_activity → 403.
+//   - Gate izin: crm:activities read (BL-39) — csm/support LOLOS; tanpa CRM
+//     role & non-platform → 403.
 //
 // Seed via seedSalesActivity (context=sales) + seedAllActivity (context lain).
 
@@ -116,14 +117,32 @@ func TestAllActivitiesList_SoftDeletedHidden(t *testing.T) {
 	}
 }
 
-// TestAllActivitiesList_ForbiddenWithoutPerm: peran tanpa crm:sales_activity (csm)
-// mendapat 403 — bukan halaman kosong yang senyap.
-func TestAllActivitiesList_ForbiddenWithoutPerm(t *testing.T) {
+// TestAllActivitiesList_CRMRolesAllowed: setiap peran CRM pemegang crm:activities
+// (BL-39: csm & support kini termasuk, bukan cuma sales/manager/admin) LOLOS gate
+// canViewAllActivities → 200. Objek gate = crm:activities read, BUKAN
+// crm:sales_activity (yang tak dimiliki csm/support).
+func TestAllActivitiesList_CRMRolesAllowed(t *testing.T) {
+	for _, bizRole := range []string{"csm", "support", "sales", "manager", "admin"} {
+		t.Run(bizRole, func(t *testing.T) {
+			env, uid := setupAccounts(t)
+			req := accountsReq(http.MethodGet, "/activity-log", nil, "")
+			rec := env.runAccount(uid, "member", bizRole, req, env.h.AllActivitiesList)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("peran %s (punya crm:activities) harus 200, got %d\n%s",
+					bizRole, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// TestAllActivitiesList_ForbiddenWithoutCRMRole: peran tanpa business_role CRM
+// dan bukan platform role mendapat 403 — bukan halaman kosong yang senyap.
+func TestAllActivitiesList_ForbiddenWithoutCRMRole(t *testing.T) {
 	env, uid := setupAccounts(t)
 	req := accountsReq(http.MethodGet, "/activity-log", nil, "")
-	rec := env.runAccount(uid, "member", "csm", req, env.h.AllActivitiesList)
+	rec := env.runAccount(uid, "member", "" /* tanpa business_role */, req, env.h.AllActivitiesList)
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("tanpa crm:sales_activity harus 403, got %d", rec.Code)
+		t.Fatalf("tanpa crm:activities & non-platform harus 403, got %d", rec.Code)
 	}
 }
 

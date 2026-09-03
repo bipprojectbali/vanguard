@@ -69,9 +69,9 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 	// agar peta jalan terlihat.
 	items = append(items, workspaceCSGroup(slug, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canImplTasks, canTrainings))
 	// Activities top-level = daftar lintas-context (sales+cs+general), M7.
-	// Gate LEBIH LUAS dari Sales Activities: CRM role ATAU platform role
-	// (super_admin/staff butuh visibilitas sistem tanpa harus diberi business_role).
-	// TODO(activities): ganti ke canViewActivities (objek crm:activities) saat M9.
+	// Gate crm:activities read (canViewActivities) ATAU platform role — BEDA objek
+	// dari Sales Activities (crm:sales_activity): csm/support memegang crm:activities
+	// jadi menu ini kini enabled bagi mereka (BL-39).
 	if canAllActivities {
 		items = append(items, ui.NavItem{
 			Label: "Activities",
