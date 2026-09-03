@@ -359,7 +359,7 @@ SET
     assigned_to = $2,
     resolved_at = CASE
         WHEN $1 = 'selesai' THEN now()
-        ELSE resolved_at
+        ELSE NULL
     END,
     updated_by  = $3,
     updated_at  = now()
@@ -374,9 +374,10 @@ type UpdateTicketStatusParams struct {
 	ID         int64  `json:"id"`
 }
 
-// Ubah status tiket. resolved_at diisi otomatis saat status = 'selesai'; dibiarkan
-// saat status lain (nilai lama dipertahankan agar tak terhapus bila di-eskalasi
-// lalu diselesaikan ulang — v1 biarkan nil pada eskalasi, selesai saja yang mengisi).
+// Ubah status tiket. resolved_at diisi otomatis saat status = 'selesai', dan
+// di-NULL-kan pada status lain apa pun — termasuk REOPEN (Selesai→Diproses,
+// BL-38): tiket yang dibuka ulang tak boleh menyimpan resolved_at basi. Invarian:
+// resolved_at terisi IFF status = 'selesai'.
 // assigned_to dapat berubah bersamaan (mis. Support menugaskan dirinya saat terima).
 func (q *Queries) UpdateTicketStatus(ctx context.Context, arg UpdateTicketStatusParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, updateTicketStatus,

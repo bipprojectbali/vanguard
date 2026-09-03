@@ -13,8 +13,9 @@ import (
 var ticketPriorityValues = []string{"rendah", "sedang", "tinggi"}
 
 // ticketStatusValues = nilai enum sahih, cerminan CHECK status constraint
-// migrasi 00020.
-var ticketStatusValues = []string{"baru", "ditugaskan", "eskalasi", "selesai"}
+// migrasi 00036 (BL-38): 4 fase inti. Reopen bukan status — tombol yang menulis
+// 'diproses' (Selesai→Diproses).
+var ticketStatusValues = []string{"baru", "diproses", "menunggu", "selesai"}
 
 func init() {
 	// Guard compile-time: panjang harus sesuai (jika enum migrasi bertambah,

@@ -60,18 +60,18 @@ func (h *Handler) reportsSupportData(ctx context.Context) (panel.ReportsSupportV
 	}, nil
 }
 
-// ticketStatusLabel menerjemahkan status tiket mentah ('baru', 'ditugaskan',
-// 'eskalasi', 'selesai') ke label Indonesia. Meniru ticketStatusBadge
-// (tickets_list.go) tapi mengembalikan teks polos — tabel breakdown report
-// murni teks, tanpa badge.
+// ticketStatusLabel menerjemahkan status tiket mentah (4 fase inti BL-38:
+// 'baru', 'diproses', 'menunggu', 'selesai') ke label Indonesia. Meniru
+// ticketStatusBadge (tickets_list_table.go) tapi mengembalikan teks polos —
+// tabel breakdown report murni teks, tanpa badge.
 func ticketStatusLabel(status string) string {
 	switch status {
 	case "baru":
 		return "Baru"
-	case "ditugaskan":
-		return "Ditugaskan"
-	case "eskalasi":
-		return "Eskalasi"
+	case "diproses":
+		return "Diproses"
+	case "menunggu":
+		return "Menunggu"
 	case "selesai":
 		return "Selesai"
 	default:

@@ -38,9 +38,10 @@ JOIN accounts a ON t.account_id = a.id
 WHERE t.id = sqlc.arg(id);
 
 -- name: UpdateTicketStatus :one
--- Ubah status tiket. resolved_at diisi otomatis saat status = 'selesai'; dibiarkan
--- saat status lain (nilai lama dipertahankan agar tak terhapus bila di-eskalasi
--- lalu diselesaikan ulang — v1 biarkan nil pada eskalasi, selesai saja yang mengisi).
+-- Ubah status tiket. resolved_at diisi otomatis saat status = 'selesai', dan
+-- di-NULL-kan pada status lain apa pun — termasuk REOPEN (Selesai→Diproses,
+-- BL-38): tiket yang dibuka ulang tak boleh menyimpan resolved_at basi. Invarian:
+-- resolved_at terisi IFF status = 'selesai'.
 -- assigned_to dapat berubah bersamaan (mis. Support menugaskan dirinya saat terima).
 UPDATE tickets
 SET
@@ -48,7 +49,7 @@ SET
     assigned_to = sqlc.narg(assigned_to),
     resolved_at = CASE
         WHEN sqlc.arg(status) = 'selesai' THEN now()
-        ELSE resolved_at
+        ELSE NULL
     END,
     updated_by  = sqlc.narg(updated_by),
     updated_at  = now()

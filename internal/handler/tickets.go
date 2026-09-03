@@ -47,7 +47,7 @@ func (h *Handler) TicketsList(w http.ResponseWriter, r *http.Request) {
 	var filterStatus string
 	var filterSLABreached, filterSLAAtRisk bool
 	switch tab {
-	case "baru", "ditugaskan", "eskalasi", "selesai":
+	case "baru", "diproses", "menunggu", "selesai":
 		filterStatus = tab
 	case "sla-risiko":
 		filterSLAAtRisk = true

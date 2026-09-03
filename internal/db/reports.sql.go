@@ -166,10 +166,10 @@ WHERE (
 )
 GROUP BY t.status
 ORDER BY CASE t.status
-    WHEN 'baru'       THEN 1
-    WHEN 'ditugaskan' THEN 2
-    WHEN 'eskalasi'   THEN 3
-    WHEN 'selesai'    THEN 4
+    WHEN 'baru'     THEN 1
+    WHEN 'diproses' THEN 2
+    WHEN 'menunggu' THEN 3
+    WHEN 'selesai'  THEN 4
     ELSE 5
 END
 `

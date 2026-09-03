@@ -78,15 +78,16 @@ func ticketPriorityBadge(priority string) g.Node {
 	}
 }
 
-// ticketStatusBadge = badge status tiket, token semantik daisyUI.
+// ticketStatusBadge = badge status tiket (4 fase inti BL-38), token semantik
+// daisyUI. menunggu = badge-warning (tertahan pihak lain — sinyal perhatian).
 func ticketStatusBadge(status string) g.Node {
 	switch status {
 	case "selesai":
 		return h.Span(h.Class("badge badge-success"), g.Text("Selesai"))
-	case "eskalasi":
-		return h.Span(h.Class("badge badge-error"), g.Text("Eskalasi"))
-	case "ditugaskan":
-		return h.Span(h.Class("badge badge-info"), g.Text("Ditugaskan"))
+	case "diproses":
+		return h.Span(h.Class("badge badge-info"), g.Text("Diproses"))
+	case "menunggu":
+		return h.Span(h.Class("badge badge-warning"), g.Text("Menunggu"))
 	default:
 		return h.Span(h.Class("badge badge-ghost"), g.Text("Baru"))
 	}
@@ -115,26 +116,28 @@ func ticketSLALabel(label string) g.Node {
 // flex-wrap agar tak dorong lebar tabel di mobile.
 func ticketStatusForm(base, id, currentStatus string) g.Node {
 	nodes := []g.Node{}
-	// Transisi yang ditampilkan berdasarkan status saat ini
+	// Transisi yang ditampilkan berdasarkan fase saat ini (BL-38):
+	//   Baru      → [Proses]
+	//   Diproses  → [Tahan (→Menunggu), Selesaikan]
+	//   Menunggu  → [Lanjutkan (→Diproses)]
+	//   Selesai   → [Buka Ulang] (→Diproses; Reopen = tombol, bukan status)
 	switch currentStatus {
 	case "baru":
 		nodes = append(nodes,
-			ticketActionBtn(base, id, "ditugaskan", "Tugaskan", "btn-info"),
-			ticketActionBtn(base, id, "eskalasi", "Eskalasi", "text-warning btn-ghost"),
+			ticketActionBtn(base, id, "diproses", "Proses", "btn-info"),
 		)
-	case "ditugaskan":
+	case "diproses":
 		nodes = append(nodes,
-			ticketActionBtn(base, id, "eskalasi", "Eskalasi", "text-warning btn-ghost"),
-			ticketActionBtn(base, id, "selesai", "Selesai", "btn-success"),
+			ticketActionBtn(base, id, "menunggu", "Tahan", "text-warning btn-ghost"),
+			ticketActionBtn(base, id, "selesai", "Selesaikan", "btn-success"),
 		)
-	case "eskalasi":
+	case "menunggu":
 		nodes = append(nodes,
-			ticketActionBtn(base, id, "ditugaskan", "Tugaskan", "btn-info"),
-			ticketActionBtn(base, id, "selesai", "Selesai", "btn-success"),
+			ticketActionBtn(base, id, "diproses", "Lanjutkan", "btn-info"),
 		)
 	default: // selesai — bisa dibuka ulang
 		nodes = append(nodes,
-			ticketActionBtn(base, id, "baru", "Buka Ulang", "btn-ghost"),
+			ticketActionBtn(base, id, "diproses", "Buka Ulang", "btn-ghost"),
 		)
 	}
 	return h.Div(h.Class("flex flex-wrap items-center gap-1"), g.Group(nodes))

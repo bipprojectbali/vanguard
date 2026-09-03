@@ -1273,9 +1273,10 @@ type Querier interface {
 	// Ganti NAMA tampilan workspace (owner-only, di-guard di handler). Slug SENGAJA
 	// tak diubah — immutable setelah dibuat (stabilitas URL; ganti display != ganti URL).
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) error
-	// Ubah status tiket. resolved_at diisi otomatis saat status = 'selesai'; dibiarkan
-	// saat status lain (nilai lama dipertahankan agar tak terhapus bila di-eskalasi
-	// lalu diselesaikan ulang — v1 biarkan nil pada eskalasi, selesai saja yang mengisi).
+	// Ubah status tiket. resolved_at diisi otomatis saat status = 'selesai', dan
+	// di-NULL-kan pada status lain apa pun — termasuk REOPEN (Selesai→Diproses,
+	// BL-38): tiket yang dibuka ulang tak boleh menyimpan resolved_at basi. Invarian:
+	// resolved_at terisi IFF status = 'selesai'.
 	// assigned_to dapat berubah bersamaan (mis. Support menugaskan dirinya saat terima).
 	UpdateTicketStatus(ctx context.Context, arg UpdateTicketStatusParams) (Ticket, error)
 	// Profil dari provider (avatar + nama tampilan) di-refresh TIAP LOGIN: keduanya
