@@ -381,30 +381,35 @@ const updateEngagementStatus = `-- name: UpdateEngagementStatus :one
 UPDATE engagements
 SET
     status        = $1,
-    outcome       = $2,
-    next_due_date = $3,
-    updated_by    = $4,
+    outcome       = COALESCE($2, outcome),
+    next_due_date = COALESCE($3, next_due_date),
+    scheduled_at  = COALESCE($4, scheduled_at),
+    updated_by    = $5,
     updated_at    = now()
-WHERE id = $5
+WHERE id = $6
 RETURNING id, tenant_id, account_id, subject, engagement_type, frequency, scheduled_at, status, channel, outcome, next_due_date, owner_id, created_by, created_at, updated_by, updated_at
 `
 
 type UpdateEngagementStatusParams struct {
-	Status      string      `json:"status"`
-	Outcome     *string     `json:"outcome"`
-	NextDueDate pgtype.Date `json:"next_due_date"`
-	UpdatedBy   *int64      `json:"updated_by"`
-	ID          int64       `json:"id"`
+	Status      string             `json:"status"`
+	Outcome     *string            `json:"outcome"`
+	NextDueDate pgtype.Date        `json:"next_due_date"`
+	ScheduledAt pgtype.Timestamptz `json:"scheduled_at"`
+	UpdatedBy   *int64             `json:"updated_by"`
+	ID          int64              `json:"id"`
 }
 
-// Ubah status engagement. outcome diperbarui bersamaan (CSM mengisi ringkasan
-// setelah engagement selesai). next_due_date dapat diperbarui (khususnya saat
-// status = rescheduled).
+// Ubah status engagement. Field hasil/jadwal OPSIONAL: COALESCE(narg, kolom)
+// menjaga nilai lama saat form tak mengirim (BL-30 #1 — tombol status polos,
+// mis. "Skip"/"Plan Ulang", TAK boleh menimpa outcome/next_due_date/scheduled_at
+// lama jadi NULL). Kirim non-NULL hanya bila operator memang mengisi (panel
+// "Done" isi outcome; panel "Reschedule" isi scheduled_at baru).
 func (q *Queries) UpdateEngagementStatus(ctx context.Context, arg UpdateEngagementStatusParams) (Engagement, error) {
 	row := q.db.QueryRow(ctx, updateEngagementStatus,
 		arg.Status,
 		arg.Outcome,
 		arg.NextDueDate,
+		arg.ScheduledAt,
 		arg.UpdatedBy,
 		arg.ID,
 	)

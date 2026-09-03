@@ -1191,9 +1191,11 @@ type Querier interface {
 	// handler (bukan constraint DB agar pesan bisa diperbaiki user). closed_date =
 	// CURRENT_DATE bila stage terminal, NULL bila dibuka kembali ke stage aktif.
 	UpdateDealStage(ctx context.Context, arg UpdateDealStageParams) error
-	// Ubah status engagement. outcome diperbarui bersamaan (CSM mengisi ringkasan
-	// setelah engagement selesai). next_due_date dapat diperbarui (khususnya saat
-	// status = rescheduled).
+	// Ubah status engagement. Field hasil/jadwal OPSIONAL: COALESCE(narg, kolom)
+	// menjaga nilai lama saat form tak mengirim (BL-30 #1 — tombol status polos,
+	// mis. "Skip"/"Plan Ulang", TAK boleh menimpa outcome/next_due_date/scheduled_at
+	// lama jadi NULL). Kirim non-NULL hanya bila operator memang mengisi (panel
+	// "Done" isi outcome; panel "Reschedule" isi scheduled_at baru).
 	UpdateEngagementStatus(ctx context.Context, arg UpdateEngagementStatusParams) (Engagement, error)
 	// Sunting profil/isi artikel. status TAK di sini (SetKBArticleStatus) —
 	// transisi status adalah aksi tersendiri, bukan efek samping edit.

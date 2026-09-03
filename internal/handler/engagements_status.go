@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -28,7 +29,7 @@ func (h *Handler) EngagementUpdateStatus(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	status, outcome, nextDue, errCode := parseEngagementStatusForm(r.FormValue)
+	form, errCode := parseEngagementStatusForm(r.FormValue)
 	if errCode != "" {
 		wsRedirect(w, r, "/engagements", errCode)
 		return
@@ -77,9 +78,10 @@ func (h *Handler) EngagementUpdateStatus(w http.ResponseWriter, r *http.Request)
 	}
 
 	if _, err := h.q(ctx).UpdateEngagementStatus(ctx, db.UpdateEngagementStatusParams{
-		Status:      status,
-		Outcome:     outcome,
-		NextDueDate: nextDue,
+		Status:      form.Status,
+		Outcome:     form.Outcome,
+		NextDueDate: form.NextDue,
+		ScheduledAt: form.ScheduledAt,
 		UpdatedBy:   &uid,
 		ID:          id,
 	}); err != nil {
@@ -88,9 +90,17 @@ func (h *Handler) EngagementUpdateStatus(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.auditWorkspace(ctx, uid, "engagement.status_update", session.TenantID(ctx), map[string]string{
+	meta := map[string]string{
 		"engagement_id": strconv.FormatInt(id, 10),
-		"status":        status,
-	})
+		"status":        form.Status,
+	}
+	// Jejak reschedule lama→baru di metadata audit (BL-30 (c)) — engagements tak
+	// punya history kolom; updated_by/at hanya siapa+kapan. e.ScheduledAt = nilai
+	// LAMA (dimuat sebelum update), form.ScheduledAt = nilai BARU. UTC (gotcha #14).
+	if form.Status == "rescheduled" && form.ScheduledAt.Valid {
+		meta["scheduled_at_old"] = e.ScheduledAt.Time.UTC().Format(time.RFC3339)
+		meta["scheduled_at_new"] = form.ScheduledAt.Time.UTC().Format(time.RFC3339)
+	}
+	h.auditWorkspace(ctx, uid, "engagement.status_update", session.TenantID(ctx), meta)
 	wsRedirectOK(w, r, "/engagements", "updated")
 }

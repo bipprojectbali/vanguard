@@ -6,6 +6,7 @@ import (
 	"go_starter/internal/ui"
 
 	g "maragu.dev/gomponents"
+	data "maragu.dev/gomponents-datastar"
 	h "maragu.dev/gomponents/html"
 )
 
@@ -38,6 +39,7 @@ type EngagementRow struct {
 	StatusBadge string // daisyUI badge class
 	OwnerName   string
 	NextDue     string // formatted date atau "—"
+	Outcome     string // ringkasan hasil; "" bila belum ada (prefill panel Done, BL-30)
 	HrefDetail  string // href ke /engagements/{id} — reserved, v1 pakai untuk status form
 }
 
@@ -209,6 +211,7 @@ func engagementsTable(v EngagementsListView) g.Node {
 		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Status")),
 		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Owner")),
 		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Next Due")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Outcome")),
 	}
 	if v.CanWrite {
 		head = append(head, h.Th(h.Class("py-2 font-medium"), g.Text("Aksi")))
@@ -244,38 +247,101 @@ func engagementTableRow(base string, r EngagementRow, canWrite bool) g.Node {
 		h.Td(h.Class("py-2 pr-4"), h.Span(h.Class("badge badge-sm "+r.StatusBadge), g.Text(r.StatusLabel))),
 		h.Td(h.Class("py-2 pr-4"), g.Text(orDash(r.OwnerName))),
 		h.Td(h.Class("py-2 pr-4 text-sm text-base-content/70"), g.Text(r.NextDue)),
+		h.Td(h.Class("py-2 pr-4 max-w-[160px]"),
+			h.Span(h.Class("block truncate text-base-content/70"), g.Text(orDash(r.Outcome)))),
 	}
 	if canWrite {
-		cells = append(cells, h.Td(h.Class("py-2"), engagementStatusForm(base, id, r.StatusLabel)))
+		cells = append(cells, h.Td(h.Class("py-2"), engagementStatusForm(base, id, r.StatusLabel, r.Outcome)))
 	}
 	return h.Tr(h.Class("border-b border-base-300/50 hover:bg-base-200/50"), g.Group(cells))
 }
 
-// engagementStatusForm = form mini ganti status per baris (canWrite).
-// Transisi: planned → done/skipped/rescheduled; done/skipped/rescheduled → planned.
-func engagementStatusForm(base, id, currentStatusLabel string) g.Node {
-	nodes := []g.Node{}
-	switch currentStatusLabel {
-	case "Planned":
-		nodes = append(nodes,
-			engagementActionBtn(base, id, "done", "✓ Done", "btn-success"),
-			engagementActionBtn(base, id, "skipped", "Skip", "btn-ghost"),
-			engagementActionBtn(base, id, "rescheduled", "Reschedule", "text-warning btn-ghost"),
-		)
-	default: // done / skipped / rescheduled → bisa dibuka ulang ke planned
-		nodes = append(nodes,
-			engagementActionBtn(base, id, "planned", "Plan Ulang", "btn-ghost"),
-		)
+// engagementStatusForm = aksi ganti status per baris (canWrite). Transisi:
+// planned → done/skipped/rescheduled; done/skipped/rescheduled → planned.
+//
+// BL-30: "✓ Done" & "Reschedule" TAK langsung submit — mereka membuka panel
+// inline (Datastar data-show, state form efemeral; pola BL-19/BL-26/BL-28
+// showWhen, BUKAN mekanisme baru) untuk menampung outcome (Done) atau jadwal-
+// baru (Reschedule). "Skip"/"Plan Ulang" tetap submit langsung — hanya kirim
+// status; query COALESCE menjaga outcome/next_due/scheduled lama agar tak jadi
+// NULL (#1).
+func engagementStatusForm(base, id, currentStatusLabel, outcome string) g.Node {
+	if currentStatusLabel == "Planned" {
+		return engagementActions(base, id, outcome)
 	}
-	return h.Div(h.Class("flex flex-wrap items-center gap-1"), g.Group(nodes))
+	// done / skipped / rescheduled → bisa dibuka ulang ke planned (status-only).
+	return h.Div(h.Class("flex flex-wrap items-center gap-1"),
+		engagementStatusBtn(base, id, "planned", "Plan Ulang", "btn-ghost"))
 }
 
-func engagementActionBtn(base, id, targetStatus, label, extraCls string) g.Node {
+// engagementActions membangun tombol + panel inline untuk baris "Planned".
+// Signal per-baris (done{id}/resc{id}) unik agar tak bertabrakan lintas baris
+// di halaman yang sama.
+func engagementActions(base, id, outcome string) g.Node {
+	post := base + "/engagements/" + id + "/status"
+	doneSig, rescSig := "done"+id, "resc"+id
+
+	buttons := []g.Node{
+		h.Button(h.Type("button"), h.Class("btn btn-xs btn-success min-h-11"),
+			data.On("click", "$"+doneSig+" = !$"+doneSig), g.Text("✓ Done")),
+		engagementStatusBtn(base, id, "skipped", "Skip", "btn-ghost"),
+		h.Button(h.Type("button"), h.Class("btn btn-xs text-warning btn-ghost min-h-11"),
+			data.On("click", "$"+rescSig+" = !$"+rescSig), g.Text("Reschedule")),
+	}
+	return h.Div(
+		h.Class("grid gap-2 min-w-0"),
+		data.Signals(map[string]any{doneSig: false, rescSig: false}),
+		h.Div(h.Class("flex flex-wrap items-center gap-1"), g.Group(buttons)),
+		engagementDonePanel(post, outcome, doneSig),
+		engagementReschedulePanel(post, rescSig),
+	)
+}
+
+// engagementStatusBtn = form submit-langsung status-only (Skip/Plan Ulang).
+func engagementStatusBtn(base, id, targetStatus, label, extraCls string) g.Node {
 	return h.FormEl(
 		h.Method("post"), h.Action(base+"/engagements/"+id+"/status"),
 		h.Input(h.Type("hidden"), h.Name("status"), h.Value(targetStatus)),
 		h.Button(h.Type("submit"), h.Class("btn btn-xs min-h-11 "+extraCls),
 			g.Text(label)),
+	)
+}
+
+// engagementDonePanel = panel "Done": ringkasan hasil (outcome, opsional) diisi
+// ulang dgn nilai tersimpan, submit status=done. Tampil saat $done{id} true.
+// g.Text meng-escape (gotcha #15).
+func engagementDonePanel(post, outcome, sig string) g.Node {
+	return showWhen("$"+sig, "min-w-0",
+		h.FormEl(
+			h.Method("post"), h.Action(post),
+			h.Class("grid gap-2 rounded-box border border-base-300 bg-base-200 p-3 min-w-0"),
+			h.Input(h.Type("hidden"), h.Name("status"), h.Value("done")),
+			h.Label(h.Class("grid gap-1 text-xs"),
+				h.Span(g.Text("Ringkasan hasil (opsional)")),
+				h.Textarea(h.Name("outcome"), h.Rows("2"),
+					h.Class("textarea textarea-bordered textarea-sm text-base w-full"),
+					g.Text(outcome))),
+			h.Button(h.Type("submit"), h.Class("btn btn-xs btn-success min-h-11"),
+				g.Text("Simpan")),
+		),
+	)
+}
+
+// engagementReschedulePanel = panel "Reschedule": jadwal interaksi baru
+// (scheduled_at, WAJIB), submit status=rescheduled. Tampil saat $resc{id} true.
+func engagementReschedulePanel(post, sig string) g.Node {
+	return showWhen("$"+sig, "min-w-0",
+		h.FormEl(
+			h.Method("post"), h.Action(post),
+			h.Class("grid gap-2 rounded-box border border-base-300 bg-base-200 p-3 min-w-0"),
+			h.Input(h.Type("hidden"), h.Name("status"), h.Value("rescheduled")),
+			h.Label(h.Class("grid gap-1 text-xs"),
+				h.Span(g.Text("Jadwal interaksi baru")),
+				h.Input(h.Type("datetime-local"), h.Name("scheduled_at"), h.Required(),
+					h.Class("input input-bordered input-sm text-base min-h-11 w-full"))),
+			h.Button(h.Type("submit"), h.Class("btn btn-xs text-warning btn-ghost min-h-11"),
+				g.Text("Simpan")),
+		),
 	)
 }
 

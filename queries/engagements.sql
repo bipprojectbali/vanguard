@@ -36,14 +36,17 @@ LEFT JOIN users u ON e.owner_id = u.id
 WHERE e.id = sqlc.arg(id);
 
 -- name: UpdateEngagementStatus :one
--- Ubah status engagement. outcome diperbarui bersamaan (CSM mengisi ringkasan
--- setelah engagement selesai). next_due_date dapat diperbarui (khususnya saat
--- status = rescheduled).
+-- Ubah status engagement. Field hasil/jadwal OPSIONAL: COALESCE(narg, kolom)
+-- menjaga nilai lama saat form tak mengirim (BL-30 #1 — tombol status polos,
+-- mis. "Skip"/"Plan Ulang", TAK boleh menimpa outcome/next_due_date/scheduled_at
+-- lama jadi NULL). Kirim non-NULL hanya bila operator memang mengisi (panel
+-- "Done" isi outcome; panel "Reschedule" isi scheduled_at baru).
 UPDATE engagements
 SET
     status        = sqlc.arg(status),
-    outcome       = sqlc.narg(outcome),
-    next_due_date = sqlc.narg(next_due_date),
+    outcome       = COALESCE(sqlc.narg(outcome), outcome),
+    next_due_date = COALESCE(sqlc.narg(next_due_date), next_due_date),
+    scheduled_at  = COALESCE(sqlc.narg(scheduled_at), scheduled_at),
     updated_by    = sqlc.narg(updated_by),
     updated_at    = now()
 WHERE id = sqlc.arg(id)

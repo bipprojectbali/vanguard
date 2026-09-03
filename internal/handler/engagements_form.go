@@ -104,19 +104,42 @@ func parseEngagementForm(fv func(string) string) (engagementForm, string) {
 	return f, ""
 }
 
-// parseEngagementStatusForm mengurai form mini status-update (dari baris tabel).
-// Hanya status yang wajib; outcome & next_due_date opsional.
-func parseEngagementStatusForm(fv func(string) string) (status string, outcome *string, nextDue pgtype.Date, errCode string) {
-	status = fv("status")
+// engagementStatusForm = data terurai dari form aksi status per-baris. Semua
+// field hasil/jadwal OPSIONAL (kosong → nil/invalid → query COALESCE menjaga
+// nilai lama, BL-30 #1). ScheduledAt hanya relevan untuk "Reschedule".
+type engagementStatusForm struct {
+	Status      string
+	Outcome     *string
+	NextDue     pgtype.Date
+	ScheduledAt pgtype.Timestamptz
+}
+
+// parseEngagementStatusForm mengurai form aksi status per-baris. status wajib &
+// sahih; outcome/next_due_date/scheduled_at opsional. scheduled_at WAJIB bila
+// status = rescheduled (inti "reschedule" = jadwal baru; tanpa itu aksi jadi
+// no-op, BL-30 #3). Field kosong sengaja TAK menimpa nilai lama — penjagaan
+// sesungguhnya di query (COALESCE).
+func parseEngagementStatusForm(fv func(string) string) (engagementStatusForm, string) {
+	status := fv("status")
 	if !isValidEnum(status, engagementStatusValues) {
-		return "", nil, pgtype.Date{}, "status"
+		return engagementStatusForm{}, "status"
 	}
+	f := engagementStatusForm{Status: status}
 	if s := strings.TrimSpace(fv("outcome")); s != "" {
-		outcome = &s
+		f.Outcome = &s
 	}
 	nd, code := optDate(fv("next_due_date"))
 	if code != "" {
-		return "", nil, pgtype.Date{}, "required"
+		return engagementStatusForm{}, "required"
 	}
-	return status, outcome, nd, ""
+	f.NextDue = nd
+	sa, code := optDateTime(fv("scheduled_at"))
+	if code != "" {
+		return engagementStatusForm{}, "datetime"
+	}
+	if status == "rescheduled" && !sa.Valid {
+		return engagementStatusForm{}, "required"
+	}
+	f.ScheduledAt = sa
+	return f, ""
 }
