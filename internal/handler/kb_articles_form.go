@@ -12,11 +12,15 @@ import (
 // wajib) punya SATU tempat: create & edit tak boleh menerima nilai yang
 // berbeda sahnya untuk kolom yang sama. Meniru playbooks_form.go (slice A2).
 //
-// visibility PUNYA CHECK di DB (kb_articles_visibility_chk, migrasi 00018)
-// — divalidasi juga di handler agar galat dilaporkan sebelum INSERT/UPDATE
-// gagal, bukan sebagai 500 mentah dari constraint. category & keywords TANPA
-// CHECK (teks bebas — kategori KB dinamis per workspace, beda dari
-// trigger_scenario Playbooks yang enum tetap).
+// visibility & category PUNYA CHECK di DB (kb_articles_visibility_chk 00018,
+// kb_articles_category_chk 00035) — divalidasi juga di handler agar galat
+// dilaporkan sebelum INSERT/UPDATE gagal, bukan sebagai 500 mentah dari
+// constraint. keywords TANPA CHECK (teks bebas).
+//
+// category DULU teks bebas (00018) — dikunci jadi enum GLOBAL di BL-35 (00035):
+// keputusan user membalik desain "kategori dinamis per workspace" demi
+// konsistensi + dropdown. Kolom tetap nullable (kosong → NULL = tak
+// berkategori), jadi validasi bawah: kosong DIBOLEHKAN, non-kosong wajib enum.
 
 const maxKBArticleTitleLen = 300
 
@@ -35,6 +39,25 @@ var kbArticleVisibilityOptions = []string{"Public", "Internal", "Portal Only"}
 var _ = func() struct{} {
 	if len(kbArticleVisibilityOptions) != len(validKBArticleVisibilities) {
 		panic("kb_articles: opsi visibility tak sinkron dengan map validasi")
+	}
+	return struct{}{}
+}()
+
+// validKBArticleCategories = domain nilai category (cermin CHECK DB
+// kb_articles_category_chk, 00035). Enum GLOBAL tetap.
+var validKBArticleCategories = map[string]struct{}{
+	"Panduan Awal": {}, "Pembayaran": {}, "Kependudukan": {}, "Teknis": {}, "Umum": {},
+}
+
+// kbArticleCategoryOptions = opsi dropdown BERURUT (map validasi tak berurutan).
+// Nilai HARUS himpunan sama dengan map validasi.
+var kbArticleCategoryOptions = []string{"Panduan Awal", "Pembayaran", "Kependudukan", "Teknis", "Umum"}
+
+// compile-time: opsi & map validasi category sepakat (panjang sama). Berbeda =
+// dropdown menawarkan nilai yang ditolak backend, atau sebaliknya.
+var _ = func() struct{} {
+	if len(kbArticleCategoryOptions) != len(validKBArticleCategories) {
+		panic("kb_articles: opsi category tak sinkron dengan map validasi")
 	}
 	return struct{}{}
 }()
@@ -68,9 +91,17 @@ func parseKBArticleForm(fv func(string) string) (kbArticleForm, string) {
 		return kbArticleForm{}, "visibility"
 	}
 
+	// category opsional-tapi-terkunci: kosong → NULL (dibolehkan); non-kosong
+	// WAJIB enum (00035). Divalidasi sebelum optTrim agar galat enum jelas.
+	f.Category = optTrim(fv("category"))
+	if f.Category != nil {
+		if _, ok := validKBArticleCategories[*f.Category]; !ok {
+			return kbArticleForm{}, "category"
+		}
+	}
+
 	// Teks bebas opsional: trim, kosong → NULL.
 	f.ArticleBody = optTrim(fv("article_body"))
-	f.Category = optTrim(fv("category"))
 	f.Keywords = optTrim(fv("keywords"))
 
 	return f, ""

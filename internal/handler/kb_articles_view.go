@@ -74,6 +74,8 @@ func kbArticlesErrMsg(code string) string {
 		return "Judul artikel wajib diisi."
 	case "visibility":
 		return "Visibilitas harus salah satu: Public, Internal, atau Portal Only."
+	case "category":
+		return "Kategori harus salah satu: Panduan Awal, Pembayaran, Kependudukan, Teknis, atau Umum."
 	case "failed":
 		return "Gagal menyimpan artikel. Coba lagi."
 	default:

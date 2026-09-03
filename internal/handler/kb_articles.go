@@ -45,6 +45,7 @@ func (h *Handler) KBArticleNew(w http.ResponseWriter, r *http.Request) {
 		Err:               kbArticlesErrMsg(r.URL.Query().Get("err")),
 		Fields:            panel.KBArticleFormFields{Visibility: "Internal"},
 		VisibilityOptions: kbArticleVisibilityOptions,
+		CategoryOptions:   kbArticleCategoryOptions,
 	}
 	h.renderWorkspaceShell(w, r, "Tambah Artikel", "/kb-articles", panel.KBArticleForm(v))
 }
@@ -113,6 +114,7 @@ func (h *Handler) KBArticleEdit(w http.ResponseWriter, r *http.Request) {
 		Err:               kbArticlesErrMsg(r.URL.Query().Get("err")),
 		Fields:            kbArticleFormFields(a),
 		VisibilityOptions: kbArticleVisibilityOptions,
+		CategoryOptions:   kbArticleCategoryOptions,
 	}
 	h.renderWorkspaceShell(w, r, "Sunting Artikel", "/kb-articles", panel.KBArticleForm(v))
 }

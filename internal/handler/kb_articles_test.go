@@ -19,7 +19,8 @@ import (
 //     POST butuh crm:kb write — admin/manager/support; sales & csm
 //     (read-saja) & "" ditolak 403.
 //   - Aturan tulis: article_title wajib; visibility enum wajib (CHECK DB);
-//     category/keywords teks bebas opsional; status hanya lewat
+//     category enum wajib bila diisi (CHECK DB 00035, opsional-nullable);
+//     keywords teks bebas opsional; status hanya lewat
 //     publish/return-to-draft/archive/unarchive (BL-34, tak tersentuh saat
 //     update profil, selalu lahir Draft saat create).
 //
@@ -167,7 +168,7 @@ func TestKBArticles_GateWrite(t *testing.T) {
 func TestKBArticles_CreateSuccess(t *testing.T) {
 	env, uid := setupAccounts(t)
 	form := kbArticleFormValues("Cara Reset Password")
-	form.Set("category", "Akun")
+	form.Set("category", "Kependudukan")
 	form.Set("keywords", "password, reset, login")
 	form.Set("article_body", "Langkah reset password: buka halaman lupa sandi...")
 	form.Set("visibility", "Public")
@@ -194,6 +195,9 @@ func TestKBArticles_CreateSuccess(t *testing.T) {
 	if a.Visibility != "Public" {
 		t.Errorf("visibility salah: %q", a.Visibility)
 	}
+	if a.Category == nil || *a.Category != "Kependudukan" {
+		t.Errorf("category enum tak tersimpan: %v", a.Category)
+	}
 	if a.AuthorID == nil || *a.AuthorID != uid {
 		t.Errorf("author_id harus pembuat, got %v", a.AuthorID)
 	}
@@ -213,6 +217,7 @@ func TestKBArticles_CreateRejectsInvalid(t *testing.T) {
 	}{
 		{"judul kosong", kbArticleFormValues(""), "err=required"},
 		{"visibility asing", withField(kbArticleFormValues("Artikel X"), "visibility", "Semua Orang"), "err=visibility"},
+		{"category asing", withField(kbArticleFormValues("Artikel X"), "category", "Akun"), "err=category"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -239,7 +244,7 @@ func TestKBArticles_UpdateSuccess(t *testing.T) {
 	a := env.seedKBArticleRow(t, "Artikel Lama")
 
 	form := kbArticleFormValues("Artikel Baru")
-	form.Set("category", "Billing")
+	form.Set("category", "Pembayaran")
 	form.Set("visibility", "Portal Only")
 	req := accountsReq(http.MethodPost, "/w/test/kb-articles/"+itoa(a.ID), form, itoa(a.ID))
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.KBArticleUpdate)
@@ -253,6 +258,9 @@ func TestKBArticles_UpdateSuccess(t *testing.T) {
 	}
 	if got.Visibility != "Portal Only" {
 		t.Errorf("visibility tak tersimpan: %q", got.Visibility)
+	}
+	if got.Category == nil || *got.Category != "Pembayaran" {
+		t.Errorf("category enum tak tersimpan: %v", got.Category)
 	}
 	if got.Status != "Draft" {
 		t.Error("update profil tak boleh mengubah status")
@@ -361,4 +369,47 @@ func TestKBArticles_StatusGateWrite(t *testing.T) {
 	if got, _ := env.q.GetKBArticle(t.Context(), a.ID); got.Status != "Draft" {
 		t.Error("publish yang ditolak tak boleh mengubah status")
 	}
+}
+
+// --- parse: category enum (BL-35) ---------------------------------------
+
+// TestParseKBArticleForm_Category — category kini enum terkunci (00035),
+// opsional-nullable: kosong → NULL (sah), nilai enum → tersimpan, nilai di
+// luar enum → galat "category". Uji langsung parser (penjaga sebenarnya).
+func TestParseKBArticleForm_Category(t *testing.T) {
+	base := map[string]string{"article_title": "Judul", "visibility": "Internal"}
+	form := func(overrides map[string]string) func(string) string {
+		return func(k string) string {
+			if v, ok := overrides[k]; ok {
+				return v
+			}
+			return base[k]
+		}
+	}
+
+	t.Run("kosong → NULL sah", func(t *testing.T) {
+		f, code := parseKBArticleForm(form(map[string]string{"category": ""}))
+		if code != "" {
+			t.Fatalf("kategori kosong harus sah, got err %q", code)
+		}
+		if f.Category != nil {
+			t.Errorf("kategori kosong harus NULL, got %v", *f.Category)
+		}
+	})
+
+	t.Run("enum sah tersimpan", func(t *testing.T) {
+		f, code := parseKBArticleForm(form(map[string]string{"category": "Teknis"}))
+		if code != "" {
+			t.Fatalf("kategori enum harus sah, got err %q", code)
+		}
+		if f.Category == nil || *f.Category != "Teknis" {
+			t.Errorf("kategori enum tak tersimpan: %v", f.Category)
+		}
+	})
+
+	t.Run("di luar enum ditolak", func(t *testing.T) {
+		if _, code := parseKBArticleForm(form(map[string]string{"category": "Akun"})); code != "category" {
+			t.Errorf("kategori di luar enum harus err=category, got %q", code)
+		}
+	})
 }

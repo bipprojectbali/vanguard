@@ -255,7 +255,8 @@ type KBArticleFormFields struct {
 }
 
 // KBArticleFormView = data halaman form. Action = URL POST tujuan.
-// VisibilityOptions dioper handler (view tak memutuskan enum).
+// Visibility/CategoryOptions dioper handler (view tak memutuskan enum;
+// category jadi enum terkunci sejak BL-35).
 type KBArticleFormView struct {
 	Base              string
 	Action            string
@@ -263,6 +264,7 @@ type KBArticleFormView struct {
 	Err               string
 	Fields            KBArticleFormFields
 	VisibilityOptions []string
+	CategoryOptions   []string
 }
 
 // KBArticleForm merender halaman form lengkap (native POST → 303, gotcha
@@ -287,7 +289,7 @@ func KBArticleForm(v KBArticleFormView) g.Node {
 		h.Class("grid gap-4 min-w-0"),
 		formCard("Identitas",
 			field("Judul Artikel", "article_title", v.Fields.ArticleTitle, true, "text"),
-			field("Kategori", "category", v.Fields.Category, false, "text"),
+			selectField("Kategori", "category", v.Fields.Category, v.CategoryOptions, false),
 			field("Kata Kunci", "keywords", v.Fields.Keywords, false, "text"),
 			selectField("Visibilitas", "visibility", v.Fields.Visibility, v.VisibilityOptions, true),
 		),
