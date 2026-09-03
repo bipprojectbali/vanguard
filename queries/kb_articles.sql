@@ -17,11 +17,26 @@
 -- kedua). only_archived=false → status <> 'Archived' (Draft+Published, tab
 -- default "Aktif"); only_archived=true → status = 'Archived' (tab "Arsip").
 -- Arsip = pensiun-tanpa-hapus → disembunyikan dari daftar default.
+--
+-- BL-36: pencarian bebas (?q=), mengaktifkan `keywords` yang semula write-only.
+-- search '' → tak menyaring; selain itu MEMPERSEMPIT di ATAS tab (ILIKE
+-- substring, case-insensitive) — tak pernah melebarkan baris. Kolom cari =
+-- judul + kata kunci + kategori (findability tiket → artikel). article_body
+-- SENGAJA di luar kunci cari (bisa besar → relevansi kabur & mahal). keywords/
+-- category NULL → ILIKE NULL = NULL → cabang OR false (aman). Parameter
+-- ter-bind (BUKAN string-concat) → anti-injeksi; metachar LIKE (%/_) dibiarkan
+-- literal-wildcard, konsisten daftar BL-6 lain (subscriptions).
 SELECT * FROM kb_articles
 WHERE (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
   AND (
         (sqlc.arg(only_archived)::bool AND status = 'Archived')
      OR (NOT sqlc.arg(only_archived)::bool AND status <> 'Archived')
+  )
+  AND (
+        sqlc.arg(search)::text = ''
+     OR article_title ILIKE '%' || sqlc.arg(search) || '%'
+     OR keywords ILIKE '%' || sqlc.arg(search) || '%'
+     OR category ILIKE '%' || sqlc.arg(search) || '%'
   )
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);

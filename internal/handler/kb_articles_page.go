@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"go_starter/internal/db"
 	"go_starter/internal/ui/pages/panel"
@@ -43,11 +44,14 @@ func (h *Handler) KBArticlesList(w http.ResponseWriter, r *http.Request) {
 	// status Archived; nilai lain (termasuk kosong) = daftar Aktif
 	// (non-Archived). Tab dibawa lintas pager lewat baseHref kanonik.
 	tab := kbArticlesTab(r.URL.Query().Get("tab"))
+	// q = pencarian bebas (BL-6/BL-36): MEMPERSEMPIT di atas tab, tak melebarkan.
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	cursorAt, cursorID := pageCursor(r)
 	rows, err := h.q(ctx).ListKBArticlesAll(ctx, db.ListKBArticlesAllParams{
 		CursorCreatedAt: cursorAt,
 		CursorID:        cursorID,
 		OnlyArchived:    tab == kbTabArchived,
+		Search:          query,
 		PageSize:        pageSize + 1,
 	})
 	if err != nil {
@@ -68,6 +72,7 @@ func (h *Handler) KBArticlesList(w http.ResponseWriter, r *http.Request) {
 		Base:       base,
 		CanWrite:   canWriteKBArticles(ctx),
 		Tab:        tab,
+		Query:      query,
 		Err:        kbArticlesErrMsg(r.URL.Query().Get("err")),
 		Msg:        kbArticlesMsg(r.URL.Query().Get("ok")),
 		Items:      items,

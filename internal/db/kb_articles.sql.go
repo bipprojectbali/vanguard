@@ -108,14 +108,21 @@ WHERE (created_at, id) < ($1::timestamptz, $2::bigint)
         ($3::bool AND status = 'Archived')
      OR (NOT $3::bool AND status <> 'Archived')
   )
+  AND (
+        $4::text = ''
+     OR article_title ILIKE '%' || $4 || '%'
+     OR keywords ILIKE '%' || $4 || '%'
+     OR category ILIKE '%' || $4 || '%'
+  )
 ORDER BY created_at DESC, id DESC
-LIMIT $4
+LIMIT $5
 `
 
 type ListKBArticlesAllParams struct {
 	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
 	CursorID        int64              `json:"cursor_id"`
 	OnlyArchived    bool               `json:"only_archived"`
+	Search          string             `json:"search"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -136,11 +143,21 @@ type ListKBArticlesAllParams struct {
 // kedua). only_archived=false → status <> 'Archived' (Draft+Published, tab
 // default "Aktif"); only_archived=true → status = 'Archived' (tab "Arsip").
 // Arsip = pensiun-tanpa-hapus → disembunyikan dari daftar default.
+//
+// BL-36: pencarian bebas (?q=), mengaktifkan `keywords` yang semula write-only.
+// search ” → tak menyaring; selain itu MEMPERSEMPIT di ATAS tab (ILIKE
+// substring, case-insensitive) — tak pernah melebarkan baris. Kolom cari =
+// judul + kata kunci + kategori (findability tiket → artikel). article_body
+// SENGAJA di luar kunci cari (bisa besar → relevansi kabur & mahal). keywords/
+// category NULL → ILIKE NULL = NULL → cabang OR false (aman). Parameter
+// ter-bind (BUKAN string-concat) → anti-injeksi; metachar LIKE (%/_) dibiarkan
+// literal-wildcard, konsisten daftar BL-6 lain (subscriptions).
 func (q *Queries) ListKBArticlesAll(ctx context.Context, arg ListKBArticlesAllParams) ([]KbArticle, error) {
 	rows, err := q.db.Query(ctx, listKBArticlesAll,
 		arg.CursorCreatedAt,
 		arg.CursorID,
 		arg.OnlyArchived,
+		arg.Search,
 		arg.PageSize,
 	)
 	if err != nil {
