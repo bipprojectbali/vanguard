@@ -44,6 +44,7 @@ type KBArticleListView struct {
 	Base       string
 	CanWrite   bool
 	Tab        string // BL-34: "aktif" (default, non-Archived) | "arsip"
+	Query      string // BL-36: ?q= pencarian bebas (judul/kata kunci/kategori); "" = tak mencari
 	Err        string
 	Msg        string
 	Items      []KBArticleRow
@@ -68,6 +69,9 @@ func KBArticleList(v KBArticleListView) g.Node {
 			)),
 		),
 		kbArticlesTabs(v),
+		searchBox(v.Base+"/kb-articles", v.Query,
+			"Cari artikel — judul, kata kunci, atau kategori…", "Cari artikel Knowledge Base",
+			hiddenField{"tab", kbTabParam(v.Tab)}),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "kb-articles-err", g.Text(v.Err)))
@@ -76,7 +80,7 @@ func KBArticleList(v KBArticleListView) g.Node {
 		body = append(body, ui.Alert(ui.VariantDefault, "kb-articles-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
-		body = append(body, emptyKBArticles(v.Tab))
+		body = append(body, emptyKBArticles(v))
 	} else {
 		body = append(body, kbArticlesTable(v), kbArticlesPager(v))
 	}
@@ -88,7 +92,9 @@ func KBArticleList(v KBArticleListView) g.Node {
 // tab Aktif. Meniru pola subStatusFilter (subscriptions.go).
 func kbArticlesTabs(v KBArticleListView) g.Node {
 	tab := func(label, key string) g.Node {
-		href := panelListHref(v.Base+"/kb-articles", [2]string{"tab", kbTabParam(key)})
+		// q dibawa lintas tab (mencari lalu ganti tab tak menghapus pencarian).
+		href := panelListHref(v.Base+"/kb-articles",
+			[2]string{"tab", kbTabParam(key)}, [2]string{"q", v.Query})
 		cls := "tab min-h-11"
 		if v.Tab == key {
 			cls += " tab-active font-medium"
@@ -115,21 +121,33 @@ func kbTabParam(tab string) string {
 // kbArticlesPager = tautan keyset "Berikutnya »" (native <a>, lolos gotcha #16).
 // NextCursor kosong = ujung daftar. flex-wrap agar tak mendorong lebar di 375px.
 func kbArticlesPager(v KBArticleListView) g.Node {
-	// baseHref kanonik memuat ?tab= agar Berikutnya »/« Sebelumnya tetap di
-	// tab yang sama (BL-34 × BL-7). Aktif = default → param kosong (URL polos).
-	base := panelListHref(v.Base+"/kb-articles", [2]string{"tab", kbTabParam(v.Tab)})
+	// baseHref kanonik memuat ?tab= + ?q= agar Berikutnya »/« Sebelumnya tetap
+	// di tab & pencarian yang sama (BL-34 × BL-7 × BL-36). Aktif = default →
+	// param tab kosong (URL polos); q kosong pun dilewati panelListHref.
+	base := panelListHref(v.Base+"/kb-articles",
+		[2]string{"tab", kbTabParam(v.Tab)}, [2]string{"q", v.Query})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }
 
-func emptyKBArticles(tab string) g.Node {
+func emptyKBArticles(v KBArticleListView) g.Node {
+	// Pencarian tanpa hasil punya pesan sendiri + tautan Reset (buang q, jaga
+	// tab) — dibedakan dari katalog/arsip yang memang kosong (BL-36).
 	msg := "Belum ada artikel di katalog."
-	if tab == "arsip" {
+	switch {
+	case v.Query != "":
+		msg = "Belum ada artikel yang cocok pencarian."
+	case v.Tab == "arsip":
 		msg = "Arsip kosong — belum ada artikel yang diarsipkan."
 	}
+	reset := withQuery(v.Base+"/kb-articles", "", hiddenField{"tab", kbTabParam(v.Tab)})
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300"),
-		h.Div(h.Class("card-body"),
-			h.P(h.Class("text-base-content/70"), g.Text(msg))),
+		h.Div(h.Class("card-body items-start"),
+			h.P(h.Class("text-base-content/70"), g.Text(msg)),
+			ui.When(v.Query != "", h.A(
+				h.Href(reset), h.Class("btn btn-ghost btn-sm min-h-11"),
+				g.Text("« Semua artikel"))),
+		),
 	)
 }
 

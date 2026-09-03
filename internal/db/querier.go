@@ -757,6 +757,15 @@ type Querier interface {
 	// kedua). only_archived=false → status <> 'Archived' (Draft+Published, tab
 	// default "Aktif"); only_archived=true → status = 'Archived' (tab "Arsip").
 	// Arsip = pensiun-tanpa-hapus → disembunyikan dari daftar default.
+	//
+	// BL-36: pencarian bebas (?q=), mengaktifkan `keywords` yang semula write-only.
+	// search '' → tak menyaring; selain itu MEMPERSEMPIT di ATAS tab (ILIKE
+	// substring, case-insensitive) — tak pernah melebarkan baris. Kolom cari =
+	// judul + kata kunci + kategori (findability tiket → artikel). article_body
+	// SENGAJA di luar kunci cari (bisa besar → relevansi kabur & mahal). keywords/
+	// category NULL → ILIKE NULL = NULL → cabang OR false (aman). Parameter
+	// ter-bind (BUKAN string-concat) → anti-injeksi; metachar LIKE (%/_) dibiarkan
+	// literal-wildcard, konsisten daftar BL-6 lain (subscriptions).
 	ListKBArticlesAll(ctx context.Context, arg ListKBArticlesAllParams) ([]KbArticle, error)
 	// Daftar lead, keyset (created_at DESC, id DESC) + filter ownership F3 + tab.
 	//
