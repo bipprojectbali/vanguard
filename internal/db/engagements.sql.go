@@ -377,6 +377,74 @@ func (q *Queries) ListEngagements(ctx context.Context, arg ListEngagementsParams
 	return items, nil
 }
 
+const listEngagementsByAccount = `-- name: ListEngagementsByAccount :many
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type,
+    e.scheduled_at, e.status, e.outcome, e.next_due_date,
+    e.owner_id, u.name AS owner_name
+FROM engagements e
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE e.account_id = $1
+ORDER BY e.scheduled_at DESC, e.id DESC
+LIMIT $2
+`
+
+type ListEngagementsByAccountParams struct {
+	AccountID int64 `json:"account_id"`
+	PageSize  int32 `json:"page_size"`
+}
+
+type ListEngagementsByAccountRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	EngagementType string             `json:"engagement_type"`
+	ScheduledAt    pgtype.Timestamptz `json:"scheduled_at"`
+	Status         string             `json:"status"`
+	Outcome        *string            `json:"outcome"`
+	NextDueDate    pgtype.Date        `json:"next_due_date"`
+	OwnerID        *int64             `json:"owner_id"`
+	OwnerName      *string            `json:"owner_name"`
+}
+
+// Linimasa terpadu detail Account (BL-31): engagement satu desa untuk digabung
+// dengan activities (read-only). Sejajar GetLatestEngagementForAccount tapi
+// banyak-baris (pageSize) agar handler bisa merge-sort dengan activities lalu
+// ambil N terbaru. Tanpa filter ownership di query: gerbangnya = desa induk
+// (handler sudah F3-gate account + F2 canViewEngagements sebelum memanggil ini),
+// persis pola GetLatestEngagementForAccount. Urut scheduled_at DESC memakai
+// idx_engagements_tenant_scheduled (bukan full-scan).
+func (q *Queries) ListEngagementsByAccount(ctx context.Context, arg ListEngagementsByAccountParams) ([]ListEngagementsByAccountRow, error) {
+	rows, err := q.db.Query(ctx, listEngagementsByAccount, arg.AccountID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEngagementsByAccountRow{}
+	for rows.Next() {
+		var i ListEngagementsByAccountRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.EngagementType,
+			&i.ScheduledAt,
+			&i.Status,
+			&i.Outcome,
+			&i.NextDueDate,
+			&i.OwnerID,
+			&i.OwnerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateEngagementStatus = `-- name: UpdateEngagementStatus :one
 UPDATE engagements
 SET
