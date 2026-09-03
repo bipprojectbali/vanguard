@@ -189,6 +189,44 @@ func TestPlaybooks_CreateSuccess(t *testing.T) {
 	env.assertAudited(t, "playbook.create")
 }
 
+// TestPlaybooks_RecommendedOwnerAligned (BL-33): opsi "Pemilik Rekomendasi"
+// selaras peran nyata — Manager kini tersedia (di samping CSM/Sales/Support),
+// slice opsi & map validasi sepakat, dan create ber-owner Manager tersimpan
+// utuh sebagai teks.
+func TestPlaybooks_RecommendedOwnerAligned(t *testing.T) {
+	// Slice opsi & map validasi harus memuat set peran yang sama.
+	want := map[string]struct{}{"Manager": {}, "CSM": {}, "Sales": {}, "Support": {}}
+	if len(playbookRecommendedOwnerOptions) != len(want) {
+		t.Fatalf("opsi = %v, want set %v", playbookRecommendedOwnerOptions, want)
+	}
+	for _, o := range playbookRecommendedOwnerOptions {
+		if _, ok := want[o]; !ok {
+			t.Errorf("opsi tak terduga: %q", o)
+		}
+		if _, ok := validPlaybookRecommendedOwners[o]; !ok {
+			t.Errorf("opsi %q tak ada di map validasi (dropdown menawarkan nilai ditolak backend)", o)
+		}
+	}
+
+	// Manager (peran baru) diterima end-to-end & tersimpan apa adanya.
+	env, uid := setupAccounts(t)
+	form := playbookFormValues("Playbook Manajerial")
+	form.Set("recommended_owner", "Manager")
+	req := accountsReq(http.MethodPost, "/w/test/playbooks", form, "")
+	rec := env.runAccount(uid, "owner", "csm", req, env.h.PlaybookCreate)
+
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=created") {
+		t.Fatalf("redirect harus ok=created, got %q (status %d)", loc, rec.Code)
+	}
+	rows := env.allPlaybooks(t)
+	if len(rows) != 1 {
+		t.Fatalf("harus 1 baris, ada %d", len(rows))
+	}
+	if p := rows[0]; p.RecommendedOwner == nil || *p.RecommendedOwner != "Manager" {
+		t.Errorf("recommended_owner harus Manager, got %v", p.RecommendedOwner)
+	}
+}
+
 // TestPlaybooks_CreateRejectsInvalid: input yang melanggar validasi backend
 // ditolak → redirect err + tak menyentuh DB.
 func TestPlaybooks_CreateRejectsInvalid(t *testing.T) {
