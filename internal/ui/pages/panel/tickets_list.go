@@ -51,16 +51,16 @@ type ticketTabDef struct {
 //
 //	key ""              → semua status
 //	key "baru"          → status='baru'
-//	key "ditugaskan"    → status='ditugaskan'
-//	key "eskalasi"      → status='eskalasi'
+//	key "diproses"      → status='diproses'
+//	key "menunggu"      → status='menunggu'
 //	key "sla-risiko"    → filter_sla_at_risk=true
 //	key "sla-langgar"   → filter_sla_breached=true
 //	key "selesai"       → status='selesai'
 var ticketTabs = []ticketTabDef{
 	{"", "Semua"},
 	{"baru", "Baru"},
-	{"ditugaskan", "Ditugaskan"},
-	{"eskalasi", "Eskalasi"},
+	{"diproses", "Diproses"},
+	{"menunggu", "Menunggu"},
 	{"sla-risiko", "SLA Berisiko"},
 	{"sla-langgar", "Terlanggar"},
 	{"selesai", "Selesai"},
