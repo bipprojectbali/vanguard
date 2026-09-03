@@ -116,6 +116,10 @@ func engagementRowView(r db.ListEngagementsRow, slug string, tz *time.Location) 
 	if r.OwnerName != nil && *r.OwnerName != "" {
 		ownerName = *r.OwnerName
 	}
+	outcome := ""
+	if r.Outcome != nil {
+		outcome = *r.Outcome
+	}
 	return panel.EngagementRow{
 		ID:          r.ID,
 		AccountName: r.AccountName,
@@ -127,6 +131,7 @@ func engagementRowView(r db.ListEngagementsRow, slug string, tz *time.Location) 
 		StatusBadge: statusBadge,
 		OwnerName:   ownerName,
 		NextDue:     engagementNextDueLabel(r.NextDueDate),
+		Outcome:     outcome,
 		HrefDetail:  wsPath(slug, "/engagements/"+strconv.FormatInt(r.ID, 10)),
 	}
 }
