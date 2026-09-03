@@ -62,15 +62,22 @@ var _ = func() struct{} {
 	return struct{}{}
 }()
 
+// defaultKBArticleVisibility = nilai visibility yang ditetapkan handler saat
+// CREATE. BL-37: dropdown Visibilitas dibuat read-only (Portal self-service
+// yang mengonsumsinya belum ada — migrasi 00018) → nilai TAK lagi dibaca dari
+// form; artikel baru selalu lahir "Internal", artikel lama mempertahankan
+// nilai tersimpannya saat disunting (kb_articles_update.go).
+const defaultKBArticleVisibility = "Internal"
+
 // kbArticleForm = nilai form Artikel KB yang SUDAH divalidasi & siap
 // dipetakan ke Create/UpdateKBArticleParams. Kolom opsional pointer (nil =
-// NULL). status TAK di sini — transisi status jalur tersendiri.
+// NULL). status TAK di sini — transisi status jalur tersendiri. Visibility
+// TAK di sini (BL-37): ditetapkan handler, bukan dibaca form.
 type kbArticleForm struct {
 	ArticleTitle string
 	ArticleBody  *string
 	Category     *string
 	Keywords     *string
-	Visibility   string
 }
 
 // parseKBArticleForm membaca & memvalidasi form. (form, "") bila sah, atau
@@ -84,12 +91,10 @@ func parseKBArticleForm(fv func(string) string) (kbArticleForm, string) {
 		return kbArticleForm{}, "required"
 	}
 
-	// visibility wajib enum; kosong dari form (mis. JS dimatikan) tetap
-	// dijaga default "Internal" di sisi handler pemanggil (KBArticleNew).
-	f.Visibility = strings.TrimSpace(fv("visibility"))
-	if _, ok := validKBArticleVisibilities[f.Visibility]; !ok {
-		return kbArticleForm{}, "visibility"
-	}
+	// visibility TAK dibaca dari form (BL-37 — field read-only). Nilai
+	// ditetapkan handler: "Internal" saat create, nilai tersimpan saat update.
+	// Mesin enum (validKBArticleVisibilities + kbArticleVisibilityOptions +
+	// guard sinkron) SENGAJA dipertahankan untuk Portal v2 nanti.
 
 	// category opsional-tapi-terkunci: kosong → NULL (dibolehkan); non-kosong
 	// WAJIB enum (00035). Divalidasi sebelum optTrim agar galat enum jelas.
