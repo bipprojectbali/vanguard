@@ -126,3 +126,21 @@ LEFT JOIN users u ON e.owner_id = u.id
 WHERE e.account_id = sqlc.arg(account_id)
 ORDER BY e.scheduled_at DESC, e.id DESC
 LIMIT 1;
+
+-- name: ListEngagementsByAccount :many
+-- Linimasa terpadu detail Account (BL-31): engagement satu desa untuk digabung
+-- dengan activities (read-only). Sejajar GetLatestEngagementForAccount tapi
+-- banyak-baris (pageSize) agar handler bisa merge-sort dengan activities lalu
+-- ambil N terbaru. Tanpa filter ownership di query: gerbangnya = desa induk
+-- (handler sudah F3-gate account + F2 canViewEngagements sebelum memanggil ini),
+-- persis pola GetLatestEngagementForAccount. Urut scheduled_at DESC memakai
+-- idx_engagements_tenant_scheduled (bukan full-scan).
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type,
+    e.scheduled_at, e.status, e.outcome, e.next_due_date,
+    e.owner_id, u.name AS owner_name
+FROM engagements e
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE e.account_id = sqlc.arg(account_id)
+ORDER BY e.scheduled_at DESC, e.id DESC
+LIMIT sqlc.arg(page_size);

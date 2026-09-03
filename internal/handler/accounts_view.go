@@ -108,6 +108,9 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 		Audit:           auditViewFor(a, names),
 		Related:         h.relatedRecordsFor(ctx, base, a.ID, sub),
 
-		Activities: h.activitiesTimelineFor(ctx, base, "account", a.ID, canWriteSalesActivityPerm(ctx)),
+		// BL-31: linimasa TERPADU (Sales activities + CS engagements), read-only.
+		// names sudah dirakit di atas → dioper agar tak query anggota dua kali.
+		// canViewEngagements di dalam builder yang menentukan apakah sumber CS ikut.
+		Activities: h.accountUnifiedTimelineFor(ctx, base, a, names, canWriteSalesActivityPerm(ctx)),
 	}
 }

@@ -718,6 +718,14 @@ type Querier interface {
 	// filter_status '' → semua status; non-'' → cocokkan persis.
 	// filter_type '' → semua tipe engagement; non-'' → cocokkan persis.
 	ListEngagements(ctx context.Context, arg ListEngagementsParams) ([]ListEngagementsRow, error)
+	// Linimasa terpadu detail Account (BL-31): engagement satu desa untuk digabung
+	// dengan activities (read-only). Sejajar GetLatestEngagementForAccount tapi
+	// banyak-baris (pageSize) agar handler bisa merge-sort dengan activities lalu
+	// ambil N terbaru. Tanpa filter ownership di query: gerbangnya = desa induk
+	// (handler sudah F3-gate account + F2 canViewEngagements sebelum memanggil ini),
+	// persis pola GetLatestEngagementForAccount. Urut scheduled_at DESC memakai
+	// idx_engagements_tenant_scheduled (bukan full-scan).
+	ListEngagementsByAccount(ctx context.Context, arg ListEngagementsByAccountParams) ([]ListEngagementsByAccountRow, error)
 	// Kandidat purge permanen: terhapus melewati masa tenggang. Dipanggil perintah
 	// terjadwal, TAK PERNAH di jalur request (purge = kerja berat & tak reversibel).
 	ListExpiredTenants(ctx context.Context, deletedAt pgtype.Timestamptz) ([]Tenant, error)

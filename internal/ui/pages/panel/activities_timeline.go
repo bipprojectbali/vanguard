@@ -21,6 +21,11 @@ import (
 
 // ActivityTimelineItem = satu baris timeline aktivitas untuk tampilan kartu.
 // Semua nilai sudah diformat handler: Date = waktu lokal (gotcha #14), Owner = nama.
+//
+// BL-31: field Source/TypeLabel/StatusBadgeClass adalah tambahan OPSIONAL untuk
+// linimasa terpadu detail Account (gabung activities Sales + engagements CS).
+// Semuanya "" secara default → baris dari detail Deal/Contact (murni activities)
+// merender persis seperti sebelumnya, tanpa penanda sumber.
 type ActivityTimelineItem struct {
 	ID      int64
 	Kind    string // task/meeting/call/chat/note
@@ -28,6 +33,19 @@ type ActivityTimelineItem struct {
 	Date    string // created_at lokal, e.g. "8 Agu 2026"
 	Status  string // "" untuk kind tanpa status (call/chat/note)
 	Owner   string // nama pemilik, "" → "—"
+
+	// Source = penanda sumber baris pada linimasa terpadu: "" (default, tak ada
+	// penanda) · "sales" (dari activities) · "cs" (dari engagements). Bila terisi,
+	// baris menampilkan chip Sales/CS di meta.
+	Source string
+	// TypeLabel = label jenis untuk baris SUMBER CS (engagement_type sudah
+	// dilabeli handler, mis. "QBR"). Bila terisi, badge kiri memakai teks ini
+	// (baris engagement tak punya "kind" activity). "" untuk baris activity.
+	TypeLabel string
+	// StatusBadgeClass = kelas daisyUI badge status yang sudah diputuskan handler
+	// (mis. "badge badge-success"). Dipakai baris CS karena peta statusnya beda
+	// dari activity. "" → baris activity pakai activityStatusBadge(Status).
+	StatusBadgeClass string
 }
 
 // ActivityTimelineView = data kartu timeline untuk satu entitas target.
@@ -39,6 +57,10 @@ type ActivityTimelineView struct {
 	CanWrite   bool
 	Items      []ActivityTimelineItem
 	NextCursor string // "" = ujung daftar (tak ada pager)
+	// Title = judul kartu; "" → "Aktivitas" (default Deal/Contact). Detail
+	// Account memakainya untuk "Linimasa" karena kartunya menggabungkan sumber
+	// Sales + CS (BL-31), bukan activities murni.
+	Title string
 }
 
 // ActivityTimeline merender kartu timeline aktivitas.
@@ -53,9 +75,13 @@ func ActivityTimeline(v ActivityTimelineView) g.Node {
 	allLink := fmt.Sprintf("%s/activities?target=%s:%d",
 		v.Base, v.TargetType, v.TargetID)
 
+	title := v.Title
+	if title == "" {
+		title = "Aktivitas"
+	}
 	header := h.Div(
 		h.Class("flex flex-wrap items-center justify-between gap-2 mb-3"),
-		h.H2(h.Class("font-semibold"), g.Text("Aktivitas")),
+		h.H2(h.Class("font-semibold"), g.Text(title)),
 		ui.When(v.CanWrite, h.A(
 			h.Href(newLink),
 			h.Class("btn btn-sm btn-ghost min-h-9"),
@@ -98,23 +124,64 @@ func activityTimelineBody(v ActivityTimelineView, allLink string) g.Node {
 	return g.Group(rows)
 }
 
-// activityTimelineRow = satu baris: kind badge | subject + tanggal·owner | status badge.
+// activityTimelineRow = satu baris: badge kiri | subject + meta | status badge.
+// Baris activity (Source="") tampil persis seperti semula. Baris terpadu BL-31
+// (Source terisi) menambah chip sumber Sales/CS di meta; baris CS (TypeLabel
+// terisi) memakai badge jenis engagement + status badge dari StatusBadgeClass.
 func activityTimelineRow(item ActivityTimelineItem) g.Node {
+	// meta = [chip sumber] tanggal · [jenis engagement] · owner.
 	meta := item.Date
+	if item.TypeLabel != "" {
+		meta += " · " + item.TypeLabel
+	}
 	if item.Owner != "" {
 		meta += " · " + item.Owner
 	}
+
+	// Badge kiri: baris CS pakai label jenis (engagement tak punya "kind"),
+	// baris activity pakai activityKindBadge seperti biasa.
+	leftBadge := activityKindBadge(item.Kind)
+	if item.TypeLabel != "" {
+		leftBadge = h.Span(h.Class("badge badge-secondary"), g.Text(item.TypeLabel))
+	}
+
+	// Status badge: baris CS pakai kelas yang sudah diputuskan handler,
+	// baris activity pakai peta status activity.
+	statusBadge := activityStatusBadge(item.Status)
+	if item.StatusBadgeClass != "" {
+		statusBadge = h.Span(h.Class(item.StatusBadgeClass), g.Text(item.Status))
+	}
+
 	return h.Div(
 		h.Class("flex flex-wrap items-start gap-2 py-2 border-b border-base-300/50 last:border-0 min-w-0"),
-		// Kind badge — shrink-0 agar tidak menyusut saat subject panjang.
-		h.Div(h.Class("shrink-0 pt-0.5"), activityKindBadge(item.Kind)),
-		// Subject + meta (tanggal · owner).
+		// Badge kiri — shrink-0 agar tidak menyusut saat subject panjang.
+		h.Div(h.Class("shrink-0 pt-0.5"), leftBadge),
+		// Subject + meta (chip sumber · tanggal · jenis · owner).
 		h.Div(
 			h.Class("flex-1 min-w-0"),
 			h.P(h.Class("text-sm font-medium truncate"), g.Text(item.Subject)),
-			h.P(h.Class("text-xs text-base-content/60 mt-0.5"), g.Text(meta)),
+			h.P(
+				h.Class("flex flex-wrap items-center gap-1.5 text-xs text-base-content/60 mt-0.5"),
+				timelineSourceChip(item.Source),
+				g.Text(meta),
+			),
 		),
-		// Status badge — shrink-0, hanya relevan untuk kind "task" dan "meeting".
-		h.Div(h.Class("shrink-0"), activityStatusBadge(item.Status)),
+		// Status badge — shrink-0.
+		h.Div(h.Class("shrink-0"), statusBadge),
 	)
+}
+
+// timelineSourceChip merender chip sumber Sales/CS untuk linimasa terpadu
+// (BL-31). Source="" → tak ada chip (baris detail Deal/Contact tak berubah).
+// Token semantik daisyUI: Sales=primary, CS=secondary (gotcha #4/#11 — jangan
+// warna absolut).
+func timelineSourceChip(source string) g.Node {
+	switch source {
+	case "sales":
+		return h.Span(h.Class("badge badge-xs badge-primary badge-outline shrink-0"), g.Text("Sales"))
+	case "cs":
+		return h.Span(h.Class("badge badge-xs badge-secondary badge-outline shrink-0"), g.Text("CS"))
+	default:
+		return g.Text("")
+	}
 }
