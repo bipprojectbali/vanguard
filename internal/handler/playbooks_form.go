@@ -27,9 +27,14 @@ var (
 		"Health Drop": {}, "Low Adoption": {}, "Renewal Approaching": {}, "New Onboarding": {},
 	}
 	// validPlaybookRecommendedOwners = peran yang direkomendasikan menjalankan
-	// playbook (cermin wireframe 6.7). Opsional.
+	// playbook. Opsional. Diselaraskan ke subset peran BAWAAN yang masuk akal
+	// jadi pemilik SOP CS (BL-33, aditif): Manager ditambahkan (menggarap
+	// CS/renewal) di samping CSM/Sales/Support lama; Admin dikecualikan
+	// (peran platform, bukan pemilik SOP). Field ini murni deskriptif (teks
+	// tersimpan, nol dampak fungsional) — bukan FK user; nilai lama tetap
+	// valid (nol data-loss).
 	validPlaybookRecommendedOwners = map[string]struct{}{
-		"CSM": {}, "Support": {}, "Sales": {},
+		"Manager": {}, "CSM": {}, "Sales": {}, "Support": {},
 	}
 )
 
@@ -84,7 +89,7 @@ func parsePlaybookForm(fv func(string) string) (playbookForm, string) {
 // 6.7).
 var (
 	playbookTriggerScenarioOptions  = []string{"Health Drop", "Low Adoption", "Renewal Approaching", "New Onboarding"}
-	playbookRecommendedOwnerOptions = []string{"CSM", "Support", "Sales"}
+	playbookRecommendedOwnerOptions = []string{"Manager", "CSM", "Sales", "Support"}
 )
 
 // compile-time: opsi & map validasi sepakat (panjang sama). Berbeda =
