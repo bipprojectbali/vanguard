@@ -16,9 +16,9 @@ import (
 // menampilkan SEMUA aktivitas (sales+cs+general) — cermin menu "Activities"
 // top-level di sidebar (di luar grup Sales).
 //
-// Gate: reuse canViewSalesActivity (crm:sales_activity read). Siapa pun yang
-// boleh lihat Sales Activities juga boleh lihat tampilan lintas-context ini.
-// TODO(activities): ganti ke crm:activities read saat permission pass M9 dijalankan.
+// Gate: canViewAllActivities (crm:activities read — objek global lintas-context,
+// BUKAN crm:sales_activity). csm/support yang memegang crm:activities kini bisa
+// membaca tampilan ini; Sales Activities tetap di gate crm:sales_activity (BL-39).
 
 // AllActivitiesList — GET /w/{workspace}/activity-log. Daftar semua aktivitas
 // (lintas-context) berkeyset + F3 ownership. Gate: canViewAllActivities (CRM role
@@ -86,7 +86,7 @@ func (h *Handler) AllActivitiesList(w http.ResponseWriter, r *http.Request) {
 }
 
 // renderAllActivitiesForbidden — 403 + penjelasan bagi anggota tanpa izin
-// (bukan platform role, dan tidak punya crm:sales_activity read).
+// (bukan platform role, dan tidak punya crm:activities read).
 func (h *Handler) renderAllActivitiesForbidden(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusForbidden)
 	h.renderWorkspaceShell(w, r, "Aktivitas", "/activity-log",

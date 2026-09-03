@@ -63,14 +63,21 @@ func canViewSalesActivity(ctx context.Context) bool {
 	return authz.CanBusiness(ctx, "crm:sales_activity", "read")
 }
 
+// canViewActivities = izin F2 baca objek Activities global (crm:activities).
+// Objek TERSENDIRI dari crm:sales_activity: csm & support memegang crm:activities
+// (mencatat CS engagement / interaksi tiket) tapi TIDAK memegang crm:sales_activity
+// (itu ruang kerja Sales). Sumber flag menu "Activities" top-level (BL-39).
+func canViewActivities(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:activities", "read")
+}
+
 // canViewAllActivities = gerbang halaman Activities lintas-context (M7, /activity-log).
 // Platform roles (super_admin/staff) BYPASS sumbu bisnis: mereka operator sistem &
 // butuh visibilitas semua aktivitas tanpa harus diberi business_role. Aktor CRM
-// biasa ikut canViewSalesActivity (crm:sales_activity read — gate paling dekat
-// sampai permission pass M9 membuat objek crm:activities tersendiri).
-// TODO(activities): ganti ke crm:activities read saat permission pass M9.
+// biasa lewat canViewActivities (crm:activities read — objek global lintas-context,
+// BUKAN crm:sales_activity yang tetap menjaga ruang kerja Sales; BL-39).
 func canViewAllActivities(ctx context.Context) bool {
-	return canViewSalesActivity(ctx) || isPlatformRole(session.Role(ctx))
+	return canViewActivities(ctx) || isPlatformRole(session.Role(ctx))
 }
 
 // canWriteSalesActivityPerm = izin F2 mentah tulis aktivitas (tanpa cek arsip).

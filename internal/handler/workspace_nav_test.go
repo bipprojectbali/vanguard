@@ -67,7 +67,8 @@ func TestWorkspaceNav_DisabledModules(t *testing.T) {
 
 // TestWorkspaceNav_ActivitiesTopLevel: Activities top-level enabled (→ /activity-log)
 // saat canAllActivities=true; disabled (tanpa Href) saat false. Backend M7.
-// canAllActivities = canViewSalesActivity || isPlatformRole (platform bypass M7).
+// canAllActivities = canViewActivities || isPlatformRole (crm:activities read +
+// platform bypass; BL-39 — objek berbeda dari canSalesActivity).
 func TestWorkspaceNav_ActivitiesTopLevel(t *testing.T) {
 	// Kasus 1: canSalesActivity=true → canAllActivities=true → Activities enabled.
 	navCRM := workspaceNav("acme", false, false, false, false, false, false, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false)

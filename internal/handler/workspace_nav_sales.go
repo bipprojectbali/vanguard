@@ -40,8 +40,9 @@ func workspaceSalesGroup(slug string, canLeads, canDeals, canSalesActivity bool)
 		quotes.Disabled = true
 	}
 	// Sales Activities → /activities (canViewSalesActivity, objek
-	// crm:sales_activity). Berbeda dari "Activities" top-level (objek M7 global,
-	// tetap disabled): ini VIEW TERFILTER Sales (activity_context='sales').
+	// crm:sales_activity). Berbeda dari "Activities" top-level (objek global
+	// crm:activities): ini VIEW TERFILTER Sales (activity_context='sales'), maka
+	// csm/support (tanpa crm:sales_activity) tetap tak masuk sini — BL-39.
 	salesAct := ui.NavItem{Label: "Sales Activities", Icon: lucide.Activity(html.Class("size-4"))}
 	if canSalesActivity {
 		salesAct.Href = wsPath(slug, "/activities")
