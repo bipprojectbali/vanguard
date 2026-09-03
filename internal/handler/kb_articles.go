@@ -39,13 +39,12 @@ func (h *Handler) KBArticleNew(w http.ResponseWriter, r *http.Request) {
 	}
 	base := wsPath(slugFromRequest(r), "")
 	v := panel.KBArticleFormView{
-		Base:              base,
-		Action:            base + "/kb-articles",
-		IsEdit:            false,
-		Err:               kbArticlesErrMsg(r.URL.Query().Get("err")),
-		Fields:            panel.KBArticleFormFields{Visibility: "Internal"},
-		VisibilityOptions: kbArticleVisibilityOptions,
-		CategoryOptions:   kbArticleCategoryOptions,
+		Base:            base,
+		Action:          base + "/kb-articles",
+		IsEdit:          false,
+		Err:             kbArticlesErrMsg(r.URL.Query().Get("err")),
+		Fields:          panel.KBArticleFormFields{Visibility: defaultKBArticleVisibility},
+		CategoryOptions: kbArticleCategoryOptions,
 	}
 	h.renderWorkspaceShell(w, r, "Tambah Artikel", "/kb-articles", panel.KBArticleForm(v))
 }
@@ -74,8 +73,8 @@ func (h *Handler) KBArticleCreate(w http.ResponseWriter, r *http.Request) {
 		ArticleBody:  form.ArticleBody,
 		Category:     form.Category,
 		Keywords:     form.Keywords,
-		Status:       "Draft", // artikel baru selalu lahir draf
-		Visibility:   form.Visibility,
+		Status:       "Draft",                    // artikel baru selalu lahir draf
+		Visibility:   defaultKBArticleVisibility, // BL-37: read-only, tak dibaca form
 		AuthorID:     &uid,
 		CreatedBy:    &uid,
 	})
@@ -108,13 +107,12 @@ func (h *Handler) KBArticleEdit(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slugFromRequest(r), "")
 	v := panel.KBArticleFormView{
-		Base:              base,
-		Action:            base + "/kb-articles/" + strconv.FormatInt(a.ID, 10),
-		IsEdit:            true,
-		Err:               kbArticlesErrMsg(r.URL.Query().Get("err")),
-		Fields:            kbArticleFormFields(a),
-		VisibilityOptions: kbArticleVisibilityOptions,
-		CategoryOptions:   kbArticleCategoryOptions,
+		Base:            base,
+		Action:          base + "/kb-articles/" + strconv.FormatInt(a.ID, 10),
+		IsEdit:          true,
+		Err:             kbArticlesErrMsg(r.URL.Query().Get("err")),
+		Fields:          kbArticleFormFields(a),
+		CategoryOptions: kbArticleCategoryOptions,
 	}
 	h.renderWorkspaceShell(w, r, "Sunting Artikel", "/kb-articles", panel.KBArticleForm(v))
 }

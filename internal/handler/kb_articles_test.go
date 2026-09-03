@@ -18,8 +18,9 @@ import (
 //     tempat sales/support tanpa objek sama sekali) lolos; hanya "" ditolak.
 //     POST butuh crm:kb write — admin/manager/support; sales & csm
 //     (read-saja) & "" ditolak 403.
-//   - Aturan tulis: article_title wajib; visibility enum wajib (CHECK DB);
-//     category enum wajib bila diisi (CHECK DB 00035, opsional-nullable);
+//   - Aturan tulis: article_title wajib; visibility read-only (BL-37 —
+//     dikunci "Internal" saat create, dipertahankan saat update, TAK dibaca
+//     form); category enum wajib bila diisi (CHECK DB 00035, opsional-nullable);
 //     keywords teks bebas opsional; status hanya lewat
 //     publish/return-to-draft/archive/unarchive (BL-34, tak tersentuh saat
 //     update profil, selalu lahir Draft saat create).
@@ -32,8 +33,10 @@ import (
 // --- helper ----------------------------------------------------------------
 
 // kbArticleFormValues merakit form minimal yang valid untuk create/update.
+// BL-37: visibility TAK lagi dikirim form (field read-only) → form minimal
+// cukup judul; handler menetapkan visibility sendiri.
 func kbArticleFormValues(title string) url.Values {
-	return url.Values{"article_title": {title}, "visibility": {"Internal"}}
+	return url.Values{"article_title": {title}}
 }
 
 // seedKBArticleRow menaruh satu artikel langsung lewat pool (bypass
@@ -42,11 +45,19 @@ func kbArticleFormValues(title string) url.Values {
 // utuh.
 func (e *testEnv) seedKBArticleRow(t *testing.T, title string) db.KbArticle {
 	t.Helper()
+	return e.seedKBArticleRowVis(t, title, "Internal")
+}
+
+// seedKBArticleRowVis = seedKBArticleRow dengan visibility eksplisit — untuk
+// membuktikan update MEMPERTAHANKAN nilai lama (BL-37), bukan membalikkannya
+// ke default.
+func (e *testEnv) seedKBArticleRowVis(t *testing.T, title, vis string) db.KbArticle {
+	t.Helper()
 	a, err := e.q.CreateKBArticle(t.Context(), db.CreateKBArticleParams{
 		TenantID:     e.tenantID,
 		ArticleTitle: title,
 		Status:       "Draft",
-		Visibility:   "Internal",
+		Visibility:   vis,
 	})
 	if err != nil {
 		t.Fatalf("seed kb article %s: %v", title, err)
@@ -171,6 +182,8 @@ func TestKBArticles_CreateSuccess(t *testing.T) {
 	form.Set("category", "Kependudukan")
 	form.Set("keywords", "password, reset, login")
 	form.Set("article_body", "Langkah reset password: buka halaman lupa sandi...")
+	// BL-37: walau form nekat mengirim visibility (mis. request buatan tangan),
+	// handler MENGABAIKANNYA & tetap menyimpan "Internal".
 	form.Set("visibility", "Public")
 	req := accountsReq(http.MethodPost, "/w/test/kb-articles", form, "")
 	rec := env.runAccount(uid, "owner", "support", req, env.h.KBArticleCreate)
@@ -192,8 +205,8 @@ func TestKBArticles_CreateSuccess(t *testing.T) {
 	if a.Status != "Draft" {
 		t.Errorf("artikel baru harus lahir Draft, got %q", a.Status)
 	}
-	if a.Visibility != "Public" {
-		t.Errorf("visibility salah: %q", a.Visibility)
+	if a.Visibility != "Internal" {
+		t.Errorf("BL-37: create harus mengunci visibility=Internal (abaikan form), got %q", a.Visibility)
 	}
 	if a.Category == nil || *a.Category != "Kependudukan" {
 		t.Errorf("category enum tak tersimpan: %v", a.Category)
@@ -216,7 +229,6 @@ func TestKBArticles_CreateRejectsInvalid(t *testing.T) {
 		wantErr string
 	}{
 		{"judul kosong", kbArticleFormValues(""), "err=required"},
-		{"visibility asing", withField(kbArticleFormValues("Artikel X"), "visibility", "Semua Orang"), "err=visibility"},
 		{"category asing", withField(kbArticleFormValues("Artikel X"), "category", "Akun"), "err=category"},
 	}
 	for _, c := range cases {
@@ -241,10 +253,13 @@ func TestKBArticles_CreateRejectsInvalid(t *testing.T) {
 // tercatat.
 func TestKBArticles_UpdateSuccess(t *testing.T) {
 	env, uid := setupAccounts(t)
-	a := env.seedKBArticleRow(t, "Artikel Lama")
+	// Seed ber-visibility non-default (Public) untuk membuktikan BL-37:
+	// update MEMPERTAHANKAN nilai lama, tak membalikkannya ke Internal.
+	a := env.seedKBArticleRowVis(t, "Artikel Lama", "Public")
 
 	form := kbArticleFormValues("Artikel Baru")
 	form.Set("category", "Pembayaran")
+	// Form nekat mengirim visibility berbeda → harus DIABAIKAN (field read-only).
 	form.Set("visibility", "Portal Only")
 	req := accountsReq(http.MethodPost, "/w/test/kb-articles/"+itoa(a.ID), form, itoa(a.ID))
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.KBArticleUpdate)
@@ -256,8 +271,8 @@ func TestKBArticles_UpdateSuccess(t *testing.T) {
 	if got.ArticleTitle != "Artikel Baru" {
 		t.Errorf("judul tak tersimpan: %q", got.ArticleTitle)
 	}
-	if got.Visibility != "Portal Only" {
-		t.Errorf("visibility tak tersimpan: %q", got.Visibility)
+	if got.Visibility != "Public" {
+		t.Errorf("BL-37: update harus mempertahankan visibility lama (Public), got %q", got.Visibility)
 	}
 	if got.Category == nil || *got.Category != "Pembayaran" {
 		t.Errorf("category enum tak tersimpan: %v", got.Category)

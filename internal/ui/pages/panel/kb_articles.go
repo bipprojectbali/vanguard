@@ -68,6 +68,11 @@ func KBArticleList(v KBArticleListView) g.Node {
 				g.Text("Artikel Baru"),
 			)),
 		),
+		// Banner MENETAP (BL-37): visibility artikel belum berefek karena Portal
+		// self-service belum ada. VariantDefault (netral) — bukan err/ok transien.
+		ui.Alert(ui.VariantDefault, "kb-portal-notice",
+			g.Text("Visibilitas belum berefek — Portal self-service belum tersedia. "+
+				"Semua artikel hanya terlihat staf internal.")),
 		kbArticlesTabs(v),
 		searchBox(v.Base+"/kb-articles", v.Query,
 			"Cari artikel — judul, kata kunci, atau kategori…", "Cari artikel Knowledge Base",
@@ -276,13 +281,15 @@ type KBArticleFormFields struct {
 // Visibility/CategoryOptions dioper handler (view tak memutuskan enum;
 // category jadi enum terkunci sejak BL-35).
 type KBArticleFormView struct {
-	Base              string
-	Action            string
-	IsEdit            bool
-	Err               string
-	Fields            KBArticleFormFields
-	VisibilityOptions []string
-	CategoryOptions   []string
+	Base            string
+	Action          string
+	IsEdit          bool
+	Err             string
+	Fields          KBArticleFormFields
+	CategoryOptions []string
+	// VisibilityOptions SENGAJA dibuang (BL-37): Visibilitas kini field
+	// read-only (visibilityLockedField), bukan dropdown yang menawarkan opsi.
+	// Saat Portal v2 tiba, kembalikan field ini + selectField editable.
 }
 
 // KBArticleForm merender halaman form lengkap (native POST → 303, gotcha
@@ -309,7 +316,7 @@ func KBArticleForm(v KBArticleFormView) g.Node {
 			field("Judul Artikel", "article_title", v.Fields.ArticleTitle, true, "text"),
 			selectField("Kategori", "category", v.Fields.Category, v.CategoryOptions, false),
 			field("Kata Kunci", "keywords", v.Fields.Keywords, false, "text"),
-			selectField("Visibilitas", "visibility", v.Fields.Visibility, v.VisibilityOptions, true),
+			visibilityLockedField(v.Fields.Visibility),
 		),
 		formCard("Isi",
 			textareaField("Isi Artikel", "article_body", v.Fields.ArticleBody),
@@ -321,4 +328,32 @@ func KBArticleForm(v KBArticleFormView) g.Node {
 		),
 	))
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// visibilityLockedField menampilkan Visibilitas sebagai field TERKUNCI
+// (read-only), BL-37. Dropdown editable dihapus karena `visibility`
+// (Public/Internal/Portal Only) belum punya konsumen: Portal self-service (v2)
+// yang membacanya SENGAJA ditunda (migrasi 00018). Field disabled TAK
+// ikut ter-submit → handler menetapkan nilainya (Internal saat create,
+// pertahankan nilai lama saat update), BUKAN dari form. Meniru pola phoneField
+// (field terkunci + keterangan). Nilai "" (jaga-jaga) tampil "Internal".
+//
+// TODO(kb-portal): saat Portal v2 dibangun, kembalikan jadi selectField
+// editable + baca lagi `visibility` di parseKBArticleForm — utang eksplisit
+// BL-37 (§17 CLAUDE.md).
+func visibilityLockedField(val string) g.Node {
+	if val == "" {
+		val = "Internal"
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor("Visibilitas", "f-visibility_ro", false),
+		ui.Input(
+			h.ID("f-visibility_ro"), h.Type("text"), h.Value(val),
+			h.Disabled(), h.Class("input text-base w-full"),
+		),
+		h.P(h.Class("text-xs text-base-content/60"),
+			g.Text("Terkunci ke Internal — Portal self-service belum tersedia, "+
+				"jadi visibilitas belum berefek.")),
+	)
 }

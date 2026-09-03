@@ -26,7 +26,8 @@ func (h *Handler) KBArticleUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, ok := h.loadKBArticle(w, r, id); !ok {
+	existing, ok := h.loadKBArticle(w, r, id)
+	if !ok {
 		return
 	}
 
@@ -42,7 +43,7 @@ func (h *Handler) KBArticleUpdate(w http.ResponseWriter, r *http.Request) {
 		ArticleBody:  form.ArticleBody,
 		Category:     form.Category,
 		Keywords:     form.Keywords,
-		Visibility:   form.Visibility,
+		Visibility:   existing.Visibility, // BL-37: read-only → pertahankan nilai lama, jangan balikkan ke default
 		UpdatedBy:    &uid,
 		ID:           id,
 	}); err != nil {

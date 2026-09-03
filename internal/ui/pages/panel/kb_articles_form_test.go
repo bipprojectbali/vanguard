@@ -14,11 +14,36 @@ import (
 // merender dropdown Kategori & Visibilitas.
 func kbArticleFormFixture() KBArticleFormView {
 	return KBArticleFormView{
-		Base:              "/w/desa",
-		Action:            "/w/desa/kb-articles",
-		Fields:            KBArticleFormFields{Visibility: "Internal"},
-		VisibilityOptions: []string{"Public", "Internal", "Portal Only"},
-		CategoryOptions:   []string{"Panduan Awal", "Pembayaran", "Kependudukan", "Teknis", "Umum"},
+		Base:            "/w/desa",
+		Action:          "/w/desa/kb-articles",
+		Fields:          KBArticleFormFields{Visibility: "Internal"},
+		CategoryOptions: []string{"Panduan Awal", "Pembayaran", "Kependudukan", "Teknis", "Umum"},
+	}
+}
+
+// TestKBArticleForm_VisibilityLocked — BL-37: Visibilitas kini field read-only,
+// BUKAN dropdown editable. Form wajib TIDAK merender <select name=visibility>;
+// nilai (Internal) tampil di field disabled tanpa atribut name (tak ter-submit).
+func TestKBArticleForm_VisibilityLocked(t *testing.T) {
+	out := renderLeads(t, KBArticleForm(kbArticleFormFixture()))
+
+	if strings.Contains(out, `name="visibility"`) {
+		t.Errorf("Visibilitas TAK boleh punya field ber-name (read-only, tak ter-submit):\n%s", out)
+	}
+	if strings.Contains(out, `<select id="f-visibility"`) {
+		t.Errorf("Visibilitas TAK boleh <select> editable (BL-37):\n%s", out)
+	}
+	if !strings.Contains(out, "disabled") || !strings.Contains(out, `value="Internal"`) {
+		t.Errorf("Visibilitas harus tampil terkunci bernilai Internal:\n%s", out)
+	}
+}
+
+// TestKBArticleList_PortalBanner — BL-37: daftar KB wajib menampilkan banner
+// menetap bahwa Portal belum ada (visibility belum berefek).
+func TestKBArticleList_PortalBanner(t *testing.T) {
+	out := renderLeads(t, KBArticleList(KBArticleListView{Base: "/w/desa"}))
+	if !strings.Contains(out, "Portal self-service belum tersedia") {
+		t.Errorf("daftar KB harus memuat banner Portal belum ada:\n%s", out)
 	}
 }
 
