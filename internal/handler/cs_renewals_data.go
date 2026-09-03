@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"go_starter/internal/authz"
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
@@ -54,15 +55,33 @@ func (h *Handler) loadCSRenewal(w http.ResponseWriter, r *http.Request, id int64
 	return sub, acct, true
 }
 
-// csRenewalMemberOptions merakit slice option anggota untuk dropdown owner renewal.
-// Pola sama dengan EngagementNew — memakai ListMembersByTenant.
-func (h *Handler) csRenewalMemberOptions(ctx context.Context) ([]panel.CSRenewalMemberOption, error) {
-	memberRows, err := h.q(ctx).ListMembersByTenant(ctx, session.TenantID(ctx))
+// csRenewalMemberOptions merakit slice option anggota untuk dropdown owner
+// renewal, DISARING ke himpunan CS (BL-32). "Owner CS" = peran ber-kapabilitas
+// `crm:renewal_mgmt write` (csm/manager/admin + peran custom ber-write), dihitung
+// via authz.RoleCanBusiness agar tahan nama peran kustom per-tenant — bukan cocok
+// nama 'csm' harfiah. Anggota tanpa business_role (belum diberi peran CRM) & yang
+// bukan CS dibuang.
+//
+// ensureID = ID owner tersimpan/preselect yang WAJIB tetap muncul walau di luar
+// himpunan CS (warisan penugasan lama ke non-CS). Tanpa ini, membuka form lalu
+// menyimpan akan menghapus owner diam-diam (data-loss). ensureID 0 = tak ada yang
+// dipaksa sertakan.
+func (h *Handler) csRenewalMemberOptions(ctx context.Context, ensureID int64) ([]panel.CSRenewalMemberOption, error) {
+	tenantID := session.TenantID(ctx)
+	memberRows, err := h.q(ctx).ListMembersByTenant(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
 	opts := make([]panel.CSRenewalMemberOption, 0, len(memberRows))
 	for _, m := range memberRows {
+		br := ""
+		if m.BusinessRole != nil {
+			br = *m.BusinessRole
+		}
+		isCS := br != "" && authz.RoleCanBusiness(tenantID, br, "crm:renewal_mgmt", "write")
+		if !isCS && m.UserID != ensureID {
+			continue
+		}
 		name := m.Email
 		if m.Name != nil && *m.Name != "" {
 			name = *m.Name
