@@ -144,3 +144,40 @@ LEFT JOIN users u ON e.owner_id = u.id
 WHERE e.account_id = sqlc.arg(account_id)
 ORDER BY e.scheduled_at DESC, e.id DESC
 LIMIT sqlc.arg(page_size);
+
+-- name: ListEngagementsFeed :many
+-- Lengan CS untuk linimasa Activities GLOBAL (/activity-log, BL-41). Sejajar
+-- ListEngagements TAPI diurut & di-keyset pada (created_at DESC, id DESC) — sumbu
+-- "kapan DICATAT" yang SAMA dengan activities di feed itu. Sumbu disamakan sengaja
+-- (keputusan BL-41): jangan campur created_at vs scheduled_at dalam satu feed, biar
+-- "terbaru" jujur & engagement terjadwal jauh ke depan tak melompati baris lain.
+--
+-- F3 ownership identik ListEngagements (dua flag scope_all/is_own via kolom
+-- accounts account_owner/assigned_csm/backup_csm) → satu sumber kebenaran dengan
+-- EngagementsListFilterFor. Keduanya false → NOL baris (fail-closed). Gate F2
+-- (canViewEngagements) ditegakkan hulu di handler — query ini tak pernah dipanggil
+-- untuk aktor tanpa crm:engagements. search '' → tak menyaring; selain itu
+-- MEMPERSEMPIT subject + village_name (BL-6, ILIKE). RLS mengurung tenant.
+-- Memakai idx_engagements_tenant_created (migrasi 00037), bukan full-scan.
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (e.created_at, e.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(search)::text = ''
+       OR e.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY e.created_at DESC, e.id DESC
+LIMIT sqlc.arg(page_size);

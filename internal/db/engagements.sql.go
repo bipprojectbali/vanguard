@@ -445,6 +445,102 @@ func (q *Queries) ListEngagementsByAccount(ctx context.Context, arg ListEngageme
 	return items, nil
 }
 
+const listEngagementsFeed = `-- name: ListEngagementsFeed :many
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (e.created_at, e.id) < ($1::timestamptz, $2::bigint)
+  AND (
+      $3::boolean
+      OR ($4::boolean AND (
+          a.account_owner = $5
+          OR a.assigned_csm = $5
+          OR a.backup_csm = $5
+      ))
+  )
+  AND ($6::text = ''
+       OR e.subject ILIKE '%' || $6 || '%'
+       OR a.village_name ILIKE '%' || $6 || '%')
+ORDER BY e.created_at DESC, e.id DESC
+LIMIT $7
+`
+
+type ListEngagementsFeedParams struct {
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        int64              `json:"cursor_id"`
+	ScopeAll        bool               `json:"scope_all"`
+	IsOwn           bool               `json:"is_own"`
+	Uid             *int64             `json:"uid"`
+	Search          string             `json:"search"`
+	PageSize        int32              `json:"page_size"`
+}
+
+type ListEngagementsFeedRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	EngagementType string             `json:"engagement_type"`
+	Status         string             `json:"status"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	AccountName    string             `json:"account_name"`
+	OwnerName      *string            `json:"owner_name"`
+}
+
+// Lengan CS untuk linimasa Activities GLOBAL (/activity-log, BL-41). Sejajar
+// ListEngagements TAPI diurut & di-keyset pada (created_at DESC, id DESC) — sumbu
+// "kapan DICATAT" yang SAMA dengan activities di feed itu. Sumbu disamakan sengaja
+// (keputusan BL-41): jangan campur created_at vs scheduled_at dalam satu feed, biar
+// "terbaru" jujur & engagement terjadwal jauh ke depan tak melompati baris lain.
+//
+// F3 ownership identik ListEngagements (dua flag scope_all/is_own via kolom
+// accounts account_owner/assigned_csm/backup_csm) → satu sumber kebenaran dengan
+// EngagementsListFilterFor. Keduanya false → NOL baris (fail-closed). Gate F2
+// (canViewEngagements) ditegakkan hulu di handler — query ini tak pernah dipanggil
+// untuk aktor tanpa crm:engagements. search ” → tak menyaring; selain itu
+// MEMPERSEMPIT subject + village_name (BL-6, ILIKE). RLS mengurung tenant.
+// Memakai idx_engagements_tenant_created (migrasi 00037), bukan full-scan.
+func (q *Queries) ListEngagementsFeed(ctx context.Context, arg ListEngagementsFeedParams) ([]ListEngagementsFeedRow, error) {
+	rows, err := q.db.Query(ctx, listEngagementsFeed,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEngagementsFeedRow{}
+	for rows.Next() {
+		var i ListEngagementsFeedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.EngagementType,
+			&i.Status,
+			&i.CreatedAt,
+			&i.AccountName,
+			&i.OwnerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateEngagementStatus = `-- name: UpdateEngagementStatus :one
 UPDATE engagements
 SET

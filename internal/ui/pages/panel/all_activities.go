@@ -102,9 +102,16 @@ func allActivitiesTable(v AllActivitiesListView) g.Node {
 	)
 }
 
-// allActivityTableRow = satu baris tabel. Sama dengan activityTableRow di
-// sales_activities.go + kolom Konteks (badge per activity_context).
+// allActivityTableRow = satu baris tabel. Baris ACTIVITY (Sales/umum) sama dengan
+// activityTableRow di sales_activities.go + kolom Konteks. Baris ENGAGEMENT (CS,
+// Source=="cs", BL-41) dirender READ-ONLY: tak ada halaman /activities/{id} untuk
+// engagement (CRUD-nya di modul CS), jadi tautan mengarah ke DESA induk; kolom
+// Jenis pakai TypeLabel (engagement_type) & Status pakai StatusBadgeClass yang
+// sudah diputuskan handler (peta status engagement ≠ activity).
 func allActivityTableRow(base string, a ActivityRow) g.Node {
+	if a.Source == "cs" {
+		return allActivityEngagementRow(base, a)
+	}
 	href := base + "/activities/" + strconv.FormatInt(a.ID, 10)
 	link := func(text, cls string) g.Node {
 		return h.Td(h.Class(cls), h.A(h.Href(href), h.Class("block truncate"), g.Text(text)))
@@ -120,6 +127,50 @@ func allActivityTableRow(base string, a ActivityRow) g.Node {
 		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), activityStatusBadge(a.Status))),
 		link(orDash(a.Created), "py-2"),
 	)
+}
+
+// allActivityEngagementRow = baris CS engagement di feed Activities global (BL-41).
+// Read-only: tautan ke desa induk (base/accounts/{TargetID}), bukan /activities/{id}.
+// Jenis = badge TypeLabel (engagement_type); Status = StatusBadgeClass dari handler.
+func allActivityEngagementRow(base string, a ActivityRow) g.Node {
+	href := base + "/accounts/" + strconv.FormatInt(a.TargetID, 10)
+	link := func(text, cls string) g.Node {
+		return h.Td(h.Class(cls), h.A(h.Href(href), h.Class("block truncate"), g.Text(text)))
+	}
+	return h.Tr(
+		h.Class("border-b border-base-300/50 hover:bg-base-200/50"),
+		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), engagementTypeBadge(a.TypeLabel))),
+		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), h.Class("block truncate font-medium"),
+			g.Text(a.Subject))),
+		h.Td(h.Class("py-2 pr-4"), activityTargetLink(base, a.TargetType, a.TargetID)),
+		h.Td(h.Class("py-2 pr-4"), activityContextBadge(a.Context)),
+		link(orDash(a.Owner), "py-2 pr-4"),
+		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), engagementStatusBadge(a.Status, a.StatusBadgeClass))),
+		link(orDash(a.Created), "py-2"),
+	)
+}
+
+// engagementTypeBadge = badge kolom Jenis untuk baris CS. Warna secondary agar
+// beda visual dari kind activity (info/success/…); label sudah di-Indonesia-kan
+// handler (engagementTypeLabel). Kosong → "—".
+func engagementTypeBadge(label string) g.Node {
+	if label == "" {
+		return h.Span(h.Class("text-base-content/50"), g.Text("—"))
+	}
+	return h.Span(h.Class("badge badge-secondary"), g.Text(label))
+}
+
+// engagementStatusBadge = badge status engagement; kelas daisyUI sudah diputuskan
+// handler (engagementStatusLabel → badge-info/success/ghost/warning). Kosong → "—".
+func engagementStatusBadge(label, badgeClass string) g.Node {
+	if label == "" {
+		return h.Span(h.Class("text-base-content/50"), g.Text("—"))
+	}
+	cls := "badge badge-ghost"
+	if badgeClass != "" {
+		cls = "badge " + badgeClass
+	}
+	return h.Span(h.Class(cls), g.Text(label))
 }
 
 // activityContextBadge = badge ringan per activity_context untuk kolom Konteks.

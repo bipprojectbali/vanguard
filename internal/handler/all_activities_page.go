@@ -4,11 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"go_starter/internal/db"
-	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // all_activities_page.go — HALAMAN daftar Activities lintas-context (M7).
@@ -20,9 +16,11 @@ import (
 // BUKAN crm:sales_activity). csm/support yang memegang crm:activities kini bisa
 // membaca tampilan ini; Sales Activities tetap di gate crm:sales_activity (BL-39).
 
-// AllActivitiesList — GET /w/{workspace}/activity-log. Daftar semua aktivitas
-// (lintas-context) berkeyset + F3 ownership. Gate: canViewAllActivities (CRM role
-// ATAU platform role — super_admin/staff butuh visibilitas tanpa business_role).
+// AllActivitiesList — GET /w/{workspace}/activity-log. Linimasa TERPADU (BL-41):
+// activities (Sales/umum) + engagements (CS) dalam satu daftar berkeyset lintas-
+// tabel + F3 ownership per-sumber. Gate halaman: canViewAllActivities (CRM role
+// ATAU platform role). Lengan CS di-gate LAGI di dalam feed (canViewEngagements)
+// agar Sales/Support tak melihat baris CS — lihat buildUnifiedActivityFeed.
 func (h *Handler) AllActivitiesList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !canViewAllActivities(ctx) {
@@ -30,44 +28,20 @@ func (h *Handler) AllActivitiesList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Platform role tidak punya business_role → pakai ScopeAll agar tidak nol baris.
-	var filter db.ActivitiesListFilter
-	if isPlatformRole(session.Role(ctx)) {
-		filter = db.ActivitiesListFilter{ScopeAll: true}
-	} else {
-		filter = db.ActivitiesListFilterFor(session.BusinessDataScope(ctx))
-	}
-	uid := session.UserID(ctx)
-	cursorAt, cursorID := pageCursor(r)
 	// q = pencarian bebas (BL-6): MEMPERSEMPIT subject di atas F3, tak melebarkan.
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
-	rows, err := h.q(ctx).ListAllActivities(ctx, db.ListAllActivitiesParams{
-		CursorCreatedAt: cursorAt,
-		CursorID:        cursorID,
-		ScopeAll:        filter.ScopeAll,
-		IsOwn:           filter.IsOwn,
-		Uid:             &uid,
-		Search:          query,
-		PageSize:        pageSize + 1,
-	})
-	if err != nil {
-		h.Log.Error("all-activities: list", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	shown, nextCursor := splitPage(rows, func(a db.Activity) (pgtype.Timestamptz, int64) {
-		return a.CreatedAt, a.ID
-	})
 	names, err := h.memberNameMap(ctx)
 	if err != nil {
 		h.Log.Error("all-activities: members", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	items := make([]panel.ActivityRow, 0, len(shown))
-	for _, a := range shown {
-		items = append(items, activityRowView(a, names))
+	items, nextCursor, err := h.buildUnifiedActivityFeed(ctx, r, names)
+	if err != nil {
+		h.Log.Error("all-activities: feed", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
 	}
 
 	base := wsPath(slugFromRequest(r), "")
