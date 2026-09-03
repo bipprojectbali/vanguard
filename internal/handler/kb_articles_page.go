@@ -39,10 +39,15 @@ func (h *Handler) KBArticlesList(w http.ResponseWriter, r *http.Request) {
 		h.renderKBArticlesForbidden(w, r)
 		return
 	}
+	// BL-34: tab Aktif (default) vs Arsip. Hanya "arsip" yang menyaring ke
+	// status Archived; nilai lain (termasuk kosong) = daftar Aktif
+	// (non-Archived). Tab dibawa lintas pager lewat baseHref kanonik.
+	tab := kbArticlesTab(r.URL.Query().Get("tab"))
 	cursorAt, cursorID := pageCursor(r)
 	rows, err := h.q(ctx).ListKBArticlesAll(ctx, db.ListKBArticlesAllParams{
 		CursorCreatedAt: cursorAt,
 		CursorID:        cursorID,
+		OnlyArchived:    tab == kbTabArchived,
 		PageSize:        pageSize + 1,
 	})
 	if err != nil {
@@ -62,6 +67,7 @@ func (h *Handler) KBArticlesList(w http.ResponseWriter, r *http.Request) {
 	h.renderWorkspaceShell(w, r, "Knowledge Base", "/kb-articles", panel.KBArticleList(panel.KBArticleListView{
 		Base:       base,
 		CanWrite:   canWriteKBArticles(ctx),
+		Tab:        tab,
 		Err:        kbArticlesErrMsg(r.URL.Query().Get("err")),
 		Msg:        kbArticlesMsg(r.URL.Query().Get("ok")),
 		Items:      items,
@@ -69,6 +75,23 @@ func (h *Handler) KBArticlesList(w http.ResponseWriter, r *http.Request) {
 		After:      r.URL.Query().Get("after"),
 		Trail:      pageTrail(r),
 	}))
+}
+
+// Nilai tab daftar Knowledge Base (BL-34). Konstanta dibagi handler & view
+// agar tautan tab + saring DB tak pernah lepas sinkron.
+const (
+	kbTabActive   = "aktif"
+	kbTabArchived = "arsip"
+)
+
+// kbArticlesTab menormalkan ?tab= ke salah satu nilai kanonik. Selain "arsip"
+// → "aktif" (default lenient: tab rusak = daftar Aktif, konsisten filosofi
+// cursor rusak = hal 1).
+func kbArticlesTab(raw string) string {
+	if raw == kbTabArchived {
+		return kbTabArchived
+	}
+	return kbTabActive
 }
 
 // kbArticleRowView memetakan satu artikel → baris tabel katalog.

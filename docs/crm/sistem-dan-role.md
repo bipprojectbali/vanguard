@@ -609,6 +609,18 @@ ia menjaga janji layanan (tiket, KB, SLA). Matriks §4: 6.9 Support `✓ semua` 
 CSM/Sales `👁`; 6.10 Support `✓ tulis`; 6.11 Manager `✓ atur` · Support/CSM `👁` ·
 Sales `✕`.
 
+> **Penyimpangan sadar 6.10 — status KB (BL-34, keputusan user 3 Sep 2026).**
+> Wireframe di atas menampilkan status **Terbit/Review/Draf**. Implementasi
+> SENGAJA menyimpang: status kini **Draf/Terbit/Arsip** (`Draft/Published/
+> Archived`) — gerbang **Review DIBUANG** (artikel terbit langsung tanpa
+> tinjauan) & **Arsip** ditambah (pensiun-tanpa-hapus; disembunyikan dari tab
+> Aktif, tampil di tab Arsip). Membalik keputusan 2026-08-13 yang justru memilih
+> Draft/Review/Published mengikuti wireframe. Aturan "wireframe = sumber
+> kebenaran" tetap berlaku untuk hal lain; deviasi ini dicatat di sini alih-alih
+> memperbarui board Penpot. Radius: migrasi `00034`, `kb_articles_status.go`
+> (publish/return-to-draft/archive/unarchive), `kb_articles.go` (badge + tab
+> Aktif/Arsip).
+
 **6.12 Customer Portal ditunda (§7)** — portal sisi-desa (eksternal), bukan
 board internal CRM.
 

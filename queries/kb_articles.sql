@@ -6,14 +6,23 @@
 -- leads_status_chk/subs_status_chk.
 
 -- name: ListKBArticlesAll :many
--- Seluruh katalog untuk tampilan kelola (semua status). Keyset (created_at DESC,
--- id DESC) + LIMIT (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi
--- & tetap konsisten walau ada sisipan. Urutan pindah dari updated_at ke
--- created_at (kolom kursor STABIL: updated_at berubah saat artikel disunting →
--- baris bisa lompat antar-halaman saat paging; created_at tetap, sesuai konvensi
--- keyset app). Status tampak dari badge per baris.
+-- Katalog untuk tampilan kelola. Keyset (created_at DESC, id DESC) + LIMIT
+-- (BL-6): katalog master pun bisa tumbuh, jadi halaman dibatasi & tetap
+-- konsisten walau ada sisipan. Urutan pindah dari updated_at ke created_at
+-- (kolom kursor STABIL: updated_at berubah saat artikel disunting → baris bisa
+-- lompat antar-halaman saat paging; created_at tetap, sesuai konvensi keyset
+-- app). Status tampak dari badge per baris.
+--
+-- BL-34: tab Aktif vs Arsip via SATU boolean `only_archived` (tanpa query
+-- kedua). only_archived=false → status <> 'Archived' (Draft+Published, tab
+-- default "Aktif"); only_archived=true → status = 'Archived' (tab "Arsip").
+-- Arsip = pensiun-tanpa-hapus → disembunyikan dari daftar default.
 SELECT * FROM kb_articles
 WHERE (created_at, id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
+  AND (
+        (sqlc.arg(only_archived)::bool AND status = 'Archived')
+     OR (NOT sqlc.arg(only_archived)::bool AND status <> 'Archived')
+  )
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
@@ -51,8 +60,9 @@ WHERE id = sqlc.arg(id)
 RETURNING *;
 
 -- name: SetKBArticleStatus :exec
--- Transisi status (Draft/Review/Published — CHECK di DB menegakkan domain
--- nilai). Handler yang memutuskan transisi mana yang ditawarkan per baris.
+-- Transisi status (Draft/Published/Archived — CHECK di DB menegakkan domain
+-- nilai, BL-34). Handler yang memutuskan transisi mana yang ditawarkan per
+-- baris (Draft→Published, Published→Draft/Archived, Archived→Draft).
 UPDATE kb_articles SET
     status     = sqlc.arg(status),
     updated_by = sqlc.narg(updated_by),
