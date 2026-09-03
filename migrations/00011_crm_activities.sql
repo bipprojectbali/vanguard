@@ -3,12 +3,22 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- MODUL 7 ACTIVITIES (fondasi) + slice Sales 4.4 — tabel POLIMORFIK `activities`.
 --
--- Migrasi INKREMENTAL (00011). SATU tabel menampung SEMUA jenis aktivitas (task,
--- meeting, call, chat, email, note) untuk SEMUA modul: Sales Activity Log (4.4),
--- Customer Success Engagement (6.5), dan Activities global (Modul 7). Dibedakan
--- lewat `activity_context` (sales/cs/general) — bukan tabel terpisah — agar
--- timeline lintas-modul (semua aktivitas satu account/deal/contact) cukup satu
--- query, dan agar penambahan jenis baru tak menuntut tabel + join baru.
+-- Migrasi INKREMENTAL (00011). SATU tabel menampung aktivitas Sales Activity Log
+-- (4.4, kind task/meeting/call/chat/email/note) dan Activities global (Modul 7),
+-- dibedakan lewat `activity_context` (sales/general) — agar timeline lintas-modul
+-- (semua aktivitas satu account/deal/contact) cukup satu query, dan agar
+-- penambahan jenis baru tak menuntut tabel + join baru.
+--
+-- KOREKSI (BL-40, 2026-09-04): rencana awal di sini menyatukan JUGA Customer
+-- Success Engagement (6.5) ke tabel ini via `activity_context='cs'` — "bukan
+-- tabel terpisah". Itu TIDAK terwujud: migrasi 00022 justru membangun CS
+-- Engagement sebagai tabel SENDIRI `engagements` (entity dgn semantik beda —
+-- FK account sungguhan `ON DELETE RESTRICT`, kosakata `engagement_type`/
+-- `frequency`/`channel`, siklus hidup `planned/done/skipped/rescheduled`,
+-- `scheduled_at NOT NULL` + `next_due_date`). Akibatnya `activity_context='cs'`
+-- di tabel ini = SLOT MATI (nol query mengisinya). Timeline lintas-modul yang
+-- menggabung Sales + CS kini pakai UNION dua tabel, bukan satu query. Rasional
+-- lengkap keputusan dua-tabel: docs/decisions/0010-activities-vs-engagements-dua-tabel.md.
 --
 -- Kenapa `target_id` BUKAN FK (pola audit_logs): target polimorfik — satu baris
 -- bisa menunjuk deal, account, atau contact — jadi tak ada satu tabel untuk
@@ -51,7 +61,7 @@ CREATE TABLE IF NOT EXISTS activities (
     -- Kepemilikan F3 (satu sumbu, seperti deal_owner) → users. Pemisah view antar
     -- modul: sales / cs / general.
     owner_id          BIGINT REFERENCES users(id) ON DELETE SET NULL,
-    activity_context  TEXT,                   -- sales/cs/general
+    activity_context  TEXT,                   -- sales/general ('cs' = SLOT MATI, lihat header/ADR 0010)
     status            TEXT,                   -- daur hidup (lihat CHECK)
     notes             TEXT,
 
