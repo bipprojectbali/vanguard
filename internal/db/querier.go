@@ -726,6 +726,20 @@ type Querier interface {
 	// persis pola GetLatestEngagementForAccount. Urut scheduled_at DESC memakai
 	// idx_engagements_tenant_scheduled (bukan full-scan).
 	ListEngagementsByAccount(ctx context.Context, arg ListEngagementsByAccountParams) ([]ListEngagementsByAccountRow, error)
+	// Lengan CS untuk linimasa Activities GLOBAL (/activity-log, BL-41). Sejajar
+	// ListEngagements TAPI diurut & di-keyset pada (created_at DESC, id DESC) — sumbu
+	// "kapan DICATAT" yang SAMA dengan activities di feed itu. Sumbu disamakan sengaja
+	// (keputusan BL-41): jangan campur created_at vs scheduled_at dalam satu feed, biar
+	// "terbaru" jujur & engagement terjadwal jauh ke depan tak melompati baris lain.
+	//
+	// F3 ownership identik ListEngagements (dua flag scope_all/is_own via kolom
+	// accounts account_owner/assigned_csm/backup_csm) → satu sumber kebenaran dengan
+	// EngagementsListFilterFor. Keduanya false → NOL baris (fail-closed). Gate F2
+	// (canViewEngagements) ditegakkan hulu di handler — query ini tak pernah dipanggil
+	// untuk aktor tanpa crm:engagements. search '' → tak menyaring; selain itu
+	// MEMPERSEMPIT subject + village_name (BL-6, ILIKE). RLS mengurung tenant.
+	// Memakai idx_engagements_tenant_created (migrasi 00037), bukan full-scan.
+	ListEngagementsFeed(ctx context.Context, arg ListEngagementsFeedParams) ([]ListEngagementsFeedRow, error)
 	// Kandidat purge permanen: terhapus melewati masa tenggang. Dipanggil perintah
 	// terjadwal, TAK PERNAH di jalur request (purge = kerja berat & tak reversibel).
 	ListExpiredTenants(ctx context.Context, deletedAt pgtype.Timestamptz) ([]Tenant, error)

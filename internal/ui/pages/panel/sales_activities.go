@@ -29,6 +29,21 @@ type ActivityRow struct {
 	Status     string
 	Created    string
 	Context    string // activity_context; "" di Sales Activities (tak ditampilkan)
+
+	// ── Baris SUMBER CS (engagement) di feed Activities global (BL-41) ──
+	// Source = penanda sumber baris: "" (default = activity/Sales, render tak
+	// berubah) · "cs" (dari engagements). Bila "cs", baris di-render read-only
+	// (tautan ke desa induk, bukan /activities/{id}) dan kolom Jenis/Status
+	// memakai peta engagement, bukan peta activity.
+	Source string
+	// TypeLabel = label jenis untuk baris CS (engagement_type sudah dilabeli
+	// handler, mis. "QBR"). Dipakai badge kolom "Jenis" karena engagement tak
+	// punya "kind" activity. "" untuk baris activity.
+	TypeLabel string
+	// StatusBadgeClass = kelas daisyUI badge status yang sudah diputuskan handler
+	// untuk baris CS (peta status engagement beda dari activity). "" → baris
+	// activity pakai activityStatusBadge(Status).
+	StatusBadgeClass string
 }
 
 // ActivitiesListView = data halaman daftar. Items = satu halaman keyset;
