@@ -1092,20 +1092,63 @@ type Querier interface {
 	// F3 ownership PERSIS ListHealthScores/CountHealthScoreKPIs (health_score.sql)
 	// agar tak divergen dari halaman /health-scores.
 	ReportHealthByStatus(ctx context.Context, arg ReportHealthByStatusParams) ([]ReportHealthByStatusRow, error)
+	// Panel 4 (funnel Lead Conversion) sisi LEADS: total lead masuk, terkualifikasi
+	// (Qualified atau sudah Converted — keduanya lolos kualifikasi), jadi deal
+	// (converted + punya converted_deal_id). avg_days_to_deal = rata (converted_at −
+	// created_at) hari, HANYA lead terkonversi. Rata Waktu Lead→Terkualifikasi
+	// DITUNDA ke BL-44 (leads tak simpan qualified_at). ROUND(...,1) + COALESCE agar
+	// sqlc tak emit interface{} (gotcha #14).
+	ReportLeadFunnel(ctx context.Context, arg ReportLeadFunnelParams) (ReportLeadFunnelRow, error)
 	// reports.sql — preset report read-only Modul 8 (tasks.md M8-1). "Report bukan
 	// objek data" (skema.md §8): nol tabel baru, query agregasi murni atas tabel yang
 	// sudah ada. Ownership (F3) pakai flag SAMA dengan modul asal tabel — sumber SATU,
 	// bukan duplikat logic scope (pola sama dengan dashboard.sql).
-	// Sales Report (wireframe 8.1): SEMUA stage TERMASUK Closed Won/Lost — beda
-	// sengaja dari DashboardPipelineByStage (yang exclude keduanya untuk chart
+	// Sales Report (wireframe 8.1 panel 1): SEMUA stage TERMASUK Closed Won/Lost —
+	// beda sengaja dari DashboardPipelineByStage (yang exclude keduanya untuk chart
 	// funnel). Report butuh gambaran penuh pipeline+hasil, bukan cuma yang terbuka.
+	// BL-43: avg_probability = rata probabilitas per stage (baris probability NULL
+	// dilewati AVG); weighted_value = SUM(amount×probability/100) — nilai pipeline
+	// tertimbang. COALESCE(...)::tipe membungkus tiap agregat agar sqlc tak emit
+	// interface{} (gotcha #14); avg dibulatkan ke bilangan bulat (persen).
 	ReportPipelineByStage(ctx context.Context, arg ReportPipelineByStageParams) ([]ReportPipelineByStageRow, error)
+	// Panel 5 (Sales Activity Report): per-owner hitung aktivitas context='sales'
+	// per kind (call/email/meeting) + total. LEFT JOIN users utk nama tampilan (pola
+	// cs_impl_tasks.sql). owner_id nullable (NULL = tanpa pemilik → satu grup). Deal
+	// Menang & Aktivitas/Deal digabung di Go dari ReportWonDealsByOwner (hindari
+	// fan-out cross-join). ORDER total DESC agar sales paling aktif di atas.
+	ReportSalesActivityByOwner(ctx context.Context, arg ReportSalesActivityByOwnerParams) ([]ReportSalesActivityByOwnerRow, error)
+	// reports_sales.sql — agregasi panel Sales Report 8.1 (BL-43) yang BUKAN pipeline
+	// per-stage (itu di reports.sql). "Report bukan objek data" (skema.md §8): nol
+	// tabel baru, query agregasi murni atas tabel yang sudah ada. F3 ownership pakai
+	// flag SAMA dengan modul asal (DealsListFilterFor/LeadsListFilterFor/
+	// ActivitiesListFilterFor) — pola `scope_all OR (is_own AND owner = uid)`,
+	// fail-closed (kedua flag false → nol baris). Empat gap yang butuh schema
+	// (Target/Batal/picklist Alasan/qualified_at) SENGAJA di luar file ini → BL-44.
+	// Panel 2 (Sales Forecast): bucket per BULAN dari expected_close_date, nilai =
+	// SUM tertimbang (amount×probability/100). Hanya deal TERBUKA (exclude Closed
+	// Won/Lost) — forecast = ekspektasi pendapatan yang BELUM terealisasi; Won sudah
+	// masuk, Lost = 0. period 'YYYY-MM' agar urut leksikografis = kronologis. Kolom
+	// Target DITUNDA ke BL-44 (tak ada tabel target).
+	ReportSalesForecast(ctx context.Context, arg ReportSalesForecastParams) ([]ReportSalesForecastRow, error)
 	// Support Report (wireframe 8.3): breakdown tiket per status + jumlah
 	// terlanggar SLA + rata-rata jam resolusi (hanya tiket 'selesai'). F3
 	// ownership PERSIS ListTickets/CountTicketKPIs (tickets.sql) — TERMASUK
 	// override Support (TicketsListFilterFor: data_scope='none' + canWrite →
 	// ScopeAll). avg_resolution_hours NULL bila belum ada tiket selesai di grup.
 	ReportTicketsByStatus(ctx context.Context, arg ReportTicketsByStatusParams) ([]ReportTicketsByStatusRow, error)
+	// Panel 3 (tabel Alasan Kalah): GROUP BY win_loss_reason atas deal Closed Lost.
+	// win_loss_reason = TEKS BEBAS (00009) → grouping apa adanya, rawan variasi ejaan
+	// (versi picklist bersih = BL-44). Reason kosong/whitespace dipetakan ke penanda
+	// eksplisit agar tetap satu baris terhitung. Porsi% dihitung di Go (butuh total).
+	ReportWinLossReasons(ctx context.Context, arg ReportWinLossReasonsParams) ([]ReportWinLossReasonsRow, error)
+	// Panel 5 pendamping: jumlah deal Closed Won per deal_owner. Digabung di Go by
+	// owner id dengan ReportSalesActivityByOwner untuk kolom Deal Menang &
+	// Aktivitas/Deal. F3 pakai flag deal (DealsListFilterFor), bukan activity.
+	ReportWonDealsByOwner(ctx context.Context, arg ReportWonDealsByOwnerParams) ([]ReportWonDealsByOwnerRow, error)
+	// Panel 4 (funnel) sisi DEALS: jumlah Closed Won + rata waktu Deal→Menang
+	// (closed_date − created_at) hari. closed_date DATE − created_at::date = int hari.
+	// Hanya deal yang punya closed_date dihitung untuk rata.
+	ReportWonTiming(ctx context.Context, arg ReportWonTimingParams) (ReportWonTimingRow, error)
 	// Batalkan penghapusan dalam masa tenggang. Status dikembalikan ke 'active':
 	// workspace yang dihapus saat ter-arsip pun kembali sebagai aktif — pemulihan
 	// harus meninggalkan keadaan yang bisa langsung dipakai, bukan setengah jalan.

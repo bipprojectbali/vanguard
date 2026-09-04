@@ -85,7 +85,9 @@ const reportPipelineByStage = `-- name: ReportPipelineByStage :many
 SELECT
     stage,
     COUNT(*)::bigint                  AS deal_count,
-    COALESCE(SUM(amount), 0)::numeric AS stage_value
+    COALESCE(SUM(amount), 0)::numeric AS stage_value,
+    COALESCE(ROUND(AVG(probability), 0), 0)::bigint         AS avg_probability,
+    COALESCE(SUM(amount * probability / 100.0), 0)::numeric AS weighted_value
 FROM deals
 WHERE deleted_at IS NULL
   AND (
@@ -112,18 +114,24 @@ type ReportPipelineByStageParams struct {
 }
 
 type ReportPipelineByStageRow struct {
-	Stage      string         `json:"stage"`
-	DealCount  int64          `json:"deal_count"`
-	StageValue pgtype.Numeric `json:"stage_value"`
+	Stage          string         `json:"stage"`
+	DealCount      int64          `json:"deal_count"`
+	StageValue     pgtype.Numeric `json:"stage_value"`
+	AvgProbability int64          `json:"avg_probability"`
+	WeightedValue  pgtype.Numeric `json:"weighted_value"`
 }
 
 // reports.sql — preset report read-only Modul 8 (tasks.md M8-1). "Report bukan
 // objek data" (skema.md §8): nol tabel baru, query agregasi murni atas tabel yang
 // sudah ada. Ownership (F3) pakai flag SAMA dengan modul asal tabel — sumber SATU,
 // bukan duplikat logic scope (pola sama dengan dashboard.sql).
-// Sales Report (wireframe 8.1): SEMUA stage TERMASUK Closed Won/Lost — beda
-// sengaja dari DashboardPipelineByStage (yang exclude keduanya untuk chart
+// Sales Report (wireframe 8.1 panel 1): SEMUA stage TERMASUK Closed Won/Lost —
+// beda sengaja dari DashboardPipelineByStage (yang exclude keduanya untuk chart
 // funnel). Report butuh gambaran penuh pipeline+hasil, bukan cuma yang terbuka.
+// BL-43: avg_probability = rata probabilitas per stage (baris probability NULL
+// dilewati AVG); weighted_value = SUM(amount×probability/100) — nilai pipeline
+// tertimbang. COALESCE(...)::tipe membungkus tiap agregat agar sqlc tak emit
+// interface{} (gotcha #14); avg dibulatkan ke bilangan bulat (persen).
 func (q *Queries) ReportPipelineByStage(ctx context.Context, arg ReportPipelineByStageParams) ([]ReportPipelineByStageRow, error) {
 	rows, err := q.db.Query(ctx, reportPipelineByStage, arg.ScopeAll, arg.IsOwn, arg.Uid)
 	if err != nil {
@@ -133,7 +141,13 @@ func (q *Queries) ReportPipelineByStage(ctx context.Context, arg ReportPipelineB
 	items := []ReportPipelineByStageRow{}
 	for rows.Next() {
 		var i ReportPipelineByStageRow
-		if err := rows.Scan(&i.Stage, &i.DealCount, &i.StageValue); err != nil {
+		if err := rows.Scan(
+			&i.Stage,
+			&i.DealCount,
+			&i.StageValue,
+			&i.AvgProbability,
+			&i.WeightedValue,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
