@@ -1089,6 +1089,11 @@ type Querier interface {
 	// Filter status='PendingApproval' = penjaga transisi (idem ApproveRenewal).
 	RejectRenewal(ctx context.Context, arg RejectRenewalParams) (Subscription, error)
 	RemovePlatformStaff(ctx context.Context, email string) error
+	// Panel 5. Per agen (t.assigned_to, join users utk nama/email). handled = tiket
+	// ditangani, resolved = selesai, avg_resolution_hours (selesai), met/with_sla =
+	// Kepatuhan SLA agen. Badge Status diturunkan handler (const threshold). Agen
+	// NULL (belum ditugaskan) dikecualikan.
+	ReportAgentPerformance(ctx context.Context, arg ReportAgentPerformanceParams) ([]ReportAgentPerformanceRow, error)
 	// Panel 2 (Adoption Report, versi sederhana) + KPI Adoption Rate: rata
 	// feature_adoption_rate + distribusi band (Tinggi 80–100 / Sedang 60–79 /
 	// Rendah 40–59 / Sangat Rendah <40). DILEWATKAN (tak di query ini): bar
@@ -1128,6 +1133,11 @@ type Querier interface {
 	// terjadwal (persen dihitung handler). F3 ownership atas kolom kepemilikan
 	// account (PERSIS ListEngagements). RLS mengurung tenant.
 	ReportEngagementCompliance(ctx context.Context, arg ReportEngagementComplianceParams) ([]ReportEngagementComplianceRow, error)
+	// Panel 4 (SEBAGIAN BESAR DILEWATKAN). Hanya artikel Published: Judul · Dilihat
+	// (view_count apa adanya — komentar 00018: auto-increment di luar scope, praktis
+	// 0) · Status. TAK ada rating/deflection/membantu (tak ada datanya). Tenant via
+	// RLS (h.q). Dibatasi 50 (panel ringkas, bukan daftar penuh).
+	ReportKBPublished(ctx context.Context) ([]ReportKBPublishedRow, error)
 	// Panel 4 (funnel Lead Conversion) sisi LEADS: total lead masuk, terkualifikasi
 	// (Qualified atau sudah Converted — keduanya lolos kualifikasi), jadi deal
 	// (converted + punya converted_deal_id). avg_days_to_deal = rata (converted_at −
@@ -1156,11 +1166,24 @@ type Querier interface {
 	// BL-49: filter opsional Periode (created_at) + Owner (deal_owner), guard NULL =
 	// tak menyaring. owner_filter di-AND DI ATAS scope (hanya menyempit).
 	ReportPipelineByStage(ctx context.Context, arg ReportPipelineByStageParams) ([]ReportPipelineByStageRow, error)
+	// Panel 3 bar. Rata jam penyelesaian per prioritas (tiket selesai). NULL bila
+	// belum ada tiket selesai di prioritas itu → "—" & bar 0 di view.
+	ReportResolutionByPriority(ctx context.Context, arg ReportResolutionByPriorityParams) ([]ReportResolutionByPriorityRow, error)
+	// Panel 3 baris metrik: rata jam penyelesaian tiket yang RESOLVED bulan ini vs
+	// bulan lalu (batas bulan UTC via date_trunc). Label bulan dirakit handler
+	// (appTZ). NULL bila tak ada tiket selesai pada bulan itu.
+	ReportResolutionMonthCompare(ctx context.Context, arg ReportResolutionMonthCompareParams) (ReportResolutionMonthCompareRow, error)
 	// Panel 3 (Retention/Churn) kartu + KPI Retention Rate: hitung aktif vs churned
 	// dari subscriptions.status. Retention% & Churn% dihitung handler dari kedua
 	// angka (active/(active+churned)). F3 ownership subscription_owner (PERSIS
 	// ListSubscriptions). RLS mengurung tenant.
 	ReportRetention(ctx context.Context, arg ReportRetentionParams) (ReportRetentionRow, error)
+	// Panel 2 tabel per-prioritas. 3 tingkat NYATA (rendah/sedang/tinggi) — mockup
+	// pakai 4 (Kritis tak ada di skema). target_minutes = target penyelesaian dari
+	// sla_policies via snapshot t.sla_policy_id (MAX bila banyak policy per
+	// prioritas; NULL bila tiket tak ber-policy → "—" di view). Terpenuhi% =
+	// met/with_sla per prioritas.
+	ReportSLAByPriority(ctx context.Context, arg ReportSLAByPriorityParams) ([]ReportSLAByPriorityRow, error)
 	// Panel 5 (Sales Activity Report): per-owner hitung aktivitas context='sales'
 	// per kind (call/email/meeting) + total. LEFT JOIN users utk nama tampilan (pola
 	// cs_impl_tasks.sql). owner_id nullable (NULL = tanpa pemilik → satu grup). Deal
@@ -1189,12 +1212,28 @@ type Querier interface {
 	// pemilik tak bisa jadi pilihan filter). TAK disaring Periode agar owner terpilih
 	// selalu tampil walau rentang dipersempit (daftar stabil).
 	ReportSalesOwners(ctx context.Context, arg ReportSalesOwnersParams) ([]ReportSalesOwnersRow, error)
-	// Support Report (wireframe 8.3): breakdown tiket per status + jumlah
-	// terlanggar SLA + rata-rata jam resolusi (hanya tiket 'selesai'). F3
-	// ownership PERSIS ListTickets/CountTicketKPIs (tickets.sql) — TERMASUK
+	// KPI header + kartu SLA panel 2. total = Total Tiket; met/with_sla = Kepatuhan
+	// SLA (hanya tiket ber-SLA jadi denominator — tiket tanpa deadline tak punya
+	// target untuk dipenuhi); avg_resolution_hours = Rata Penyelesaian (tiket
+	// selesai). breached = terlanggar (resolved telat ATAU belum selesai lewat
+	// deadline); at_risk = belum selesai, deadline < 4 jam lagi (pola CountTicketKPIs).
+	ReportSupportKPIs(ctx context.Context, arg ReportSupportKPIsParams) (ReportSupportKPIsRow, error)
+	// reports_support.sql — agregasi Support Report (Modul 8, wireframe 8.3, BL-46).
+	// Diperluas dari 1 panel (breakdown status) ke 5 panel; query yang DIBANGUN
+	// hanya untuk data yang SUDAH ADA (CSAT, kategori tiket, kanal, respons
+	// pertama, FCR, KB rating/deflection DILEWATKAN — tak ada kolom/tabel).
+	//
+	// F3 ownership PERSIS ListTickets/CountTicketKPIs (tickets.sql) — TERMASUK
 	// override Support (TicketsListFilterFor: data_scope='none' + canWrite →
-	// ScopeAll). avg_resolution_hours NULL bila belum ada tiket selesai di grup.
-	ReportTicketsByStatus(ctx context.Context, arg ReportTicketsByStatusParams) ([]ReportTicketsByStatusRow, error)
+	// ScopeAll). Filter dinyatakan via JOIN accounts + predikat scope_all/is_own/uid.
+	// Bucket bulan: to_char(date_trunc('month', …), 'YYYY-MM') → urut leksikografis =
+	// kronologis (pola sama ReportSalesForecast). Timezone: batas bulan UTC (cukup
+	// untuk laporan; gotcha #14 — hindari AT TIME ZONE di SELECT list sqlc).
+	// Panel 1 (Ticket Volume): per bulan → Tiket Masuk (created bulan itu) & Selesai
+	// (resolved bulan itu). Backlog kumulatif (masuk−selesai berjalan) DIHITUNG di
+	// handler dari urutan bulan ini (SQL cukup dua deret). UNION ALL dua sumber
+	// tanggal lalu GROUP agar bulan yang hanya punya salah satu tetap muncul.
+	ReportTicketVolumeByMonth(ctx context.Context, arg ReportTicketVolumeByMonthParams) ([]ReportTicketVolumeByMonthRow, error)
 	// Panel 3 (tabel Alasan Kalah): GROUP BY loss_reason_code atas deal Closed Lost.
 	// loss_reason_code = PICKLIST terkunci (00038, BL-44 3a) → grouping bersih tanpa
 	// variasi ejaan. Deal lama tanpa kode (mis. ditutup sebelum picklist & tanpa teks
