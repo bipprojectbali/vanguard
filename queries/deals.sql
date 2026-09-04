@@ -137,6 +137,7 @@ RETURNING *;
 UPDATE deals SET
     stage           = sqlc.arg(stage),
     win_loss_reason = sqlc.narg(win_loss_reason),
+    loss_reason_code = sqlc.narg(loss_reason_code),
     loss_notes      = sqlc.narg(loss_notes),
     closed_date     = CASE
         WHEN sqlc.arg(stage) IN ('Closed Won','Closed Lost') THEN CURRENT_DATE

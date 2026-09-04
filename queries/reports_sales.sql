@@ -32,13 +32,14 @@ GROUP BY date_trunc('month', expected_close_date)
 ORDER BY date_trunc('month', expected_close_date);
 
 -- name: ReportWinLossReasons :many
--- Panel 3 (tabel Alasan Kalah): GROUP BY win_loss_reason atas deal Closed Lost.
--- win_loss_reason = TEKS BEBAS (00009) → grouping apa adanya, rawan variasi ejaan
--- (versi picklist bersih = BL-44). Reason kosong/whitespace dipetakan ke penanda
--- eksplisit agar tetap satu baris terhitung. Porsi% dihitung di Go (butuh total).
+-- Panel 3 (tabel Alasan Kalah): GROUP BY loss_reason_code atas deal Closed Lost.
+-- loss_reason_code = PICKLIST terkunci (00038, BL-44 3a) → grouping bersih tanpa
+-- variasi ejaan. Deal lama tanpa kode (mis. ditutup sebelum picklist & tanpa teks
+-- yang bisa dipetakan) → penanda '(Tanpa kode)' agar tetap satu baris terhitung.
+-- Porsi% dihitung di Go (butuh total).
 SELECT
-    (COALESCE(NULLIF(TRIM(win_loss_reason), ''), '(Tanpa alasan)'))::text AS reason,
-    COUNT(*)::bigint                                                      AS deal_count
+    (COALESCE(loss_reason_code, '(Tanpa kode)'))::text AS reason,
+    COUNT(*)::bigint                                   AS deal_count
 FROM deals
 WHERE deleted_at IS NULL
   AND stage = 'Closed Lost'
@@ -49,7 +50,7 @@ WHERE deleted_at IS NULL
   AND (sqlc.narg(period_start)::timestamptz IS NULL OR created_at >= sqlc.narg(period_start))
   AND (sqlc.narg(period_end)::timestamptz IS NULL OR created_at < sqlc.narg(period_end))
   AND (sqlc.narg(owner_filter)::bigint IS NULL OR deal_owner = sqlc.narg(owner_filter))
-GROUP BY COALESCE(NULLIF(TRIM(win_loss_reason), ''), '(Tanpa alasan)')
+GROUP BY COALESCE(loss_reason_code, '(Tanpa kode)')
 ORDER BY COUNT(*) DESC, reason;
 
 -- name: ReportLeadFunnel :one

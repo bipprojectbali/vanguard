@@ -39,6 +39,8 @@ func wsErrMsgCRM(code string) string {
 		return "Kategori forecast tidak valid."
 	case "win_loss":
 		return "Alasan menang/kalah wajib diisi saat deal ditutup (Closed Won/Lost)."
+	case "loss_reason":
+		return "Pilih alasan kalah (Harga/Fitur/Kompetitor/Anggaran/Lainnya) saat deal Closed Lost."
 	case "account_req":
 		return "Desa (account) wajib dipilih untuk deal ini."
 	case "convert_guard":

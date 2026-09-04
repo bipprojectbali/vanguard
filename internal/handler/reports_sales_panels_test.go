@@ -50,13 +50,14 @@ func (e *testEnv) seedForecastDeal(t *testing.T, accID int64, owner *int64, stag
 	return d
 }
 
-// setDealLostReason menempel win_loss_reason (teks bebas 00009) pada deal Closed
-// Lost — kolom tak ada di CreateDeal, ditulis mentah lewat pool.
-func (e *testEnv) setDealLostReason(t *testing.T, dealID int64, reason string) {
+// setDealLossCode menempel loss_reason_code (picklist 00038, BL-44) pada deal
+// Closed Lost — kolom tak ada di CreateDeal, ditulis mentah lewat pool. Panel
+// Win/Loss GROUP BY kode ini (bukan lagi win_loss_reason teks bebas).
+func (e *testEnv) setDealLossCode(t *testing.T, dealID int64, code string) {
 	t.Helper()
 	if _, err := e.h.Pool.Exec(t.Context(),
-		`UPDATE deals SET win_loss_reason = $1 WHERE id = $2`, reason, dealID); err != nil {
-		t.Fatalf("set lost reason: %v", err)
+		`UPDATE deals SET loss_reason_code = $1 WHERE id = $2`, code, dealID); err != nil {
+		t.Fatalf("set loss code: %v", err)
 	}
 }
 
@@ -135,7 +136,7 @@ func TestReportsSales_ForecastPanel_Buckets(t *testing.T) {
 // --- Panel 3: Win/Loss (persen + alasan) -------------------------------------
 
 // TestReportsSales_WinLossPanel: kartu Menang/Kalah dari won/lost count; tabel
-// Alasan Kalah GROUP BY win_loss_reason dengan Porsi% dihitung di Go.
+// Alasan Kalah GROUP BY loss_reason_code (picklist BL-44) dengan Porsi% di Go.
 func TestReportsSales_WinLossPanel(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa WinLoss", &uid, nil, nil)
@@ -143,13 +144,13 @@ func TestReportsSales_WinLossPanel(t *testing.T) {
 	l1 := env.seedReportDeal(t, acc.ID, &uid, "Closed Lost", "1000000")
 	l2 := env.seedReportDeal(t, acc.ID, &uid, "Closed Lost", "1000000")
 	l3 := env.seedReportDeal(t, acc.ID, &uid, "Closed Lost", "1000000")
-	env.setDealLostReason(t, l1.ID, "Harga Terlalu Tinggi")
-	env.setDealLostReason(t, l2.ID, "Harga Terlalu Tinggi")
-	env.setDealLostReason(t, l3.ID, "Kurang Fitur")
+	env.setDealLossCode(t, l1.ID, "Harga")
+	env.setDealLossCode(t, l2.ID, "Harga")
+	env.setDealLossCode(t, l3.ID, "Fitur")
 
 	_, body := env.reportsSalesBody(t, uid, "owner", "admin")
-	// Menang 1/4 = 25%, Kalah 3/4 = 75%.
-	for _, want := range []string{"25%", "75%", "Harga Terlalu Tinggi", "66%", "Kurang Fitur", "33%"} {
+	// Menang 1/4 = 25%, Kalah 3/4 = 75%; kode Harga 2/3 = 66%, Fitur 1/3 = 33%.
+	for _, want := range []string{"25%", "75%", "Harga", "66%", "Fitur", "33%"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("panel Win/Loss harus memuat %q, body:\n%s", want, body)
 		}
@@ -267,7 +268,7 @@ func TestReportsSales_Export_Panels(t *testing.T) {
 	acc := env.seedAccount(t, "Desa CSV", &uid, nil, nil)
 	env.seedForecastDeal(t, acc.ID, &uid, "Prospecting", "20000000", 50, ymd(2026, 9, 10)) // weighted 10jt
 	lost := env.seedReportDeal(t, acc.ID, &uid, "Closed Lost", "1000000")
-	env.setDealLostReason(t, lost.ID, "Harga")
+	env.setDealLossCode(t, lost.ID, "Harga")
 	env.seedLeadStatus(t, "L1", uid, "Qualified")
 	env.seedReportDeal(t, acc.ID, &uid, "Closed Won", "1000000")
 	env.seedSalesActivity(t, "call", "account", acc.ID, "C", &uid)

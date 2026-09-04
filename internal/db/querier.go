@@ -1151,10 +1151,11 @@ type Querier interface {
 	// override Support (TicketsListFilterFor: data_scope='none' + canWrite →
 	// ScopeAll). avg_resolution_hours NULL bila belum ada tiket selesai di grup.
 	ReportTicketsByStatus(ctx context.Context, arg ReportTicketsByStatusParams) ([]ReportTicketsByStatusRow, error)
-	// Panel 3 (tabel Alasan Kalah): GROUP BY win_loss_reason atas deal Closed Lost.
-	// win_loss_reason = TEKS BEBAS (00009) → grouping apa adanya, rawan variasi ejaan
-	// (versi picklist bersih = BL-44). Reason kosong/whitespace dipetakan ke penanda
-	// eksplisit agar tetap satu baris terhitung. Porsi% dihitung di Go (butuh total).
+	// Panel 3 (tabel Alasan Kalah): GROUP BY loss_reason_code atas deal Closed Lost.
+	// loss_reason_code = PICKLIST terkunci (00038, BL-44 3a) → grouping bersih tanpa
+	// variasi ejaan. Deal lama tanpa kode (mis. ditutup sebelum picklist & tanpa teks
+	// yang bisa dipetakan) → penanda '(Tanpa kode)' agar tetap satu baris terhitung.
+	// Porsi% dihitung di Go (butuh total).
 	ReportWinLossReasons(ctx context.Context, arg ReportWinLossReasonsParams) ([]ReportWinLossReasonsRow, error)
 	// Panel 5 pendamping: jumlah deal Closed Won per deal_owner. Digabung di Go by
 	// owner id dengan ReportSalesActivityByOwner untuk kolom Deal Menang &
