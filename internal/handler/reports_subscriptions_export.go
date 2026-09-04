@@ -1,106 +1,102 @@
 package handler
 
 import (
-	"context"
-	"time"
+	"net/http"
+	"strconv"
 
-	"go_starter/internal/db"
-	"go_starter/internal/session"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"go_starter/internal/ui/pages/panel"
 )
 
-// reports_subscriptions_export.go — loop keyset LENGKAP untuk CSV Subscription
-// Report, dipisah dari reports_subscriptions.go (yang sudah dekat batas 150
-// baris "route/handler" & concern beda: render satu halaman vs kumpulkan
-// SEMUA baris). "No silent caps" (CLAUDE.md #13): export yang diam-diam
-// terpotong ke halaman pertama adalah bug tersembunyi, bukan fitur.
+// reports_subscriptions_export.go — CSV per-panel Subscription Report 8.4
+// (BL-47). Satu route /reports/subscriptions/export baca ?panel= (default
+// "mrr"). Serial dari view yang SAMA (reportsSubscriptionsData) → angka CSV
+// identik HTML, bukan jalur hitung kedua. F2 & F3 & F4 identik jalur HTML
+// (query, argumen scope, & masking sama). Panel tak dikenal → mrr (default aman).
 
-// paginateAll mengumpulkan SELURUH baris lewat keyset (bukan cuma page
-// pertama) — generik atas tipe baris apa pun yang punya (created_at, id).
-// fetch dipanggil ulang dengan cursor baris terakhir sampai halaman < pageSize
-// (tanda halaman terakhir, pola sama dgn splitPage). Mulai dari
-// firstPageCursor() (sentinel infinity), BUKAN zero-value — query keyset
-// membandingkan "< cursor", jadi zero-value (Valid:false) meloloskan NOL baris.
-func paginateAll[T any](
-	fetch func(cursorAt pgtype.Timestamptz, cursorID int64) ([]T, error),
-	keyOf func(T) (pgtype.Timestamptz, int64),
-) ([]T, error) {
-	var all []T
-	cursorAt, cursorID := firstPageCursor()
-	for {
-		page, err := fetch(cursorAt, cursorID)
-		if err != nil {
-			return nil, err
-		}
-		hasMore := len(page) > pageSize
-		if hasMore {
-			page = page[:pageSize]
-		}
-		all = append(all, page...)
-		if !hasMore || len(page) == 0 {
-			break
-		}
-		cursorAt, cursorID = keyOf(page[len(page)-1])
+// ReportsSubscriptionsExport — GET /reports/subscriptions/export?panel=…
+func (h *Handler) ReportsSubscriptionsExport(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !canViewReports(ctx) {
+		h.renderReportsForbidden(w, r, "Subscription Report", "/reports/subscriptions")
+		return
 	}
-	return all, nil
+	view, err := h.reportsSubscriptionsData(ctx)
+	if err != nil {
+		h.Log.Error("reports: subscriptions export", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	name, headers, rows := reportsSubscriptionsCSV(r.URL.Query().Get("panel"), view)
+	if err := writeCSV(w, name, headers, rows); err != nil {
+		h.Log.Error("reports: subscriptions export write", "err", err)
+	}
 }
 
-// reportsSubscriptionsExportRows merakit header+baris CSV untuk section aktif,
-// mengumpulkan SEMUA baris (paginateAll) — F3 ownership SAMA dgn tampilan HTML.
-func (h *Handler) reportsSubscriptionsExportRows(ctx context.Context, section string) ([]string, [][]string, error) {
-	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
-	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
-	q := h.q(ctx)
-
-	if section == reportSectionChurn {
-		names, err := h.memberNameMap(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
-		all, err := paginateAll(
-			func(cursorAt pgtype.Timestamptz, cursorID int64) ([]db.ListChurnedRow, error) {
-				return q.ListChurned(ctx, db.ListChurnedParams{
-					CursorCreatedAt: cursorAt, CursorID: cursorID,
-					ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
-					PageSize: pageSize + 1,
-				})
-			},
-			func(s db.ListChurnedRow) (pgtype.Timestamptz, int64) { return s.CreatedAt, s.ID },
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-		header := []string{"Desa", "Paket", "MRR Hilang", "Alasan", "Tipe", "Tgl Churn", "CS"}
-		rows := make([][]string, 0, len(all))
-		for _, s := range all {
-			v := churnRowView(s, names, br)
-			rows = append(rows, []string{v.Village, v.Plan, v.LostMRR, v.Reason, v.Type, v.ChurnDate, v.CSM})
-		}
-		return header, rows, nil
-	}
-
-	now := time.Now().In(appTZ)
-	today := reportTodayDate(now)
-	all, err := paginateAll(
-		func(cursorAt pgtype.Timestamptz, cursorID int64) ([]db.ListRenewalsRow, error) {
-			return q.ListRenewals(ctx, db.ListRenewalsParams{
-				CursorCreatedAt: cursorAt, CursorID: cursorID,
-				ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
-				WindowFilter: "due", Today: today, PageSize: pageSize + 1,
+// reportsSubscriptionsCSV memilih panel & merakit baris CSV dari view. Nilai Rp
+// SUDAH ter-mask F4 di view (builder) — CSV tak membocorkan apa yang HTML tutup.
+func reportsSubscriptionsCSV(panelKey string, v panel.ReportsSubscriptionsView) (string, []string, [][]string) {
+	switch panelKey {
+	case "renewal":
+		rows := make([][]string, 0, len(v.RenewalMonths))
+		for _, r := range v.RenewalMonths {
+			rows = append(rows, []string{
+				r.Period,
+				strconv.FormatInt(r.Due, 10),
+				strconv.FormatInt(r.Renewed, 10),
+				r.Rate,
 			})
-		},
-		func(s db.ListRenewalsRow) (pgtype.Timestamptz, int64) { return s.CreatedAt, s.ID },
-	)
-	if err != nil {
-		return nil, nil, err
+		}
+		return "subscription-renewal", []string{"Periode", "Jatuh Tempo", "Diperpanjang", "Rate"}, rows
+
+	case "churn":
+		rows := make([][]string, 0, len(v.ChurnReasons))
+		for _, r := range v.ChurnReasons {
+			rows = append(rows, []string{
+				r.Reason,
+				strconv.FormatInt(r.Count, 10),
+				r.LostValue,
+				r.Porsi,
+			})
+		}
+		return "subscription-churn", []string{"Alasan", "Desa", "Nilai Hilang", "Porsi"}, rows
+
+	case "plan":
+		rows := make([][]string, 0, len(v.RevenueByPlan))
+		for _, r := range v.RevenueByPlan {
+			rows = append(rows, []string{
+				r.Plan,
+				strconv.FormatInt(r.Count, 10),
+				r.MRR,
+				r.AvgPer,
+			})
+		}
+		return "subscription-plan", []string{"Paket", "Desa", "MRR", "Rata per Desa"}, rows
+
+	case "aging":
+		rows := make([][]string, 0, len(v.AgingRows))
+		for _, r := range v.AgingRows {
+			rows = append(rows, []string{
+				r.Bucket,
+				strconv.FormatInt(r.Villages, 10),
+				r.MRR,
+				r.AvgHealth,
+				r.RenewalRate,
+				r.ChurnRate,
+				r.Note,
+			})
+		}
+		return "subscription-aging", []string{"Kelompok Umur", "Desa", "MRR", "Rata Health", "Renewal Rate", "Churn Rate", "Catatan"}, rows
+
+	default: // "" atau "mrr" — default aman.
+		rows := make([][]string, 0, len(v.MRRComponents))
+		for _, r := range v.MRRComponents {
+			rows = append(rows, []string{
+				r.Component,
+				r.Value,
+				strconv.FormatInt(r.Count, 10),
+				r.Porsi,
+			})
+		}
+		return "subscription-mrr", []string{"Komponen MRR", "Nilai", "Desa", "Porsi"}, rows
 	}
-	header := []string{"Desa", "Paket", "Tgl Perpanjang", "Sisa Hari", "Jenis", "Status", "Prev", "Kini"}
-	rows := make([][]string, 0, len(all))
-	for _, s := range all {
-		v := renewalRowView(s, now, br)
-		rows = append(rows, []string{v.Village, v.Plan, v.RenewalDate, v.DaysLeft, v.Type, v.Status, v.PrevValue, v.CurrentMRR})
-	}
-	return header, rows, nil
 }

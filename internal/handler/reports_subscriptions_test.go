@@ -2,49 +2,85 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"go_starter/internal/codes"
+	"go_starter/internal/db"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// reports_subscriptions_test.go — Subscription Report (Modul 8 M8-1) di sisi
-// handler. Empat sumbu dijaga:
+// reports_subscriptions_test.go — Subscription Report 8.4 (Modul 8, BL-47) di
+// sisi handler. Sumbu yang dijaga:
 //
 //   - F2 (gerbang): tanpa izin crm:reports read → 403 + penjelasan.
-//   - Section: ?section=renewal (default) memakai jendela TETAP "due"
-//     (reuse ListRenewals); ?section=churn memakai ListChurned.
-//   - F3 (ownership): sales own-scope hanya melihat baris miliknya sendiri.
-//   - Export "no silent caps": CSV export mengumpulkan SEMUA halaman keyset,
-//     dibuktikan dgn seed > pageSize baris lalu hitung baris CSV = total seed.
+//   - Panel: kelima panel (MRR/ARR · Renewal · Churn · Revenue by Plan · Aging)
+//     + 4 KPI benar-benar dirender; label churn Indonesia terpetakan.
+//   - F3 (ownership): sales own-scope hanya mengagregasi langganan miliknya;
+//     manager all-scope lintas-owner (dibuktikan lewat nama paket panel 4).
+//   - F4 (masking): builder memasking nilai Rp bagi role tanpa akses ARR.
+//   - Dilewatkan: elemen yang sengaja tak dibangun (delta "vs bulan lalu") tak
+//     muncul di HTML.
+//   - Export: CSV per-panel 200 + text/csv; gerbang F2 sama.
 //
-// Setup/helper reuse accounts_test.go + seedRenewalSub/seedChurnedSub (sudah
-// ada dari M5-4, package sama).
+// Setup/helper reuse accounts_test.go + seedRenewalSub/seedChurnedSub/seedPlan
+// (package sama). seedActiveSubStart (bawah) menambah start_date — dibutuhkan
+// panel Aging & komponen MRR baru yang helper lama biarkan NULL.
 
-func reportsSubscriptionsReq(section string) *http.Request {
-	target := "/w/test/reports/subscriptions"
-	if section != "" {
-		target += "?section=" + section
+// seedActiveSubStart menyeed langganan Active ber-start_date & MRR/ARR eksplisit
+// (helper renewal/churn lama tak set start_date). end_date jauh di depan agar
+// tak masuk jendela jatuh-tempo; dipakai panel Revenue-by-Plan, Aging, & MRR
+// baru (start_date bulan ini tanpa previous_subscription_id).
+func (e *testEnv) seedActiveSubStart(
+	t *testing.T, accountID, planID int64, owner *int64, mrr string, start time.Time,
+) db.Subscription {
+	t.Helper()
+	code, err := e.q.GenerateEntityCode(t.Context(), e.tenantID, codes.EntitySubscription)
+	if err != nil {
+		t.Fatalf("generate subscription code: %v", err)
 	}
-	return accountsReq(http.MethodGet, target, nil, "")
+	s, err := e.q.CreateSubscription(t.Context(), db.CreateSubscriptionParams{
+		TenantID:          e.tenantID,
+		EntityCode:        &code,
+		SubscriptionOwner: owner,
+		AccountID:         accountID,
+		PlanID:            planID,
+		Status:            "Active",
+		StartDate:         pgtype.Date{Time: start, Valid: true},
+		EndDate:           pgtype.Date{Time: start.AddDate(1, 0, 0), Valid: true},
+		AutoRenew:         false,
+		Mrr:               numFrom(t, mrr),
+		Arr:               numFrom(t, "6000000"),
+		CreatedBy:         owner,
+	})
+	if err != nil {
+		t.Fatalf("seed active subscription: %v", err)
+	}
+	return s
 }
 
-func reportsSubscriptionsExportReq(section string) *http.Request {
+func reportsSubscriptionsReq() *http.Request {
+	return accountsReq(http.MethodGet, "/w/test/reports/subscriptions", nil, "")
+}
+
+func reportsSubscriptionsExportReq(panelKey string) *http.Request {
 	target := "/w/test/reports/subscriptions/export"
-	if section != "" {
-		target += "?section=" + section
+	if panelKey != "" {
+		target += "?panel=" + panelKey
 	}
 	return accountsReq(http.MethodGet, target, nil, "")
 }
 
-// --- F2: gerbang ---------------------------------------------------------
+// --- F2: gerbang -----------------------------------------------------------
 
 // TestReportsSubscriptions_GateRead: anggota tanpa business_role (izin crm:
 // reports tak dimiliki) → 403 + penjelasan.
 func TestReportsSubscriptions_GateRead(t *testing.T) {
 	env, uid := setupAccounts(t)
 
-	rec := env.runAccount(uid, "member", "", reportsSubscriptionsReq(""), env.h.ReportsSubscriptions)
+	rec := env.runAccount(uid, "member", "", reportsSubscriptionsReq(), env.h.ReportsSubscriptions)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rec.Code)
 	}
@@ -53,13 +89,13 @@ func TestReportsSubscriptions_GateRead(t *testing.T) {
 	}
 }
 
-// TestReportsSubscriptions_GateRead_AllowedRoles: sales/manager/admin
-// (pemegang crm:reports read) → 200.
+// TestReportsSubscriptions_GateRead_AllowedRoles: sales/manager/admin (pemegang
+// crm:reports read) → 200.
 func TestReportsSubscriptions_GateRead_AllowedRoles(t *testing.T) {
 	env, uid := setupAccounts(t)
 	for _, role := range []string{"sales", "manager", "admin"} {
 		t.Run("role="+role, func(t *testing.T) {
-			rec := env.runAccount(uid, "owner", role, reportsSubscriptionsReq(""), env.h.ReportsSubscriptions)
+			rec := env.runAccount(uid, "owner", role, reportsSubscriptionsReq(), env.h.ReportsSubscriptions)
 			if rec.Code != http.StatusOK {
 				t.Errorf("role %q: status = %d, want 200\n%s", role, rec.Code, rec.Body.String())
 			}
@@ -67,88 +103,138 @@ func TestReportsSubscriptions_GateRead_AllowedRoles(t *testing.T) {
 	}
 }
 
-// --- Section: renewal (default, jendela "due") ---------------------------
+// --- Panel: kelima panel dirender ------------------------------------------
 
-// TestReportsSubscriptions_RenewalDefault: tanpa ?section= → tab renewal,
-// hanya renewal jatuh tempo (jendela "due") yang muncul.
-func TestReportsSubscriptions_RenewalDefault(t *testing.T) {
+// TestReportsSubscriptions_PanelsRender: seed data lintas panel, lalu pastikan
+// judul kelima panel, label KPI, nama paket (bukan hardcode), & label churn
+// Indonesia (terpetakan dari picklist Inggris) muncul.
+func TestReportsSubscriptions_PanelsRender(t *testing.T) {
 	env, uid := setupAccounts(t)
 	now := time.Now()
-	due := env.seedAccount(t, "Desa Report Due", &uid, nil, nil)
-	far := env.seedAccount(t, "Desa Report Far", &uid, nil, nil)
-	pDue := env.seedPlan(t, "Plan Report Due", "PL-RPD", "1000000")
-	pFar := env.seedPlan(t, "Plan Report Far", "PL-RPF", "1000000")
+
+	active := env.seedAccount(t, "Desa Aktif", &uid, nil, nil)
+	pActive := env.seedPlan(t, "Paket Emas", "PL-EMAS", "1000000")
+	env.seedActiveSubStart(t, active.ID, pActive, &uid, "500000", now)
+
+	due := env.seedAccount(t, "Desa Jatuh Tempo", &uid, nil, nil)
+	pDue := env.seedPlan(t, "Paket Perak", "PL-PERAK", "1000000")
 	env.seedRenewalSub(t, due.ID, pDue, &uid, "Active", now.AddDate(0, 0, 10), "", "Manual")
-	env.seedRenewalSub(t, far.ID, pFar, &uid, "Active", now.AddDate(0, 0, 60), "", "Manual")
 
-	rec := env.runAccount(uid, "owner", "manager", reportsSubscriptionsReq(""), env.h.ReportsSubscriptions)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200\n%s", rec.Code, rec.Body.String())
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Desa Report Due") {
-		t.Error("default section (renewal, jendela due) harus memuat Desa Report Due")
-	}
-	if strings.Contains(body, "Desa Report Far") {
-		t.Error("jendela due TAK boleh memuat renewal jauh (Desa Report Far)")
-	}
-}
-
-// --- Section: churn --------------------------------------------------------
-
-// TestReportsSubscriptions_Churn: ?section=churn hanya memuat langganan
-// berhenti, bukan renewal aktif.
-func TestReportsSubscriptions_Churn(t *testing.T) {
-	env, uid := setupAccounts(t)
-	gone := env.seedAccount(t, "Desa Report Gone", &uid, nil, nil)
-	pGone := env.seedPlan(t, "Plan Report Gone", "PL-RPG", "1000000")
+	gone := env.seedAccount(t, "Desa Berhenti", &uid, nil, nil)
+	pGone := env.seedPlan(t, "Paket Perunggu", "PL-PRG", "1000000")
 	env.seedChurnedSub(t, gone.ID, pGone, &uid, "Voluntary", "500000")
 
-	rec := env.runAccount(uid, "owner", "manager", reportsSubscriptionsReq("churn"), env.h.ReportsSubscriptions)
+	rec := env.runAccount(uid, "owner", "manager", reportsSubscriptionsReq(), env.h.ReportsSubscriptions)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Desa Report Gone") {
-		t.Error("section churn harus memuat langganan berhenti (Desa Report Gone)")
+
+	for _, want := range []string{
+		"MRR/ARR Report", "Renewal Report", "Churn Report", "Revenue by Plan",
+		"Subscription Aging",         // judul panel
+		"Renewal Rate", "Churn Rate", // KPI
+		"Paket Emas",            // nama paket panel 4 (dari plans, bukan hardcode)
+		"Anggaran tidak lanjut", // label churn Indonesia (Budget → …)
+		"&lt; 6 bulan",          // bucket aging (start_date = now), &lt; = escape "<"
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body Subscription Report harus memuat %q", want)
+		}
 	}
 }
 
-// --- F3: ownership -----------------------------------------------------------
+// TestReportsSubscriptions_SkippedNotRendered: elemen yang SENGAJA dilewatkan
+// BL-47 (delta "vs bulan lalu") tak boleh muncul di HTML.
+func TestReportsSubscriptions_SkippedNotRendered(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa Skip", &uid, nil, nil)
+	plan := env.seedPlan(t, "Paket Skip", "PL-SKIP", "1000000")
+	env.seedActiveSubStart(t, acc.ID, plan, &uid, "500000", time.Now())
+
+	rec := env.runAccount(uid, "owner", "manager", reportsSubscriptionsReq(), env.h.ReportsSubscriptions)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "vs bulan lalu") {
+		t.Error("delta 'vs bulan lalu' sengaja dilewatkan (tak ada snapshot MRR historis) — tak boleh dirender")
+	}
+}
+
+// --- F3: ownership ----------------------------------------------------------
 
 // TestReportsSubscriptions_ScopedByOwnership: sales (own-scope) hanya
-// melihat renewal miliknya; manager (all-scope) lintas-owner.
+// mengagregasi langganan miliknya (paket sendiri di Revenue-by-Plan); manager
+// (all-scope) lintas-owner.
 func TestReportsSubscriptions_ScopedByOwnership(t *testing.T) {
 	env, uid := setupAccounts(t)
 	other := env.seedMember(t, "otherreport@local", "member", 0).ID
 	now := time.Now()
-	mine := env.seedAccount(t, "Desa Report Mine", &uid, nil, nil)
-	theirs := env.seedAccount(t, "Desa Report Theirs", &other, nil, nil)
-	pM := env.seedPlan(t, "Plan Report Mine", "PL-RPM", "1000000")
-	pT := env.seedPlan(t, "Plan Report Theirs", "PL-RPT", "1000000")
-	env.seedRenewalSub(t, mine.ID, pM, &uid, "Active", now.AddDate(0, 0, 10), "", "Manual")
-	env.seedRenewalSub(t, theirs.ID, pT, &other, "Active", now.AddDate(0, 0, 10), "", "Manual")
 
-	rec := env.runAccount(uid, "owner", "sales", reportsSubscriptionsReq("renewal"), env.h.ReportsSubscriptions)
+	mine := env.seedAccount(t, "Desa Milikku", &uid, nil, nil)
+	theirs := env.seedAccount(t, "Desa Orang", &other, nil, nil)
+	pMine := env.seedPlan(t, "Paket Milikku", "PL-MINE", "1000000")
+	pTheirs := env.seedPlan(t, "Paket Orang", "PL-THEIRS", "1000000")
+	env.seedActiveSubStart(t, mine.ID, pMine, &uid, "500000", now)
+	env.seedActiveSubStart(t, theirs.ID, pTheirs, &other, "700000", now)
+
+	rec := env.runAccount(uid, "owner", "sales", reportsSubscriptionsReq(), env.h.ReportsSubscriptions)
 	body := rec.Body.String()
-	if !strings.Contains(body, "Desa Report Mine") {
-		t.Error("sales harus melihat renewal miliknya (Desa Report Mine)")
+	if !strings.Contains(body, "Paket Milikku") {
+		t.Error("sales harus mengagregasi paket miliknya (Paket Milikku)")
 	}
-	if strings.Contains(body, "Desa Report Theirs") {
-		t.Error("sales TAK boleh melihat renewal milik anggota lain (Desa Report Theirs)")
+	if strings.Contains(body, "Paket Orang") {
+		t.Error("sales TAK boleh melihat paket milik anggota lain (Paket Orang)")
 	}
 
-	recM := env.runAccount(uid, "owner", "manager", reportsSubscriptionsReq("renewal"), env.h.ReportsSubscriptions)
+	recM := env.runAccount(uid, "owner", "manager", reportsSubscriptionsReq(), env.h.ReportsSubscriptions)
 	bodyM := recM.Body.String()
-	if !strings.Contains(bodyM, "Desa Report Mine") || !strings.Contains(bodyM, "Desa Report Theirs") {
-		t.Error("manager (all-scope) harus melihat semua renewal")
+	if !strings.Contains(bodyM, "Paket Milikku") || !strings.Contains(bodyM, "Paket Orang") {
+		t.Error("manager (all-scope) harus mengagregasi semua paket")
 	}
 }
 
-// --- Export CSV: no silent caps ---------------------------------------------
+// --- F4: masking (builder-level) -------------------------------------------
 
-// TestReportsSubscriptions_Export_GateRead: export tanpa izin → 403 (bukan
-// CSV bocor).
+// TestReportsSubscriptions_MaskingF4: nilai Rp (Revenue-by-Plan & komponen MRR)
+// tersamar bagi role tanpa akses ARR (canSeeARR=false, mis. "support") tetapi
+// utuh bagi "admin". Diuji di level builder (pola reports_cs_test).
+func TestReportsSubscriptions_MaskingF4(t *testing.T) {
+	planRows := []db.ReportRevenueByPlanRow{
+		{PlanName: "Paket Emas", VillageCount: 2, Mrr: numFrom(t, "1000000")},
+	}
+	masked := buildRevenueByPlan(planRows, "support")
+	if len(masked) != 1 {
+		t.Fatalf("buildRevenueByPlan(support) len = %d, want 1", len(masked))
+	}
+	if masked[0].MRR != flsHidden || masked[0].AvgPer != flsHidden {
+		t.Errorf("MRR/AvgPer tersamar = %q/%q, want %q", masked[0].MRR, masked[0].AvgPer, flsHidden)
+	}
+	seen := buildRevenueByPlan(planRows, "admin")
+	if !strings.Contains(seen[0].MRR, "1.000.000") {
+		t.Errorf("admin harus melihat MRR Rp 1.000.000, got %q", seen[0].MRR)
+	}
+	if !strings.Contains(seen[0].AvgPer, "500.000") {
+		t.Errorf("admin harus melihat Rata per Desa Rp 500.000, got %q", seen[0].AvgPer)
+	}
+
+	mrrRow := db.ReportSubMRRRow{
+		NewMrr: numFrom(t, "500000"), NewCount: 1,
+	}
+	comps := buildMRRComponents(mrrRow, "support")
+	if comps[0].Value != flsHidden {
+		t.Errorf("komponen MRR support = %q, want %q (tersamar)", comps[0].Value, flsHidden)
+	}
+	compsAdmin := buildMRRComponents(mrrRow, "admin")
+	if !strings.Contains(compsAdmin[0].Value, "500.000") {
+		t.Errorf("admin harus melihat MRR Baru Rp 500.000, got %q", compsAdmin[0].Value)
+	}
+}
+
+// --- Export CSV ------------------------------------------------------------
+
+// TestReportsSubscriptions_Export_GateRead: export tanpa izin → 403 (bukan CSV
+// bocor).
 func TestReportsSubscriptions_Export_GateRead(t *testing.T) {
 	env, uid := setupAccounts(t)
 	rec := env.runAccount(uid, "member", "", reportsSubscriptionsExportReq(""), env.h.ReportsSubscriptionsExport)
@@ -157,46 +243,40 @@ func TestReportsSubscriptions_Export_GateRead(t *testing.T) {
 	}
 }
 
-// TestReportsSubscriptions_Export_Churn: export churn 200 + Content-Type
-// text/csv + baris CSV sesuai data yang diseed.
-func TestReportsSubscriptions_Export_Churn(t *testing.T) {
-	env, uid := setupAccounts(t)
-	acc := env.seedAccount(t, "Desa Report Export", &uid, nil, nil)
-	plan := env.seedPlan(t, "Plan Report Export", "PL-RPE", "1000000")
-	env.seedChurnedSub(t, acc.ID, plan, &uid, "Voluntary", "500000")
-
-	rec := env.runAccount(uid, "owner", "admin", reportsSubscriptionsExportReq("churn"), env.h.ReportsSubscriptionsExport)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	if ct := rec.Header().Get("Content-Type"); ct != "text/csv; charset=utf-8" {
-		t.Errorf("Content-Type = %q", ct)
-	}
-	if !strings.Contains(rec.Body.String(), "Desa Report Export") {
-		t.Errorf("baris CSV harus memuat Desa Report Export, body:\n%s", rec.Body.String())
-	}
-}
-
-// TestReportsSubscriptions_Export_NoSilentCaps: seed > pageSize renewal
-// jatuh-tempo, export CSV harus memuat SEMUA baris (bukan cuma page pertama
-// keyset) — CLAUDE.md rule "no silent caps".
-func TestReportsSubscriptions_Export_NoSilentCaps(t *testing.T) {
+// TestReportsSubscriptions_Export_Panels: tiap panel meng-export CSV 200 +
+// Content-Type text/csv dengan header kolom yang benar.
+func TestReportsSubscriptions_Export_Panels(t *testing.T) {
 	env, uid := setupAccounts(t)
 	now := time.Now()
-	total := pageSize + 5
-	for i := 0; i < total; i++ {
-		acc := env.seedAccount(t, "Desa Export Bulk "+strconv.Itoa(i), &uid, nil, nil)
-		plan := env.seedPlan(t, "Plan Export Bulk "+strconv.Itoa(i), "PL-EXB"+strconv.Itoa(i), "1000000")
-		env.seedRenewalSub(t, acc.ID, plan, &uid, "Active", now.AddDate(0, 0, 10), "", "Manual")
-	}
+	acc := env.seedAccount(t, "Desa Export", &uid, nil, nil)
+	plan := env.seedPlan(t, "Paket Export", "PL-EXP", "1000000")
+	env.seedActiveSubStart(t, acc.ID, plan, &uid, "500000", now)
+	gone := env.seedAccount(t, "Desa Export Churn", &uid, nil, nil)
+	pGone := env.seedPlan(t, "Paket Export Churn", "PL-EXC", "1000000")
+	env.seedChurnedSub(t, gone.ID, pGone, &uid, "Voluntary", "500000")
 
-	rec := env.runAccount(uid, "owner", "manager", reportsSubscriptionsExportReq("renewal"), env.h.ReportsSubscriptionsExport)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
+	cases := []struct {
+		panel  string
+		header string
+	}{
+		{"mrr", "Komponen MRR"},
+		{"renewal", "Jatuh Tempo"},
+		{"churn", "Nilai Hilang"},
+		{"plan", "Rata per Desa"},
+		{"aging", "Kelompok Umur"},
 	}
-	lines := strings.Split(strings.TrimRight(rec.Body.String(), "\n"), "\n")
-	dataLines := len(lines) - 1 // minus header
-	if dataLines != total {
-		t.Errorf("baris data CSV = %d, want %d (export tak boleh terpotong ke page pertama)", dataLines, total)
+	for _, c := range cases {
+		t.Run("panel="+c.panel, func(t *testing.T) {
+			rec := env.runAccount(uid, "owner", "admin", reportsSubscriptionsExportReq(c.panel), env.h.ReportsSubscriptionsExport)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200", rec.Code)
+			}
+			if ct := rec.Header().Get("Content-Type"); ct != "text/csv; charset=utf-8" {
+				t.Errorf("Content-Type = %q", ct)
+			}
+			if !strings.Contains(rec.Body.String(), c.header) {
+				t.Errorf("CSV panel %q harus memuat header %q, body:\n%s", c.panel, c.header, rec.Body.String())
+			}
+		})
 	}
 }
