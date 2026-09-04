@@ -1089,13 +1089,45 @@ type Querier interface {
 	// Filter status='PendingApproval' = penjaga transisi (idem ApproveRenewal).
 	RejectRenewal(ctx context.Context, arg RejectRenewalParams) (Subscription, error)
 	RemovePlatformStaff(ctx context.Context, email string) error
-	// Customer Success Report (wireframe 8.2): breakdown Health/Adoption per
-	// status. NPS/CSAT (skema.md §8, sumber kedua 8.2) TIDAK termasuk — tabel
-	// survei belum ada di skema mana pun (lihat doc comment reports_cs.go
-	// handler); scope 8.2 di sini sengaja dipersempit ke Health/Adoption saja.
-	// F3 ownership PERSIS ListHealthScores/CountHealthScoreKPIs (health_score.sql)
-	// agar tak divergen dari halaman /health-scores.
-	ReportHealthByStatus(ctx context.Context, arg ReportHealthByStatusParams) ([]ReportHealthByStatusRow, error)
+	// Panel 2 (Adoption Report, versi sederhana) + KPI Adoption Rate: rata
+	// feature_adoption_rate + distribusi band (Tinggi 80–100 / Sedang 60–79 /
+	// Rendah 40–59 / Sangat Rendah <40). DILEWATKAN (tak di query ini): bar
+	// per-fitur & tabel kategori power-user — tak ada model pemakaian per-fitur
+	// (hanya feature_adoption_rate numerik tunggal). F3 identik ReportCSHealth.
+	ReportCSAdoption(ctx context.Context, arg ReportCSAdoptionParams) (ReportCSAdoptionRow, error)
+	// ── Customer Success Report (wireframe 8.2, BL-45) ──────────────────────────
+	// Enam panel spec 8.2; DIBANGUN hanya yang datanya SUDAH ADA (skema.md §8: nol
+	// tabel baru, agregasi murni). DILEWATKAN (tak dirender): NPS/CSAT (tak ada
+	// tabel surveys), tren health bulanan (tak ada snapshot per bulan), adopsi
+	// per-fitur & kategori power-user (tak ada model pemakaian per-fitur),
+	// onboarding per-tahap (tak ada timestamp tahap antara), net retention (tak ada
+	// delta ekspansi MRR). Tiga bentuk F3 ownership berbeda karena tiga sumber:
+	//   • Health/Adoption/Onboarding (accounts+customer_success): scope_all/is_csm/
+	//     is_sales — PERSIS CountHealthScoreKPIs (health_score.sql), tak divergen
+	//     dari /health-scores.
+	//   • Retention/Churn (subscriptions.subscription_owner): scope_all/is_own —
+	//     PERSIS ListSubscriptions/SubscriptionsListFilterFor.
+	//   • Engagement (engagements JOIN accounts): scope_all/is_own atas kolom
+	//     kepemilikan account — PERSIS ListEngagements/EngagementsListFilterFor.
+	// Panel 1 (Health Score Report) + KPI Rata Health Score: rata skor + distribusi
+	// band desa (Sehat 80–100 / Cukup 60–79 / Berisiko 40–59 / Kritis <40).
+	// Band hanya menghitung desa BER-skor (overall_health_score NOT NULL — perban-
+	// dingan NULL menghasilkan NULL, tak masuk FILTER). scored = denominator persen.
+	ReportCSHealth(ctx context.Context, arg ReportCSHealthParams) (ReportCSHealthRow, error)
+	// Panel 3 tabel Alasan Churn: GROUP BY churn_reason (SUDAH picklist di 00012)
+	// atas langganan Cancelled/Churned, dengan lost_value_mrr sebagai Nilai Hilang
+	// (di-mask F4 di handler). churn_reason NULL → '(Tanpa alasan)'. Diurut jumlah
+	// terbanyak. F3 identik ReportRetention.
+	ReportChurnReasons(ctx context.Context, arg ReportChurnReasonsParams) ([]ReportChurnReasonsRow, error)
+	// Panel 6 tabel per-CSM: Desa Dipegang (accounts.assigned_csm = owner, subquery
+	// skalar bergantung kolom grup) · Touch Point done/total · kepatuhan% (handler).
+	// GROUP BY engagements.owner_id. owner_id NULL (belum ditugaskan) → nama '—' di
+	// handler. F3 identik ReportEngagementCompliance.
+	ReportEngagementByCSM(ctx context.Context, arg ReportEngagementByCSMParams) ([]ReportEngagementByCSMRow, error)
+	// Panel 6 (Engagement Report) per engagement_type: kepatuhan = done / total
+	// terjadwal (persen dihitung handler). F3 ownership atas kolom kepemilikan
+	// account (PERSIS ListEngagements). RLS mengurung tenant.
+	ReportEngagementCompliance(ctx context.Context, arg ReportEngagementComplianceParams) ([]ReportEngagementComplianceRow, error)
 	// Panel 4 (funnel Lead Conversion) sisi LEADS: total lead masuk, terkualifikasi
 	// (Qualified atau sudah Converted — keduanya lolos kualifikasi), jadi deal
 	// (converted + punya converted_deal_id). avg_days_to_deal = rata (converted_at −
@@ -1103,6 +1135,13 @@ type Querier interface {
 	// DITUNDA ke BL-44 (leads tak simpan qualified_at). ROUND(...,1) + COALESCE agar
 	// sqlc tak emit interface{} (gotcha #14).
 	ReportLeadFunnel(ctx context.Context, arg ReportLeadFunnelParams) (ReportLeadFunnelRow, error)
+	// Panel 5 (Onboarding Report): rata durasi (actual_go_live − kickoff, hari) +
+	// Selesai + Terlambat + distribusi onboarding_status. Terlambat = go-live nyata
+	// melewati target ATAU onboarding belum selesai tapi kickoff >30 hari lalu
+	// (today dioper handler, appTZ-aware; hindari AT TIME ZONE di SELECT sqlc,
+	// gotcha #14). DILEWATKAN: tabel per-tahap (tak ada timestamp tahap antara).
+	// F3 identik ReportCSHealth. completed_with_dates = denominator guard rata durasi.
+	ReportOnboarding(ctx context.Context, arg ReportOnboardingParams) (ReportOnboardingRow, error)
 	// reports.sql — preset report read-only Modul 8 (tasks.md M8-1). "Report bukan
 	// objek data" (skema.md §8): nol tabel baru, query agregasi murni atas tabel yang
 	// sudah ada. Ownership (F3) pakai flag SAMA dengan modul asal tabel — sumber SATU,
@@ -1117,6 +1156,11 @@ type Querier interface {
 	// BL-49: filter opsional Periode (created_at) + Owner (deal_owner), guard NULL =
 	// tak menyaring. owner_filter di-AND DI ATAS scope (hanya menyempit).
 	ReportPipelineByStage(ctx context.Context, arg ReportPipelineByStageParams) ([]ReportPipelineByStageRow, error)
+	// Panel 3 (Retention/Churn) kartu + KPI Retention Rate: hitung aktif vs churned
+	// dari subscriptions.status. Retention% & Churn% dihitung handler dari kedua
+	// angka (active/(active+churned)). F3 ownership subscription_owner (PERSIS
+	// ListSubscriptions). RLS mengurung tenant.
+	ReportRetention(ctx context.Context, arg ReportRetentionParams) (ReportRetentionRow, error)
 	// Panel 5 (Sales Activity Report): per-owner hitung aktivitas context='sales'
 	// per kind (call/email/meeting) + total. LEFT JOIN users utk nama tampilan (pola
 	// cs_impl_tasks.sql). owner_id nullable (NULL = tanpa pemilik → satu grup). Deal

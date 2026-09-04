@@ -11,11 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const reportHealthByStatus = `-- name: ReportHealthByStatus :many
+const reportCSAdoption = `-- name: ReportCSAdoption :one
 SELECT
-    COALESCE(cs.health_status, 'Belum Dinilai')     AS health_status,
-    COUNT(*)::bigint                                AS account_count,
-    ROUND(AVG(cs.overall_health_score)::numeric, 1) AS avg_health_score
+    COUNT(*) FILTER (WHERE cs.feature_adoption_rate IS NOT NULL)                                 AS scored,
+    ROUND(AVG(cs.feature_adoption_rate)::numeric, 1)                                             AS avg_adoption,
+    COUNT(*) FILTER (WHERE cs.feature_adoption_rate >= 80)                                       AS band_high,
+    COUNT(*) FILTER (WHERE cs.feature_adoption_rate >= 60 AND cs.feature_adoption_rate < 80)     AS band_mid,
+    COUNT(*) FILTER (WHERE cs.feature_adoption_rate >= 40 AND cs.feature_adoption_rate < 60)     AS band_low,
+    COUNT(*) FILTER (WHERE cs.feature_adoption_rate < 40)                                        AS band_poor
 FROM accounts a
 LEFT JOIN customer_success cs
        ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
@@ -27,49 +30,166 @@ WHERE a.deleted_at IS NULL
       OR ($4::boolean
           AND a.account_owner = $3)
   )
-GROUP BY COALESCE(cs.health_status, 'Belum Dinilai')
-ORDER BY CASE COALESCE(cs.health_status, 'Belum Dinilai')
-    WHEN 'Healthy'  THEN 1
-    WHEN 'At-Risk'  THEN 2
-    WHEN 'Critical' THEN 3
-    ELSE 4
-END
 `
 
-type ReportHealthByStatusParams struct {
+type ReportCSAdoptionParams struct {
 	ScopeAll bool   `json:"scope_all"`
 	IsCsm    bool   `json:"is_csm"`
 	Uid      *int64 `json:"uid"`
 	IsSales  bool   `json:"is_sales"`
 }
 
-type ReportHealthByStatusRow struct {
-	HealthStatus   string         `json:"health_status"`
-	AccountCount   int64          `json:"account_count"`
-	AvgHealthScore pgtype.Numeric `json:"avg_health_score"`
+type ReportCSAdoptionRow struct {
+	Scored      int64          `json:"scored"`
+	AvgAdoption pgtype.Numeric `json:"avg_adoption"`
+	BandHigh    int64          `json:"band_high"`
+	BandMid     int64          `json:"band_mid"`
+	BandLow     int64          `json:"band_low"`
+	BandPoor    int64          `json:"band_poor"`
 }
 
-// Customer Success Report (wireframe 8.2): breakdown Health/Adoption per
-// status. NPS/CSAT (skema.md §8, sumber kedua 8.2) TIDAK termasuk — tabel
-// survei belum ada di skema mana pun (lihat doc comment reports_cs.go
-// handler); scope 8.2 di sini sengaja dipersempit ke Health/Adoption saja.
-// F3 ownership PERSIS ListHealthScores/CountHealthScoreKPIs (health_score.sql)
-// agar tak divergen dari halaman /health-scores.
-func (q *Queries) ReportHealthByStatus(ctx context.Context, arg ReportHealthByStatusParams) ([]ReportHealthByStatusRow, error) {
-	rows, err := q.db.Query(ctx, reportHealthByStatus,
+// Panel 2 (Adoption Report, versi sederhana) + KPI Adoption Rate: rata
+// feature_adoption_rate + distribusi band (Tinggi 80–100 / Sedang 60–79 /
+// Rendah 40–59 / Sangat Rendah <40). DILEWATKAN (tak di query ini): bar
+// per-fitur & tabel kategori power-user — tak ada model pemakaian per-fitur
+// (hanya feature_adoption_rate numerik tunggal). F3 identik ReportCSHealth.
+func (q *Queries) ReportCSAdoption(ctx context.Context, arg ReportCSAdoptionParams) (ReportCSAdoptionRow, error) {
+	row := q.db.QueryRow(ctx, reportCSAdoption,
 		arg.ScopeAll,
 		arg.IsCsm,
 		arg.Uid,
 		arg.IsSales,
 	)
+	var i ReportCSAdoptionRow
+	err := row.Scan(
+		&i.Scored,
+		&i.AvgAdoption,
+		&i.BandHigh,
+		&i.BandMid,
+		&i.BandLow,
+		&i.BandPoor,
+	)
+	return i, err
+}
+
+const reportCSHealth = `-- name: ReportCSHealth :one
+
+SELECT
+    COUNT(*) FILTER (WHERE cs.overall_health_score IS NOT NULL)                              AS scored,
+    ROUND(AVG(cs.overall_health_score)::numeric, 1)                                          AS avg_health,
+    COUNT(*) FILTER (WHERE cs.overall_health_score >= 80)                                    AS band_healthy,
+    COUNT(*) FILTER (WHERE cs.overall_health_score >= 60 AND cs.overall_health_score < 80)   AS band_fair,
+    COUNT(*) FILTER (WHERE cs.overall_health_score >= 40 AND cs.overall_health_score < 60)   AS band_at_risk,
+    COUNT(*) FILTER (WHERE cs.overall_health_score < 40)                                     AS band_critical
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+WHERE a.deleted_at IS NULL
+  AND (
+      $1::boolean
+      OR ($2::boolean
+          AND (a.assigned_csm = $3 OR a.backup_csm = $3))
+      OR ($4::boolean
+          AND a.account_owner = $3)
+  )
+`
+
+type ReportCSHealthParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsCsm    bool   `json:"is_csm"`
+	Uid      *int64 `json:"uid"`
+	IsSales  bool   `json:"is_sales"`
+}
+
+type ReportCSHealthRow struct {
+	Scored       int64          `json:"scored"`
+	AvgHealth    pgtype.Numeric `json:"avg_health"`
+	BandHealthy  int64          `json:"band_healthy"`
+	BandFair     int64          `json:"band_fair"`
+	BandAtRisk   int64          `json:"band_at_risk"`
+	BandCritical int64          `json:"band_critical"`
+}
+
+// ── Customer Success Report (wireframe 8.2, BL-45) ──────────────────────────
+// Enam panel spec 8.2; DIBANGUN hanya yang datanya SUDAH ADA (skema.md §8: nol
+// tabel baru, agregasi murni). DILEWATKAN (tak dirender): NPS/CSAT (tak ada
+// tabel surveys), tren health bulanan (tak ada snapshot per bulan), adopsi
+// per-fitur & kategori power-user (tak ada model pemakaian per-fitur),
+// onboarding per-tahap (tak ada timestamp tahap antara), net retention (tak ada
+// delta ekspansi MRR). Tiga bentuk F3 ownership berbeda karena tiga sumber:
+//   - Health/Adoption/Onboarding (accounts+customer_success): scope_all/is_csm/
+//     is_sales — PERSIS CountHealthScoreKPIs (health_score.sql), tak divergen
+//     dari /health-scores.
+//   - Retention/Churn (subscriptions.subscription_owner): scope_all/is_own —
+//     PERSIS ListSubscriptions/SubscriptionsListFilterFor.
+//   - Engagement (engagements JOIN accounts): scope_all/is_own atas kolom
+//     kepemilikan account — PERSIS ListEngagements/EngagementsListFilterFor.
+//
+// Panel 1 (Health Score Report) + KPI Rata Health Score: rata skor + distribusi
+// band desa (Sehat 80–100 / Cukup 60–79 / Berisiko 40–59 / Kritis <40).
+// Band hanya menghitung desa BER-skor (overall_health_score NOT NULL — perban-
+// dingan NULL menghasilkan NULL, tak masuk FILTER). scored = denominator persen.
+func (q *Queries) ReportCSHealth(ctx context.Context, arg ReportCSHealthParams) (ReportCSHealthRow, error) {
+	row := q.db.QueryRow(ctx, reportCSHealth,
+		arg.ScopeAll,
+		arg.IsCsm,
+		arg.Uid,
+		arg.IsSales,
+	)
+	var i ReportCSHealthRow
+	err := row.Scan(
+		&i.Scored,
+		&i.AvgHealth,
+		&i.BandHealthy,
+		&i.BandFair,
+		&i.BandAtRisk,
+		&i.BandCritical,
+	)
+	return i, err
+}
+
+const reportChurnReasons = `-- name: ReportChurnReasons :many
+SELECT
+    COALESCE(s.churn_reason, '(Tanpa alasan)')  AS churn_reason,
+    COUNT(*)::bigint                            AS account_count,
+    COALESCE(SUM(s.lost_value_mrr), 0)::numeric AS lost_value
+FROM subscriptions s
+WHERE s.deleted_at IS NULL
+  AND s.status IN ('Cancelled', 'Churned')
+  AND (
+      $1::boolean
+      OR ($2::boolean AND s.subscription_owner = $3)
+  )
+GROUP BY COALESCE(s.churn_reason, '(Tanpa alasan)')
+ORDER BY account_count DESC, churn_reason
+`
+
+type ReportChurnReasonsParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsOwn    bool   `json:"is_own"`
+	Uid      *int64 `json:"uid"`
+}
+
+type ReportChurnReasonsRow struct {
+	ChurnReason  string         `json:"churn_reason"`
+	AccountCount int64          `json:"account_count"`
+	LostValue    pgtype.Numeric `json:"lost_value"`
+}
+
+// Panel 3 tabel Alasan Churn: GROUP BY churn_reason (SUDAH picklist di 00012)
+// atas langganan Cancelled/Churned, dengan lost_value_mrr sebagai Nilai Hilang
+// (di-mask F4 di handler). churn_reason NULL → '(Tanpa alasan)'. Diurut jumlah
+// terbanyak. F3 identik ReportRetention.
+func (q *Queries) ReportChurnReasons(ctx context.Context, arg ReportChurnReasonsParams) ([]ReportChurnReasonsRow, error) {
+	rows, err := q.db.Query(ctx, reportChurnReasons, arg.ScopeAll, arg.IsOwn, arg.Uid)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ReportHealthByStatusRow{}
+	items := []ReportChurnReasonsRow{}
 	for rows.Next() {
-		var i ReportHealthByStatusRow
-		if err := rows.Scan(&i.HealthStatus, &i.AccountCount, &i.AvgHealthScore); err != nil {
+		var i ReportChurnReasonsRow
+		if err := rows.Scan(&i.ChurnReason, &i.AccountCount, &i.LostValue); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -78,6 +198,211 @@ func (q *Queries) ReportHealthByStatus(ctx context.Context, arg ReportHealthBySt
 		return nil, err
 	}
 	return items, nil
+}
+
+const reportEngagementByCSM = `-- name: ReportEngagementByCSM :many
+SELECT
+    e.owner_id                                          AS owner_id,
+    u.name                                              AS owner_name,
+    u.email                                             AS owner_email,
+    COUNT(*)::bigint                                    AS total,
+    COUNT(*) FILTER (WHERE e.status = 'done')::bigint   AS done,
+    (SELECT COUNT(*)::bigint FROM accounts ac
+      WHERE ac.assigned_csm = e.owner_id
+        AND ac.deleted_at IS NULL)                      AS accounts_assigned
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (
+    $1::boolean
+    OR ($2::boolean AND (
+        a.account_owner = $3
+        OR a.assigned_csm = $3
+        OR a.backup_csm = $3
+    ))
+)
+GROUP BY e.owner_id, u.name, u.email
+ORDER BY total DESC, owner_id
+`
+
+type ReportEngagementByCSMParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsOwn    bool   `json:"is_own"`
+	Uid      *int64 `json:"uid"`
+}
+
+type ReportEngagementByCSMRow struct {
+	OwnerID          *int64  `json:"owner_id"`
+	OwnerName        *string `json:"owner_name"`
+	OwnerEmail       *string `json:"owner_email"`
+	Total            int64   `json:"total"`
+	Done             int64   `json:"done"`
+	AccountsAssigned int64   `json:"accounts_assigned"`
+}
+
+// Panel 6 tabel per-CSM: Desa Dipegang (accounts.assigned_csm = owner, subquery
+// skalar bergantung kolom grup) · Touch Point done/total · kepatuhan% (handler).
+// GROUP BY engagements.owner_id. owner_id NULL (belum ditugaskan) → nama '—' di
+// handler. F3 identik ReportEngagementCompliance.
+func (q *Queries) ReportEngagementByCSM(ctx context.Context, arg ReportEngagementByCSMParams) ([]ReportEngagementByCSMRow, error) {
+	rows, err := q.db.Query(ctx, reportEngagementByCSM, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReportEngagementByCSMRow{}
+	for rows.Next() {
+		var i ReportEngagementByCSMRow
+		if err := rows.Scan(
+			&i.OwnerID,
+			&i.OwnerName,
+			&i.OwnerEmail,
+			&i.Total,
+			&i.Done,
+			&i.AccountsAssigned,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reportEngagementCompliance = `-- name: ReportEngagementCompliance :many
+SELECT
+    e.engagement_type                                    AS engagement_type,
+    COUNT(*)::bigint                                     AS total,
+    COUNT(*) FILTER (WHERE e.status = 'done')::bigint    AS done
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+WHERE (
+    $1::boolean
+    OR ($2::boolean AND (
+        a.account_owner = $3
+        OR a.assigned_csm = $3
+        OR a.backup_csm = $3
+    ))
+)
+GROUP BY e.engagement_type
+ORDER BY e.engagement_type
+`
+
+type ReportEngagementComplianceParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsOwn    bool   `json:"is_own"`
+	Uid      *int64 `json:"uid"`
+}
+
+type ReportEngagementComplianceRow struct {
+	EngagementType string `json:"engagement_type"`
+	Total          int64  `json:"total"`
+	Done           int64  `json:"done"`
+}
+
+// Panel 6 (Engagement Report) per engagement_type: kepatuhan = done / total
+// terjadwal (persen dihitung handler). F3 ownership atas kolom kepemilikan
+// account (PERSIS ListEngagements). RLS mengurung tenant.
+func (q *Queries) ReportEngagementCompliance(ctx context.Context, arg ReportEngagementComplianceParams) ([]ReportEngagementComplianceRow, error) {
+	rows, err := q.db.Query(ctx, reportEngagementCompliance, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReportEngagementComplianceRow{}
+	for rows.Next() {
+		var i ReportEngagementComplianceRow
+		if err := rows.Scan(&i.EngagementType, &i.Total, &i.Done); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reportOnboarding = `-- name: ReportOnboarding :one
+SELECT
+    COUNT(*) FILTER (WHERE cs.onboarding_status IS NOT NULL)              AS total,
+    COUNT(*) FILTER (WHERE cs.onboarding_status = 'Completed')            AS completed,
+    COUNT(*) FILTER (WHERE cs.onboarding_status = 'Not Started')          AS not_started,
+    COUNT(*) FILTER (WHERE cs.onboarding_status = 'In Progress')          AS in_progress,
+    COUNT(*) FILTER (WHERE cs.onboarding_status = 'Stalled')              AS stalled,
+    COUNT(*) FILTER (WHERE cs.actual_go_live_date IS NOT NULL
+                       AND cs.kickoff_date IS NOT NULL)                   AS completed_with_dates,
+    ROUND(AVG(cs.actual_go_live_date - cs.kickoff_date)
+          FILTER (WHERE cs.actual_go_live_date IS NOT NULL
+                    AND cs.kickoff_date IS NOT NULL)::numeric, 1)         AS avg_duration_days,
+    COUNT(*) FILTER (
+        WHERE (cs.actual_go_live_date IS NOT NULL
+               AND cs.target_go_live_date IS NOT NULL
+               AND cs.actual_go_live_date > cs.target_go_live_date)
+           OR (cs.onboarding_status IN ('Not Started', 'In Progress', 'Stalled')
+               AND cs.kickoff_date IS NOT NULL
+               AND cs.kickoff_date < $1::date - 30)
+    )                                                                    AS late
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+WHERE a.deleted_at IS NULL
+  AND (
+      $2::boolean
+      OR ($3::boolean
+          AND (a.assigned_csm = $4 OR a.backup_csm = $4))
+      OR ($5::boolean
+          AND a.account_owner = $4)
+  )
+`
+
+type ReportOnboardingParams struct {
+	Today    pgtype.Date `json:"today"`
+	ScopeAll bool        `json:"scope_all"`
+	IsCsm    bool        `json:"is_csm"`
+	Uid      *int64      `json:"uid"`
+	IsSales  bool        `json:"is_sales"`
+}
+
+type ReportOnboardingRow struct {
+	Total              int64          `json:"total"`
+	Completed          int64          `json:"completed"`
+	NotStarted         int64          `json:"not_started"`
+	InProgress         int64          `json:"in_progress"`
+	Stalled            int64          `json:"stalled"`
+	CompletedWithDates int64          `json:"completed_with_dates"`
+	AvgDurationDays    pgtype.Numeric `json:"avg_duration_days"`
+	Late               int64          `json:"late"`
+}
+
+// Panel 5 (Onboarding Report): rata durasi (actual_go_live − kickoff, hari) +
+// Selesai + Terlambat + distribusi onboarding_status. Terlambat = go-live nyata
+// melewati target ATAU onboarding belum selesai tapi kickoff >30 hari lalu
+// (today dioper handler, appTZ-aware; hindari AT TIME ZONE di SELECT sqlc,
+// gotcha #14). DILEWATKAN: tabel per-tahap (tak ada timestamp tahap antara).
+// F3 identik ReportCSHealth. completed_with_dates = denominator guard rata durasi.
+func (q *Queries) ReportOnboarding(ctx context.Context, arg ReportOnboardingParams) (ReportOnboardingRow, error) {
+	row := q.db.QueryRow(ctx, reportOnboarding,
+		arg.Today,
+		arg.ScopeAll,
+		arg.IsCsm,
+		arg.Uid,
+		arg.IsSales,
+	)
+	var i ReportOnboardingRow
+	err := row.Scan(
+		&i.Total,
+		&i.Completed,
+		&i.NotStarted,
+		&i.InProgress,
+		&i.Stalled,
+		&i.CompletedWithDates,
+		&i.AvgDurationDays,
+		&i.Late,
+	)
+	return i, err
 }
 
 const reportPipelineByStage = `-- name: ReportPipelineByStage :many
@@ -171,6 +496,40 @@ func (q *Queries) ReportPipelineByStage(ctx context.Context, arg ReportPipelineB
 		return nil, err
 	}
 	return items, nil
+}
+
+const reportRetention = `-- name: ReportRetention :one
+SELECT
+    COUNT(*) FILTER (WHERE s.status = 'Active')                       AS active,
+    COUNT(*) FILTER (WHERE s.status IN ('Cancelled', 'Churned'))      AS churned
+FROM subscriptions s
+WHERE s.deleted_at IS NULL
+  AND (
+      $1::boolean
+      OR ($2::boolean AND s.subscription_owner = $3)
+  )
+`
+
+type ReportRetentionParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsOwn    bool   `json:"is_own"`
+	Uid      *int64 `json:"uid"`
+}
+
+type ReportRetentionRow struct {
+	Active  int64 `json:"active"`
+	Churned int64 `json:"churned"`
+}
+
+// Panel 3 (Retention/Churn) kartu + KPI Retention Rate: hitung aktif vs churned
+// dari subscriptions.status. Retention% & Churn% dihitung handler dari kedua
+// angka (active/(active+churned)). F3 ownership subscription_owner (PERSIS
+// ListSubscriptions). RLS mengurung tenant.
+func (q *Queries) ReportRetention(ctx context.Context, arg ReportRetentionParams) (ReportRetentionRow, error) {
+	row := q.db.QueryRow(ctx, reportRetention, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	var i ReportRetentionRow
+	err := row.Scan(&i.Active, &i.Churned)
+	return i, err
 }
 
 const reportTicketsByStatus = `-- name: ReportTicketsByStatus :many
