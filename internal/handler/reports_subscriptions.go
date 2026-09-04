@@ -33,57 +33,68 @@ import (
 // reportsSubscriptionsData menjalankan agregasi & merakit view-model 5 panel;
 // dipakai ReportsSubscriptions (HTML) & ReportsSubscriptionsExport (CSV) agar
 // keduanya konsisten (satu sumber angka, bukan dua jalur hitung terpisah).
-func (h *Handler) reportsSubscriptionsData(ctx context.Context) (panel.ReportsSubscriptionsView, error) {
+func (h *Handler) reportsSubscriptionsData(ctx context.Context, f subscriptionReportFilter) (panel.ReportsSubscriptionsView, error) {
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
 	br := session.BusinessRole(ctx)
 	today := reportTodayDate(time.Now().In(appTZ))
 	q := h.q(ctx)
 
+	// BL-52: pergerakan MRR & renewal & churn dipotong Periode (kolom benar per
+	// query); MRR/ARR berjalan, Revenue-by-Plan, & Aging = SNAPSHOT (Periode TAK
+	// dioper). Paket (plan_filter) menyaring SEMUA query.
 	mrr, err := q.ReportSubMRR(ctx, db.ReportSubMRRParams{
 		Today: today, ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, PlanFilter: f.PlanID,
 	})
 	if err != nil {
 		return panel.ReportsSubscriptionsView{}, err
 	}
 	renewal, err := q.ReportRenewalSummary(ctx, db.ReportRenewalSummaryParams{
 		Today: today, ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, PlanFilter: f.PlanID,
 	})
 	if err != nil {
 		return panel.ReportsSubscriptionsView{}, err
 	}
 	renewalMonths, err := q.ReportRenewalByMonth(ctx, db.ReportRenewalByMonthParams{
 		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, PlanFilter: f.PlanID,
 	})
 	if err != nil {
 		return panel.ReportsSubscriptionsView{}, err
 	}
 	retention, err := q.ReportRetention(ctx, db.ReportRetentionParams{
 		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, PlanFilter: f.PlanID,
 	})
 	if err != nil {
 		return panel.ReportsSubscriptionsView{}, err
 	}
 	churnAge, err := q.ReportChurnAge(ctx, db.ReportChurnAgeParams{
 		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, PlanFilter: f.PlanID,
 	})
 	if err != nil {
 		return panel.ReportsSubscriptionsView{}, err
 	}
 	churnReasons, err := q.ReportChurnReasons(ctx, db.ReportChurnReasonsParams{
 		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, PlanFilter: f.PlanID,
 	})
 	if err != nil {
 		return panel.ReportsSubscriptionsView{}, err
 	}
 	revenueByPlan, err := q.ReportRevenueByPlan(ctx, db.ReportRevenueByPlanParams{
 		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+		PlanFilter: f.PlanID,
 	})
 	if err != nil {
 		return panel.ReportsSubscriptionsView{}, err
 	}
 	aging, err := q.ReportSubscriptionAging(ctx, db.ReportSubscriptionAgingParams{
 		Today: today, ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+		PlanFilter: f.PlanID,
 	})
 	if err != nil {
 		return panel.ReportsSubscriptionsView{}, err
@@ -133,12 +144,21 @@ func (h *Handler) ReportsSubscriptions(w http.ResponseWriter, r *http.Request) {
 		h.renderReportsForbidden(w, r, "Subscription Report", "/reports/subscriptions")
 		return
 	}
-	view, err := h.reportsSubscriptionsData(ctx)
+	f := parseSubscriptionReportFilter(r)
+	view, err := h.reportsSubscriptionsData(ctx, f)
 	if err != nil {
 		h.Log.Error("reports: subscriptions data", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	sf := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
+	filterView, err := h.buildSubscriptionFilterView(ctx, f, sf, session.UserID(ctx))
+	if err != nil {
+		h.Log.Error("reports: subscriptions filter", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	view.Filter = filterView
 	view.Base = wsPath(slugFromRequest(r), "")
 	h.renderWorkspaceShell(w, r, "Subscription Report", "/reports/subscriptions",
 		panel.ReportsSubscriptionsBody(view))

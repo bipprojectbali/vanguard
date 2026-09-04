@@ -78,6 +78,9 @@ type SubAgingRow struct {
 type ReportsSubscriptionsView struct {
 	Base string
 
+	// Filter interaktif Periode + Paket (BL-52).
+	Filter SubscriptionReportFilterView
+
 	// KPI (4 kartu)
 	MRR         string
 	ARR         string
@@ -106,6 +109,21 @@ type ReportsSubscriptionsView struct {
 	AgingRows []SubAgingRow
 }
 
+// SubscriptionReportFilterView = sub-view filter interaktif Periode + Paket
+// (BL-52). Reuse SalesFilterOption (bentuk opsi identik). Dropdown Paket selalu
+// dirender (plan tak owner-spesifik; diturunkan dari DATA dalam cakupan pemakai).
+// QueryString ditempel ke tautan Export CSV agar CSV tersaring identik HTML.
+// CustomStart/End = echo input tanggal Kustom.
+type SubscriptionReportFilterView struct {
+	PeriodValue string
+	Periods     []SalesFilterOption
+	PlanValue   string
+	Plans       []SalesFilterOption
+	CustomStart string
+	CustomEnd   string
+	QueryString string
+}
+
 // ReportsSubscriptionsBody — header + 4 KPI + 4 panel (grid 2 kolom) + panel
 // Aging selebar penuh. Grid mobile-first: 1 kolom di mobile, 2 di lg.
 func ReportsSubscriptionsBody(v ReportsSubscriptionsView) g.Node {
@@ -114,6 +132,7 @@ func ReportsSubscriptionsBody(v ReportsSubscriptionsView) g.Node {
 			h.H1(h.Class("text-xl font-semibold"), g.Text("Subscription Report")),
 			h.P(h.Class("text-base-content/70"), g.Text("MRR/ARR, renewal, churn, pendapatan per paket, & umur langganan.")),
 		),
+		reportsSubscriptionsFilterForm(v),
 		reportsSubscriptionsKPICards(v),
 		h.Div(h.Class("grid grid-cols-1 lg:grid-cols-2 gap-4 min-w-0"),
 			reportsSubMRRPanel(v),
@@ -122,6 +141,37 @@ func ReportsSubscriptionsBody(v ReportsSubscriptionsView) g.Node {
 			reportsSubRevenuePanel(v),
 		),
 		reportsSubAgingPanel(v),
+	)
+}
+
+// reportsSubscriptionsFilterForm = baris filter Periode + Paket (BL-52). Form
+// GET native (bookmarkable, lolos CSP gotcha #16) → submit re-render seluruh
+// halaman tersaring. Dropdown Paket selalu dirender (plan tak owner-spesifik).
+// Input tanggal Kustom selalu tampil (tanpa JS toggle, CSP-safe) tapi hanya
+// berdampak saat Periode=Kustom (handler). Catatan snapshot memperjelas Periode
+// tak menyentuh MRR/ARR berjalan, Revenue by Plan, & Aging. Mobile-first:
+// flex-wrap (nol overflow 375px), tiap kontrol text-base (≥16px → iOS tak
+// auto-zoom) + min-h-11 (tap ≥44px).
+func reportsSubscriptionsFilterForm(v ReportsSubscriptionsView) g.Node {
+	f := v.Filter
+	return h.Div(h.Class("grid gap-1 min-w-0"),
+		h.Form(
+			h.Method("get"), h.Action(v.Base+"/reports/subscriptions"),
+			h.Class("flex flex-wrap items-end gap-3 min-w-0"),
+			salesFilterSelect("period", "Periode", f.Periods),
+			salesFilterSelect("plan", "Paket", f.Plans),
+			salesFilterDate("start", "Dari (Kustom)", f.CustomStart),
+			salesFilterDate("end", "Sampai (Kustom)", f.CustomEnd),
+			h.Div(h.Class("flex flex-wrap items-end gap-2"),
+				h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"), g.Text("Terapkan")),
+				g.If(f.QueryString != "", h.A(
+					h.Href(v.Base+"/reports/subscriptions"),
+					h.Class("btn btn-ghost min-h-11"), g.Text("Reset"),
+				)),
+			),
+		),
+		h.P(h.Class("text-xs text-base-content/60"),
+			g.Text("Periode menyaring pergerakan MRR, renewal, & churn; MRR/ARR berjalan, Revenue by Plan, & Aging menampilkan kondisi terkini. Paket menyaring semua panel.")),
 	)
 }
 
@@ -137,8 +187,11 @@ func reportsSubscriptionsKPICards(v ReportsSubscriptionsView) g.Node {
 // reportSubPanelCard = pembungkus kartu panel seragam Subscription: judul +
 // tautan Export CSV per-panel (panelKey → ?panel=…) + isi. Pola sama
 // reportSupportPanelCard/reportCSPanelCard.
-func reportSubPanelCard(base, title, panelKey string, body ...g.Node) g.Node {
+func reportSubPanelCard(base, filterQS, title, panelKey string, body ...g.Node) g.Node {
 	href := base + "/reports/subscriptions/export?panel=" + panelKey
+	if filterQS != "" {
+		href += "&" + filterQS
+	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
 		h.Div(h.Class("card-body min-w-0"),

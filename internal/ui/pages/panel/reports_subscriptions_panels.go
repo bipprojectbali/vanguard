@@ -40,7 +40,7 @@ func reportsSubMRRPanel(v ReportsSubscriptionsView) g.Node {
 			rows,
 		)
 	}
-	return reportSubPanelCard(v.Base, "MRR/ARR Report", "mrr", cards, table)
+	return reportSubPanelCard(v.Base, v.Filter.QueryString, "MRR/ARR Report", "mrr", cards, table)
 }
 
 // ── Panel 2: Renewal Report ─────────────────────────────────────────────────
@@ -70,7 +70,7 @@ func reportsSubRenewalPanel(v ReportsSubscriptionsView) g.Node {
 			rows,
 		)
 	}
-	return reportSubPanelCard(v.Base, "Renewal Report", "renewal", cards, table)
+	return reportSubPanelCard(v.Base, v.Filter.QueryString, "Renewal Report", "renewal", cards, table)
 }
 
 // ── Panel 3: Churn Report ───────────────────────────────────────────────────
@@ -100,7 +100,7 @@ func reportsSubChurnPanel(v ReportsSubscriptionsView) g.Node {
 			rows,
 		)
 	}
-	return reportSubPanelCard(v.Base, "Churn Report", "churn", cards, table)
+	return reportSubPanelCard(v.Base, v.Filter.QueryString, "Churn Report", "churn", cards, table)
 }
 
 // ── Panel 4: Revenue by Plan ────────────────────────────────────────────────
@@ -126,7 +126,7 @@ func reportsSubRevenuePanel(v ReportsSubscriptionsView) g.Node {
 			rows,
 		)
 	}
-	return reportSubPanelCard(v.Base, "Revenue by Plan", "plan", table)
+	return reportSubPanelCard(v.Base, v.Filter.QueryString, "Revenue by Plan", "plan", table)
 }
 
 // ── Panel 5: Subscription Aging (selebar penuh) ─────────────────────────────
@@ -154,5 +154,5 @@ func reportsSubAgingPanel(v ReportsSubscriptionsView) g.Node {
 			rows,
 		)
 	}
-	return reportSubPanelCard(v.Base, "Subscription Aging", "aging", body)
+	return reportSubPanelCard(v.Base, v.Filter.QueryString, "Subscription Aging", "aging", body)
 }

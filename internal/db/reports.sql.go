@@ -180,25 +180,28 @@ LEFT JOIN customer_success cs
        ON cs.account_id = s.account_id AND cs.tenant_id = s.tenant_id
 WHERE s.deleted_at IS NULL
   AND s.status IN ('Cancelled', 'Churned')
+  -- Paket (BL-52): NULL = semua paket; CS Report (BL-50) tak mengoper → no-op.
+  AND ($1::bigint IS NULL OR s.plan_id = $1)
   AND (
-      $1::boolean
-      OR ($2::boolean AND s.subscription_owner = $3)
+      $2::boolean
+      OR ($3::boolean AND s.subscription_owner = $4)
   )
   -- Periode (BL-50) memotong cancellation_date (kohort churn di rentang).
-  AND ($4::timestamptz IS NULL OR s.cancellation_date >= $4::date)
-  AND ($5::timestamptz IS NULL OR s.cancellation_date < $5::date)
+  AND ($5::timestamptz IS NULL OR s.cancellation_date >= $5::date)
+  AND ($6::timestamptz IS NULL OR s.cancellation_date < $6::date)
   AND (
-      $6::text IS NULL
-      OR ($6 = 'healthy'  AND cs.overall_health_score >= 80)
-      OR ($6 = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
-      OR ($6 = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
-      OR ($6 = 'critical' AND cs.overall_health_score < 40)
+      $7::text IS NULL
+      OR ($7 = 'healthy'  AND cs.overall_health_score >= 80)
+      OR ($7 = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR ($7 = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR ($7 = 'critical' AND cs.overall_health_score < 40)
   )
 GROUP BY COALESCE(s.churn_reason, '(Tanpa alasan)')
 ORDER BY account_count DESC, churn_reason
 `
 
 type ReportChurnReasonsParams struct {
+	PlanFilter  *int64             `json:"plan_filter"`
 	ScopeAll    bool               `json:"scope_all"`
 	IsOwn       bool               `json:"is_own"`
 	Uid         *int64             `json:"uid"`
@@ -219,6 +222,7 @@ type ReportChurnReasonsRow struct {
 // terbanyak. F3 identik ReportRetention.
 func (q *Queries) ReportChurnReasons(ctx context.Context, arg ReportChurnReasonsParams) ([]ReportChurnReasonsRow, error) {
 	rows, err := q.db.Query(ctx, reportChurnReasons,
+		arg.PlanFilter,
 		arg.ScopeAll,
 		arg.IsOwn,
 		arg.Uid,
@@ -614,22 +618,25 @@ FROM subscriptions s
 LEFT JOIN customer_success cs
        ON cs.account_id = s.account_id AND cs.tenant_id = s.tenant_id
 WHERE s.deleted_at IS NULL
+  -- Paket (BL-52): NULL = semua paket; CS Report (BL-50) tak mengoper → no-op.
+  AND ($3::bigint IS NULL OR s.plan_id = $3)
   AND (
-      $3::boolean
-      OR ($4::boolean AND s.subscription_owner = $5)
+      $4::boolean
+      OR ($5::boolean AND s.subscription_owner = $6)
   )
   AND (
-      $6::text IS NULL
-      OR ($6 = 'healthy'  AND cs.overall_health_score >= 80)
-      OR ($6 = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
-      OR ($6 = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
-      OR ($6 = 'critical' AND cs.overall_health_score < 40)
+      $7::text IS NULL
+      OR ($7 = 'healthy'  AND cs.overall_health_score >= 80)
+      OR ($7 = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR ($7 = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR ($7 = 'critical' AND cs.overall_health_score < 40)
   )
 `
 
 type ReportRetentionParams struct {
 	PeriodStart pgtype.Timestamptz `json:"period_start"`
 	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	PlanFilter  *int64             `json:"plan_filter"`
 	ScopeAll    bool               `json:"scope_all"`
 	IsOwn       bool               `json:"is_own"`
 	Uid         *int64             `json:"uid"`
@@ -653,6 +660,7 @@ func (q *Queries) ReportRetention(ctx context.Context, arg ReportRetentionParams
 	row := q.db.QueryRow(ctx, reportRetention,
 		arg.PeriodStart,
 		arg.PeriodEnd,
+		arg.PlanFilter,
 		arg.ScopeAll,
 		arg.IsOwn,
 		arg.Uid,
