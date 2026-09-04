@@ -78,6 +78,16 @@ WHERE a.deleted_at IS NULL
           AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
       OR (sqlc.arg(is_sales)::boolean
           AND a.account_owner = sqlc.arg(uid))
+  )
+  -- Segmen = band kesehatan (BL-50). NULL → semua; band terpilih menyaring atas
+  -- overall_health_score (desa tanpa skor keluar saat band dipilih). SNAPSHOT:
+  -- Periode TAK berlaku (health = kondisi terkini, bukan kohort waktu).
+  AND (
+      sqlc.narg(segment)::text IS NULL
+      OR (sqlc.narg(segment) = 'healthy'  AND cs.overall_health_score >= 80)
+      OR (sqlc.narg(segment) = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR (sqlc.narg(segment) = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR (sqlc.narg(segment) = 'critical' AND cs.overall_health_score < 40)
   );
 
 -- name: ReportCSAdoption :one
@@ -103,6 +113,14 @@ WHERE a.deleted_at IS NULL
           AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
       OR (sqlc.arg(is_sales)::boolean
           AND a.account_owner = sqlc.arg(uid))
+  )
+  -- Segmen = band kesehatan (BL-50); SNAPSHOT (Periode tak berlaku pada adopsi).
+  AND (
+      sqlc.narg(segment)::text IS NULL
+      OR (sqlc.narg(segment) = 'healthy'  AND cs.overall_health_score >= 80)
+      OR (sqlc.narg(segment) = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR (sqlc.narg(segment) = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR (sqlc.narg(segment) = 'critical' AND cs.overall_health_score < 40)
   );
 
 -- name: ReportRetention :one
@@ -110,14 +128,30 @@ WHERE a.deleted_at IS NULL
 -- dari subscriptions.status. Retention% & Churn% dihitung handler dari kedua
 -- angka (active/(active+churned)). F3 ownership subscription_owner (PERSIS
 -- ListSubscriptions). RLS mengurung tenant.
+-- Periode (BL-50): active = SNAPSHOT (langganan aktif SAAT INI, tak dibatasi
+-- waktu); churned = dibatasi cancellation_date dalam [start,end) agar konsisten
+-- dgn tabel Alasan Churn. RetentionRate = active/(active+churnedDalamPeriode).
+-- Segmen = band kesehatan atas customer_success desa langganan (LEFT JOIN cs).
 SELECT
     COUNT(*) FILTER (WHERE s.status = 'Active')                       AS active,
-    COUNT(*) FILTER (WHERE s.status IN ('Cancelled', 'Churned'))      AS churned
+    COUNT(*) FILTER (WHERE s.status IN ('Cancelled', 'Churned')
+        AND (sqlc.narg(period_start)::timestamptz IS NULL OR s.cancellation_date >= sqlc.narg(period_start)::date)
+        AND (sqlc.narg(period_end)::timestamptz IS NULL OR s.cancellation_date < sqlc.narg(period_end)::date)
+    )                                                                AS churned
 FROM subscriptions s
+LEFT JOIN customer_success cs
+       ON cs.account_id = s.account_id AND cs.tenant_id = s.tenant_id
 WHERE s.deleted_at IS NULL
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (
+      sqlc.narg(segment)::text IS NULL
+      OR (sqlc.narg(segment) = 'healthy'  AND cs.overall_health_score >= 80)
+      OR (sqlc.narg(segment) = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR (sqlc.narg(segment) = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR (sqlc.narg(segment) = 'critical' AND cs.overall_health_score < 40)
   );
 
 -- name: ReportChurnReasons :many
@@ -130,11 +164,23 @@ SELECT
     COUNT(*)::bigint                            AS account_count,
     COALESCE(SUM(s.lost_value_mrr), 0)::numeric AS lost_value
 FROM subscriptions s
+LEFT JOIN customer_success cs
+       ON cs.account_id = s.account_id AND cs.tenant_id = s.tenant_id
 WHERE s.deleted_at IS NULL
   AND s.status IN ('Cancelled', 'Churned')
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  -- Periode (BL-50) memotong cancellation_date (kohort churn di rentang).
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR s.cancellation_date >= sqlc.narg(period_start)::date)
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR s.cancellation_date < sqlc.narg(period_end)::date)
+  AND (
+      sqlc.narg(segment)::text IS NULL
+      OR (sqlc.narg(segment) = 'healthy'  AND cs.overall_health_score >= 80)
+      OR (sqlc.narg(segment) = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR (sqlc.narg(segment) = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR (sqlc.narg(segment) = 'critical' AND cs.overall_health_score < 40)
   )
 GROUP BY COALESCE(s.churn_reason, '(Tanpa alasan)')
 ORDER BY account_count DESC, churn_reason;
@@ -175,6 +221,17 @@ WHERE a.deleted_at IS NULL
           AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
       OR (sqlc.arg(is_sales)::boolean
           AND a.account_owner = sqlc.arg(uid))
+  )
+  -- Periode (BL-50) = kohort kickoff_date (desa yang MULAI onboarding di rentang;
+  -- kickoff NULL keluar saat Periode aktif). Segmen = band kesehatan.
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR cs.kickoff_date >= sqlc.narg(period_start)::date)
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR cs.kickoff_date < sqlc.narg(period_end)::date)
+  AND (
+      sqlc.narg(segment)::text IS NULL
+      OR (sqlc.narg(segment) = 'healthy'  AND cs.overall_health_score >= 80)
+      OR (sqlc.narg(segment) = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR (sqlc.narg(segment) = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR (sqlc.narg(segment) = 'critical' AND cs.overall_health_score < 40)
   );
 
 -- name: ReportEngagementCompliance :many
@@ -187,6 +244,8 @@ SELECT
     COUNT(*) FILTER (WHERE e.status = 'done')::bigint    AS done
 FROM engagements e
 JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
 WHERE (
     sqlc.arg(scope_all)::boolean
     OR (sqlc.arg(is_own)::boolean AND (
@@ -195,6 +254,16 @@ WHERE (
         OR a.backup_csm = sqlc.arg(uid)
     ))
 )
+  -- Periode (BL-50) memotong scheduled_at (engagement terjadwal di rentang).
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR e.scheduled_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR e.scheduled_at < sqlc.narg(period_end))
+  AND (
+      sqlc.narg(segment)::text IS NULL
+      OR (sqlc.narg(segment) = 'healthy'  AND cs.overall_health_score >= 80)
+      OR (sqlc.narg(segment) = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR (sqlc.narg(segment) = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR (sqlc.narg(segment) = 'critical' AND cs.overall_health_score < 40)
+  )
 GROUP BY e.engagement_type
 ORDER BY e.engagement_type;
 
@@ -215,6 +284,8 @@ SELECT
 FROM engagements e
 JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
 LEFT JOIN users u ON e.owner_id = u.id
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
 WHERE (
     sqlc.arg(scope_all)::boolean
     OR (sqlc.arg(is_own)::boolean AND (
@@ -223,5 +294,15 @@ WHERE (
         OR a.backup_csm = sqlc.arg(uid)
     ))
 )
+  -- Periode (BL-50) memotong scheduled_at; Segmen = band kesehatan (LEFT JOIN cs).
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR e.scheduled_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR e.scheduled_at < sqlc.narg(period_end))
+  AND (
+      sqlc.narg(segment)::text IS NULL
+      OR (sqlc.narg(segment) = 'healthy'  AND cs.overall_health_score >= 80)
+      OR (sqlc.narg(segment) = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR (sqlc.narg(segment) = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR (sqlc.narg(segment) = 'critical' AND cs.overall_health_score < 40)
+  )
 GROUP BY e.owner_id, u.name, u.email
 ORDER BY total DESC, owner_id;

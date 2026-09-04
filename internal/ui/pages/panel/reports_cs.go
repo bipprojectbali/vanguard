@@ -56,11 +56,29 @@ type CSEngagementCSMRow struct {
 	BarPct     int
 }
 
+// CSReportFilterView = sub-view filter interaktif Periode + Segmen (BL-50).
+// Reuse SalesFilterOption (bentuk opsi identik). QueryString ditempel ke tautan
+// Export CSV agar CSV tersaring identik HTML. CustomStart/End = echo input date
+// (YYYY-MM-DD) saat Periode = Kustom. Kedua dropdown selalu dirender (enum tetap,
+// tak bergantung scope — beda dgn owner Sales).
+type CSReportFilterView struct {
+	PeriodValue  string
+	Periods      []SalesFilterOption
+	SegmentValue string
+	Segments     []SalesFilterOption
+	CustomStart  string
+	CustomEnd    string
+	QueryString  string
+}
+
 // ReportsCSView — data siap-render /reports/customer-success (3 KPI + 6 panel;
 // NPS/CSAT dilewatkan). String KPI ("—" bila tak bermakna) & persen dihitung
 // handler.
 type ReportsCSView struct {
 	Base string
+
+	// Filter interaktif Periode + Segmen (BL-50).
+	Filter CSReportFilterView
 
 	// KPI ringkas.
 	AvgHealth     string
@@ -101,6 +119,7 @@ func ReportsCSBody(v ReportsCSView) g.Node {
 			h.H1(h.Class("text-xl font-semibold"), g.Text("Customer Success Report")),
 			h.P(h.Class("text-base-content/70"), g.Text("Health, adopsi, retensi/churn, onboarding, & engagement — panel lain menyusul saat datanya tersedia.")),
 		),
+		reportsCSFilterForm(v),
 		reportsCSKPICards(v),
 		h.Div(h.Class("grid grid-cols-1 lg:grid-cols-2 gap-4 min-w-0"),
 			reportsHealthPanel(v),
@@ -120,11 +139,44 @@ func reportsCSKPICards(v ReportsCSView) g.Node {
 	)
 }
 
+// reportsCSFilterForm = baris filter Periode + Segmen (BL-50). Form GET native
+// (bookmarkable, lolos CSP gotcha #16) → submit re-render seluruh halaman
+// tersaring. Kedua dropdown selalu dirender (enum tetap). Input tanggal Kustom
+// selalu tampil (tanpa JS toggle, CSP-safe) tapi hanya berdampak saat
+// Periode=Kustom (handler). Catatan snapshot memperjelas Periode tak menyentuh
+// Health/Adopsi/Retention Rate. Mobile-first: flex-wrap (nol overflow 375px),
+// tiap kontrol text-base (≥16px → iOS tak auto-zoom) + min-h-11 (tap ≥44px).
+func reportsCSFilterForm(v ReportsCSView) g.Node {
+	f := v.Filter
+	return h.Div(h.Class("grid gap-1 min-w-0"),
+		h.Form(
+			h.Method("get"), h.Action(v.Base+"/reports/customer-success"),
+			h.Class("flex flex-wrap items-end gap-3 min-w-0"),
+			salesFilterSelect("period", "Periode", f.Periods),
+			salesFilterSelect("segment", "Segmen (Kesehatan)", f.Segments),
+			salesFilterDate("start", "Dari (Kustom)", f.CustomStart),
+			salesFilterDate("end", "Sampai (Kustom)", f.CustomEnd),
+			h.Div(h.Class("flex flex-wrap items-end gap-2"),
+				h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"), g.Text("Terapkan")),
+				g.If(f.QueryString != "", h.A(
+					h.Href(v.Base+"/reports/customer-success"),
+					h.Class("btn btn-ghost min-h-11"), g.Text("Reset"),
+				)),
+			),
+		),
+		h.P(h.Class("text-xs text-base-content/60"),
+			g.Text("Periode menyaring Onboarding (kickoff), Engagement (jadwal), & Alasan/Churn (pembatalan); Health, Adopsi, & Retention Rate menampilkan kondisi terkini.")),
+	)
+}
+
 // reportCSPanelCard = pembungkus kartu panel seragam CS: judul + tautan Export
-// CSV per-panel (panelKey → ?panel=…) + isi. Filter interaktif ditunda BL lain
-// (tak ada QueryString). min-w-0 agar card menyusut (bukan meluber) di grid mobile.
-func reportCSPanelCard(base, title, panelKey string, body ...g.Node) g.Node {
+// CSV per-panel (panelKey → ?panel=…, ditempel filterQS BL-50 agar CSV tersaring
+// identik) + isi. min-w-0 agar card menyusut (bukan meluber) di grid mobile.
+func reportCSPanelCard(base, filterQS, title, panelKey string, body ...g.Node) g.Node {
 	href := base + "/reports/customer-success/export?panel=" + panelKey
+	if filterQS != "" {
+		href += "&" + filterQS
+	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
 		h.Div(h.Class("card-body min-w-0"),

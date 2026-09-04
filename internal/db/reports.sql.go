@@ -30,13 +30,22 @@ WHERE a.deleted_at IS NULL
       OR ($4::boolean
           AND a.account_owner = $3)
   )
+  -- Segmen = band kesehatan (BL-50); SNAPSHOT (Periode tak berlaku pada adopsi).
+  AND (
+      $5::text IS NULL
+      OR ($5 = 'healthy'  AND cs.overall_health_score >= 80)
+      OR ($5 = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR ($5 = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR ($5 = 'critical' AND cs.overall_health_score < 40)
+  )
 `
 
 type ReportCSAdoptionParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsCsm    bool   `json:"is_csm"`
-	Uid      *int64 `json:"uid"`
-	IsSales  bool   `json:"is_sales"`
+	ScopeAll bool    `json:"scope_all"`
+	IsCsm    bool    `json:"is_csm"`
+	Uid      *int64  `json:"uid"`
+	IsSales  bool    `json:"is_sales"`
+	Segment  *string `json:"segment"`
 }
 
 type ReportCSAdoptionRow struct {
@@ -59,6 +68,7 @@ func (q *Queries) ReportCSAdoption(ctx context.Context, arg ReportCSAdoptionPara
 		arg.IsCsm,
 		arg.Uid,
 		arg.IsSales,
+		arg.Segment,
 	)
 	var i ReportCSAdoptionRow
 	err := row.Scan(
@@ -92,13 +102,24 @@ WHERE a.deleted_at IS NULL
       OR ($4::boolean
           AND a.account_owner = $3)
   )
+  -- Segmen = band kesehatan (BL-50). NULL → semua; band terpilih menyaring atas
+  -- overall_health_score (desa tanpa skor keluar saat band dipilih). SNAPSHOT:
+  -- Periode TAK berlaku (health = kondisi terkini, bukan kohort waktu).
+  AND (
+      $5::text IS NULL
+      OR ($5 = 'healthy'  AND cs.overall_health_score >= 80)
+      OR ($5 = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR ($5 = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR ($5 = 'critical' AND cs.overall_health_score < 40)
+  )
 `
 
 type ReportCSHealthParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsCsm    bool   `json:"is_csm"`
-	Uid      *int64 `json:"uid"`
-	IsSales  bool   `json:"is_sales"`
+	ScopeAll bool    `json:"scope_all"`
+	IsCsm    bool    `json:"is_csm"`
+	Uid      *int64  `json:"uid"`
+	IsSales  bool    `json:"is_sales"`
+	Segment  *string `json:"segment"`
 }
 
 type ReportCSHealthRow struct {
@@ -135,6 +156,7 @@ func (q *Queries) ReportCSHealth(ctx context.Context, arg ReportCSHealthParams) 
 		arg.IsCsm,
 		arg.Uid,
 		arg.IsSales,
+		arg.Segment,
 	)
 	var i ReportCSHealthRow
 	err := row.Scan(
@@ -154,20 +176,35 @@ SELECT
     COUNT(*)::bigint                            AS account_count,
     COALESCE(SUM(s.lost_value_mrr), 0)::numeric AS lost_value
 FROM subscriptions s
+LEFT JOIN customer_success cs
+       ON cs.account_id = s.account_id AND cs.tenant_id = s.tenant_id
 WHERE s.deleted_at IS NULL
   AND s.status IN ('Cancelled', 'Churned')
   AND (
       $1::boolean
       OR ($2::boolean AND s.subscription_owner = $3)
   )
+  -- Periode (BL-50) memotong cancellation_date (kohort churn di rentang).
+  AND ($4::timestamptz IS NULL OR s.cancellation_date >= $4::date)
+  AND ($5::timestamptz IS NULL OR s.cancellation_date < $5::date)
+  AND (
+      $6::text IS NULL
+      OR ($6 = 'healthy'  AND cs.overall_health_score >= 80)
+      OR ($6 = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR ($6 = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR ($6 = 'critical' AND cs.overall_health_score < 40)
+  )
 GROUP BY COALESCE(s.churn_reason, '(Tanpa alasan)')
 ORDER BY account_count DESC, churn_reason
 `
 
 type ReportChurnReasonsParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	Segment     *string            `json:"segment"`
 }
 
 type ReportChurnReasonsRow struct {
@@ -181,7 +218,14 @@ type ReportChurnReasonsRow struct {
 // (di-mask F4 di handler). churn_reason NULL → '(Tanpa alasan)'. Diurut jumlah
 // terbanyak. F3 identik ReportRetention.
 func (q *Queries) ReportChurnReasons(ctx context.Context, arg ReportChurnReasonsParams) ([]ReportChurnReasonsRow, error) {
-	rows, err := q.db.Query(ctx, reportChurnReasons, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportChurnReasons,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Segment,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -213,6 +257,8 @@ SELECT
 FROM engagements e
 JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
 LEFT JOIN users u ON e.owner_id = u.id
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
 WHERE (
     $1::boolean
     OR ($2::boolean AND (
@@ -221,14 +267,27 @@ WHERE (
         OR a.backup_csm = $3
     ))
 )
+  -- Periode (BL-50) memotong scheduled_at; Segmen = band kesehatan (LEFT JOIN cs).
+  AND ($4::timestamptz IS NULL OR e.scheduled_at >= $4)
+  AND ($5::timestamptz IS NULL OR e.scheduled_at < $5)
+  AND (
+      $6::text IS NULL
+      OR ($6 = 'healthy'  AND cs.overall_health_score >= 80)
+      OR ($6 = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR ($6 = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR ($6 = 'critical' AND cs.overall_health_score < 40)
+  )
 GROUP BY e.owner_id, u.name, u.email
 ORDER BY total DESC, owner_id
 `
 
 type ReportEngagementByCSMParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	Segment     *string            `json:"segment"`
 }
 
 type ReportEngagementByCSMRow struct {
@@ -245,7 +304,14 @@ type ReportEngagementByCSMRow struct {
 // GROUP BY engagements.owner_id. owner_id NULL (belum ditugaskan) → nama '—' di
 // handler. F3 identik ReportEngagementCompliance.
 func (q *Queries) ReportEngagementByCSM(ctx context.Context, arg ReportEngagementByCSMParams) ([]ReportEngagementByCSMRow, error) {
-	rows, err := q.db.Query(ctx, reportEngagementByCSM, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportEngagementByCSM,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Segment,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -278,6 +344,8 @@ SELECT
     COUNT(*) FILTER (WHERE e.status = 'done')::bigint    AS done
 FROM engagements e
 JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
 WHERE (
     $1::boolean
     OR ($2::boolean AND (
@@ -286,14 +354,27 @@ WHERE (
         OR a.backup_csm = $3
     ))
 )
+  -- Periode (BL-50) memotong scheduled_at (engagement terjadwal di rentang).
+  AND ($4::timestamptz IS NULL OR e.scheduled_at >= $4)
+  AND ($5::timestamptz IS NULL OR e.scheduled_at < $5)
+  AND (
+      $6::text IS NULL
+      OR ($6 = 'healthy'  AND cs.overall_health_score >= 80)
+      OR ($6 = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR ($6 = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR ($6 = 'critical' AND cs.overall_health_score < 40)
+  )
 GROUP BY e.engagement_type
 ORDER BY e.engagement_type
 `
 
 type ReportEngagementComplianceParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	Segment     *string            `json:"segment"`
 }
 
 type ReportEngagementComplianceRow struct {
@@ -306,7 +387,14 @@ type ReportEngagementComplianceRow struct {
 // terjadwal (persen dihitung handler). F3 ownership atas kolom kepemilikan
 // account (PERSIS ListEngagements). RLS mengurung tenant.
 func (q *Queries) ReportEngagementCompliance(ctx context.Context, arg ReportEngagementComplianceParams) ([]ReportEngagementComplianceRow, error) {
-	rows, err := q.db.Query(ctx, reportEngagementCompliance, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportEngagementCompliance,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Segment,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -356,14 +444,28 @@ WHERE a.deleted_at IS NULL
       OR ($5::boolean
           AND a.account_owner = $4)
   )
+  -- Periode (BL-50) = kohort kickoff_date (desa yang MULAI onboarding di rentang;
+  -- kickoff NULL keluar saat Periode aktif). Segmen = band kesehatan.
+  AND ($6::timestamptz IS NULL OR cs.kickoff_date >= $6::date)
+  AND ($7::timestamptz IS NULL OR cs.kickoff_date < $7::date)
+  AND (
+      $8::text IS NULL
+      OR ($8 = 'healthy'  AND cs.overall_health_score >= 80)
+      OR ($8 = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR ($8 = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR ($8 = 'critical' AND cs.overall_health_score < 40)
+  )
 `
 
 type ReportOnboardingParams struct {
-	Today    pgtype.Date `json:"today"`
-	ScopeAll bool        `json:"scope_all"`
-	IsCsm    bool        `json:"is_csm"`
-	Uid      *int64      `json:"uid"`
-	IsSales  bool        `json:"is_sales"`
+	Today       pgtype.Date        `json:"today"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsCsm       bool               `json:"is_csm"`
+	Uid         *int64             `json:"uid"`
+	IsSales     bool               `json:"is_sales"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	Segment     *string            `json:"segment"`
 }
 
 type ReportOnboardingRow struct {
@@ -390,6 +492,9 @@ func (q *Queries) ReportOnboarding(ctx context.Context, arg ReportOnboardingPara
 		arg.IsCsm,
 		arg.Uid,
 		arg.IsSales,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Segment,
 	)
 	var i ReportOnboardingRow
 	err := row.Scan(
@@ -501,19 +606,34 @@ func (q *Queries) ReportPipelineByStage(ctx context.Context, arg ReportPipelineB
 const reportRetention = `-- name: ReportRetention :one
 SELECT
     COUNT(*) FILTER (WHERE s.status = 'Active')                       AS active,
-    COUNT(*) FILTER (WHERE s.status IN ('Cancelled', 'Churned'))      AS churned
+    COUNT(*) FILTER (WHERE s.status IN ('Cancelled', 'Churned')
+        AND ($1::timestamptz IS NULL OR s.cancellation_date >= $1::date)
+        AND ($2::timestamptz IS NULL OR s.cancellation_date < $2::date)
+    )                                                                AS churned
 FROM subscriptions s
+LEFT JOIN customer_success cs
+       ON cs.account_id = s.account_id AND cs.tenant_id = s.tenant_id
 WHERE s.deleted_at IS NULL
   AND (
-      $1::boolean
-      OR ($2::boolean AND s.subscription_owner = $3)
+      $3::boolean
+      OR ($4::boolean AND s.subscription_owner = $5)
+  )
+  AND (
+      $6::text IS NULL
+      OR ($6 = 'healthy'  AND cs.overall_health_score >= 80)
+      OR ($6 = 'fair'     AND cs.overall_health_score >= 60 AND cs.overall_health_score < 80)
+      OR ($6 = 'at_risk'  AND cs.overall_health_score >= 40 AND cs.overall_health_score < 60)
+      OR ($6 = 'critical' AND cs.overall_health_score < 40)
   )
 `
 
 type ReportRetentionParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	Segment     *string            `json:"segment"`
 }
 
 type ReportRetentionRow struct {
@@ -525,8 +645,19 @@ type ReportRetentionRow struct {
 // dari subscriptions.status. Retention% & Churn% dihitung handler dari kedua
 // angka (active/(active+churned)). F3 ownership subscription_owner (PERSIS
 // ListSubscriptions). RLS mengurung tenant.
+// Periode (BL-50): active = SNAPSHOT (langganan aktif SAAT INI, tak dibatasi
+// waktu); churned = dibatasi cancellation_date dalam [start,end) agar konsisten
+// dgn tabel Alasan Churn. RetentionRate = active/(active+churnedDalamPeriode).
+// Segmen = band kesehatan atas customer_success desa langganan (LEFT JOIN cs).
 func (q *Queries) ReportRetention(ctx context.Context, arg ReportRetentionParams) (ReportRetentionRow, error) {
-	row := q.db.QueryRow(ctx, reportRetention, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	row := q.db.QueryRow(ctx, reportRetention,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Segment,
+	)
 	var i ReportRetentionRow
 	err := row.Scan(&i.Active, &i.Churned)
 	return i, err
