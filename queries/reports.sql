@@ -142,6 +142,8 @@ FROM subscriptions s
 LEFT JOIN customer_success cs
        ON cs.account_id = s.account_id AND cs.tenant_id = s.tenant_id
 WHERE s.deleted_at IS NULL
+  -- Paket (BL-52): NULL = semua paket; CS Report (BL-50) tak mengoper → no-op.
+  AND (sqlc.narg(plan_filter)::bigint IS NULL OR s.plan_id = sqlc.narg(plan_filter))
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
@@ -168,6 +170,8 @@ LEFT JOIN customer_success cs
        ON cs.account_id = s.account_id AND cs.tenant_id = s.tenant_id
 WHERE s.deleted_at IS NULL
   AND s.status IN ('Cancelled', 'Churned')
+  -- Paket (BL-52): NULL = semua paket; CS Report (BL-50) tak mengoper → no-op.
+  AND (sqlc.narg(plan_filter)::bigint IS NULL OR s.plan_id = sqlc.narg(plan_filter))
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))

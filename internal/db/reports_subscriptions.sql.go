@@ -24,16 +24,22 @@ SELECT
     )::numeric, 0) AS avg_age_days
 FROM subscriptions
 WHERE deleted_at IS NULL
+  AND ($1::timestamptz IS NULL OR cancellation_date >= $1::timestamptz::date)
+  AND ($2::timestamptz IS NULL OR cancellation_date < $2::timestamptz::date)
+  AND ($3::bigint IS NULL OR plan_id = $3)
   AND (
-      $1::boolean
-      OR ($2::boolean AND subscription_owner = $3)
+      $4::boolean
+      OR ($5::boolean AND subscription_owner = $6)
   )
 `
 
 type ReportChurnAgeParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	PlanFilter  *int64             `json:"plan_filter"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
 }
 
 type ReportChurnAgeRow struct {
@@ -46,8 +52,17 @@ type ReportChurnAgeRow struct {
 // (cancellation_date − start_date, hari) atas langganan Cancelled/Churned.
 // aged_count = denominator guard rata umur (kedua tanggal terisi). Jumlah desa
 // churn & breakdown alasan REUSE ReportRetention/ReportChurnReasons.
+// BL-52: Periode memotong cancellation_date dalam [start,end) (kohort churn di
+// rentang); Paket menyaring plan_id.
 func (q *Queries) ReportChurnAge(ctx context.Context, arg ReportChurnAgeParams) (ReportChurnAgeRow, error) {
-	row := q.db.QueryRow(ctx, reportChurnAge, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	row := q.db.QueryRow(ctx, reportChurnAge,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.PlanFilter,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+	)
 	var i ReportChurnAgeRow
 	err := row.Scan(&i.LostValue, &i.AgedCount, &i.AvgAgeDays)
 	return i, err
@@ -64,18 +79,24 @@ SELECT
 FROM subscriptions s
 WHERE s.deleted_at IS NULL
   AND s.end_date IS NOT NULL
+  AND ($1::timestamptz IS NULL OR s.end_date >= $1::timestamptz::date)
+  AND ($2::timestamptz IS NULL OR s.end_date < $2::timestamptz::date)
+  AND ($3::bigint IS NULL OR s.plan_id = $3)
   AND (
-      $1::boolean
-      OR ($2::boolean AND s.subscription_owner = $3)
+      $4::boolean
+      OR ($5::boolean AND s.subscription_owner = $6)
   )
 GROUP BY date_trunc('month', s.end_date)
 ORDER BY period
 `
 
 type ReportRenewalByMonthParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	PlanFilter  *int64             `json:"plan_filter"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
 }
 
 type ReportRenewalByMonthRow struct {
@@ -87,8 +108,16 @@ type ReportRenewalByMonthRow struct {
 // Panel 2 tabel bulanan (Periode · Jatuh Tempo · Diperpanjang · Rate): bucket
 // dari end_date (fakta tersimpan, bukan rekonstruksi). diperpanjang = ada baris
 // renewal anak. Rate dihitung handler (renewed/due). Diurut kronologis.
+// BL-52: Periode memotong end_date dalam [start,end); Paket menyaring plan_id.
 func (q *Queries) ReportRenewalByMonth(ctx context.Context, arg ReportRenewalByMonthParams) ([]ReportRenewalByMonthRow, error) {
-	rows, err := q.db.Query(ctx, reportRenewalByMonth, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportRenewalByMonth,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.PlanFilter,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -111,15 +140,23 @@ const reportRenewalSummary = `-- name: ReportRenewalSummary :one
 SELECT
     COUNT(*) FILTER (
         WHERE s.end_date IS NOT NULL AND s.end_date < $1::date
+          AND ($2::timestamptz IS NULL OR s.end_date >= $2::timestamptz::date)
+          AND ($3::timestamptz IS NULL OR s.end_date < $3::timestamptz::date)
     )::bigint AS due_past,
     COUNT(*) FILTER (
         WHERE s.end_date IS NOT NULL AND s.end_date < $1::date
+          AND ($2::timestamptz IS NULL OR s.end_date >= $2::timestamptz::date)
+          AND ($3::timestamptz IS NULL OR s.end_date < $3::timestamptz::date)
           AND EXISTS (
               SELECT 1 FROM subscriptions r
               WHERE r.previous_subscription_id = s.id AND r.deleted_at IS NULL
           )
     )::bigint AS renewed_past,
-    COALESCE(SUM(s.mrr) FILTER (WHERE s.previous_subscription_id IS NOT NULL), 0)::numeric AS renewed_value,
+    COALESCE(SUM(s.mrr) FILTER (
+        WHERE s.previous_subscription_id IS NOT NULL
+          AND ($2::timestamptz IS NULL OR s.start_date >= $2::timestamptz::date)
+          AND ($3::timestamptz IS NULL OR s.start_date < $3::timestamptz::date)
+    ), 0)::numeric AS renewed_value,
     COUNT(*) FILTER (
         WHERE s.status = 'Active' AND s.end_date IS NOT NULL
           AND s.end_date >= $1::date
@@ -127,17 +164,21 @@ SELECT
     )::bigint AS due_30
 FROM subscriptions s
 WHERE s.deleted_at IS NULL
+  AND ($4::bigint IS NULL OR s.plan_id = $4)
   AND (
-      $2::boolean
-      OR ($3::boolean AND s.subscription_owner = $4)
+      $5::boolean
+      OR ($6::boolean AND s.subscription_owner = $7)
   )
 `
 
 type ReportRenewalSummaryParams struct {
-	Today    pgtype.Date `json:"today"`
-	ScopeAll bool        `json:"scope_all"`
-	IsOwn    bool        `json:"is_own"`
-	Uid      *int64      `json:"uid"`
+	Today       pgtype.Date        `json:"today"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	PlanFilter  *int64             `json:"plan_filter"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
 }
 
 type ReportRenewalSummaryRow struct {
@@ -150,11 +191,18 @@ type ReportRenewalSummaryRow struct {
 // KPI Renewal Rate + Panel 2 kartu: rate = diperpanjang / jatuh-tempo (hanya
 // yang SUDAH jatuh tempo, end_date < today — masa depan belum bisa diperpanjang).
 // "diperpanjang" = ada baris renewal anak (previous_subscription_id menunjuk
-// balik). renewed_value = SUM(mrr) SEMUA baris renewal (termasuk upsell).
-// due_30 = Active dgn end_date dalam 30 hari ke depan (index idx_subs_renewal).
+// balik). renewed_value = SUM(mrr) baris renewal. due_30 = Active dgn end_date
+// dalam 30 hari ke depan (index idx_subs_renewal).
+// BL-52: Periode memotong jatuh-tempo/diperpanjang di end_date (kohort yang
+// jatuh tempo dalam rentang); renewed_value memakai start_date anak renewal
+// (kapan perpanjangan terjadi). due_30 = SNAPSHOT forward-looking dari today
+// (inheren relatif; Periode TAK berlaku). Paket menyaring semua.
 func (q *Queries) ReportRenewalSummary(ctx context.Context, arg ReportRenewalSummaryParams) (ReportRenewalSummaryRow, error) {
 	row := q.db.QueryRow(ctx, reportRenewalSummary,
 		arg.Today,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.PlanFilter,
 		arg.ScopeAll,
 		arg.IsOwn,
 		arg.Uid,
@@ -178,18 +226,20 @@ FROM subscriptions s
 JOIN plans p ON p.id = s.plan_id
 WHERE s.deleted_at IS NULL
   AND s.status = 'Active'
+  AND ($1::bigint IS NULL OR s.plan_id = $1)
   AND (
-      $1::boolean
-      OR ($2::boolean AND s.subscription_owner = $3)
+      $2::boolean
+      OR ($3::boolean AND s.subscription_owner = $4)
   )
 GROUP BY p.id, p.plan_name
 ORDER BY mrr DESC, p.plan_name
 `
 
 type ReportRevenueByPlanParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	PlanFilter *int64 `json:"plan_filter"`
+	ScopeAll   bool   `json:"scope_all"`
+	IsOwn      bool   `json:"is_own"`
+	Uid        *int64 `json:"uid"`
 }
 
 type ReportRevenueByPlanRow struct {
@@ -202,8 +252,15 @@ type ReportRevenueByPlanRow struct {
 // langganan Active. Nama paket dari plans.plan_name (apa pun yang di-seed
 // tenant, BUKAN hardcode). Rata per Desa dihitung handler (mrr/desa). Diurut
 // MRR terbesar. RLS mengurung tenant di kedua tabel.
+// BL-52: SNAPSHOT (nilai Active SEKARANG) → Periode TAK diterapkan; Paket
+// menyaring ke plan_id terpilih (panel menampilkan paket itu saja).
 func (q *Queries) ReportRevenueByPlan(ctx context.Context, arg ReportRevenueByPlanParams) ([]ReportRevenueByPlanRow, error) {
-	rows, err := q.db.Query(ctx, reportRevenueByPlan, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportRevenueByPlan,
+		arg.PlanFilter,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -231,66 +288,70 @@ SELECT
 
     COALESCE(SUM(mrr) FILTER (
         WHERE previous_subscription_id IS NULL
-          AND start_date >= date_trunc('month', $1::date)::date
-          AND start_date <  (date_trunc('month', $1::date) + interval '1 month')::date
+          AND start_date >= COALESCE($1::timestamptz::date, date_trunc('month', $2::date)::date)
+          AND start_date <  COALESCE($3::timestamptz::date, (date_trunc('month', $2::date) + interval '1 month')::date)
     ), 0)::numeric AS new_mrr,
     COUNT(*) FILTER (
         WHERE previous_subscription_id IS NULL
-          AND start_date >= date_trunc('month', $1::date)::date
-          AND start_date <  (date_trunc('month', $1::date) + interval '1 month')::date
+          AND start_date >= COALESCE($1::timestamptz::date, date_trunc('month', $2::date)::date)
+          AND start_date <  COALESCE($3::timestamptz::date, (date_trunc('month', $2::date) + interval '1 month')::date)
     )::bigint AS new_count,
 
     COALESCE(SUM(mrr - previous_value) FILTER (
         WHERE previous_subscription_id IS NOT NULL AND previous_value IS NOT NULL
           AND mrr > previous_value
-          AND start_date >= date_trunc('month', $1::date)::date
-          AND start_date <  (date_trunc('month', $1::date) + interval '1 month')::date
+          AND start_date >= COALESCE($1::timestamptz::date, date_trunc('month', $2::date)::date)
+          AND start_date <  COALESCE($3::timestamptz::date, (date_trunc('month', $2::date) + interval '1 month')::date)
     ), 0)::numeric AS expansion_mrr,
     COUNT(*) FILTER (
         WHERE previous_subscription_id IS NOT NULL AND previous_value IS NOT NULL
           AND mrr > previous_value
-          AND start_date >= date_trunc('month', $1::date)::date
-          AND start_date <  (date_trunc('month', $1::date) + interval '1 month')::date
+          AND start_date >= COALESCE($1::timestamptz::date, date_trunc('month', $2::date)::date)
+          AND start_date <  COALESCE($3::timestamptz::date, (date_trunc('month', $2::date) + interval '1 month')::date)
     )::bigint AS expansion_count,
 
     COALESCE(SUM(previous_value - mrr) FILTER (
         WHERE previous_subscription_id IS NOT NULL AND previous_value IS NOT NULL
           AND mrr < previous_value
           AND status NOT IN ('Cancelled', 'Churned')
-          AND start_date >= date_trunc('month', $1::date)::date
-          AND start_date <  (date_trunc('month', $1::date) + interval '1 month')::date
+          AND start_date >= COALESCE($1::timestamptz::date, date_trunc('month', $2::date)::date)
+          AND start_date <  COALESCE($3::timestamptz::date, (date_trunc('month', $2::date) + interval '1 month')::date)
     ), 0)::numeric AS contraction_mrr,
     COUNT(*) FILTER (
         WHERE previous_subscription_id IS NOT NULL AND previous_value IS NOT NULL
           AND mrr < previous_value
           AND status NOT IN ('Cancelled', 'Churned')
-          AND start_date >= date_trunc('month', $1::date)::date
-          AND start_date <  (date_trunc('month', $1::date) + interval '1 month')::date
+          AND start_date >= COALESCE($1::timestamptz::date, date_trunc('month', $2::date)::date)
+          AND start_date <  COALESCE($3::timestamptz::date, (date_trunc('month', $2::date) + interval '1 month')::date)
     )::bigint AS contraction_count,
 
     COALESCE(SUM(lost_value_mrr) FILTER (
         WHERE status IN ('Cancelled', 'Churned')
-          AND cancellation_date >= date_trunc('month', $1::date)::date
-          AND cancellation_date <  (date_trunc('month', $1::date) + interval '1 month')::date
+          AND cancellation_date >= COALESCE($1::timestamptz::date, date_trunc('month', $2::date)::date)
+          AND cancellation_date <  COALESCE($3::timestamptz::date, (date_trunc('month', $2::date) + interval '1 month')::date)
     ), 0)::numeric AS churn_mrr,
     COUNT(*) FILTER (
         WHERE status IN ('Cancelled', 'Churned')
-          AND cancellation_date >= date_trunc('month', $1::date)::date
-          AND cancellation_date <  (date_trunc('month', $1::date) + interval '1 month')::date
+          AND cancellation_date >= COALESCE($1::timestamptz::date, date_trunc('month', $2::date)::date)
+          AND cancellation_date <  COALESCE($3::timestamptz::date, (date_trunc('month', $2::date) + interval '1 month')::date)
     )::bigint AS churn_count
 FROM subscriptions
 WHERE deleted_at IS NULL
+  AND ($4::bigint IS NULL OR plan_id = $4)
   AND (
-      $2::boolean
-      OR ($3::boolean AND subscription_owner = $4)
+      $5::boolean
+      OR ($6::boolean AND subscription_owner = $7)
   )
 `
 
 type ReportSubMRRParams struct {
-	Today    pgtype.Date `json:"today"`
-	ScopeAll bool        `json:"scope_all"`
-	IsOwn    bool        `json:"is_own"`
-	Uid      *int64      `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	Today       pgtype.Date        `json:"today"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	PlanFilter  *int64             `json:"plan_filter"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
 }
 
 type ReportSubMRRRow struct {
@@ -327,20 +388,38 @@ type ReportSubMRRRow struct {
 // Semua agregat dibungkus COALESCE(...)::tipe agar sqlc tak emit interface{}
 // (gotcha #14). Jendela "bulan ini" dari sqlc.arg(today)::date (appTZ-aware,
 // dioper handler — hindari AT TIME ZONE di SELECT list sqlc).
+//
+// FILTER interaktif Periode + Paket (BL-52): SEMANTIK SENGAJA PER-PANEL, bukan
+// kolom waktu seragam.
+//   - period_start/period_end (timestamptz narg, [start,end)) memotong panel
+//     BER-DIMENSI-WAKTU di kolom yang BENAR: pergerakan MRR baru/ekspansi/
+//     kontraksi by start_date; churn (komponen MRR & breakdown) by
+//     cancellation_date; renewal by end_date. Bila NULL → perilaku BL-47
+//     (pergerakan MRR jatuh ke jendela "bulan ini" via COALESCE default).
+//   - Panel SNAPSHOT (MRR/ARR berjalan, Revenue-by-Plan, Aging) = nilai
+//     SEKARANG, TAK ber-dimensi-waktu → period_* TAK diterapkan (hanya Paket).
+//   - plan_filter (bigint narg) menyaring SEMUA panel ke satu plan_id; NULL →
+//     semua paket. Di-AND DI ATAS scope F3 (menyempit, tak melebarkan).
+//
 // KPI MRR/ARR + Panel 1 (MRR Movement): nilai berjalan (Active) + 4 komponen
-// pergerakan BULAN INI, EKSAK dari previous_value + status + start_date:
-//   - MRR baru      = start_date bulan ini & TANPA previous_subscription_id.
-//   - Ekspansi      = renewal (previous_subscription_id NOT NULL) mulai bulan
-//     ini dgn mrr > previous_value → nilai = SUM(mrr−previous).
-//   - Kontraksi     = renewal mulai bulan ini dgn mrr < previous_value (BUKAN
+// pergerakan, EKSAK dari previous_value + status + start_date:
+//   - MRR baru      = start_date dalam jendela & TANPA previous_subscription_id.
+//   - Ekspansi      = renewal (previous_subscription_id NOT NULL) mulai dalam
+//     jendela dgn mrr > previous_value → nilai = SUM(mrr−previous).
+//   - Kontraksi     = renewal mulai dalam jendela dgn mrr < previous_value (BUKAN
 //     churn) → nilai = SUM(previous−mrr) (positif, penyusutan).
-//   - Churn         = Cancelled/Churned dgn cancellation_date bulan ini →
+//   - Churn         = Cancelled/Churned dgn cancellation_date dalam jendela →
 //     nilai = SUM(lost_value_mrr).
 //
+// Jendela pergerakan = [period_start,period_end) bila diset (BL-52), else "bulan
+// ini" (BL-47 default via COALESCE). MRR/ARR berjalan = SNAPSHOT (tak ber-jendela).
 // ARR = kolom arr bila ada, else mrr×12 (billing annual bisa diskon → arr≠×12).
 func (q *Queries) ReportSubMRR(ctx context.Context, arg ReportSubMRRParams) (ReportSubMRRRow, error) {
 	row := q.db.QueryRow(ctx, reportSubMRR,
+		arg.PeriodStart,
 		arg.Today,
+		arg.PeriodEnd,
+		arg.PlanFilter,
 		arg.ScopeAll,
 		arg.IsOwn,
 		arg.Uid,
@@ -388,19 +467,21 @@ LEFT JOIN customer_success cs
        ON cs.account_id = s.account_id AND cs.tenant_id = s.tenant_id
 WHERE s.deleted_at IS NULL
   AND s.start_date IS NOT NULL
+  AND ($2::bigint IS NULL OR s.plan_id = $2)
   AND (
-      $2::boolean
-      OR ($3::boolean AND s.subscription_owner = $4)
+      $3::boolean
+      OR ($4::boolean AND s.subscription_owner = $5)
   )
 GROUP BY bucket
 ORDER BY bucket
 `
 
 type ReportSubscriptionAgingParams struct {
-	Today    pgtype.Date `json:"today"`
-	ScopeAll bool        `json:"scope_all"`
-	IsOwn    bool        `json:"is_own"`
-	Uid      *int64      `json:"uid"`
+	Today      pgtype.Date `json:"today"`
+	PlanFilter *int64      `json:"plan_filter"`
+	ScopeAll   bool        `json:"scope_all"`
+	IsOwn      bool        `json:"is_own"`
+	Uid        *int64      `json:"uid"`
 }
 
 type ReportSubscriptionAgingRow struct {
@@ -421,9 +502,13 @@ type ReportSubscriptionAgingRow struct {
 // (1..4) agar handler beri label + Catatan interpretatif (const bernama).
 //
 //	1: <6 bln (<183 hari) · 2: 6–12 bln (<366) · 3: 1–2 thn (<731) · 4: >2 thn
+//
+// BL-52: SNAPSHOT (umur & nilai SEKARANG) → Periode TAK diterapkan; Paket
+// menyaring ke plan_id terpilih.
 func (q *Queries) ReportSubscriptionAging(ctx context.Context, arg ReportSubscriptionAgingParams) ([]ReportSubscriptionAgingRow, error) {
 	rows, err := q.db.Query(ctx, reportSubscriptionAging,
 		arg.Today,
+		arg.PlanFilter,
 		arg.ScopeAll,
 		arg.IsOwn,
 		arg.Uid,
@@ -445,6 +530,60 @@ func (q *Queries) ReportSubscriptionAging(ctx context.Context, arg ReportSubscri
 			&i.Churned,
 			&i.Total,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reportSubscriptionPlans = `-- name: ReportSubscriptionPlans :many
+SELECT
+    p.id::bigint     AS plan_id,
+    p.plan_name      AS plan_name,
+    COUNT(*)::bigint AS subscription_count
+FROM subscriptions s
+JOIN plans p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND (
+      $1::boolean
+      OR ($2::boolean AND s.subscription_owner = $3)
+  )
+GROUP BY p.id, p.plan_name
+ORDER BY p.plan_name
+`
+
+type ReportSubscriptionPlansParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsOwn    bool   `json:"is_own"`
+	Uid      *int64 `json:"uid"`
+}
+
+type ReportSubscriptionPlansRow struct {
+	PlanID            int64  `json:"plan_id"`
+	PlanName          string `json:"plan_name"`
+	SubscriptionCount int64  `json:"subscription_count"`
+}
+
+// BL-52: isi dropdown "Paket" Subscription Report — DITURUNKAN DARI DATA (paket
+// yang benar-benar dipakai langganan dalam cakupan pemakai), bukan daftar plans
+// penuh. Pola sama ReportSalesOwners: "pilihan yang pasti kosong lebih buruk
+// daripada pilihan yang tak ada". F3 pakai flag subscription yang SAMA
+// (SubscriptionsListFilterFor). TAK disaring Periode/Paket agar daftar stabil
+// (paket terpilih selalu tampil walau rentang dipersempit).
+func (q *Queries) ReportSubscriptionPlans(ctx context.Context, arg ReportSubscriptionPlansParams) ([]ReportSubscriptionPlansRow, error) {
+	rows, err := q.db.Query(ctx, reportSubscriptionPlans, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReportSubscriptionPlansRow{}
+	for rows.Next() {
+		var i ReportSubscriptionPlansRow
+		if err := rows.Scan(&i.PlanID, &i.PlanName, &i.SubscriptionCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

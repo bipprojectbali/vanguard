@@ -20,7 +20,8 @@ func (h *Handler) ReportsSubscriptionsExport(w http.ResponseWriter, r *http.Requ
 		h.renderReportsForbidden(w, r, "Subscription Report", "/reports/subscriptions")
 		return
 	}
-	view, err := h.reportsSubscriptionsData(ctx)
+	f := parseSubscriptionReportFilter(r)
+	view, err := h.reportsSubscriptionsData(ctx, f)
 	if err != nil {
 		h.Log.Error("reports: subscriptions export", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)

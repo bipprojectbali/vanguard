@@ -1123,6 +1123,8 @@ type Querier interface {
 	// (cancellation_date − start_date, hari) atas langganan Cancelled/Churned.
 	// aged_count = denominator guard rata umur (kedua tanggal terisi). Jumlah desa
 	// churn & breakdown alasan REUSE ReportRetention/ReportChurnReasons.
+	// BL-52: Periode memotong cancellation_date dalam [start,end) (kohort churn di
+	// rentang); Paket menyaring plan_id.
 	ReportChurnAge(ctx context.Context, arg ReportChurnAgeParams) (ReportChurnAgeRow, error)
 	// Panel 3 tabel Alasan Churn: GROUP BY churn_reason (SUDAH picklist di 00012)
 	// atas langganan Cancelled/Churned, dengan lost_value_mrr sebagai Nilai Hilang
@@ -1175,12 +1177,17 @@ type Querier interface {
 	// Panel 2 tabel bulanan (Periode · Jatuh Tempo · Diperpanjang · Rate): bucket
 	// dari end_date (fakta tersimpan, bukan rekonstruksi). diperpanjang = ada baris
 	// renewal anak. Rate dihitung handler (renewed/due). Diurut kronologis.
+	// BL-52: Periode memotong end_date dalam [start,end); Paket menyaring plan_id.
 	ReportRenewalByMonth(ctx context.Context, arg ReportRenewalByMonthParams) ([]ReportRenewalByMonthRow, error)
 	// KPI Renewal Rate + Panel 2 kartu: rate = diperpanjang / jatuh-tempo (hanya
 	// yang SUDAH jatuh tempo, end_date < today — masa depan belum bisa diperpanjang).
 	// "diperpanjang" = ada baris renewal anak (previous_subscription_id menunjuk
-	// balik). renewed_value = SUM(mrr) SEMUA baris renewal (termasuk upsell).
-	// due_30 = Active dgn end_date dalam 30 hari ke depan (index idx_subs_renewal).
+	// balik). renewed_value = SUM(mrr) baris renewal. due_30 = Active dgn end_date
+	// dalam 30 hari ke depan (index idx_subs_renewal).
+	// BL-52: Periode memotong jatuh-tempo/diperpanjang di end_date (kohort yang
+	// jatuh tempo dalam rentang); renewed_value memakai start_date anak renewal
+	// (kapan perpanjangan terjadi). due_30 = SNAPSHOT forward-looking dari today
+	// (inheren relatif; Periode TAK berlaku). Paket menyaring semua.
 	ReportRenewalSummary(ctx context.Context, arg ReportRenewalSummaryParams) (ReportRenewalSummaryRow, error)
 	// Panel 3 bar. Rata jam penyelesaian per prioritas (tiket selesai). NULL bila
 	// belum ada tiket selesai di prioritas itu → "—" & bar 0 di view. Periode by
@@ -1206,6 +1213,8 @@ type Querier interface {
 	// langganan Active. Nama paket dari plans.plan_name (apa pun yang di-seed
 	// tenant, BUKAN hardcode). Rata per Desa dihitung handler (mrr/desa). Diurut
 	// MRR terbesar. RLS mengurung tenant di kedua tabel.
+	// BL-52: SNAPSHOT (nilai Active SEKARANG) → Periode TAK diterapkan; Paket
+	// menyaring ke plan_id terpilih (panel menampilkan paket itu saja).
 	ReportRevenueByPlan(ctx context.Context, arg ReportRevenueByPlanParams) ([]ReportRevenueByPlanRow, error)
 	// Panel 2 tabel per-prioritas. 3 tingkat NYATA (rendah/sedang/tinggi) — mockup
 	// pakai 4 (Kritis tak ada di skema). target_minutes = target penyelesaian dari
@@ -1261,15 +1270,29 @@ type Querier interface {
 	// Semua agregat dibungkus COALESCE(...)::tipe agar sqlc tak emit interface{}
 	// (gotcha #14). Jendela "bulan ini" dari sqlc.arg(today)::date (appTZ-aware,
 	// dioper handler — hindari AT TIME ZONE di SELECT list sqlc).
+	//
+	// FILTER interaktif Periode + Paket (BL-52): SEMANTIK SENGAJA PER-PANEL, bukan
+	// kolom waktu seragam.
+	//   • period_start/period_end (timestamptz narg, [start,end)) memotong panel
+	//     BER-DIMENSI-WAKTU di kolom yang BENAR: pergerakan MRR baru/ekspansi/
+	//     kontraksi by start_date; churn (komponen MRR & breakdown) by
+	//     cancellation_date; renewal by end_date. Bila NULL → perilaku BL-47
+	//     (pergerakan MRR jatuh ke jendela "bulan ini" via COALESCE default).
+	//   • Panel SNAPSHOT (MRR/ARR berjalan, Revenue-by-Plan, Aging) = nilai
+	//     SEKARANG, TAK ber-dimensi-waktu → period_* TAK diterapkan (hanya Paket).
+	//   • plan_filter (bigint narg) menyaring SEMUA panel ke satu plan_id; NULL →
+	//     semua paket. Di-AND DI ATAS scope F3 (menyempit, tak melebarkan).
 	// KPI MRR/ARR + Panel 1 (MRR Movement): nilai berjalan (Active) + 4 komponen
-	// pergerakan BULAN INI, EKSAK dari previous_value + status + start_date:
-	//   • MRR baru      = start_date bulan ini & TANPA previous_subscription_id.
-	//   • Ekspansi      = renewal (previous_subscription_id NOT NULL) mulai bulan
-	//                     ini dgn mrr > previous_value → nilai = SUM(mrr−previous).
-	//   • Kontraksi     = renewal mulai bulan ini dgn mrr < previous_value (BUKAN
+	// pergerakan, EKSAK dari previous_value + status + start_date:
+	//   • MRR baru      = start_date dalam jendela & TANPA previous_subscription_id.
+	//   • Ekspansi      = renewal (previous_subscription_id NOT NULL) mulai dalam
+	//                     jendela dgn mrr > previous_value → nilai = SUM(mrr−previous).
+	//   • Kontraksi     = renewal mulai dalam jendela dgn mrr < previous_value (BUKAN
 	//                     churn) → nilai = SUM(previous−mrr) (positif, penyusutan).
-	//   • Churn         = Cancelled/Churned dgn cancellation_date bulan ini →
+	//   • Churn         = Cancelled/Churned dgn cancellation_date dalam jendela →
 	//                     nilai = SUM(lost_value_mrr).
+	// Jendela pergerakan = [period_start,period_end) bila diset (BL-52), else "bulan
+	// ini" (BL-47 default via COALESCE). MRR/ARR berjalan = SNAPSHOT (tak ber-jendela).
 	// ARR = kolom arr bila ada, else mrr×12 (billing annual bisa diskon → arr≠×12).
 	ReportSubMRR(ctx context.Context, arg ReportSubMRRParams) (ReportSubMRRRow, error)
 	// Panel 5 (Subscription Aging): bucket umur (today − start_date) atas langganan
@@ -1278,7 +1301,16 @@ type Querier interface {
 	// jatuh-tempo/diperpanjang/churned (untuk rate handler). Bucket key numerik
 	// (1..4) agar handler beri label + Catatan interpretatif (const bernama).
 	//   1: <6 bln (<183 hari) · 2: 6–12 bln (<366) · 3: 1–2 thn (<731) · 4: >2 thn
+	// BL-52: SNAPSHOT (umur & nilai SEKARANG) → Periode TAK diterapkan; Paket
+	// menyaring ke plan_id terpilih.
 	ReportSubscriptionAging(ctx context.Context, arg ReportSubscriptionAgingParams) ([]ReportSubscriptionAgingRow, error)
+	// BL-52: isi dropdown "Paket" Subscription Report — DITURUNKAN DARI DATA (paket
+	// yang benar-benar dipakai langganan dalam cakupan pemakai), bukan daftar plans
+	// penuh. Pola sama ReportSalesOwners: "pilihan yang pasti kosong lebih buruk
+	// daripada pilihan yang tak ada". F3 pakai flag subscription yang SAMA
+	// (SubscriptionsListFilterFor). TAK disaring Periode/Paket agar daftar stabil
+	// (paket terpilih selalu tampil walau rentang dipersempit).
+	ReportSubscriptionPlans(ctx context.Context, arg ReportSubscriptionPlansParams) ([]ReportSubscriptionPlansRow, error)
 	// KPI header + kartu SLA panel 2. total = Total Tiket; met/with_sla = Kepatuhan
 	// SLA (hanya tiket ber-SLA jadi denominator — tiket tanpa deadline tak punya
 	// target untuk dipenuhi); avg_resolution_hours = Rata Penyelesaian (tiket
