@@ -52,7 +52,7 @@ func reportsPipelinePanel(v ReportsSalesView) g.Node {
 			h.TBody(g.Group(rows)),
 		))
 	}
-	return reportPanelCard(v.Base, "Pipeline Report", "pipeline", body)
+	return reportPanelCard(v.Base, v.Filter.QueryString, "Pipeline Report", "pipeline", body)
 }
 
 // ── Panel 2: Sales Forecast ─────────────────────────────────────────────────
@@ -80,7 +80,7 @@ func reportsForecastPanel(v ReportsSalesView) g.Node {
 			h.TBody(g.Group(rows)),
 		))
 	}
-	return reportPanelCard(v.Base, "Sales Forecast", "forecast", body)
+	return reportPanelCard(v.Base, v.Filter.QueryString, "Sales Forecast", "forecast", body)
 }
 
 // ── Panel 3: Win/Loss Analysis ──────────────────────────────────────────────
@@ -113,7 +113,7 @@ func reportsWinLossPanel(v ReportsSalesView) g.Node {
 			h.TBody(g.Group(rows)),
 		))
 	}
-	return reportPanelCard(v.Base, "Win/Loss Analysis", "winloss", cards, reasons)
+	return reportPanelCard(v.Base, v.Filter.QueryString, "Win/Loss Analysis", "winloss", cards, reasons)
 }
 
 // reportStat = kartu angka tunggal kecil (Menang/Kalah %). Meniru dashboardKPICard
@@ -144,7 +144,7 @@ func reportsFunnelPanel(v ReportsSalesView) g.Node {
 		reportStat("Rata Lead→Deal", v.AvgLeadToDeal, "text-base-content"),
 		reportStat("Rata Deal→Menang", v.AvgDealToWon, "text-base-content"),
 	)
-	return reportPanelCard(v.Base, "Lead Conversion", "funnel",
+	return reportPanelCard(v.Base, v.Filter.QueryString, "Lead Conversion", "funnel",
 		h.Div(h.Class("grid gap-3 min-w-0"), g.Group(steps)), stats)
 }
 
@@ -178,5 +178,5 @@ func reportsActivityPanel(v ReportsSalesView) g.Node {
 			h.TBody(g.Group(rows)),
 		))
 	}
-	return reportPanelCard(v.Base, "Sales Activity Report", "activity", body)
+	return reportPanelCard(v.Base, v.Filter.QueryString, "Sales Activity Report", "activity", body)
 }

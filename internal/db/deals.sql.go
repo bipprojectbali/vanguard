@@ -138,13 +138,19 @@ WHERE deleted_at IS NULL
       OR ($2::boolean AND deal_owner = $3)
   )
   AND (NOT $4::boolean OR deal_owner = $3)
+  AND ($5::timestamptz IS NULL OR created_at >= $5)
+  AND ($6::timestamptz IS NULL OR created_at < $6)
+  AND ($7::bigint IS NULL OR deal_owner = $7)
 `
 
 type DealPipelineStatsParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
-	MineOnly bool   `json:"mine_only"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	MineOnly    bool               `json:"mine_only"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	OwnerFilter *int64             `json:"owner_filter"`
 }
 
 type DealPipelineStatsRow struct {
@@ -158,12 +164,19 @@ type DealPipelineStatsRow struct {
 // Go atas seluruh baris). COALESCE(...)::bigint/::numeric membungkus agregat agar
 // sqlc tak meng-emit interface{} (gotcha #14). Win rate dihitung di Go dari
 // won_count/(won_count+lost_count) — pembagian nol ditangani di sana.
+// BL-49: filter opsional Periode (created_at) + Owner (deal_owner) untuk Sales
+// Report — guard NULL = tak menyaring (perilaku papan Kanban tak berubah, memang
+// oper nil). owner_filter di-AND DI ATAS predikat scope: hanya bisa MENYEMPIT
+// dalam cakupan yang diizinkan (sales own-scope pilih owner lain → nol baris).
 func (q *Queries) DealPipelineStats(ctx context.Context, arg DealPipelineStatsParams) (DealPipelineStatsRow, error) {
 	row := q.db.QueryRow(ctx, dealPipelineStats,
 		arg.ScopeAll,
 		arg.IsOwn,
 		arg.Uid,
 		arg.MineOnly,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.OwnerFilter,
 	)
 	var i DealPipelineStatsRow
 	err := row.Scan(

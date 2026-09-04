@@ -11,6 +11,8 @@
 -- dilewati AVG); weighted_value = SUM(amount×probability/100) — nilai pipeline
 -- tertimbang. COALESCE(...)::tipe membungkus tiap agregat agar sqlc tak emit
 -- interface{} (gotcha #14); avg dibulatkan ke bilangan bulat (persen).
+-- BL-49: filter opsional Periode (created_at) + Owner (deal_owner), guard NULL =
+-- tak menyaring. owner_filter di-AND DI ATAS scope (hanya menyempit).
 SELECT
     stage,
     COUNT(*)::bigint                  AS deal_count,
@@ -23,6 +25,9 @@ WHERE deleted_at IS NULL
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
   )
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR created_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR created_at < sqlc.narg(period_end))
+  AND (sqlc.narg(owner_filter)::bigint IS NULL OR deal_owner = sqlc.narg(owner_filter))
 GROUP BY stage
 ORDER BY CASE stage
     WHEN 'Prospecting'  THEN 1

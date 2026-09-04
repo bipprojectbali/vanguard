@@ -94,6 +94,9 @@ WHERE deleted_at IS NULL
       $1::boolean
       OR ($2::boolean AND deal_owner = $3)
   )
+  AND ($4::timestamptz IS NULL OR created_at >= $4)
+  AND ($5::timestamptz IS NULL OR created_at < $5)
+  AND ($6::bigint IS NULL OR deal_owner = $6)
 GROUP BY stage
 ORDER BY CASE stage
     WHEN 'Prospecting'  THEN 1
@@ -108,9 +111,12 @@ END
 `
 
 type ReportPipelineByStageParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	OwnerFilter *int64             `json:"owner_filter"`
 }
 
 type ReportPipelineByStageRow struct {
@@ -132,8 +138,17 @@ type ReportPipelineByStageRow struct {
 // dilewati AVG); weighted_value = SUM(amount×probability/100) — nilai pipeline
 // tertimbang. COALESCE(...)::tipe membungkus tiap agregat agar sqlc tak emit
 // interface{} (gotcha #14); avg dibulatkan ke bilangan bulat (persen).
+// BL-49: filter opsional Periode (created_at) + Owner (deal_owner), guard NULL =
+// tak menyaring. owner_filter di-AND DI ATAS scope (hanya menyempit).
 func (q *Queries) ReportPipelineByStage(ctx context.Context, arg ReportPipelineByStageParams) ([]ReportPipelineByStageRow, error) {
-	rows, err := q.db.Query(ctx, reportPipelineByStage, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportPipelineByStage,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.OwnerFilter,
+	)
 	if err != nil {
 		return nil, err
 	}

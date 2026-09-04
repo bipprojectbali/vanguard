@@ -349,6 +349,10 @@ type Querier interface {
 	// Go atas seluruh baris). COALESCE(...)::bigint/::numeric membungkus agregat agar
 	// sqlc tak meng-emit interface{} (gotcha #14). Win rate dihitung di Go dari
 	// won_count/(won_count+lost_count) — pembagian nol ditangani di sana.
+	// BL-49: filter opsional Periode (created_at) + Owner (deal_owner) untuk Sales
+	// Report — guard NULL = tak menyaring (perilaku papan Kanban tak berubah, memang
+	// oper nil). owner_filter di-AND DI ATAS predikat scope: hanya bisa MENYEMPIT
+	// dalam cakupan yang diizinkan (sales own-scope pilih owner lain → nol baris).
 	DealPipelineStats(ctx context.Context, arg DealPipelineStatsParams) (DealPipelineStatsRow, error)
 	// Tolak undangan (sisi PENERIMA). Kunci ganda token + email: penerima tak punya
 	// scope ke workspace pengundang, jadi DeleteInvite (yang butuh tenant_id) tak
@@ -1110,6 +1114,8 @@ type Querier interface {
 	// dilewati AVG); weighted_value = SUM(amount×probability/100) — nilai pipeline
 	// tertimbang. COALESCE(...)::tipe membungkus tiap agregat agar sqlc tak emit
 	// interface{} (gotcha #14); avg dibulatkan ke bilangan bulat (persen).
+	// BL-49: filter opsional Periode (created_at) + Owner (deal_owner), guard NULL =
+	// tak menyaring. owner_filter di-AND DI ATAS scope (hanya menyempit).
 	ReportPipelineByStage(ctx context.Context, arg ReportPipelineByStageParams) ([]ReportPipelineByStageRow, error)
 	// Panel 5 (Sales Activity Report): per-owner hitung aktivitas context='sales'
 	// per kind (call/email/meeting) + total. LEFT JOIN users utk nama tampilan (pola
@@ -1130,6 +1136,15 @@ type Querier interface {
 	// masuk, Lost = 0. period 'YYYY-MM' agar urut leksikografis = kronologis. Kolom
 	// Target DITUNDA ke BL-44 (tak ada tabel target).
 	ReportSalesForecast(ctx context.Context, arg ReportSalesForecastParams) ([]ReportSalesForecastRow, error)
+	// BL-49: isi dropdown "Tim (owner)" Sales Report — DITURUNKAN DARI DATA (deal
+	// owner yang benar-benar punya deal dalam cakupan pemakai), bukan dari daftar
+	// anggota. Pola sama ListActivityActors (audit.sql): "pilihan yang pasti kosong
+	// lebih buruk daripada pilihan yang tak ada". F3 pakai flag deal yang SAMA
+	// (DealsListFilterFor) → sales own-scope hanya melihat dirinya (handler
+	// menyembunyikan dropdown untuk non-scope_all). owner_id NOT NULL (deal tanpa
+	// pemilik tak bisa jadi pilihan filter). TAK disaring Periode agar owner terpilih
+	// selalu tampil walau rentang dipersempit (daftar stabil).
+	ReportSalesOwners(ctx context.Context, arg ReportSalesOwnersParams) ([]ReportSalesOwnersRow, error)
 	// Support Report (wireframe 8.3): breakdown tiket per status + jumlah
 	// terlanggar SLA + rata-rata jam resolusi (hanya tiket 'selesai'). F3
 	// ownership PERSIS ListTickets/CountTicketKPIs (tickets.sql) — TERMASUK

@@ -84,6 +84,10 @@ LIMIT sqlc.arg(page_size);
 -- Go atas seluruh baris). COALESCE(...)::bigint/::numeric membungkus agregat agar
 -- sqlc tak meng-emit interface{} (gotcha #14). Win rate dihitung di Go dari
 -- won_count/(won_count+lost_count) — pembagian nol ditangani di sana.
+-- BL-49: filter opsional Periode (created_at) + Owner (deal_owner) untuk Sales
+-- Report — guard NULL = tak menyaring (perilaku papan Kanban tak berubah, memang
+-- oper nil). owner_filter di-AND DI ATAS predikat scope: hanya bisa MENYEMPIT
+-- dalam cakupan yang diizinkan (sales own-scope pilih owner lain → nol baris).
 SELECT
     COALESCE(COUNT(*) FILTER (
         WHERE stage NOT IN ('Closed Won','Closed Lost')), 0)::bigint AS open_count,
@@ -97,7 +101,10 @@ WHERE deleted_at IS NULL
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
   )
-  AND (NOT sqlc.arg(mine_only)::boolean OR deal_owner = sqlc.arg(uid));
+  AND (NOT sqlc.arg(mine_only)::boolean OR deal_owner = sqlc.arg(uid))
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR created_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR created_at < sqlc.narg(period_end))
+  AND (sqlc.narg(owner_filter)::bigint IS NULL OR deal_owner = sqlc.narg(owner_filter));
 
 -- name: UpdateDeal :one
 -- Sunting profil deal. entity_code, stage, dan hasil (win_loss_reason/closed_date)
