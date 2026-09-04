@@ -128,6 +128,18 @@ func registerRoutes(r chi.Router, h *handler.Handler, staticFS http.Handler, log
 		r.Post("/workspaces/{id}/unsuspend", h.DevWorkspaceUnsuspend)
 		r.Post("/workspaces/{id}/restore", h.DevWorkspaceRestore)
 
+		// Identitas & siklus hidup workspace — PLATFORM-ONLY (BL-53). Ganti nama +
+		// arsip/pulihkan/hapus dipindah dari /w/{slug}/settings (dulu wewenang
+		// owner) ke sini: mengelola identitas workspace adalah keputusan platform,
+		// sejalan dengan suspend/restore di atas. Rumah aplikasi tetap tak bisa
+		// diarsipkan/dihapus (dijaga handler + SQL). Gate sama (dev:users) dengan
+		// daftar di atas — bukan platform:settings, itu untuk pengaturan global.
+		r.Get("/workspaces/{id}", h.DevWorkspaceDetail)
+		r.Post("/workspaces/{id}/rename", h.DevWorkspaceRename)
+		r.Post("/workspaces/{id}/archive", h.DevWorkspaceArchive)
+		r.Post("/workspaces/{id}/unarchive", h.DevWorkspaceUnarchive)
+		r.Post("/workspaces/{id}/delete", h.DevWorkspaceDelete)
+
 		// Pengaturan platform — berlaku SEKETIKA (tabel platform_settings + cache),
 		// bukan env yang butuh restart. Hak khusus per-user diatur di /dev/users
 		// karena di sanalah orangnya terlihat; dua tempat mengelola hal yang sama
@@ -195,18 +207,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, staticFS http.Handler, log
 		r.Get("/workspace/new", h.WorkspaceNewPage)
 		r.Post("/workspace/new", h.WorkspaceCreate)
 	})
-	r.Group(func(r chi.Router) {
-		r.Use(mw.RequireAuth)
-		// Unarchive SENGAJA di luar /w/{workspace} (0005 §4): gerbang read-only
-		// workspace terarsip memblokir SEMUA POST di dalamnya, jadi pintu keluarnya
-		// harus berada di luar ruangan yang ia buka. Konsekuensinya handler ini
-		// memvalidasi keanggotaan & otoritasnya sendiri (isOwnerOf).
-		//
-		// TANPA RequireMulti: workspace primer memang tak bisa diarsipkan, tapi di
-		// mode multi ada workspace lain yang bisa — dan pintu keluar tak boleh
-		// bergantung pada mode.
-		r.Post("/workspace/{workspace}/unarchive", h.WorkspaceUnarchive)
-	})
+	// Unarchive workspace kini di /dev/workspaces/{id}/unarchive (BL-53): sebagai
+	// aksi platform lintas-tenant BY ID di bawah scope /dev, ia tak lagi butuh
+	// jalur khusus di luar prefix /w/{slug} — masalah "gerbang read-only mengunci
+	// pintu keluar dari dalam" (0005 §4) tak berlaku bagi platform yang sengaja
+	// tembus gerbang siklus hidup.
 
 	// Undangan — PUBLIK (penerima belum tentu punya akun). Tanpa Scope: penerima
 	// belum jadi anggota workspace mana pun saat membuka tautan.
@@ -255,29 +260,16 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 
 		r.Get("/", h.WorkspaceHome)
 
-		// Pengaturan workspace: admin+ boleh LIHAT, ganti nama = owner/platform
-		// (di-guard handler, bukan route, agar admin tetap bisa membuka read-only).
-		r.Get("/settings", h.WorkspaceSettings)
-		r.Post("/settings", h.WorkspaceUpdate)
+		// Identitas & siklus hidup workspace (ganti nama, arsip/hapus/pulihkan)
+		// SENGAJA TAK ADA di sini — dipindah ke /dev/workspaces/{id} sebagai
+		// wewenang platform (BL-53). Yang tersisa di ruang kerja = pengaturan yang
+		// memang milik pengelola workspace: Customization (format kode) di bawah,
+		// Anggota, dan Peran.
 
-		// Format kode-unik entitas (DESA-001, dst). Alamat sibling (bukan nested di
-		// /settings) agar active-state sidebar tak menyala ganda — matcher memakai
-		// prefix. Gerbang SAMA dengan ganti nama (canEditWorkspace di handler):
-		// lihat untuk semua anggota, ubah untuk pengelola.
+		// Format kode-unik entitas (DESA-001, dst). Gerbang canEditWorkspace di
+		// handler: lihat untuk semua anggota, ubah untuk pengelola.
 		r.Get("/codes", h.WorkspaceCodeFormats)
 		r.Post("/codes", h.WorkspaceCodeFormatUpdate)
-
-		// Siklus hidup oleh OWNER (0005). Keduanya POST di dalam workspace, jadi
-		// otomatis tertolak saat workspace sudah diarsipkan — kecuali unarchive,
-		// yang justru karena itu diletakkan di luar prefix ini.
-		//
-		// SELALU didaftarkan, tak lagi bergantung mode (0007). Yang menahannya
-		// adalah `is_primary`: rumah aplikasi tak bisa diarsipkan/dihapus, dijaga
-		// di HANDLER dan di SQL sekaligus. Itu penjagaan yang lebih baik daripada
-		// "route-nya tak ada di mode single" — sebab mode bisa naik saat jalan,
-		// dan route yang terdaftar bersyarat akan telanjur salah setelahnya.
-		r.Post("/archive", h.WorkspaceArchive)
-		r.Post("/delete", h.WorkspaceDelete)
 
 		// Anggota (model membership). Lihat = semua anggota; ubah/keluarkan/undang
 		// = owner/admin (di-guard handler via canManageMembers).

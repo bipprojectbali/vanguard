@@ -58,12 +58,15 @@ func TestNavFor_MenuIkutRole(t *testing.T) {
 
 // TestNavFor_PengaturanIkutIzin: entri yang PASTI ditolak tak boleh ditampilkan.
 // Member melihat pintu Pengaturan lalu ditolak 403 = menu hantu — persis yang
-// dihindari TestNavFor_MemberTakDapatMenuAdmin sebelum peleburan.
+// dihindari TestNavFor_MemberTakDapatMenuAdmin sebelum peleburan. Diuji lewat
+// Customization (/codes), anak grup Settings yang di-gate canEditWorkspace —
+// dulu diuji lewat Workspace Settings (/settings), yang kini pindah ke /dev
+// sebagai wewenang platform (BL-53).
 func TestNavFor_PengaturanIkutIzin(t *testing.T) {
-	if navContainsSuffix(navFor(ctxWithRole(t, "member")), "/settings") {
+	if navContainsSuffix(navFor(ctxWithRole(t, "member")), "/codes") {
 		t.Error("member tak boleh melihat menu Pengaturan (route akan menolaknya)")
 	}
-	if !navContainsSuffix(navFor(ctxWithRole(t, "owner")), "/settings") {
+	if !navContainsSuffix(navFor(ctxWithRole(t, "owner")), "/codes") {
 		t.Error("owner harus melihat menu Pengaturan")
 	}
 }

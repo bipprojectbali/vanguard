@@ -15,8 +15,8 @@ import (
 // label/pesan) agar keduanya di bawah ambang tipe Route/Handler (150).
 // WorkspaceCodeFormatUpdate — POST /w/{workspace}/codes. Simpan format
 // SATU entitas (dipilih lewat hidden field `entity`). Guard di handler, bukan
-// route: sama seperti WorkspaceUpdate, admin di mode multi boleh membuka halaman
-// tapi tak boleh menyimpan.
+// route: canEditWorkspace menyaring simpan — admin di mode multi boleh membuka
+// halaman tapi tak boleh menyimpan.
 func (h *Handler) WorkspaceCodeFormatUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !canEditWorkspace(ctx) {
