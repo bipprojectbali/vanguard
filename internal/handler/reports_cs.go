@@ -39,7 +39,7 @@ import (
 // ReportsCS (HTML) & ReportsCSExport (CSV) agar keduanya konsisten (satu sumber
 // angka). Tiga bentuk filter ownership karena tiga sumber tabel berbeda (lihat
 // doc queries/reports.sql).
-func (h *Handler) reportsCSData(ctx context.Context) (panel.ReportsCSView, error) {
+func (h *Handler) reportsCSData(ctx context.Context, f csReportFilter) (panel.ReportsCSView, error) {
 	scope := session.BusinessDataScope(ctx)
 	acc := db.AccountsListFilterFor(scope)
 	sub := db.SubscriptionsListFilterFor(scope)
@@ -47,27 +47,32 @@ func (h *Handler) reportsCSData(ctx context.Context) (panel.ReportsCSView, error
 	uid := session.UserID(ctx)
 	br := session.BusinessRole(ctx)
 	q := h.q(ctx)
+	seg := f.segmentArg() // *string band kesehatan (nil = semua)
 
+	// Health & Adoption = SNAPSHOT: hanya Segmen (Periode tak berlaku).
 	health, err := q.ReportCSHealth(ctx, db.ReportCSHealthParams{
-		ScopeAll: acc.ScopeAll, IsCsm: acc.IsOwn, IsSales: acc.IsOwn, Uid: &uid,
+		ScopeAll: acc.ScopeAll, IsCsm: acc.IsOwn, IsSales: acc.IsOwn, Uid: &uid, Segment: seg,
 	})
 	if err != nil {
 		return panel.ReportsCSView{}, err
 	}
 	adoption, err := q.ReportCSAdoption(ctx, db.ReportCSAdoptionParams{
-		ScopeAll: acc.ScopeAll, IsCsm: acc.IsOwn, IsSales: acc.IsOwn, Uid: &uid,
+		ScopeAll: acc.ScopeAll, IsCsm: acc.IsOwn, IsSales: acc.IsOwn, Uid: &uid, Segment: seg,
 	})
 	if err != nil {
 		return panel.ReportsCSView{}, err
 	}
+	// Retention: active SNAPSHOT, churned dibatasi Periode (cancellation_date).
 	retention, err := q.ReportRetention(ctx, db.ReportRetentionParams{
 		ScopeAll: sub.ScopeAll, IsOwn: sub.IsOwn, Uid: &uid,
+		Segment: seg, PeriodStart: f.Start, PeriodEnd: f.End,
 	})
 	if err != nil {
 		return panel.ReportsCSView{}, err
 	}
 	churn, err := q.ReportChurnReasons(ctx, db.ReportChurnReasonsParams{
 		ScopeAll: sub.ScopeAll, IsOwn: sub.IsOwn, Uid: &uid,
+		Segment: seg, PeriodStart: f.Start, PeriodEnd: f.End,
 	})
 	if err != nil {
 		return panel.ReportsCSView{}, err
@@ -75,24 +80,29 @@ func (h *Handler) reportsCSData(ctx context.Context) (panel.ReportsCSView, error
 	onboarding, err := q.ReportOnboarding(ctx, db.ReportOnboardingParams{
 		Today:    pgtype.Date{Time: todayInAppTZ(), Valid: true},
 		ScopeAll: acc.ScopeAll, IsCsm: acc.IsOwn, IsSales: acc.IsOwn, Uid: &uid,
+		Segment: seg, PeriodStart: f.Start, PeriodEnd: f.End,
 	})
 	if err != nil {
 		return panel.ReportsCSView{}, err
 	}
 	compliance, err := q.ReportEngagementCompliance(ctx, db.ReportEngagementComplianceParams{
 		ScopeAll: eng.ScopeAll, IsOwn: eng.IsOwn, Uid: &uid,
+		Segment: seg, PeriodStart: f.Start, PeriodEnd: f.End,
 	})
 	if err != nil {
 		return panel.ReportsCSView{}, err
 	}
 	byCSM, err := q.ReportEngagementByCSM(ctx, db.ReportEngagementByCSMParams{
 		ScopeAll: eng.ScopeAll, IsOwn: eng.IsOwn, Uid: &uid,
+		Segment: seg, PeriodStart: f.Start, PeriodEnd: f.End,
 	})
 	if err != nil {
 		return panel.ReportsCSView{}, err
 	}
 
 	v := panel.ReportsCSView{
+		Filter: h.buildCSFilterView(ctx, f),
+
 		AvgHealth:     csAvgStr(health.AvgHealth, health.Scored),
 		AvgAdoption:   csPctStr(adoption.AvgAdoption, adoption.Scored),
 		RetentionRate: ratePct(retention.Active, retention.Active+retention.Churned),
@@ -128,7 +138,7 @@ func (h *Handler) ReportsCS(w http.ResponseWriter, r *http.Request) {
 		h.renderReportsForbidden(w, r, "Customer Success Report", "/reports/customer-success")
 		return
 	}
-	view, err := h.reportsCSData(ctx)
+	view, err := h.reportsCSData(ctx, parseCSReportFilter(r))
 	if err != nil {
 		h.Log.Error("reports: cs data", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)

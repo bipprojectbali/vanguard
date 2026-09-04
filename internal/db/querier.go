@@ -1192,6 +1192,10 @@ type Querier interface {
 	// dari subscriptions.status. Retention% & Churn% dihitung handler dari kedua
 	// angka (active/(active+churned)). F3 ownership subscription_owner (PERSIS
 	// ListSubscriptions). RLS mengurung tenant.
+	// Periode (BL-50): active = SNAPSHOT (langganan aktif SAAT INI, tak dibatasi
+	// waktu); churned = dibatasi cancellation_date dalam [start,end) agar konsisten
+	// dgn tabel Alasan Churn. RetentionRate = active/(active+churnedDalamPeriode).
+	// Segmen = band kesehatan atas customer_success desa langganan (LEFT JOIN cs).
 	ReportRetention(ctx context.Context, arg ReportRetentionParams) (ReportRetentionRow, error)
 	// Panel 4 (Revenue by Plan): JOIN subscriptions × plans GROUP BY plan_id atas
 	// langganan Active. Nama paket dari plans.plan_name (apa pun yang di-seed

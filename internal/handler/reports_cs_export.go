@@ -20,7 +20,7 @@ func (h *Handler) ReportsCSExport(w http.ResponseWriter, r *http.Request) {
 		h.renderReportsForbidden(w, r, "Customer Success Report", "/reports/customer-success")
 		return
 	}
-	view, err := h.reportsCSData(ctx)
+	view, err := h.reportsCSData(ctx, parseCSReportFilter(r))
 	if err != nil {
 		h.Log.Error("reports: cs export", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
