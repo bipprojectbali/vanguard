@@ -141,11 +141,13 @@ func TestPlatformTembusSuspensi(t *testing.T) {
 	})
 }
 
-// TestUnarchive_PlatformBukanAnggota: REGRESI (ditemukan di browser). Route
-// unarchive berada di luar Scope, jadi ia mencari tenant sendiri. Sempat memakai
-// resolveTenantBySlug yang MENSYARATKAN keanggotaan — sementara platform bukan
-// anggota workspace mana pun, sehingga ia ditolak 404 di sini padahal isOwnerOf
-// di baris berikutnya justru mengizinkannya. Dua cek yang saling bertentangan.
+// TestUnarchive_PlatformBukanAnggota: REGRESI (ditemukan di browser). Jalur
+// pencarian tenant platform TIDAK boleh mensyaratkan keanggotaan — platform
+// bukan anggota workspace mana pun, jadi resolveTenantBySlug (yang menyaring
+// keanggotaan) akan menolaknya. tenantBySlug menemukannya tanpa syarat itu.
+// Sejak BL-53 unarchive pindah ke /dev/workspaces/{id} (aksi platform by-ID di
+// bawah scope WithSuper), tapi invarian pemisahan platform-vs-anggota di jalur
+// pencarian slug tetap dijaga di sini.
 func TestUnarchive_PlatformBukanAnggota(t *testing.T) {
 	env, uid := setupTest(t)
 	ctx := t.Context()
@@ -164,12 +166,8 @@ func TestUnarchive_PlatformBukanAnggota(t *testing.T) {
 		session.SetIdentity(sc.ctx, uid, "root@local", "super_admin", true,
 			env.tenantID, "Test", "test", "")
 		// Jalur pencarian platform: TANPA syarat keanggotaan.
-		tn, ok := env.h.tenantBySlug(sc.ctx, "asing")
-		if !ok {
+		if _, ok := env.h.tenantBySlug(sc.ctx, "asing"); !ok {
 			t.Fatal("platform harus menemukan workspace yang bukan miliknya")
-		}
-		if !env.h.isOwnerOf(sc.ctx, uid, tn.ID) {
-			t.Error("platform harus berwenang memulihkan workspace mana pun")
 		}
 		// Jalur anggota biasa tetap menolak — pemisahan tak boleh melonggarkan ini.
 		session.SetIdentity(sc.ctx, uid, "biasa@local", "member", false,

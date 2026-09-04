@@ -247,7 +247,9 @@ func TestWorkspaceNav_ReportsGroup(t *testing.T) {
 
 // TestWorkspaceNav_SettingsGroupChildren: Settings = grup bersarang; anak enabled
 // mengikuti izin masing-masing (sumber sama dengan gerbang halaman), plus dua
-// placeholder disabled. Semua izin → keenam anak hadir dengan href benar.
+// placeholder disabled. Semua izin → ketiga anak hadir dengan href benar.
+// "Workspace Settings" (/settings) SENGAJA tak lagi di sini — identitas & siklus
+// hidup workspace pindah ke /dev sebagai wewenang platform (BL-53).
 func TestWorkspaceNav_SettingsGroupChildren(t *testing.T) {
 	nav := workspaceNav("acme", true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true)
 	grp, ok := findItem(nav, "Settings")
@@ -257,8 +259,10 @@ func TestWorkspaceNav_SettingsGroupChildren(t *testing.T) {
 	if grp.Href != "" {
 		t.Errorf("header grup Settings tak boleh jadi link, got Href %q", grp.Href)
 	}
+	if _, ok := findItem(grp.Children, "Workspace Settings"); ok {
+		t.Error("Workspace Settings harus tidak ada — pindah ke /dev (BL-53)")
+	}
 	want := map[string]string{
-		"Workspace Settings":  "/w/acme/settings",
 		"User Management":     "/w/acme/members",
 		"Roles & Permissions": "/w/acme/roles",
 		"Customization":       "/w/acme/codes",

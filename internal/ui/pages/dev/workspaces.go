@@ -61,7 +61,9 @@ func workspaceRow(t WorkspaceRow) g.Node {
 		h.Class("border-b border-base-300/50"),
 		h.Td(h.Class("py-2 pr-4"), h.Div(
 			h.Class("flex flex-col min-w-0"),
-			h.Span(h.Class("truncate font-medium"), g.Text(t.Name)),
+			// Nama = tautan ke halaman detail (ganti nama + zona bahaya, BL-53).
+			h.A(h.Href("/dev/workspaces/"+id),
+				h.Class("truncate font-medium link link-hover"), g.Text(t.Name)),
 			h.Span(h.Class("text-xs text-base-content/60 truncate"), g.Text("/w/"+t.Slug)),
 		)),
 		h.Td(h.Class("py-2 pr-4"), workspaceStatus(t)),

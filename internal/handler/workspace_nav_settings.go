@@ -19,17 +19,12 @@ func workspaceSettingsGroup(slug string, canMembers, canRoles, canSettings bool)
 	if !canMembers && !canRoles && !canSettings {
 		return nil
 	}
-	children := make([]ui.NavItem, 0, 6)
-	// Workspace Settings → /settings (identitas workspace/app + daur hidup:
-	// arsip/suspend). TAK ada di submenu wireframe, tapi halamannya nyata & penting;
-	// ditaruh paling atas grup, gated canEditWorkspace (sumber izin sama dengan
-	// gerbang WorkspaceSettings). Tanpa ini rename/arsip tak punya jalan menu.
-	if canSettings {
-		children = append(children, ui.NavItem{
-			Label: "Workspace Settings", Href: wsPath(slug, "/settings"),
-			Icon: lucide.Building2(html.Class("size-4")),
-		})
-	}
+	children := make([]ui.NavItem, 0, 5)
+	// Identitas workspace (ganti nama) & daur hidup (arsip/hapus) TAK lagi punya
+	// item di sini — dipindah ke /dev/workspaces/{id} sebagai wewenang platform
+	// (BL-53). Yang tersisa di grup Settings ruang kerja: Anggota, Peran, dan
+	// Customization (format kode) — semuanya memang milik pengelola workspace.
+
 	// User Management → /members (canManageMembers, sama dengan gerbang MembersPage).
 	if canMembers {
 		children = append(children, ui.NavItem{
