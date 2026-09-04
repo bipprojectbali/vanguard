@@ -307,41 +307,41 @@ func engagementStatusBtn(base, id, targetStatus, label, extraCls string) g.Node 
 	)
 }
 
+// engagementActionPanel = kerangka form aksi inline (border/bg/padding sama),
+// hidden status + field spesifik + tombol simpan berwarna. Tampil saat $sig true.
+func engagementActionPanel(post, sig, status, btnColorCls string, fields ...g.Node) g.Node {
+	body := []g.Node{
+		h.Method("post"), h.Action(post),
+		h.Class("grid gap-2 rounded-box border border-base-300 bg-base-200 p-3 min-w-0"),
+		h.Input(h.Type("hidden"), h.Name("status"), h.Value(status)),
+	}
+	body = append(body, fields...)
+	body = append(body, h.Button(h.Type("submit"),
+		h.Class("btn btn-xs "+btnColorCls+" min-h-11"), g.Text("Simpan")))
+	return showWhen("$"+sig, "min-w-0", h.FormEl(body...))
+}
+
 // engagementDonePanel = panel "Done": ringkasan hasil (outcome, opsional) diisi
 // ulang dgn nilai tersimpan, submit status=done. Tampil saat $done{id} true.
 // g.Text meng-escape (gotcha #15).
 func engagementDonePanel(post, outcome, sig string) g.Node {
-	return showWhen("$"+sig, "min-w-0",
-		h.FormEl(
-			h.Method("post"), h.Action(post),
-			h.Class("grid gap-2 rounded-box border border-base-300 bg-base-200 p-3 min-w-0"),
-			h.Input(h.Type("hidden"), h.Name("status"), h.Value("done")),
-			h.Label(h.Class("grid gap-1 text-xs"),
-				h.Span(g.Text("Ringkasan hasil (opsional)")),
-				h.Textarea(h.Name("outcome"), h.Rows("2"),
-					h.Class("textarea textarea-bordered textarea-sm text-base w-full"),
-					g.Text(outcome))),
-			h.Button(h.Type("submit"), h.Class("btn btn-xs btn-success min-h-11"),
-				g.Text("Simpan")),
-		),
+	return engagementActionPanel(post, sig, "done", "btn-success",
+		h.Label(h.Class("grid gap-1 text-xs"),
+			h.Span(g.Text("Ringkasan hasil (opsional)")),
+			h.Textarea(h.Name("outcome"), h.Rows("2"),
+				h.Class("textarea textarea-bordered textarea-sm text-base w-full"),
+				g.Text(outcome))),
 	)
 }
 
 // engagementReschedulePanel = panel "Reschedule": jadwal interaksi baru
 // (scheduled_at, WAJIB), submit status=rescheduled. Tampil saat $resc{id} true.
 func engagementReschedulePanel(post, sig string) g.Node {
-	return showWhen("$"+sig, "min-w-0",
-		h.FormEl(
-			h.Method("post"), h.Action(post),
-			h.Class("grid gap-2 rounded-box border border-base-300 bg-base-200 p-3 min-w-0"),
-			h.Input(h.Type("hidden"), h.Name("status"), h.Value("rescheduled")),
-			h.Label(h.Class("grid gap-1 text-xs"),
-				h.Span(g.Text("Jadwal interaksi baru")),
-				h.Input(h.Type("datetime-local"), h.Name("scheduled_at"), h.Required(),
-					h.Class("input input-bordered input-sm text-base min-h-11 w-full"))),
-			h.Button(h.Type("submit"), h.Class("btn btn-xs text-warning btn-ghost min-h-11"),
-				g.Text("Simpan")),
-		),
+	return engagementActionPanel(post, sig, "rescheduled", "text-warning btn-ghost",
+		h.Label(h.Class("grid gap-1 text-xs"),
+			h.Span(g.Text("Jadwal interaksi baru")),
+			h.Input(h.Type("datetime-local"), h.Name("scheduled_at"), h.Required(),
+				h.Class("input input-bordered input-sm text-base min-h-11 w-full"))),
 	)
 }
 

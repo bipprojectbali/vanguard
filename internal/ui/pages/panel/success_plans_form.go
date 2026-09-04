@@ -176,15 +176,15 @@ func successPlanDetailCard(v SuccessPlanFormView) g.Node {
 		h.Div(h.Class("card-body gap-4"),
 			h.H2(h.Class("card-title text-base"), g.Text("Detail Plan")),
 			successPlanNameField(v),
-			h.Div(h.Class("grid grid-cols-1 sm:grid-cols-2 gap-4"),
-				successPlanObjectiveField(v),
-				successPlanSuccessMetricField(v),
+			successPlanTwoCol(
+				successPlanTextareaField("Objektif", "objective", "Tujuan utama yang ingin dicapai…", v.CurrentObjective),
+				successPlanTextareaField("Metrik Sukses", "success_metric", "Cara mengukur keberhasilan plan ini…", v.CurrentSuccessMetric),
 			),
-			h.Div(h.Class("grid grid-cols-1 sm:grid-cols-2 gap-4"),
+			successPlanTwoCol(
 				successPlanTargetDateField(v),
 				successPlanProgressField(v),
 			),
-			h.Div(h.Class("grid grid-cols-1 sm:grid-cols-2 gap-4"),
+			successPlanTwoCol(
 				successPlanStatusField(v),
 				successPlanOwnerCsmField(v),
 			),
@@ -209,26 +209,20 @@ func successPlanNameField(v SuccessPlanFormView) g.Node {
 	)
 }
 
-func successPlanObjectiveField(v SuccessPlanFormView) g.Node {
-	return h.Div(h.Class("form-control gap-1"),
-		h.Label(h.Class("label pb-0"), h.Span(h.Class("label-text"), g.Text("Objektif"))),
-		h.Textarea(
-			h.Name("objective"),
-			h.Class("textarea textarea-bordered w-full min-h-[80px]"),
-			h.Placeholder("Tujuan utama yang ingin dicapai…"),
-			g.Text(v.CurrentObjective),
-		),
-	)
+// successPlanTwoCol membungkus dua field dalam grid responsif (1 kolom di mobile, 2 di ≥sm).
+func successPlanTwoCol(a, b g.Node) g.Node {
+	return h.Div(h.Class("grid grid-cols-1 sm:grid-cols-2 gap-4"), a, b)
 }
 
-func successPlanSuccessMetricField(v SuccessPlanFormView) g.Node {
+// successPlanTextareaField membangun field textarea generik (objektif, metrik sukses).
+func successPlanTextareaField(label, name, placeholder, val string) g.Node {
 	return h.Div(h.Class("form-control gap-1"),
-		h.Label(h.Class("label pb-0"), h.Span(h.Class("label-text"), g.Text("Metrik Sukses"))),
+		h.Label(h.Class("label pb-0"), h.Span(h.Class("label-text"), g.Text(label))),
 		h.Textarea(
-			h.Name("success_metric"),
+			h.Name(name),
 			h.Class("textarea textarea-bordered w-full min-h-[80px]"),
-			h.Placeholder("Cara mengukur keberhasilan plan ini…"),
-			g.Text(v.CurrentSuccessMetric),
+			h.Placeholder(placeholder),
+			g.Text(val),
 		),
 	)
 }

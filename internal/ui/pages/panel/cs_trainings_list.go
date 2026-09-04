@@ -316,39 +316,39 @@ func csTrainingStatusBtn(base, id, targetStatus, label, extraCls string) g.Node 
 	)
 }
 
+// csTrainingActionPanel = kerangka form aksi inline (border/bg/padding sama),
+// hidden status + field spesifik + tombol simpan berwarna. Tampil saat $sig true.
+func csTrainingActionPanel(post, sig, status, btnColorCls string, fields ...g.Node) g.Node {
+	body := []g.Node{
+		h.Method("post"), h.Action(post),
+		h.Class("grid gap-2 rounded-box border border-base-300 bg-base-200 p-3 min-w-0"),
+		h.Input(h.Type("hidden"), h.Name("status"), h.Value(status)),
+	}
+	body = append(body, fields...)
+	body = append(body, h.Button(h.Type("submit"),
+		h.Class("btn btn-xs "+btnColorCls+" min-h-11"), g.Text("Simpan")))
+	return showWhen("$"+sig, "min-w-0", h.FormEl(body...))
+}
+
 // csTrainingDonePanel = panel "Selesai": attendance% + peserta aktual + catatan
 // (semua opsional), submit status=completed. Tampil saat $done{id} true.
 func csTrainingDonePanel(post, notes, sig string) g.Node {
-	return showWhen("$"+sig, "min-w-0",
-		h.FormEl(
-			h.Method("post"), h.Action(post),
-			h.Class("grid gap-2 rounded-box border border-base-300 bg-base-200 p-3 min-w-0"),
-			h.Input(h.Type("hidden"), h.Name("status"), h.Value("completed")),
-			csTrainingNumField("Attendance (%)", "attendance", "0.01", "100"),
-			csTrainingNumField("Peserta aktual", "participants", "1", ""),
-			csTrainingNotesField(notes),
-			h.Button(h.Type("submit"), h.Class("btn btn-xs btn-success min-h-11"),
-				g.Text("Simpan")),
-		),
+	return csTrainingActionPanel(post, sig, "completed", "btn-success",
+		csTrainingNumField("Attendance (%)", "attendance", "0.01", "100"),
+		csTrainingNumField("Peserta aktual", "participants", "1", ""),
+		csTrainingNotesField(notes),
 	)
 }
 
 // csTrainingReschedulePanel = panel "Jadwal Ulang": tanggal & jam baru (wajib)
 // + catatan, submit status=rescheduled. Tampil saat $resc{id} true.
 func csTrainingReschedulePanel(post, notes, sig string) g.Node {
-	return showWhen("$"+sig, "min-w-0",
-		h.FormEl(
-			h.Method("post"), h.Action(post),
-			h.Class("grid gap-2 rounded-box border border-base-300 bg-base-200 p-3 min-w-0"),
-			h.Input(h.Type("hidden"), h.Name("status"), h.Value("rescheduled")),
-			h.Label(h.Class("grid gap-1 text-xs"),
-				h.Span(g.Text("Tanggal & jam baru")),
-				h.Input(h.Type("datetime-local"), h.Name("training_date"), h.Required(),
-					h.Class("input input-bordered input-sm text-base min-h-11 w-full"))),
-			csTrainingNotesField(notes),
-			h.Button(h.Type("submit"), h.Class("btn btn-xs btn-warning min-h-11"),
-				g.Text("Simpan")),
-		),
+	return csTrainingActionPanel(post, sig, "rescheduled", "btn-warning",
+		h.Label(h.Class("grid gap-1 text-xs"),
+			h.Span(g.Text("Tanggal & jam baru")),
+			h.Input(h.Type("datetime-local"), h.Name("training_date"), h.Required(),
+				h.Class("input input-bordered input-sm text-base min-h-11 w-full"))),
+		csTrainingNotesField(notes),
 	)
 }
 
