@@ -1119,6 +1119,11 @@ type Querier interface {
 	// Band hanya menghitung desa BER-skor (overall_health_score NOT NULL — perban-
 	// dingan NULL menghasilkan NULL, tak masuk FILTER). scored = denominator persen.
 	ReportCSHealth(ctx context.Context, arg ReportCSHealthParams) (ReportCSHealthRow, error)
+	// Panel 3 kartu Nilai Hilang + Rata Umur: total lost_value_mrr & rata umur
+	// (cancellation_date − start_date, hari) atas langganan Cancelled/Churned.
+	// aged_count = denominator guard rata umur (kedua tanggal terisi). Jumlah desa
+	// churn & breakdown alasan REUSE ReportRetention/ReportChurnReasons.
+	ReportChurnAge(ctx context.Context, arg ReportChurnAgeParams) (ReportChurnAgeRow, error)
 	// Panel 3 tabel Alasan Churn: GROUP BY churn_reason (SUDAH picklist di 00012)
 	// atas langganan Cancelled/Churned, dengan lost_value_mrr sebagai Nilai Hilang
 	// (di-mask F4 di handler). churn_reason NULL → '(Tanpa alasan)'. Diurut jumlah
@@ -1166,6 +1171,16 @@ type Querier interface {
 	// BL-49: filter opsional Periode (created_at) + Owner (deal_owner), guard NULL =
 	// tak menyaring. owner_filter di-AND DI ATAS scope (hanya menyempit).
 	ReportPipelineByStage(ctx context.Context, arg ReportPipelineByStageParams) ([]ReportPipelineByStageRow, error)
+	// Panel 2 tabel bulanan (Periode · Jatuh Tempo · Diperpanjang · Rate): bucket
+	// dari end_date (fakta tersimpan, bukan rekonstruksi). diperpanjang = ada baris
+	// renewal anak. Rate dihitung handler (renewed/due). Diurut kronologis.
+	ReportRenewalByMonth(ctx context.Context, arg ReportRenewalByMonthParams) ([]ReportRenewalByMonthRow, error)
+	// KPI Renewal Rate + Panel 2 kartu: rate = diperpanjang / jatuh-tempo (hanya
+	// yang SUDAH jatuh tempo, end_date < today — masa depan belum bisa diperpanjang).
+	// "diperpanjang" = ada baris renewal anak (previous_subscription_id menunjuk
+	// balik). renewed_value = SUM(mrr) SEMUA baris renewal (termasuk upsell).
+	// due_30 = Active dgn end_date dalam 30 hari ke depan (index idx_subs_renewal).
+	ReportRenewalSummary(ctx context.Context, arg ReportRenewalSummaryParams) (ReportRenewalSummaryRow, error)
 	// Panel 3 bar. Rata jam penyelesaian per prioritas (tiket selesai). NULL bila
 	// belum ada tiket selesai di prioritas itu → "—" & bar 0 di view.
 	ReportResolutionByPriority(ctx context.Context, arg ReportResolutionByPriorityParams) ([]ReportResolutionByPriorityRow, error)
@@ -1178,6 +1193,11 @@ type Querier interface {
 	// angka (active/(active+churned)). F3 ownership subscription_owner (PERSIS
 	// ListSubscriptions). RLS mengurung tenant.
 	ReportRetention(ctx context.Context, arg ReportRetentionParams) (ReportRetentionRow, error)
+	// Panel 4 (Revenue by Plan): JOIN subscriptions × plans GROUP BY plan_id atas
+	// langganan Active. Nama paket dari plans.plan_name (apa pun yang di-seed
+	// tenant, BUKAN hardcode). Rata per Desa dihitung handler (mrr/desa). Diurut
+	// MRR terbesar. RLS mengurung tenant di kedua tabel.
+	ReportRevenueByPlan(ctx context.Context, arg ReportRevenueByPlanParams) ([]ReportRevenueByPlanRow, error)
 	// Panel 2 tabel per-prioritas. 3 tingkat NYATA (rendah/sedang/tinggi) — mockup
 	// pakai 4 (Kritis tak ada di skema). target_minutes = target penyelesaian dari
 	// sla_policies via snapshot t.sla_policy_id (MAX bila banyak policy per
@@ -1212,6 +1232,44 @@ type Querier interface {
 	// pemilik tak bisa jadi pilihan filter). TAK disaring Periode agar owner terpilih
 	// selalu tampil walau rentang dipersempit (daftar stabil).
 	ReportSalesOwners(ctx context.Context, arg ReportSalesOwnersParams) ([]ReportSalesOwnersRow, error)
+	// reports_subscriptions.sql — Subscription Report 8.4 (Modul 8, BL-47). "Report
+	// bukan objek data" (skema.md §8): NOL tabel baru, agregasi murni atas
+	// subscriptions (+ plans, customer_success). F3 ownership PERSIS
+	// ListSubscriptions/SubscriptionsListFilterFor (subscription_owner) — sumber
+	// SATU dengan modul asal, bukan duplikat logic scope. RLS mengurung tenant.
+	//
+	// KPI churn rate + panel breakdown Alasan REUSE query yang sudah ada di
+	// reports.sql (ReportRetention active/churned + ReportChurnReasons GROUP BY
+	// churn_reason) — tak ditulis ulang. File ini menambah MRR movement, Renewal,
+	// Revenue-by-Plan, & Aging.
+	//
+	// DILEWATKAN (keputusan sadar BL-47, "data belum ada DILEWATKAN dulu"): tren
+	// MRR bulanan historis (Apr–Agu) & delta "vs bulan lalu" di kartu MRR —
+	// subscriptions.mrr = nilai SEKARANG (bukan snapshot per bulan lampau);
+	// rekonstruksi mundur salah utk sub yang sudah di-renew beda MRR, dan tak ada
+	// tabel snapshot MRR historis. Butuh tabel + job terjadwal (BL sendiri).
+	//
+	// Semua agregat dibungkus COALESCE(...)::tipe agar sqlc tak emit interface{}
+	// (gotcha #14). Jendela "bulan ini" dari sqlc.arg(today)::date (appTZ-aware,
+	// dioper handler — hindari AT TIME ZONE di SELECT list sqlc).
+	// KPI MRR/ARR + Panel 1 (MRR Movement): nilai berjalan (Active) + 4 komponen
+	// pergerakan BULAN INI, EKSAK dari previous_value + status + start_date:
+	//   • MRR baru      = start_date bulan ini & TANPA previous_subscription_id.
+	//   • Ekspansi      = renewal (previous_subscription_id NOT NULL) mulai bulan
+	//                     ini dgn mrr > previous_value → nilai = SUM(mrr−previous).
+	//   • Kontraksi     = renewal mulai bulan ini dgn mrr < previous_value (BUKAN
+	//                     churn) → nilai = SUM(previous−mrr) (positif, penyusutan).
+	//   • Churn         = Cancelled/Churned dgn cancellation_date bulan ini →
+	//                     nilai = SUM(lost_value_mrr).
+	// ARR = kolom arr bila ada, else mrr×12 (billing annual bisa diskon → arr≠×12).
+	ReportSubMRR(ctx context.Context, arg ReportSubMRRParams) (ReportSubMRRRow, error)
+	// Panel 5 (Subscription Aging): bucket umur (today − start_date) atas langganan
+	// BER-start_date. Per bucket: desa Active · MRR (Active) · rata health
+	// (customer_success.overall_health_score, agregat — bukan PII per-desa) ·
+	// jatuh-tempo/diperpanjang/churned (untuk rate handler). Bucket key numerik
+	// (1..4) agar handler beri label + Catatan interpretatif (const bernama).
+	//   1: <6 bln (<183 hari) · 2: 6–12 bln (<366) · 3: 1–2 thn (<731) · 4: >2 thn
+	ReportSubscriptionAging(ctx context.Context, arg ReportSubscriptionAgingParams) ([]ReportSubscriptionAgingRow, error)
 	// KPI header + kartu SLA panel 2. total = Total Tiket; met/with_sla = Kepatuhan
 	// SLA (hanya tiket ber-SLA jadi denominator — tiket tanpa deadline tak punya
 	// target untuk dipenuhi); avg_resolution_hours = Rata Penyelesaian (tiket

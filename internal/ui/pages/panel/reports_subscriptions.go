@@ -1,88 +1,156 @@
 package panel
 
 import (
-	"go_starter/internal/ui"
-
 	g "maragu.dev/gomponents"
 	h "maragu.dev/gomponents/html"
 )
 
-// reports_subscriptions.go — Subscription Report (Modul 8 M8-1, wireframe
-// 8.4): view MURNI-DATA, dua tab bookmarkable (Renewal Forecast/Churn, gotcha
-// #16 — LINK <a>, bukan Datastar). Tabel REUSE LANGSUNG renewalsTable/
-// churnTable (subscriptions_renewals.go/subscriptions_churn.go, package
-// sama) — kolom & ui.TableScroll tak ditulis ulang, hanya Base+Items dipakai.
+// reports_subscriptions.go — Subscription Report 8.4 (Modul 8, BL-47): view
+// MURNI-DATA; handler (internal/handler/reports_subscriptions*.go) yang
+// menghitung & memformat (Rp/persen/porsi + masking F4). Struktur data 5 panel
+// di sini; fungsi render tiap panel di reports_subscriptions_panels.go (pola
+// sama reports_support/reports_cs). Kartu KPI meniru dashboardKPICard (package
+// sama); tiap <table> dibungkus ui.TableScroll lewat csTableScroll (WAJIB,
+// gotcha overflow). Daftar baris renewal/churn per-desa TIDAK lagi di sini —
+// itu drill-down di modul Subscriptions (/subscriptions/renewals · /churn);
+// laporan ini agregasi murni ("Report bukan objek data").
+//
+// DILEWATKAN (keputusan sadar BL-47, "data belum ada DILEWATKAN dulu"): delta
+// "vs bulan lalu" di kartu MRR & tren MRR bulanan historis (Apr–Agu) — tak ada
+// snapshot MRR per bulan lampau (subscriptions.mrr = nilai SEKARANG). Filter
+// interaktif Periode+Paket ditunda ke BL lanjutan (pola BL-49/50/51).
 
-// reportSectionTabs = dua opsi tab TETAP (bukan dioper handler seperti
-// Window/Type — hanya dua section). Key SAMA dgn konstanta handler
-// reportSectionRenewal/reportSectionChurn (reports_subscriptions.go).
-var reportSectionTabs = []struct{ Key, Label string }{
-	{"renewal", "Renewal Forecast"},
-	{"churn", "Churn"},
+// ── Struktur data (semua string SUDAH diformat & di-mask F4 di handler) ──
+
+// SubMRRComponentRow = satu komponen pergerakan MRR bulan ini (Panel 1): MRR
+// baru / Ekspansi / Kontraksi / Churn. Value = Rp (di-mask F4). Porsi = bagian
+// terhadap total magnitudo pergerakan.
+type SubMRRComponentRow struct {
+	Component string
+	Value     string
+	Count     int64
+	Porsi     string
 }
 
-// ReportsSubscriptionsView = data halaman /reports/subscriptions. Section
-// aktif menentukan slice mana yang dirender — hanya salah satu Items terisi
-// per request (handler hanya mengambil satu sumber per section).
+// SubRenewalMonthRow = satu baris bulanan Panel 2 (Renewal). Rate = diperpanjang/
+// jatuh-tempo bulan itu (dihitung handler).
+type SubRenewalMonthRow struct {
+	Period  string
+	Due     int64
+	Renewed int64
+	Rate    string
+}
+
+// SubChurnReasonRow = satu alasan churn Panel 3. Reason = label Indonesia
+// (dipetakan dari picklist Inggris). LostValue = Rp (di-mask F4). Porsi =
+// bagian desa terhadap total desa churn.
+type SubChurnReasonRow struct {
+	Reason    string
+	Count     int64
+	LostValue string
+	Porsi     string
+}
+
+// SubPlanRevenueRow = satu paket Panel 4 (Revenue by Plan). MRR & AvgPer = Rp
+// (di-mask F4). BarPct relatif paket MRR terbesar.
+type SubPlanRevenueRow struct {
+	Plan   string
+	Count  int64
+	MRR    string
+	AvgPer string
+	BarPct int
+}
+
+// SubAgingRow = satu kelompok umur Panel 5 (Subscription Aging). MRR = Rp
+// (di-mask F4). Note = label interpretatif tetap per bucket (const handler).
+type SubAgingRow struct {
+	Bucket      string
+	Villages    int64
+	MRR         string
+	AvgHealth   string
+	RenewalRate string
+	ChurnRate   string
+	Note        string
+}
+
+// ReportsSubscriptionsView = data halaman /reports/subscriptions (5 panel
+// agregasi + 4 KPI). Semua nilai SUDAH string terformat/ter-mask.
 type ReportsSubscriptionsView struct {
-	Base         string
-	Section      string
-	RenewalItems []RenewalRow
-	ChurnItems   []ChurnRow
-	NextCursor   string
-	After        string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
-	Trail        string // BL-7: jejak cursor halaman sebelumnya (?trail=)
+	Base string
+
+	// KPI (4 kartu)
+	MRR         string
+	ARR         string
+	RenewalRate string
+	ChurnRate   string
+
+	// Panel 1 — MRR/ARR Report
+	MRRComponents []SubMRRComponentRow
+
+	// Panel 2 — Renewal Report
+	RenewalRateCard string
+	RenewedValue    string
+	Due30           int64
+	RenewalMonths   []SubRenewalMonthRow
+
+	// Panel 3 — Churn Report
+	ChurnVillages int64
+	LostValue     string
+	AvgAge        string
+	ChurnReasons  []SubChurnReasonRow
+
+	// Panel 4 — Revenue by Plan
+	RevenueByPlan []SubPlanRevenueRow
+
+	// Panel 5 — Subscription Aging (selebar penuh)
+	AgingRows []SubAgingRow
 }
 
-// ReportsSubscriptionsBody merender header + tab section + tabel aktif +
-// pager + link Export CSV (ikut section aktif di query string).
+// ReportsSubscriptionsBody — header + 4 KPI + 4 panel (grid 2 kolom) + panel
+// Aging selebar penuh. Grid mobile-first: 1 kolom di mobile, 2 di lg.
 func ReportsSubscriptionsBody(v ReportsSubscriptionsView) g.Node {
-	body := []g.Node{
+	return h.Div(h.Class("grid gap-4 min-w-0"),
 		h.Div(
-			h.Class("flex flex-wrap items-center justify-between gap-2 mb-2"),
-			h.Div(
-				h.H1(h.Class("text-xl font-semibold"), g.Text("Subscription Report")),
-				h.P(h.Class("text-base-content/70"), g.Text("Renewal jatuh tempo & langganan berhenti.")),
-			),
-			h.A(h.Href(v.Base+"/reports/subscriptions/export?section="+v.Section),
-				h.Class("btn btn-outline min-h-11"), g.Text("Export CSV")),
+			h.H1(h.Class("text-xl font-semibold"), g.Text("Subscription Report")),
+			h.P(h.Class("text-base-content/70"), g.Text("MRR/ARR, renewal, churn, pendapatan per paket, & umur langganan.")),
 		),
-		reportSectionTabsView(v),
-	}
-	if v.Section == "churn" {
-		if len(v.ChurnItems) == 0 {
-			body = append(body, emptyChurn())
-		} else {
-			body = append(body, churnTable(ChurnView{Base: v.Base, Items: v.ChurnItems}))
-		}
-	} else {
-		if len(v.RenewalItems) == 0 {
-			body = append(body, emptyRenewals())
-		} else {
-			body = append(body, renewalsTable(RenewalsView{Base: v.Base, Items: v.RenewalItems}))
-		}
-	}
-	body = append(body, reportsSubscriptionsPager(v))
-	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+		reportsSubscriptionsKPICards(v),
+		h.Div(h.Class("grid grid-cols-1 lg:grid-cols-2 gap-4 min-w-0"),
+			reportsSubMRRPanel(v),
+			reportsSubRenewalPanel(v),
+			reportsSubChurnPanel(v),
+			reportsSubRevenuePanel(v),
+		),
+		reportsSubAgingPanel(v),
+	)
 }
 
-// reportSectionTabsView = baris tab LINK section. Navigasi bookmarkable
-// (gotcha #16); flex-wrap agar tak mendorong lebar di mobile.
-func reportSectionTabsView(v ReportsSubscriptionsView) g.Node {
-	tabs := make([]g.Node, 0, len(reportSectionTabs))
-	for _, t := range reportSectionTabs {
-		cls := "tab min-h-11"
-		if v.Section == t.Key {
-			cls += " tab-active font-medium"
-		}
-		tabs = append(tabs, h.A(
-			h.Href(v.Base+"/reports/subscriptions?section="+t.Key),
-			h.Class(cls), g.Text(t.Label)))
-	}
-	return h.Div(h.Role("tablist"), h.Class("tabs tabs-bordered flex-wrap"), g.Group(tabs))
+func reportsSubscriptionsKPICards(v ReportsSubscriptionsView) g.Node {
+	return h.Div(h.Class("grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"),
+		dashboardKPICard("MRR", v.MRR, "text-primary"),
+		dashboardKPICard("ARR", v.ARR, "text-secondary"),
+		dashboardKPICard("Renewal Rate", v.RenewalRate, "text-success"),
+		dashboardKPICard("Churn Rate", v.ChurnRate, "text-error"),
+	)
 }
 
-func reportsSubscriptionsPager(v ReportsSubscriptionsView) g.Node {
-	base := v.Base + "/reports/subscriptions?section=" + v.Section
-	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
+// reportSubPanelCard = pembungkus kartu panel seragam Subscription: judul +
+// tautan Export CSV per-panel (panelKey → ?panel=…) + isi. Pola sama
+// reportSupportPanelCard/reportCSPanelCard.
+func reportSubPanelCard(base, title, panelKey string, body ...g.Node) g.Node {
+	href := base + "/reports/subscriptions/export?panel=" + panelKey
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+		h.Div(h.Class("card-body min-w-0"),
+			h.Div(h.Class("flex flex-wrap items-center justify-between gap-2 mb-2"),
+				h.H2(h.Class("font-semibold"), g.Text(title)),
+				h.A(
+					h.Href(href),
+					h.Class("btn btn-outline btn-sm min-h-11"),
+					g.Text("Export CSV"),
+				),
+			),
+			g.Group(body),
+		),
+	)
 }

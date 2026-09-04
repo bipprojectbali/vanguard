@@ -12,99 +12,112 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// reports_subscriptions.go — Subscription Report (Modul 8 M8-1, wireframe 8.4):
-// renewal-forecast (jendela TETAP "due", reuse ListRenewals) + churn (reuse
-// ListChurned), dua TAB link bookmarkable (?section=renewal|churn, gotcha
-// #16). Row-view REUSE langsung (renewalRowView/churnRowView, package sama —
-// subscriptions_renewals.go/subscriptions_churn_page.go) — tak ditulis ulang.
-// F2 gate canViewReports; F3 ownership via SubscriptionsListFilterFor (sumber
-// SAMA dgn dasbor asal). Export CSV loop SEMUA halaman keyset (rule "no
-// silent caps" — export tak boleh diam-diam terpotong ke halaman pertama).
+// reports_subscriptions.go — Subscription Report (Modul 8, wireframe 8.4,
+// BL-47): 5 panel agregasi (MRR/ARR · Renewal · Churn · Revenue by Plan ·
+// Aging) + 4 KPI. Orkestrasi di sini; transformasi baris→sub-view di
+// reports_subscriptions_panels.go; serialisasi CSV per-panel di
+// reports_subscriptions_export.go. "Report bukan objek data" (skema.md §8):
+// NOL tabel baru, agregasi murni atas subscriptions (+ plans, customer_success).
+// Drill-down per-desa renewal/churn TETAP di modul Subscriptions
+// (/subscriptions/renewals · /churn) — laporan ini agregasi, bukan daftar.
+//
+// DILEWATKAN (keputusan sadar BL-47, "data belum ada DILEWATKAN dulu"): delta
+// "vs bulan lalu" kartu MRR & tren MRR bulanan historis (tak ada snapshot MRR
+// lampau). Filter interaktif Periode+Paket ditunda ke BL lanjutan (pola
+// BL-49/50/51).
+//
+// F2 gate canViewReports (SATU objek crm:reports read). F3 ownership via
+// SubscriptionsListFilterFor (subscription_owner — sumber SAMA modul asal). F4
+// masking Rp via maskARR di builder (Support/role tanpa akses → "•••").
 
-const (
-	reportSectionRenewal = "renewal"
-	reportSectionChurn   = "churn"
-)
-
-// normalizeReportSection memetakan ?section= ke salah satu key sah; nilai
-// asing/kosong → reportSectionRenewal (tab default).
-func normalizeReportSection(v string) string {
-	if v == reportSectionChurn {
-		return reportSectionChurn
-	}
-	return reportSectionRenewal
-}
-
-// ReportsSubscriptions — GET /reports/subscriptions?section=renewal|churn.
-func (h *Handler) ReportsSubscriptions(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	if !canViewReports(ctx) {
-		h.renderReportsForbidden(w, r, "Subscription Report", "/reports/subscriptions")
-		return
-	}
-	section := normalizeReportSection(r.URL.Query().Get("section"))
-	view, err := h.reportsSubscriptionsPage(ctx, r, section)
-	if err != nil {
-		h.Log.Error("reports: subscriptions page", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	view.Base = wsPath(slugFromRequest(r), "")
-	h.renderWorkspaceShell(w, r, "Subscription Report", "/reports/subscriptions",
-		panel.ReportsSubscriptionsBody(view))
-}
-
-// reportsSubscriptionsPage mengambil SATU halaman keyset (dipakai HTML —
-// export loop semua halaman lewat helper terpisah di bawah).
-func (h *Handler) reportsSubscriptionsPage(ctx context.Context, r *http.Request, section string) (panel.ReportsSubscriptionsView, error) {
+// reportsSubscriptionsData menjalankan agregasi & merakit view-model 5 panel;
+// dipakai ReportsSubscriptions (HTML) & ReportsSubscriptionsExport (CSV) agar
+// keduanya konsisten (satu sumber angka, bukan dua jalur hitung terpisah).
+func (h *Handler) reportsSubscriptionsData(ctx context.Context) (panel.ReportsSubscriptionsView, error) {
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
 	br := session.BusinessRole(ctx)
-	cursorAt, cursorID := pageCursor(r)
+	today := reportTodayDate(time.Now().In(appTZ))
 	q := h.q(ctx)
-	view := panel.ReportsSubscriptionsView{Section: section, After: r.URL.Query().Get("after"), Trail: pageTrail(r)}
 
-	if section == reportSectionChurn {
-		rows, err := q.ListChurned(ctx, db.ListChurnedParams{
-			CursorCreatedAt: cursorAt, CursorID: cursorID,
-			ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
-			PageSize: pageSize + 1,
-		})
-		if err != nil {
-			return view, err
-		}
-		shown, next := splitPage(rows, func(s db.ListChurnedRow) (pgtype.Timestamptz, int64) { return s.CreatedAt, s.ID })
-		names, err := h.memberNameMap(ctx)
-		if err != nil {
-			return view, err
-		}
-		items := make([]panel.ChurnRow, 0, len(shown))
-		for _, s := range shown {
-			items = append(items, churnRowView(s, names, br))
-		}
-		view.ChurnItems, view.NextCursor = items, next
-		return view, nil
-	}
-
-	now := time.Now().In(appTZ)
-	today := reportTodayDate(now)
-	rows, err := q.ListRenewals(ctx, db.ListRenewalsParams{
-		CursorCreatedAt: cursorAt, CursorID: cursorID,
-		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
-		WindowFilter: "due", Today: today, PageSize: pageSize + 1,
+	mrr, err := q.ReportSubMRR(ctx, db.ReportSubMRRParams{
+		Today: today, ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
 	})
 	if err != nil {
-		return view, err
+		return panel.ReportsSubscriptionsView{}, err
 	}
-	shown, next := splitPage(rows, func(s db.ListRenewalsRow) (pgtype.Timestamptz, int64) { return s.CreatedAt, s.ID })
-	items := make([]panel.RenewalRow, 0, len(shown))
-	for _, s := range shown {
-		items = append(items, renewalRowView(s, now, br))
+	renewal, err := q.ReportRenewalSummary(ctx, db.ReportRenewalSummaryParams{
+		Today: today, ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+	})
+	if err != nil {
+		return panel.ReportsSubscriptionsView{}, err
 	}
-	view.RenewalItems, view.NextCursor = items, next
-	return view, nil
+	renewalMonths, err := q.ReportRenewalByMonth(ctx, db.ReportRenewalByMonthParams{
+		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+	})
+	if err != nil {
+		return panel.ReportsSubscriptionsView{}, err
+	}
+	retention, err := q.ReportRetention(ctx, db.ReportRetentionParams{
+		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+	})
+	if err != nil {
+		return panel.ReportsSubscriptionsView{}, err
+	}
+	churnAge, err := q.ReportChurnAge(ctx, db.ReportChurnAgeParams{
+		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+	})
+	if err != nil {
+		return panel.ReportsSubscriptionsView{}, err
+	}
+	churnReasons, err := q.ReportChurnReasons(ctx, db.ReportChurnReasonsParams{
+		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+	})
+	if err != nil {
+		return panel.ReportsSubscriptionsView{}, err
+	}
+	revenueByPlan, err := q.ReportRevenueByPlan(ctx, db.ReportRevenueByPlanParams{
+		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+	})
+	if err != nil {
+		return panel.ReportsSubscriptionsView{}, err
+	}
+	aging, err := q.ReportSubscriptionAging(ctx, db.ReportSubscriptionAgingParams{
+		Today: today, ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+	})
+	if err != nil {
+		return panel.ReportsSubscriptionsView{}, err
+	}
+
+	renewalRate := ratePct(renewal.RenewedPast, renewal.DuePast)
+	v := panel.ReportsSubscriptionsView{
+		MRR:         maskARR(formatRupiah(mrr.MrrActive), br),
+		ARR:         maskARR(formatRupiah(mrr.ArrActive), br),
+		RenewalRate: renewalRate,
+		ChurnRate:   ratePct(retention.Churned, retention.Active+retention.Churned),
+
+		MRRComponents: buildMRRComponents(mrr, br),
+
+		RenewalRateCard: renewalRate,
+		RenewedValue:    maskARR(formatRupiah(renewal.RenewedValue), br),
+		Due30:           renewal.Due30,
+		RenewalMonths:   buildRenewalMonths(renewalMonths),
+
+		ChurnVillages: retention.Churned,
+		LostValue:     maskARR(formatRupiah(churnAge.LostValue), br),
+		AvgAge:        ageDaysStr(churnAge.AvgAgeDays, churnAge.AgedCount),
+		ChurnReasons:  buildSubChurnReasons(churnReasons, br),
+
+		RevenueByPlan: buildRevenueByPlan(revenueByPlan, br),
+
+		AgingRows: buildSubAging(aging, br),
+	}
+	return v, nil
 }
 
+// reportTodayDate = "hari ini" appTZ sebagai pgtype.Date (tengah malam UTC —
+// jendela query date_trunc/end_date berbasis date murni). Dioper ke query
+// ber-Today (hindari AT TIME ZONE di SELECT list sqlc, gotcha #14).
 func reportTodayDate(now time.Time) pgtype.Date {
 	return pgtype.Date{
 		Time:  time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC),
@@ -112,22 +125,21 @@ func reportTodayDate(now time.Time) pgtype.Date {
 	}
 }
 
-// ReportsSubscriptionsExport — GET /reports/subscriptions/export?section=...
-// Loop SEMUA halaman keyset (bukan cuma page pertama) → CSV lengkap.
-func (h *Handler) ReportsSubscriptionsExport(w http.ResponseWriter, r *http.Request) {
+// ReportsSubscriptions — GET /reports/subscriptions. Bukan pemegang izin
+// crm:reports read → 403 + penjelasan (pola sama reports_support.go).
+func (h *Handler) ReportsSubscriptions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !canViewReports(ctx) {
 		h.renderReportsForbidden(w, r, "Subscription Report", "/reports/subscriptions")
 		return
 	}
-	section := normalizeReportSection(r.URL.Query().Get("section"))
-	header, rows, err := h.reportsSubscriptionsExportRows(ctx, section)
+	view, err := h.reportsSubscriptionsData(ctx)
 	if err != nil {
-		h.Log.Error("reports: subscriptions export", "err", err)
+		h.Log.Error("reports: subscriptions data", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if err := writeCSV(w, "subscription-report-"+section, header, rows); err != nil {
-		h.Log.Error("reports: subscriptions export write", "err", err)
-	}
+	view.Base = wsPath(slugFromRequest(r), "")
+	h.renderWorkspaceShell(w, r, "Subscription Report", "/reports/subscriptions",
+		panel.ReportsSubscriptionsBody(view))
 }
