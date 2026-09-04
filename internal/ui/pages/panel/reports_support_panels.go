@@ -35,7 +35,7 @@ func reportsVolumePanel(v ReportsSupportView) g.Node {
 			rows,
 		)
 	}
-	return reportSupportPanelCard(v.Base, "Ticket Volume Report", "volume", body)
+	return reportSupportPanelCard(v.Base, v.Filter.QueryString, "Ticket Volume Report", "volume", body)
 }
 
 // ── Panel 2: SLA Compliance Report ──────────────────────────────────────────
@@ -66,7 +66,7 @@ func reportsSLAPanel(v ReportsSupportView) g.Node {
 			rows,
 		)
 	}
-	return reportSupportPanelCard(v.Base, "SLA Compliance Report", "sla", cards, table)
+	return reportSupportPanelCard(v.Base, v.Filter.QueryString, "SLA Compliance Report", "sla", cards, table)
 }
 
 // ── Panel 3: Resolution Time Report ─────────────────────────────────────────
@@ -97,7 +97,7 @@ func reportsResolutionPanel(v ReportsSupportView) g.Node {
 		reportStat(v.ResPrevLabel, v.ResPrevMonth, "text-base-content"),
 		reportStat("Perubahan", v.ResChange, "text-secondary"),
 	)
-	return reportSupportPanelCard(v.Base, "Resolution Time Report", "resolution", byPriority, compare)
+	return reportSupportPanelCard(v.Base, v.Filter.QueryString, "Resolution Time Report", "resolution", byPriority, compare)
 }
 
 // ── Panel 4: KB Usage Report (sebagian besar dilewatkan) ─────────────────────
@@ -121,7 +121,7 @@ func reportsKBPanel(v ReportsSupportView) g.Node {
 			rows,
 		)
 	}
-	return reportSupportPanelCard(v.Base, "KB Usage Report", "kb", body)
+	return reportSupportPanelCard(v.Base, v.Filter.QueryString, "KB Usage Report", "kb", body)
 }
 
 // ── Panel 5: Agent Performance Report (selebar penuh) ────────────────────────
@@ -150,5 +150,5 @@ func reportsAgentPanel(v ReportsSupportView) g.Node {
 			rows,
 		)
 	}
-	return reportSupportPanelCard(v.Base, "Agent Performance Report", "agent", body)
+	return reportSupportPanelCard(v.Base, v.Filter.QueryString, "Agent Performance Report", "agent", body)
 }

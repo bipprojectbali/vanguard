@@ -9,12 +9,24 @@
 -- Bucket bulan: to_char(date_trunc('month', …), 'YYYY-MM') → urut leksikografis =
 -- kronologis (pola sama ReportSalesForecast). Timezone: batas bulan UTC (cukup
 -- untuk laporan; gotcha #14 — hindari AT TIME ZONE di SELECT list sqlc).
+--
+-- Filter interaktif Periode + Prioritas (BL-51, pola BL-49 Sales/BL-50 CS): narg
+-- OPSIONAL period_start/period_end (timestamptz) + priority (text). Guard NULL =
+-- tak menyaring (sqlc.narg(x) IS NULL OR col …). Periode memotong KOLOM YANG
+-- TEPAT per panel (bukan created_at seragam): Volume Masuk by created_at &
+-- Selesai by resolved_at; KPI/SLA/Agent by created_at; Resolution by resolved_at
+-- (tiket selesai). Prioritas menyaring baris/agregasi. DUA pengecualian sengaja:
+-- ReportResolutionMonthCompare = "bulan ini vs lalu" relatif now() → Periode TAK
+-- berlaku (hanya Prioritas); ReportKBPublished = snapshot tanpa dimensi
+-- waktu/prioritas → tak disaring sama sekali (catatan UI menjelaskan keduanya).
 
 -- name: ReportTicketVolumeByMonth :many
 -- Panel 1 (Ticket Volume): per bulan → Tiket Masuk (created bulan itu) & Selesai
 -- (resolved bulan itu). Backlog kumulatif (masuk−selesai berjalan) DIHITUNG di
 -- handler dari urutan bulan ini (SQL cukup dua deret). UNION ALL dua sumber
 -- tanggal lalu GROUP agar bulan yang hanya punya salah satu tetap muncul.
+-- Periode SENGAJA per-sumber: Masuk dibatasi created_at, Selesai dibatasi
+-- resolved_at (BL-51). Prioritas menyaring kedua sumber.
 SELECT
     period,
     SUM(masuk)::bigint   AS masuk,
@@ -32,6 +44,9 @@ FROM (
             OR a.backup_csm = sqlc.arg(uid)
         ))
     )
+      AND (sqlc.narg(period_start)::timestamptz IS NULL OR t.created_at >= sqlc.narg(period_start))
+      AND (sqlc.narg(period_end)::timestamptz IS NULL OR t.created_at < sqlc.narg(period_end))
+      AND (sqlc.narg(priority)::text IS NULL OR t.priority = sqlc.narg(priority))
     UNION ALL
     SELECT to_char(date_trunc('month', t.resolved_at), 'YYYY-MM') AS period,
            0 AS masuk, 1 AS selesai
@@ -46,6 +61,9 @@ FROM (
             OR a.backup_csm = sqlc.arg(uid)
         ))
     )
+      AND (sqlc.narg(period_start)::timestamptz IS NULL OR t.resolved_at >= sqlc.narg(period_start))
+      AND (sqlc.narg(period_end)::timestamptz IS NULL OR t.resolved_at < sqlc.narg(period_end))
+      AND (sqlc.narg(priority)::text IS NULL OR t.priority = sqlc.narg(priority))
 ) x
 GROUP BY period
 ORDER BY period;
@@ -56,6 +74,7 @@ ORDER BY period;
 -- target untuk dipenuhi); avg_resolution_hours = Rata Penyelesaian (tiket
 -- selesai). breached = terlanggar (resolved telat ATAU belum selesai lewat
 -- deadline); at_risk = belum selesai, deadline < 4 jam lagi (pola CountTicketKPIs).
+-- Periode by created_at + Prioritas (BL-51).
 SELECT
     COUNT(*)::bigint AS total,
     COUNT(*) FILTER (WHERE t.sla_deadline_at IS NOT NULL)::bigint AS with_sla,
@@ -82,14 +101,17 @@ WHERE (
         OR a.assigned_csm = sqlc.arg(uid)
         OR a.backup_csm = sqlc.arg(uid)
     ))
-);
+)
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR t.created_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR t.created_at < sqlc.narg(period_end))
+  AND (sqlc.narg(priority)::text IS NULL OR t.priority = sqlc.narg(priority));
 
 -- name: ReportSLAByPriority :many
 -- Panel 2 tabel per-prioritas. 3 tingkat NYATA (rendah/sedang/tinggi) — mockup
 -- pakai 4 (Kritis tak ada di skema). target_minutes = target penyelesaian dari
 -- sla_policies via snapshot t.sla_policy_id (MAX bila banyak policy per
 -- prioritas; NULL bila tiket tak ber-policy → "—" di view). Terpenuhi% =
--- met/with_sla per prioritas.
+-- met/with_sla per prioritas. Periode by created_at + Prioritas saring baris (BL-51).
 SELECT
     t.priority AS priority,
     COUNT(*)::bigint AS total,
@@ -113,6 +135,9 @@ WHERE (
         OR a.backup_csm = sqlc.arg(uid)
     ))
 )
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR t.created_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR t.created_at < sqlc.narg(period_end))
+  AND (sqlc.narg(priority)::text IS NULL OR t.priority = sqlc.narg(priority))
 GROUP BY t.priority
 ORDER BY CASE t.priority
     WHEN 'tinggi' THEN 1
@@ -123,7 +148,9 @@ END;
 
 -- name: ReportResolutionByPriority :many
 -- Panel 3 bar. Rata jam penyelesaian per prioritas (tiket selesai). NULL bila
--- belum ada tiket selesai di prioritas itu → "—" & bar 0 di view.
+-- belum ada tiket selesai di prioritas itu → "—" & bar 0 di view. Periode by
+-- resolved_at (BUKAN created_at — panel tentang tiket yang SELESAI dalam jendela)
+-- + Prioritas saring baris (BL-51).
 SELECT
     t.priority AS priority,
     COUNT(*) FILTER (WHERE t.status = 'selesai' AND t.resolved_at IS NOT NULL)::bigint AS resolved_count,
@@ -140,6 +167,9 @@ WHERE (
         OR a.backup_csm = sqlc.arg(uid)
     ))
 )
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR t.resolved_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR t.resolved_at < sqlc.narg(period_end))
+  AND (sqlc.narg(priority)::text IS NULL OR t.priority = sqlc.narg(priority))
 GROUP BY t.priority
 ORDER BY CASE t.priority
     WHEN 'tinggi' THEN 1
@@ -151,7 +181,9 @@ END;
 -- name: ReportResolutionMonthCompare :one
 -- Panel 3 baris metrik: rata jam penyelesaian tiket yang RESOLVED bulan ini vs
 -- bulan lalu (batas bulan UTC via date_trunc). Label bulan dirakit handler
--- (appTZ). NULL bila tak ada tiket selesai pada bulan itu.
+-- (appTZ). NULL bila tak ada tiket selesai pada bulan itu. Periode TAK berlaku
+-- (metrik inheren "bulan ini vs lalu" relatif now()); hanya Prioritas menyaring
+-- (BL-51) — catatan UI menjelaskan Periode tak menyentuh baris ini.
 SELECT
     ROUND((AVG(EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 3600.0)
            FILTER (WHERE t.status = 'selesai' AND t.resolved_at IS NOT NULL
@@ -171,13 +203,14 @@ WHERE (
         OR a.assigned_csm = sqlc.arg(uid)
         OR a.backup_csm = sqlc.arg(uid)
     ))
-);
+)
+  AND (sqlc.narg(priority)::text IS NULL OR t.priority = sqlc.narg(priority));
 
 -- name: ReportAgentPerformance :many
 -- Panel 5. Per agen (t.assigned_to, join users utk nama/email). handled = tiket
 -- ditangani, resolved = selesai, avg_resolution_hours (selesai), met/with_sla =
 -- Kepatuhan SLA agen. Badge Status diturunkan handler (const threshold). Agen
--- NULL (belum ditugaskan) dikecualikan.
+-- NULL (belum ditugaskan) dikecualikan. Periode by created_at + Prioritas (BL-51).
 SELECT
     t.assigned_to AS agent_id,
     u.name AS agent_name,
@@ -203,6 +236,9 @@ WHERE t.assigned_to IS NOT NULL
         OR a.backup_csm = sqlc.arg(uid)
     ))
 )
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR t.created_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR t.created_at < sqlc.narg(period_end))
+  AND (sqlc.narg(priority)::text IS NULL OR t.priority = sqlc.narg(priority))
 GROUP BY t.assigned_to, u.name, u.email
 ORDER BY handled DESC, agent_id;
 
@@ -210,7 +246,8 @@ ORDER BY handled DESC, agent_id;
 -- Panel 4 (SEBAGIAN BESAR DILEWATKAN). Hanya artikel Published: Judul · Dilihat
 -- (view_count apa adanya — komentar 00018: auto-increment di luar scope, praktis
 -- 0) · Status. TAK ada rating/deflection/membantu (tak ada datanya). Tenant via
--- RLS (h.q). Dibatasi 50 (panel ringkas, bukan daftar penuh).
+-- RLS (h.q). Dibatasi 50 (panel ringkas, bukan daftar penuh). Snapshot tanpa
+-- dimensi waktu/prioritas → filter Periode/Prioritas TAK berlaku (catatan UI).
 SELECT
     article_title,
     view_count::bigint AS views,

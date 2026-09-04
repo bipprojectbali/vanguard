@@ -34,10 +34,17 @@ import (
 // reportsSupportData menjalankan agregasi & merakit view-model 5 panel; dipakai
 // ReportsSupport (HTML) & ReportsSupportExport (CSV) agar keduanya konsisten
 // (satu sumber angka, bukan dua jalur hitung terpisah).
-func (h *Handler) reportsSupportData(ctx context.Context) (panel.ReportsSupportView, error) {
+func (h *Handler) reportsSupportData(ctx context.Context, f supportReportFilter) (panel.ReportsSupportView, error) {
 	filter := db.TicketsListFilterFor(session.BusinessDataScope(ctx), canWriteTicketsPerm(ctx))
 	uid := session.UserID(ctx)
-	scope := db.ReportTicketVolumeByMonthParams{ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid}
+	prio := f.priorityArg() // *string prioritas (nil = semua)
+	// scope = argumen bersama 5 query utama (bentuk field identik → type-convert).
+	// Periode & Prioritas ikut di sini; ReportResolutionMonthCompare (tanpa
+	// Periode) & ReportKBPublished (tanpa params) dirakit terpisah di bawah.
+	scope := db.ReportTicketVolumeByMonthParams{
+		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, Priority: prio,
+	}
 	q := h.q(ctx)
 
 	volume, err := q.ReportTicketVolumeByMonth(ctx, scope)
@@ -56,7 +63,11 @@ func (h *Handler) reportsSupportData(ctx context.Context) (panel.ReportsSupportV
 	if err != nil {
 		return panel.ReportsSupportView{}, err
 	}
-	compare, err := q.ReportResolutionMonthCompare(ctx, db.ReportResolutionMonthCompareParams(scope))
+	// MonthCompare: "bulan ini vs lalu" relatif now() → Periode TAK berlaku,
+	// hanya Prioritas menyaring (BL-51).
+	compare, err := q.ReportResolutionMonthCompare(ctx, db.ReportResolutionMonthCompareParams{
+		ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid, Priority: prio,
+	})
 	if err != nil {
 		return panel.ReportsSupportView{}, err
 	}
@@ -71,6 +82,8 @@ func (h *Handler) reportsSupportData(ctx context.Context) (panel.ReportsSupportV
 
 	thisLabel, prevLabel := resolutionMonthLabels(todayInAppTZ())
 	v := panel.ReportsSupportView{
+		Filter: h.buildSupportFilterView(ctx, f),
+
 		TotalTickets:  formatInt(kpis.Total),
 		SLACompliance: ratePct(kpis.Met, kpis.WithSla),
 		AvgResolution: hoursStr(kpis.AvgResolutionHours),
@@ -103,7 +116,7 @@ func (h *Handler) ReportsSupport(w http.ResponseWriter, r *http.Request) {
 		h.renderReportsForbidden(w, r, "Support Report", "/reports/support")
 		return
 	}
-	view, err := h.reportsSupportData(ctx)
+	view, err := h.reportsSupportData(ctx, parseSupportReportFilter(r))
 	if err != nil {
 		h.Log.Error("reports: support data", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
