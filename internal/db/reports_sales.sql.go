@@ -25,12 +25,20 @@ WHERE deleted_at IS NULL
       $1::boolean
       OR ($2::boolean AND lead_owner = $3)
   )
+  -- BL-49: Periode di funnel memotong leads.created_at (lead masuk pada rentang);
+  -- owner_filter = lead_owner (menyempit dalam scope).
+  AND ($4::timestamptz IS NULL OR created_at >= $4)
+  AND ($5::timestamptz IS NULL OR created_at < $5)
+  AND ($6::bigint IS NULL OR lead_owner = $6)
 `
 
 type ReportLeadFunnelParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	OwnerFilter *int64             `json:"owner_filter"`
 }
 
 type ReportLeadFunnelRow struct {
@@ -47,7 +55,14 @@ type ReportLeadFunnelRow struct {
 // DITUNDA ke BL-44 (leads tak simpan qualified_at). ROUND(...,1) + COALESCE agar
 // sqlc tak emit interface{} (gotcha #14).
 func (q *Queries) ReportLeadFunnel(ctx context.Context, arg ReportLeadFunnelParams) (ReportLeadFunnelRow, error) {
-	row := q.db.QueryRow(ctx, reportLeadFunnel, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	row := q.db.QueryRow(ctx, reportLeadFunnel,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.OwnerFilter,
+	)
 	var i ReportLeadFunnelRow
 	err := row.Scan(
 		&i.TotalLeads,
@@ -75,14 +90,20 @@ WHERE a.deleted_at IS NULL
       $1::boolean
       OR ($2::boolean AND a.owner_id = $3)
   )
+  AND ($4::timestamptz IS NULL OR a.created_at >= $4)
+  AND ($5::timestamptz IS NULL OR a.created_at < $5)
+  AND ($6::bigint IS NULL OR a.owner_id = $6)
 GROUP BY a.owner_id, u.name, u.email
 ORDER BY total_count DESC, a.owner_id
 `
 
 type ReportSalesActivityByOwnerParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	OwnerFilter *int64             `json:"owner_filter"`
 }
 
 type ReportSalesActivityByOwnerRow struct {
@@ -101,7 +122,14 @@ type ReportSalesActivityByOwnerRow struct {
 // Menang & Aktivitas/Deal digabung di Go dari ReportWonDealsByOwner (hindari
 // fan-out cross-join). ORDER total DESC agar sales paling aktif di atas.
 func (q *Queries) ReportSalesActivityByOwner(ctx context.Context, arg ReportSalesActivityByOwnerParams) ([]ReportSalesActivityByOwnerRow, error) {
-	rows, err := q.db.Query(ctx, reportSalesActivityByOwner, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportSalesActivityByOwner,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.OwnerFilter,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -141,14 +169,22 @@ WHERE deleted_at IS NULL
       $1::boolean
       OR ($2::boolean AND deal_owner = $3)
   )
+  -- BL-49: Periode di Forecast memotong EXPECTED_CLOSE_DATE (bukan created_at) —
+  -- forecast forward-looking, filter = rentang bucket. owner_filter menyempit.
+  AND ($4::timestamptz IS NULL OR expected_close_date >= $4)
+  AND ($5::timestamptz IS NULL OR expected_close_date < $5)
+  AND ($6::bigint IS NULL OR deal_owner = $6)
 GROUP BY date_trunc('month', expected_close_date)
 ORDER BY date_trunc('month', expected_close_date)
 `
 
 type ReportSalesForecastParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	OwnerFilter *int64             `json:"owner_filter"`
 }
 
 type ReportSalesForecastRow struct {
@@ -169,7 +205,14 @@ type ReportSalesForecastRow struct {
 // masuk, Lost = 0. period 'YYYY-MM' agar urut leksikografis = kronologis. Kolom
 // Target DITUNDA ke BL-44 (tak ada tabel target).
 func (q *Queries) ReportSalesForecast(ctx context.Context, arg ReportSalesForecastParams) ([]ReportSalesForecastRow, error) {
-	rows, err := q.db.Query(ctx, reportSalesForecast, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportSalesForecast,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.OwnerFilter,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -178,6 +221,70 @@ func (q *Queries) ReportSalesForecast(ctx context.Context, arg ReportSalesForeca
 	for rows.Next() {
 		var i ReportSalesForecastRow
 		if err := rows.Scan(&i.Period, &i.WeightedValue); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reportSalesOwners = `-- name: ReportSalesOwners :many
+SELECT
+    d.deal_owner::bigint AS owner_id,
+    u.name               AS owner_name,
+    u.email              AS owner_email,
+    COUNT(*)::bigint     AS deal_count
+FROM deals d
+JOIN users u ON u.id = d.deal_owner
+WHERE d.deleted_at IS NULL
+  AND d.deal_owner IS NOT NULL
+  AND (
+      $1::boolean
+      OR ($2::boolean AND d.deal_owner = $3)
+  )
+GROUP BY d.deal_owner, u.name, u.email
+ORDER BY u.name NULLS LAST, u.email
+`
+
+type ReportSalesOwnersParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsOwn    bool   `json:"is_own"`
+	Uid      *int64 `json:"uid"`
+}
+
+type ReportSalesOwnersRow struct {
+	OwnerID    int64   `json:"owner_id"`
+	OwnerName  *string `json:"owner_name"`
+	OwnerEmail string  `json:"owner_email"`
+	DealCount  int64   `json:"deal_count"`
+}
+
+// BL-49: isi dropdown "Tim (owner)" Sales Report — DITURUNKAN DARI DATA (deal
+// owner yang benar-benar punya deal dalam cakupan pemakai), bukan dari daftar
+// anggota. Pola sama ListActivityActors (audit.sql): "pilihan yang pasti kosong
+// lebih buruk daripada pilihan yang tak ada". F3 pakai flag deal yang SAMA
+// (DealsListFilterFor) → sales own-scope hanya melihat dirinya (handler
+// menyembunyikan dropdown untuk non-scope_all). owner_id NOT NULL (deal tanpa
+// pemilik tak bisa jadi pilihan filter). TAK disaring Periode agar owner terpilih
+// selalu tampil walau rentang dipersempit (daftar stabil).
+func (q *Queries) ReportSalesOwners(ctx context.Context, arg ReportSalesOwnersParams) ([]ReportSalesOwnersRow, error) {
+	rows, err := q.db.Query(ctx, reportSalesOwners, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReportSalesOwnersRow{}
+	for rows.Next() {
+		var i ReportSalesOwnersRow
+		if err := rows.Scan(
+			&i.OwnerID,
+			&i.OwnerName,
+			&i.OwnerEmail,
+			&i.DealCount,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -199,14 +306,20 @@ WHERE deleted_at IS NULL
       $1::boolean
       OR ($2::boolean AND deal_owner = $3)
   )
+  AND ($4::timestamptz IS NULL OR created_at >= $4)
+  AND ($5::timestamptz IS NULL OR created_at < $5)
+  AND ($6::bigint IS NULL OR deal_owner = $6)
 GROUP BY COALESCE(NULLIF(TRIM(win_loss_reason), ''), '(Tanpa alasan)')
 ORDER BY COUNT(*) DESC, reason
 `
 
 type ReportWinLossReasonsParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	OwnerFilter *int64             `json:"owner_filter"`
 }
 
 type ReportWinLossReasonsRow struct {
@@ -219,7 +332,14 @@ type ReportWinLossReasonsRow struct {
 // (versi picklist bersih = BL-44). Reason kosong/whitespace dipetakan ke penanda
 // eksplisit agar tetap satu baris terhitung. Porsi% dihitung di Go (butuh total).
 func (q *Queries) ReportWinLossReasons(ctx context.Context, arg ReportWinLossReasonsParams) ([]ReportWinLossReasonsRow, error) {
-	rows, err := q.db.Query(ctx, reportWinLossReasons, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportWinLossReasons,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.OwnerFilter,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -249,13 +369,19 @@ WHERE deleted_at IS NULL
       $1::boolean
       OR ($2::boolean AND deal_owner = $3)
   )
+  AND ($4::timestamptz IS NULL OR created_at >= $4)
+  AND ($5::timestamptz IS NULL OR created_at < $5)
+  AND ($6::bigint IS NULL OR deal_owner = $6)
 GROUP BY deal_owner
 `
 
 type ReportWonDealsByOwnerParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	OwnerFilter *int64             `json:"owner_filter"`
 }
 
 type ReportWonDealsByOwnerRow struct {
@@ -267,7 +393,14 @@ type ReportWonDealsByOwnerRow struct {
 // owner id dengan ReportSalesActivityByOwner untuk kolom Deal Menang &
 // Aktivitas/Deal. F3 pakai flag deal (DealsListFilterFor), bukan activity.
 func (q *Queries) ReportWonDealsByOwner(ctx context.Context, arg ReportWonDealsByOwnerParams) ([]ReportWonDealsByOwnerRow, error) {
-	rows, err := q.db.Query(ctx, reportWonDealsByOwner, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportWonDealsByOwner,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.OwnerFilter,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -299,12 +432,18 @@ WHERE deleted_at IS NULL
       $1::boolean
       OR ($2::boolean AND deal_owner = $3)
   )
+  AND ($4::timestamptz IS NULL OR created_at >= $4)
+  AND ($5::timestamptz IS NULL OR created_at < $5)
+  AND ($6::bigint IS NULL OR deal_owner = $6)
 `
 
 type ReportWonTimingParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	OwnerFilter *int64             `json:"owner_filter"`
 }
 
 type ReportWonTimingRow struct {
@@ -316,7 +455,14 @@ type ReportWonTimingRow struct {
 // (closed_date − created_at) hari. closed_date DATE − created_at::date = int hari.
 // Hanya deal yang punya closed_date dihitung untuk rata.
 func (q *Queries) ReportWonTiming(ctx context.Context, arg ReportWonTimingParams) (ReportWonTimingRow, error) {
-	row := q.db.QueryRow(ctx, reportWonTiming, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	row := q.db.QueryRow(ctx, reportWonTiming,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.OwnerFilter,
+	)
 	var i ReportWonTimingRow
 	err := row.Scan(&i.WonCount, &i.AvgDaysToWon)
 	return i, err

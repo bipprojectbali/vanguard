@@ -23,6 +23,11 @@ WHERE deleted_at IS NULL
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
   )
+  -- BL-49: Periode di Forecast memotong EXPECTED_CLOSE_DATE (bukan created_at) —
+  -- forecast forward-looking, filter = rentang bucket. owner_filter menyempit.
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR expected_close_date >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR expected_close_date < sqlc.narg(period_end))
+  AND (sqlc.narg(owner_filter)::bigint IS NULL OR deal_owner = sqlc.narg(owner_filter))
 GROUP BY date_trunc('month', expected_close_date)
 ORDER BY date_trunc('month', expected_close_date);
 
@@ -41,6 +46,9 @@ WHERE deleted_at IS NULL
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
   )
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR created_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR created_at < sqlc.narg(period_end))
+  AND (sqlc.narg(owner_filter)::bigint IS NULL OR deal_owner = sqlc.narg(owner_filter))
 GROUP BY COALESCE(NULLIF(TRIM(win_loss_reason), ''), '(Tanpa alasan)')
 ORDER BY COUNT(*) DESC, reason;
 
@@ -63,7 +71,12 @@ WHERE deleted_at IS NULL
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND lead_owner = sqlc.arg(uid))
-  );
+  )
+  -- BL-49: Periode di funnel memotong leads.created_at (lead masuk pada rentang);
+  -- owner_filter = lead_owner (menyempit dalam scope).
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR created_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR created_at < sqlc.narg(period_end))
+  AND (sqlc.narg(owner_filter)::bigint IS NULL OR lead_owner = sqlc.narg(owner_filter));
 
 -- name: ReportWonTiming :one
 -- Panel 4 (funnel) sisi DEALS: jumlah Closed Won + rata waktu Deal→Menang
@@ -80,7 +93,10 @@ WHERE deleted_at IS NULL
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
-  );
+  )
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR created_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR created_at < sqlc.narg(period_end))
+  AND (sqlc.narg(owner_filter)::bigint IS NULL OR deal_owner = sqlc.narg(owner_filter));
 
 -- name: ReportSalesActivityByOwner :many
 -- Panel 5 (Sales Activity Report): per-owner hitung aktivitas context='sales'
@@ -104,6 +120,9 @@ WHERE a.deleted_at IS NULL
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND a.owner_id = sqlc.arg(uid))
   )
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR a.created_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR a.created_at < sqlc.narg(period_end))
+  AND (sqlc.narg(owner_filter)::bigint IS NULL OR a.owner_id = sqlc.narg(owner_filter))
 GROUP BY a.owner_id, u.name, u.email
 ORDER BY total_count DESC, a.owner_id;
 
@@ -121,4 +140,32 @@ WHERE deleted_at IS NULL
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
   )
+  AND (sqlc.narg(period_start)::timestamptz IS NULL OR created_at >= sqlc.narg(period_start))
+  AND (sqlc.narg(period_end)::timestamptz IS NULL OR created_at < sqlc.narg(period_end))
+  AND (sqlc.narg(owner_filter)::bigint IS NULL OR deal_owner = sqlc.narg(owner_filter))
 GROUP BY deal_owner;
+
+-- name: ReportSalesOwners :many
+-- BL-49: isi dropdown "Tim (owner)" Sales Report — DITURUNKAN DARI DATA (deal
+-- owner yang benar-benar punya deal dalam cakupan pemakai), bukan dari daftar
+-- anggota. Pola sama ListActivityActors (audit.sql): "pilihan yang pasti kosong
+-- lebih buruk daripada pilihan yang tak ada". F3 pakai flag deal yang SAMA
+-- (DealsListFilterFor) → sales own-scope hanya melihat dirinya (handler
+-- menyembunyikan dropdown untuk non-scope_all). owner_id NOT NULL (deal tanpa
+-- pemilik tak bisa jadi pilihan filter). TAK disaring Periode agar owner terpilih
+-- selalu tampil walau rentang dipersempit (daftar stabil).
+SELECT
+    d.deal_owner::bigint AS owner_id,
+    u.name               AS owner_name,
+    u.email              AS owner_email,
+    COUNT(*)::bigint     AS deal_count
+FROM deals d
+JOIN users u ON u.id = d.deal_owner
+WHERE d.deleted_at IS NULL
+  AND d.deal_owner IS NOT NULL
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND d.deal_owner = sqlc.arg(uid))
+  )
+GROUP BY d.deal_owner, u.name, u.email
+ORDER BY u.name NULLS LAST, u.email;

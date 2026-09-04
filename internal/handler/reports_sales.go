@@ -27,14 +27,16 @@ import (
 //     canSeeARR (skema.md §9) → nilai tersamar. Panel Win/Loss, Lead
 //     Conversion, Sales Activity murni angka/persen/hari → tanpa masking.
 //
-// Filter interaktif Periode + Tim(owner) SENGAJA ditunda (BL follow-up) agar PR
-// terreview; semua panel default seluruh data dalam cakupan ownership pemakai.
-// Empat gap butuh-schema (Target/Batal/picklist Alasan/qualified_at) → BL-44.
+// Filter interaktif Periode + Tim(owner) (BL-49) memotong SEMUA panel + KPI +
+// CSV serentak via salesReportFilter (reports_sales_filter.go). Empat gap
+// butuh-schema (Target/Batal/picklist Alasan/qualified_at) → BL-44.
 
 // reportsSalesData menjalankan agregasi & merakit view-model 5 panel; dipakai
 // ReportsSales (HTML) & ReportsSalesExport (CSV) agar keduanya konsisten (satu
-// sumber angka, bukan dua jalur hitung terpisah).
-func (h *Handler) reportsSalesData(ctx context.Context) (panel.ReportsSalesView, error) {
+// sumber angka, bukan dua jalur hitung terpisah). f = filter Periode+Tim (BL-49)
+// yang di-AND ke tiap query (guard NULL = tak menyaring); owner_filter menyempit
+// DI ATAS scope F3, tak melebarkan.
+func (h *Handler) reportsSalesData(ctx context.Context, f salesReportFilter) (panel.ReportsSalesView, error) {
 	deal := db.DealsListFilterFor(session.BusinessDataScope(ctx))
 	lead := db.LeadsListFilterFor(session.BusinessDataScope(ctx))
 	act := db.ActivitiesListFilterFor(session.BusinessDataScope(ctx))
@@ -44,49 +46,62 @@ func (h *Handler) reportsSalesData(ctx context.Context) (panel.ReportsSalesView,
 
 	stats, err := q.DealPipelineStats(ctx, db.DealPipelineStatsParams{
 		ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 	})
 	if err != nil {
 		return panel.ReportsSalesView{}, err
 	}
 	stages, err := q.ReportPipelineByStage(ctx, db.ReportPipelineByStageParams{
 		ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 	})
 	if err != nil {
 		return panel.ReportsSalesView{}, err
 	}
 	forecast, err := q.ReportSalesForecast(ctx, db.ReportSalesForecastParams{
 		ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 	})
 	if err != nil {
 		return panel.ReportsSalesView{}, err
 	}
 	reasons, err := q.ReportWinLossReasons(ctx, db.ReportWinLossReasonsParams{
 		ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 	})
 	if err != nil {
 		return panel.ReportsSalesView{}, err
 	}
 	funnel, err := q.ReportLeadFunnel(ctx, db.ReportLeadFunnelParams{
 		ScopeAll: lead.ScopeAll, IsOwn: lead.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 	})
 	if err != nil {
 		return panel.ReportsSalesView{}, err
 	}
 	wonTiming, err := q.ReportWonTiming(ctx, db.ReportWonTimingParams{
 		ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 	})
 	if err != nil {
 		return panel.ReportsSalesView{}, err
 	}
 	activity, err := q.ReportSalesActivityByOwner(ctx, db.ReportSalesActivityByOwnerParams{
 		ScopeAll: act.ScopeAll, IsOwn: act.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 	})
 	if err != nil {
 		return panel.ReportsSalesView{}, err
 	}
 	wonByOwner, err := q.ReportWonDealsByOwner(ctx, db.ReportWonDealsByOwnerParams{
 		ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+		PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 	})
+	if err != nil {
+		return panel.ReportsSalesView{}, err
+	}
+
+	filterView, err := h.buildSalesFilterView(ctx, f, deal, uid)
 	if err != nil {
 		return panel.ReportsSalesView{}, err
 	}
@@ -98,6 +113,8 @@ func (h *Handler) reportsSalesData(ctx context.Context) (panel.ReportsSalesView,
 	}
 
 	return panel.ReportsSalesView{
+		Filter: filterView,
+
 		OpenCount:     stats.OpenCount,
 		PipelineValue: maskARR(formatRupiah(stats.PipelineValue), br),
 		WinRate:       winRate,
@@ -126,7 +143,7 @@ func (h *Handler) ReportsSales(w http.ResponseWriter, r *http.Request) {
 		h.renderReportsForbidden(w, r, "Sales Report", "/reports/sales")
 		return
 	}
-	view, err := h.reportsSalesData(ctx)
+	view, err := h.reportsSalesData(ctx, parseSalesReportFilter(r))
 	if err != nil {
 		h.Log.Error("reports: sales data", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)

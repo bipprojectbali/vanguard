@@ -23,7 +23,7 @@ func (h *Handler) ReportsSalesExport(w http.ResponseWriter, r *http.Request) {
 		h.renderReportsForbidden(w, r, "Sales Report", "/reports/sales")
 		return
 	}
-	name, headers, rows, err := h.reportsSalesCSV(ctx, r.URL.Query().Get("panel"))
+	name, headers, rows, err := h.reportsSalesCSV(ctx, r.URL.Query().Get("panel"), parseSalesReportFilter(r))
 	if err != nil {
 		h.Log.Error("reports: sales export", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -35,8 +35,9 @@ func (h *Handler) ReportsSalesExport(w http.ResponseWriter, r *http.Request) {
 }
 
 // reportsSalesCSV memilih agregasi sesuai panel & merakit baris CSV. Panel tak
-// dikenal → pipeline (default aman, kompatibel mundur).
-func (h *Handler) reportsSalesCSV(ctx context.Context, panelKey string) (string, []string, [][]string, error) {
+// dikenal → pipeline (default aman, kompatibel mundur). f = filter Periode+Tim
+// (BL-49) di-oper identik jalur HTML → CSV tersaring sama persis.
+func (h *Handler) reportsSalesCSV(ctx context.Context, panelKey string, f salesReportFilter) (string, []string, [][]string, error) {
 	deal := db.DealsListFilterFor(session.BusinessDataScope(ctx))
 	lead := db.LeadsListFilterFor(session.BusinessDataScope(ctx))
 	act := db.ActivitiesListFilterFor(session.BusinessDataScope(ctx))
@@ -48,6 +49,7 @@ func (h *Handler) reportsSalesCSV(ctx context.Context, panelKey string) (string,
 	case "forecast":
 		buckets, err := q.ReportSalesForecast(ctx, db.ReportSalesForecastParams{
 			ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+			PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 		})
 		if err != nil {
 			return "", nil, nil, err
@@ -61,6 +63,7 @@ func (h *Handler) reportsSalesCSV(ctx context.Context, panelKey string) (string,
 	case "winloss":
 		reasons, err := q.ReportWinLossReasons(ctx, db.ReportWinLossReasonsParams{
 			ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+			PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 		})
 		if err != nil {
 			return "", nil, nil, err
@@ -78,12 +81,14 @@ func (h *Handler) reportsSalesCSV(ctx context.Context, panelKey string) (string,
 	case "funnel":
 		funnel, err := q.ReportLeadFunnel(ctx, db.ReportLeadFunnelParams{
 			ScopeAll: lead.ScopeAll, IsOwn: lead.IsOwn, Uid: &uid,
+			PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 		})
 		if err != nil {
 			return "", nil, nil, err
 		}
 		timing, err := q.ReportWonTiming(ctx, db.ReportWonTimingParams{
 			ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+			PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 		})
 		if err != nil {
 			return "", nil, nil, err
@@ -97,12 +102,14 @@ func (h *Handler) reportsSalesCSV(ctx context.Context, panelKey string) (string,
 	case "activity":
 		acts, err := q.ReportSalesActivityByOwner(ctx, db.ReportSalesActivityByOwnerParams{
 			ScopeAll: act.ScopeAll, IsOwn: act.IsOwn, Uid: &uid,
+			PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 		})
 		if err != nil {
 			return "", nil, nil, err
 		}
 		won, err := q.ReportWonDealsByOwner(ctx, db.ReportWonDealsByOwnerParams{
 			ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+			PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 		})
 		if err != nil {
 			return "", nil, nil, err
@@ -127,6 +134,7 @@ func (h *Handler) reportsSalesCSV(ctx context.Context, panelKey string) (string,
 	default: // "" atau "pipeline" — kompatibel mundur M8-1.
 		stages, err := q.ReportPipelineByStage(ctx, db.ReportPipelineByStageParams{
 			ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+			PeriodStart: f.Start, PeriodEnd: f.End, OwnerFilter: f.OwnerID,
 		})
 		if err != nil {
 			return "", nil, nil, err
