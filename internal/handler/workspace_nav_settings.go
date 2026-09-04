@@ -13,13 +13,13 @@ import (
 // workspaceSettingsGroup merakit grup Settings (wireframe 9). Muncul bila user
 // punya MINIMAL satu izin pengaturan — tanpa itu grup tak menawarkan apa pun,
 // jadi disembunyikan seutuhnya. Tiap anak enabled mengikuti izin gerbang
-// halamannya (nol menu hantu); Automation & Integrations placeholder disabled.
+// halamannya (nol menu hantu).
 // nil → user tak berhak melihat grup sama sekali.
 func workspaceSettingsGroup(slug string, canMembers, canRoles, canSettings bool) *ui.NavItem {
 	if !canMembers && !canRoles && !canSettings {
 		return nil
 	}
-	children := make([]ui.NavItem, 0, 5)
+	children := make([]ui.NavItem, 0, 3)
 	// Identitas workspace (ganti nama) & daur hidup (arsip/hapus) TAK lagi punya
 	// item di sini — dipindah ke /dev/workspaces/{id} sebagai wewenang platform
 	// (BL-53). Yang tersisa di grup Settings ruang kerja: Anggota, Peran, dan
@@ -46,10 +46,6 @@ func workspaceSettingsGroup(slug string, canMembers, canRoles, canSettings bool)
 			Icon: lucide.Wrench(html.Class("size-4")),
 		})
 	}
-	children = append(children,
-		ui.NavItem{Label: "Automation / Workflow", Icon: lucide.Workflow(html.Class("size-4")), Disabled: true},
-		ui.NavItem{Label: "Integrations", Icon: lucide.Plug(html.Class("size-4")), Disabled: true},
-	)
 	return &ui.NavItem{
 		Label: "Settings", Icon: lucide.Settings(html.Class("size-4")), Children: children,
 	}
