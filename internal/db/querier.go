@@ -1092,7 +1092,7 @@ type Querier interface {
 	// Panel 5. Per agen (t.assigned_to, join users utk nama/email). handled = tiket
 	// ditangani, resolved = selesai, avg_resolution_hours (selesai), met/with_sla =
 	// Kepatuhan SLA agen. Badge Status diturunkan handler (const threshold). Agen
-	// NULL (belum ditugaskan) dikecualikan.
+	// NULL (belum ditugaskan) dikecualikan. Periode by created_at + Prioritas (BL-51).
 	ReportAgentPerformance(ctx context.Context, arg ReportAgentPerformanceParams) ([]ReportAgentPerformanceRow, error)
 	// Panel 2 (Adoption Report, versi sederhana) + KPI Adoption Rate: rata
 	// feature_adoption_rate + distribusi band (Tinggi 80–100 / Sedang 60–79 /
@@ -1141,7 +1141,8 @@ type Querier interface {
 	// Panel 4 (SEBAGIAN BESAR DILEWATKAN). Hanya artikel Published: Judul · Dilihat
 	// (view_count apa adanya — komentar 00018: auto-increment di luar scope, praktis
 	// 0) · Status. TAK ada rating/deflection/membantu (tak ada datanya). Tenant via
-	// RLS (h.q). Dibatasi 50 (panel ringkas, bukan daftar penuh).
+	// RLS (h.q). Dibatasi 50 (panel ringkas, bukan daftar penuh). Snapshot tanpa
+	// dimensi waktu/prioritas → filter Periode/Prioritas TAK berlaku (catatan UI).
 	ReportKBPublished(ctx context.Context) ([]ReportKBPublishedRow, error)
 	// Panel 4 (funnel Lead Conversion) sisi LEADS: total lead masuk, terkualifikasi
 	// (Qualified atau sudah Converted — keduanya lolos kualifikasi), jadi deal
@@ -1182,11 +1183,15 @@ type Querier interface {
 	// due_30 = Active dgn end_date dalam 30 hari ke depan (index idx_subs_renewal).
 	ReportRenewalSummary(ctx context.Context, arg ReportRenewalSummaryParams) (ReportRenewalSummaryRow, error)
 	// Panel 3 bar. Rata jam penyelesaian per prioritas (tiket selesai). NULL bila
-	// belum ada tiket selesai di prioritas itu → "—" & bar 0 di view.
+	// belum ada tiket selesai di prioritas itu → "—" & bar 0 di view. Periode by
+	// resolved_at (BUKAN created_at — panel tentang tiket yang SELESAI dalam jendela)
+	// + Prioritas saring baris (BL-51).
 	ReportResolutionByPriority(ctx context.Context, arg ReportResolutionByPriorityParams) ([]ReportResolutionByPriorityRow, error)
 	// Panel 3 baris metrik: rata jam penyelesaian tiket yang RESOLVED bulan ini vs
 	// bulan lalu (batas bulan UTC via date_trunc). Label bulan dirakit handler
-	// (appTZ). NULL bila tak ada tiket selesai pada bulan itu.
+	// (appTZ). NULL bila tak ada tiket selesai pada bulan itu. Periode TAK berlaku
+	// (metrik inheren "bulan ini vs lalu" relatif now()); hanya Prioritas menyaring
+	// (BL-51) — catatan UI menjelaskan Periode tak menyentuh baris ini.
 	ReportResolutionMonthCompare(ctx context.Context, arg ReportResolutionMonthCompareParams) (ReportResolutionMonthCompareRow, error)
 	// Panel 3 (Retention/Churn) kartu + KPI Retention Rate: hitung aktif vs churned
 	// dari subscriptions.status. Retention% & Churn% dihitung handler dari kedua
@@ -1206,7 +1211,7 @@ type Querier interface {
 	// pakai 4 (Kritis tak ada di skema). target_minutes = target penyelesaian dari
 	// sla_policies via snapshot t.sla_policy_id (MAX bila banyak policy per
 	// prioritas; NULL bila tiket tak ber-policy → "—" di view). Terpenuhi% =
-	// met/with_sla per prioritas.
+	// met/with_sla per prioritas. Periode by created_at + Prioritas saring baris (BL-51).
 	ReportSLAByPriority(ctx context.Context, arg ReportSLAByPriorityParams) ([]ReportSLAByPriorityRow, error)
 	// Panel 5 (Sales Activity Report): per-owner hitung aktivitas context='sales'
 	// per kind (call/email/meeting) + total. LEFT JOIN users utk nama tampilan (pola
@@ -1279,6 +1284,7 @@ type Querier interface {
 	// target untuk dipenuhi); avg_resolution_hours = Rata Penyelesaian (tiket
 	// selesai). breached = terlanggar (resolved telat ATAU belum selesai lewat
 	// deadline); at_risk = belum selesai, deadline < 4 jam lagi (pola CountTicketKPIs).
+	// Periode by created_at + Prioritas (BL-51).
 	ReportSupportKPIs(ctx context.Context, arg ReportSupportKPIsParams) (ReportSupportKPIsRow, error)
 	// reports_support.sql — agregasi Support Report (Modul 8, wireframe 8.3, BL-46).
 	// Diperluas dari 1 panel (breakdown status) ke 5 panel; query yang DIBANGUN
@@ -1291,10 +1297,22 @@ type Querier interface {
 	// Bucket bulan: to_char(date_trunc('month', …), 'YYYY-MM') → urut leksikografis =
 	// kronologis (pola sama ReportSalesForecast). Timezone: batas bulan UTC (cukup
 	// untuk laporan; gotcha #14 — hindari AT TIME ZONE di SELECT list sqlc).
+	//
+	// Filter interaktif Periode + Prioritas (BL-51, pola BL-49 Sales/BL-50 CS): narg
+	// OPSIONAL period_start/period_end (timestamptz) + priority (text). Guard NULL =
+	// tak menyaring (sqlc.narg(x) IS NULL OR col …). Periode memotong KOLOM YANG
+	// TEPAT per panel (bukan created_at seragam): Volume Masuk by created_at &
+	// Selesai by resolved_at; KPI/SLA/Agent by created_at; Resolution by resolved_at
+	// (tiket selesai). Prioritas menyaring baris/agregasi. DUA pengecualian sengaja:
+	// ReportResolutionMonthCompare = "bulan ini vs lalu" relatif now() → Periode TAK
+	// berlaku (hanya Prioritas); ReportKBPublished = snapshot tanpa dimensi
+	// waktu/prioritas → tak disaring sama sekali (catatan UI menjelaskan keduanya).
 	// Panel 1 (Ticket Volume): per bulan → Tiket Masuk (created bulan itu) & Selesai
 	// (resolved bulan itu). Backlog kumulatif (masuk−selesai berjalan) DIHITUNG di
 	// handler dari urutan bulan ini (SQL cukup dua deret). UNION ALL dua sumber
 	// tanggal lalu GROUP agar bulan yang hanya punya salah satu tetap muncul.
+	// Periode SENGAJA per-sumber: Masuk dibatasi created_at, Selesai dibatasi
+	// resolved_at (BL-51). Prioritas menyaring kedua sumber.
 	ReportTicketVolumeByMonth(ctx context.Context, arg ReportTicketVolumeByMonthParams) ([]ReportTicketVolumeByMonthRow, error)
 	// Panel 3 (tabel Alasan Kalah): GROUP BY loss_reason_code atas deal Closed Lost.
 	// loss_reason_code = PICKLIST terkunci (00038, BL-44 3a) → grouping bersih tanpa

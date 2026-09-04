@@ -37,14 +37,20 @@ WHERE t.assigned_to IS NOT NULL
         OR a.backup_csm = $3
     ))
 )
+  AND ($4::timestamptz IS NULL OR t.created_at >= $4)
+  AND ($5::timestamptz IS NULL OR t.created_at < $5)
+  AND ($6::text IS NULL OR t.priority = $6)
 GROUP BY t.assigned_to, u.name, u.email
 ORDER BY handled DESC, agent_id
 `
 
 type ReportAgentPerformanceParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	Priority    *string            `json:"priority"`
 }
 
 type ReportAgentPerformanceRow struct {
@@ -61,9 +67,16 @@ type ReportAgentPerformanceRow struct {
 // Panel 5. Per agen (t.assigned_to, join users utk nama/email). handled = tiket
 // ditangani, resolved = selesai, avg_resolution_hours (selesai), met/with_sla =
 // Kepatuhan SLA agen. Badge Status diturunkan handler (const threshold). Agen
-// NULL (belum ditugaskan) dikecualikan.
+// NULL (belum ditugaskan) dikecualikan. Periode by created_at + Prioritas (BL-51).
 func (q *Queries) ReportAgentPerformance(ctx context.Context, arg ReportAgentPerformanceParams) ([]ReportAgentPerformanceRow, error) {
-	rows, err := q.db.Query(ctx, reportAgentPerformance, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportAgentPerformance,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Priority,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +124,8 @@ type ReportKBPublishedRow struct {
 // Panel 4 (SEBAGIAN BESAR DILEWATKAN). Hanya artikel Published: Judul · Dilihat
 // (view_count apa adanya — komentar 00018: auto-increment di luar scope, praktis
 // 0) · Status. TAK ada rating/deflection/membantu (tak ada datanya). Tenant via
-// RLS (h.q). Dibatasi 50 (panel ringkas, bukan daftar penuh).
+// RLS (h.q). Dibatasi 50 (panel ringkas, bukan daftar penuh). Snapshot tanpa
+// dimensi waktu/prioritas → filter Periode/Prioritas TAK berlaku (catatan UI).
 func (q *Queries) ReportKBPublished(ctx context.Context) ([]ReportKBPublishedRow, error) {
 	rows, err := q.db.Query(ctx, reportKBPublished)
 	if err != nil {
@@ -149,6 +163,9 @@ WHERE (
         OR a.backup_csm = $3
     ))
 )
+  AND ($4::timestamptz IS NULL OR t.resolved_at >= $4)
+  AND ($5::timestamptz IS NULL OR t.resolved_at < $5)
+  AND ($6::text IS NULL OR t.priority = $6)
 GROUP BY t.priority
 ORDER BY CASE t.priority
     WHEN 'tinggi' THEN 1
@@ -159,9 +176,12 @@ END
 `
 
 type ReportResolutionByPriorityParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	Priority    *string            `json:"priority"`
 }
 
 type ReportResolutionByPriorityRow struct {
@@ -171,9 +191,18 @@ type ReportResolutionByPriorityRow struct {
 }
 
 // Panel 3 bar. Rata jam penyelesaian per prioritas (tiket selesai). NULL bila
-// belum ada tiket selesai di prioritas itu → "—" & bar 0 di view.
+// belum ada tiket selesai di prioritas itu → "—" & bar 0 di view. Periode by
+// resolved_at (BUKAN created_at — panel tentang tiket yang SELESAI dalam jendela)
+// + Prioritas saring baris (BL-51).
 func (q *Queries) ReportResolutionByPriority(ctx context.Context, arg ReportResolutionByPriorityParams) ([]ReportResolutionByPriorityRow, error) {
-	rows, err := q.db.Query(ctx, reportResolutionByPriority, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportResolutionByPriority,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Priority,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -213,12 +242,14 @@ WHERE (
         OR a.backup_csm = $3
     ))
 )
+  AND ($4::text IS NULL OR t.priority = $4)
 `
 
 type ReportResolutionMonthCompareParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll bool    `json:"scope_all"`
+	IsOwn    bool    `json:"is_own"`
+	Uid      *int64  `json:"uid"`
+	Priority *string `json:"priority"`
 }
 
 type ReportResolutionMonthCompareRow struct {
@@ -228,9 +259,16 @@ type ReportResolutionMonthCompareRow struct {
 
 // Panel 3 baris metrik: rata jam penyelesaian tiket yang RESOLVED bulan ini vs
 // bulan lalu (batas bulan UTC via date_trunc). Label bulan dirakit handler
-// (appTZ). NULL bila tak ada tiket selesai pada bulan itu.
+// (appTZ). NULL bila tak ada tiket selesai pada bulan itu. Periode TAK berlaku
+// (metrik inheren "bulan ini vs lalu" relatif now()); hanya Prioritas menyaring
+// (BL-51) — catatan UI menjelaskan Periode tak menyentuh baris ini.
 func (q *Queries) ReportResolutionMonthCompare(ctx context.Context, arg ReportResolutionMonthCompareParams) (ReportResolutionMonthCompareRow, error) {
-	row := q.db.QueryRow(ctx, reportResolutionMonthCompare, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	row := q.db.QueryRow(ctx, reportResolutionMonthCompare,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Priority,
+	)
 	var i ReportResolutionMonthCompareRow
 	err := row.Scan(&i.ThisMonthHours, &i.PrevMonthHours)
 	return i, err
@@ -260,6 +298,9 @@ WHERE (
         OR a.backup_csm = $3
     ))
 )
+  AND ($4::timestamptz IS NULL OR t.created_at >= $4)
+  AND ($5::timestamptz IS NULL OR t.created_at < $5)
+  AND ($6::text IS NULL OR t.priority = $6)
 GROUP BY t.priority
 ORDER BY CASE t.priority
     WHEN 'tinggi' THEN 1
@@ -270,9 +311,12 @@ END
 `
 
 type ReportSLAByPriorityParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	Priority    *string            `json:"priority"`
 }
 
 type ReportSLAByPriorityRow struct {
@@ -288,9 +332,16 @@ type ReportSLAByPriorityRow struct {
 // pakai 4 (Kritis tak ada di skema). target_minutes = target penyelesaian dari
 // sla_policies via snapshot t.sla_policy_id (MAX bila banyak policy per
 // prioritas; NULL bila tiket tak ber-policy → "—" di view). Terpenuhi% =
-// met/with_sla per prioritas.
+// met/with_sla per prioritas. Periode by created_at + Prioritas saring baris (BL-51).
 func (q *Queries) ReportSLAByPriority(ctx context.Context, arg ReportSLAByPriorityParams) ([]ReportSLAByPriorityRow, error) {
-	rows, err := q.db.Query(ctx, reportSLAByPriority, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportSLAByPriority,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Priority,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -344,12 +395,18 @@ WHERE (
         OR a.backup_csm = $3
     ))
 )
+  AND ($4::timestamptz IS NULL OR t.created_at >= $4)
+  AND ($5::timestamptz IS NULL OR t.created_at < $5)
+  AND ($6::text IS NULL OR t.priority = $6)
 `
 
 type ReportSupportKPIsParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	Priority    *string            `json:"priority"`
 }
 
 type ReportSupportKPIsRow struct {
@@ -366,8 +423,16 @@ type ReportSupportKPIsRow struct {
 // target untuk dipenuhi); avg_resolution_hours = Rata Penyelesaian (tiket
 // selesai). breached = terlanggar (resolved telat ATAU belum selesai lewat
 // deadline); at_risk = belum selesai, deadline < 4 jam lagi (pola CountTicketKPIs).
+// Periode by created_at + Prioritas (BL-51).
 func (q *Queries) ReportSupportKPIs(ctx context.Context, arg ReportSupportKPIsParams) (ReportSupportKPIsRow, error) {
-	row := q.db.QueryRow(ctx, reportSupportKPIs, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	row := q.db.QueryRow(ctx, reportSupportKPIs,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Priority,
+	)
 	var i ReportSupportKPIsRow
 	err := row.Scan(
 		&i.Total,
@@ -399,6 +464,9 @@ FROM (
             OR a.backup_csm = $3
         ))
     )
+      AND ($4::timestamptz IS NULL OR t.created_at >= $4)
+      AND ($5::timestamptz IS NULL OR t.created_at < $5)
+      AND ($6::text IS NULL OR t.priority = $6)
     UNION ALL
     SELECT to_char(date_trunc('month', t.resolved_at), 'YYYY-MM') AS period,
            0 AS masuk, 1 AS selesai
@@ -413,15 +481,21 @@ FROM (
             OR a.backup_csm = $3
         ))
     )
+      AND ($4::timestamptz IS NULL OR t.resolved_at >= $4)
+      AND ($5::timestamptz IS NULL OR t.resolved_at < $5)
+      AND ($6::text IS NULL OR t.priority = $6)
 ) x
 GROUP BY period
 ORDER BY period
 `
 
 type ReportTicketVolumeByMonthParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll    bool               `json:"scope_all"`
+	IsOwn       bool               `json:"is_own"`
+	Uid         *int64             `json:"uid"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	Priority    *string            `json:"priority"`
 }
 
 type ReportTicketVolumeByMonthRow struct {
@@ -441,12 +515,31 @@ type ReportTicketVolumeByMonthRow struct {
 // Bucket bulan: to_char(date_trunc('month', …), 'YYYY-MM') → urut leksikografis =
 // kronologis (pola sama ReportSalesForecast). Timezone: batas bulan UTC (cukup
 // untuk laporan; gotcha #14 — hindari AT TIME ZONE di SELECT list sqlc).
+//
+// Filter interaktif Periode + Prioritas (BL-51, pola BL-49 Sales/BL-50 CS): narg
+// OPSIONAL period_start/period_end (timestamptz) + priority (text). Guard NULL =
+// tak menyaring (sqlc.narg(x) IS NULL OR col …). Periode memotong KOLOM YANG
+// TEPAT per panel (bukan created_at seragam): Volume Masuk by created_at &
+// Selesai by resolved_at; KPI/SLA/Agent by created_at; Resolution by resolved_at
+// (tiket selesai). Prioritas menyaring baris/agregasi. DUA pengecualian sengaja:
+// ReportResolutionMonthCompare = "bulan ini vs lalu" relatif now() → Periode TAK
+// berlaku (hanya Prioritas); ReportKBPublished = snapshot tanpa dimensi
+// waktu/prioritas → tak disaring sama sekali (catatan UI menjelaskan keduanya).
 // Panel 1 (Ticket Volume): per bulan → Tiket Masuk (created bulan itu) & Selesai
 // (resolved bulan itu). Backlog kumulatif (masuk−selesai berjalan) DIHITUNG di
 // handler dari urutan bulan ini (SQL cukup dua deret). UNION ALL dua sumber
 // tanggal lalu GROUP agar bulan yang hanya punya salah satu tetap muncul.
+// Periode SENGAJA per-sumber: Masuk dibatasi created_at, Selesai dibatasi
+// resolved_at (BL-51). Prioritas menyaring kedua sumber.
 func (q *Queries) ReportTicketVolumeByMonth(ctx context.Context, arg ReportTicketVolumeByMonthParams) ([]ReportTicketVolumeByMonthRow, error) {
-	rows, err := q.db.Query(ctx, reportTicketVolumeByMonth, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	rows, err := q.db.Query(ctx, reportTicketVolumeByMonth,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Priority,
+	)
 	if err != nil {
 		return nil, err
 	}

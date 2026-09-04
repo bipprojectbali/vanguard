@@ -20,7 +20,7 @@ func (h *Handler) ReportsSupportExport(w http.ResponseWriter, r *http.Request) {
 		h.renderReportsForbidden(w, r, "Support Report", "/reports/support")
 		return
 	}
-	view, err := h.reportsSupportData(ctx)
+	view, err := h.reportsSupportData(ctx, parseSupportReportFilter(r))
 	if err != nil {
 		h.Log.Error("reports: support export", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
