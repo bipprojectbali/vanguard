@@ -4,13 +4,19 @@
 -- bukan duplikat logic scope (pola sama dengan dashboard.sql).
 
 -- name: ReportPipelineByStage :many
--- Sales Report (wireframe 8.1): SEMUA stage TERMASUK Closed Won/Lost — beda
--- sengaja dari DashboardPipelineByStage (yang exclude keduanya untuk chart
+-- Sales Report (wireframe 8.1 panel 1): SEMUA stage TERMASUK Closed Won/Lost —
+-- beda sengaja dari DashboardPipelineByStage (yang exclude keduanya untuk chart
 -- funnel). Report butuh gambaran penuh pipeline+hasil, bukan cuma yang terbuka.
+-- BL-43: avg_probability = rata probabilitas per stage (baris probability NULL
+-- dilewati AVG); weighted_value = SUM(amount×probability/100) — nilai pipeline
+-- tertimbang. COALESCE(...)::tipe membungkus tiap agregat agar sqlc tak emit
+-- interface{} (gotcha #14); avg dibulatkan ke bilangan bulat (persen).
 SELECT
     stage,
     COUNT(*)::bigint                  AS deal_count,
-    COALESCE(SUM(amount), 0)::numeric AS stage_value
+    COALESCE(SUM(amount), 0)::numeric AS stage_value,
+    COALESCE(ROUND(AVG(probability), 0), 0)::bigint         AS avg_probability,
+    COALESCE(SUM(amount * probability / 100.0), 0)::numeric AS weighted_value
 FROM deals
 WHERE deleted_at IS NULL
   AND (
