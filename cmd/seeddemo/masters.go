@@ -116,15 +116,20 @@ func seedMasters(ctx context.Context, q *db.Queries, tenantID int64, tag string,
 		out.playbookCount++
 	}
 
+	// kbSpecs: category & status TERKUNCI enum — category ∈ {Panduan Awal,
+	// Pembayaran, Kependudukan, Teknis, Umum} (kb_articles_category_chk, migrasi
+	// 00035); status ∈ {Draft, Published, Archived} (kb_articles_status_chk,
+	// 00034); visibility ∈ {Public, Internal, Portal Only} (00018). Ubah nilai di
+	// sini hanya ke anggota enum sah — TestSeedInto jadi gerbangnya.
 	kbSpecs := []struct {
 		title, body, category, status, visibility string
 	}{
-		{"Cara Reset Password Operator", "Panduan reset password akun operator desa lewat menu Pengaturan.", "Akun", "Published", "Public"},
-		{"Panduan Input APBDes", "Langkah input rencana anggaran desa ke modul keuangan.", "Keuangan", "Published", "Public"},
-		{"Troubleshooting Login Gagal", "Daftar penyebab umum login gagal & solusinya.", "Akun", "Published", "Internal"},
-		{"Checklist Onboarding CSM", "Checklist internal CSM saat mengonboarding desa baru.", "Onboarding", "Review", "Internal"},
-		{"Draft: Integrasi SIA Desa", "Rancangan dokumentasi integrasi modul SIA (belum final).", "Integrasi", "Draft", "Internal"},
-		{"FAQ Portal Desa", "Pertanyaan umum warga seputar layanan portal desa.", "Portal", "Published", "Portal Only"},
+		{"Cara Reset Password Operator", "Panduan reset password akun operator desa lewat menu Pengaturan.", "Teknis", "Published", "Public"},
+		{"Panduan Input APBDes", "Langkah input rencana anggaran desa ke modul keuangan.", "Pembayaran", "Published", "Public"},
+		{"Troubleshooting Login Gagal", "Daftar penyebab umum login gagal & solusinya.", "Teknis", "Published", "Internal"},
+		{"Checklist Onboarding CSM", "Checklist internal CSM saat mengonboarding desa baru.", "Panduan Awal", "Draft", "Internal"},
+		{"Draft: Integrasi SIA Desa", "Rancangan dokumentasi integrasi modul SIA (belum final).", "Teknis", "Draft", "Internal"},
+		{"FAQ Portal Desa", "Pertanyaan umum warga seputar layanan portal desa.", "Umum", "Published", "Portal Only"},
 	}
 	for _, s := range kbSpecs {
 		if _, err := q.CreateKBArticle(ctx, db.CreateKBArticleParams{
