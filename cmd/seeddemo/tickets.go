@@ -11,8 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// tickets.go — 25 tiket dukungan tersebar ke SEMUA 4 status (baru/ditugaskan/
-// eskalasi/selesai). sla_deadline_at disimpan sbg snapshot saat create
+// tickets.go — 25 tiket dukungan tersebar ke SEMUA 4 status (baru/diproses/
+// menunggu/selesai; enum disederhanakan BL-38, migrasi 00036). sla_deadline_at
+// disimpan sbg snapshot saat create
 // (00021_crm_cs_tickets.sql) — bukan dihitung ulang dari sla_policies — jadi
 // bebas ditulis di MASA LALU utk ≥5 tiket TERBUKA (breach), independen dari
 // created_at.
@@ -32,16 +33,16 @@ func seedTickets(ctx context.Context, q *db.Queries, tenantID int64, rng *rand.R
 	var ids []int64
 	today := time.Now()
 
-	// Distribusi status: 8 baru, 6 ditugaskan, 5 eskalasi, 6 selesai (total 25).
+	// Distribusi status: 8 baru, 6 diproses, 5 menunggu, 6 selesai (total 25).
 	statusPlan := make([]string, 0, ticketTotal)
 	for i := 0; i < 8; i++ {
 		statusPlan = append(statusPlan, "baru")
 	}
 	for i := 0; i < 6; i++ {
-		statusPlan = append(statusPlan, "ditugaskan")
+		statusPlan = append(statusPlan, "diproses")
 	}
 	for i := 0; i < 5; i++ {
-		statusPlan = append(statusPlan, "eskalasi")
+		statusPlan = append(statusPlan, "menunggu")
 	}
 	for i := 0; i < 6; i++ {
 		statusPlan = append(statusPlan, "selesai")
@@ -63,7 +64,7 @@ func seedTickets(ctx context.Context, q *db.Queries, tenantID int64, rng *rand.R
 			slaPolicyID = &id
 		}
 
-		// Deadline: tiket TERBUKA (baru/ditugaskan/eskalasi) sebagian sengaja
+		// Deadline: tiket TERBUKA (baru/diproses/menunggu) sebagian sengaja
 		// breach (masa lalu); tiket 'selesai' deadline wajar (masa lalu tapi
 		// diselesaikan sebelum lewat, tercermin dari resolved_at via UpdateTicketStatus).
 		var deadline time.Time
