@@ -44,8 +44,12 @@ type DealDetailView struct {
 
 	Competitor    string
 	WinLossReason string
-	ClosedDate    string
-	LossNotes     string
+	// LossReasonCode (BL-44 3a) = kode alasan kalah terstruktur (picklist), hanya
+	// terisi saat Closed Lost. LossReasonCodes = opsi dropdown untuk kontrol stage.
+	LossReasonCode  string
+	LossReasonCodes []string
+	ClosedDate      string
+	LossNotes       string
 
 	Owner    string
 	CanWrite bool
@@ -114,6 +118,7 @@ func DealDetail(v DealDetailView) g.Node {
 		}),
 		detailCard("Hasil & Analisis", []detailField{
 			{"Alasan Menang/Kalah", v.WinLossReason},
+			{"Kode Alasan Kalah", v.LossReasonCode},
 			{"Kompetitor", v.Competitor},
 			{"Tanggal Tutup", v.ClosedDate},
 			{"Catatan Kekalahan", v.LossNotes},

@@ -141,6 +141,16 @@ func dealStageControl(v DealDetailView, base string) g.Node {
 							"Deal menang membuat langganan otomatis untuk desa & paket deal ini."),
 					)
 				}),
+				// BL-44 (3a): kode alasan kalah terstruktur (picklist) — muncul HANYA saat
+				// Closed Lost. required=false di HTML (select tersembunyi tak boleh memblok
+				// submit stage lain); backend WAJIB memvalidasinya saat Closed Lost
+				// (sales_deals_stage.go → ?err=loss_reason). Dipakai grouping bersih laporan.
+				showWhen(
+					"$stage == '"+stageClosedLost+"'",
+					"min-w-0", selectField("Alasan Kalah (Kode)", "loss_reason_code",
+						v.LossReasonCode, v.LossReasonCodes, false,
+						"Wajib dipilih saat deal Closed Lost — dipakai laporan Win/Loss."),
+				),
 				showWhen(
 					"$stage == '"+stageClosedLost+"'",
 					"sm:col-span-2 min-w-0", textareaField("Catatan Kekalahan", "loss_notes", v.LossNotes),

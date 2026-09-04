@@ -15,7 +15,8 @@ import (
 // DealStage — POST /w/{workspace}/deals/{id}/stage. Memindah tahap pipeline (aksi
 // tersendiri, bukan efek edit). Closed Won/Lost WAJIB win_loss_reason → else
 // ?err=win_loss (validasi di handler, bukan CHECK DB, agar pesan bisa diperbaiki
-// user). loss_notes hanya relevan saat Closed Lost; disimpan apa adanya.
+// user). Closed Lost JUGA WAJIB loss_reason_code (picklist, BL-44) → ?err=loss_reason.
+// loss_notes hanya relevan saat Closed Lost; disimpan apa adanya.
 func (h *Handler) DealStage(w http.ResponseWriter, r *http.Request) {
 	if !h.requireDealWrite(w, r) {
 		return
@@ -40,12 +41,28 @@ func (h *Handler) DealStage(w http.ResponseWriter, r *http.Request) {
 	}
 	winLoss := optTrim(r.FormValue("win_loss_reason"))
 	lossNotes := optTrim(r.FormValue("loss_notes"))
+	lossCode := optTrim(r.FormValue("loss_reason_code"))
 	// Stage terminal menuntut alasan menang/kalah — jejak "kenapa" wajib ada saat
 	// deal ditutup. Stage aktif tak menuntutnya.
 	terminal := stage == "Closed Won" || stage == "Closed Lost"
 	if terminal && winLoss == nil {
 		wsRedirect(w, r, "/deals/"+idStr, "win_loss")
 		return
+	}
+	// BL-44 (3a): Closed Lost WAJIB kode alasan kalah terstruktur (picklist) untuk
+	// laporan Win/Loss yang bersih; harus salah satu nilai valid. Kode HANYA relevan
+	// saat kalah → dikosongkan untuk stage lain (Won & stage aktif).
+	if stage == "Closed Lost" {
+		if lossCode == nil {
+			wsRedirect(w, r, "/deals/"+idStr, "loss_reason")
+			return
+		}
+		if _, ok := validLossReasonCodes[*lossCode]; !ok {
+			wsRedirect(w, r, "/deals/"+idStr, "loss_reason")
+			return
+		}
+	} else {
+		lossCode = nil
 	}
 	if !terminal {
 		// Pindah kembali ke stage aktif → bersihkan hasil (tak ada menang/kalah lagi).
@@ -68,11 +85,12 @@ func (h *Handler) DealStage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.q(ctx).UpdateDealStage(ctx, db.UpdateDealStageParams{
-		Stage:         stage,
-		WinLossReason: winLoss,
-		LossNotes:     lossNotes,
-		UpdatedBy:     &uid,
-		ID:            id,
+		Stage:          stage,
+		WinLossReason:  winLoss,
+		LossReasonCode: lossCode,
+		LossNotes:      lossNotes,
+		UpdatedBy:      &uid,
+		ID:             id,
 	}); err != nil {
 		h.Log.Error("deals: stage", "err", err)
 		wsRedirect(w, r, "/deals/"+idStr, "failed")

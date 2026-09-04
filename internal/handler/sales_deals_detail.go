@@ -116,6 +116,8 @@ func (h *Handler) dealDetailView(ctx context.Context, base string, d db.Deal, na
 		SubscriptionTerm: deref(d.SubscriptionTerm),
 		Competitor:       deref(d.Competitor),
 		WinLossReason:    deref(d.WinLossReason),
+		LossReasonCode:   deref(d.LossReasonCode),
+		LossReasonCodes:  lossReasonCodeOptions,
 		ClosedDate:       dateStr(d.ClosedDate),
 		LossNotes:        deref(d.LossNotes),
 		Owner:            ownerName(d.DealOwner, names),
