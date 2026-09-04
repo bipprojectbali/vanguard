@@ -29,8 +29,8 @@ type AllActivitiesListView struct {
 	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
 }
 
-// AllActivitiesList merender halaman: header + tombol buat per-kind + alert +
-// tabel (atau keadaan kosong) + pager.
+// AllActivitiesList merender halaman: header + tombol "Tambah Aktivitas" (pola
+// 1-form BL-19/BL-42) + alert + tabel (atau keadaan kosong) + pager.
 func AllActivitiesList(v AllActivitiesListView) g.Node {
 	body := []g.Node{
 		h.Div(
@@ -40,7 +40,11 @@ func AllActivitiesList(v AllActivitiesListView) g.Node {
 				h.P(h.Class("text-base-content/70"),
 					g.Text("Semua catatan aktivitas lintas-modul — Sales, Customer Success, dan umum.")),
 			),
-			ui.When(v.CanWrite, allActivityNewButtons(v.Base)),
+			// BL-42: satu tombol "Tambah Aktivitas" (jenis dipilih di form) alih-alih
+			// 3 tombol per-kind — seragam dgn Sales Activities (BL-19) & menjangkau
+			// SEMUA kind (termasuk meeting/chat). Tanpa targetFilter (feed global tak
+			// pre-seleksi target).
+			ui.When(v.CanWrite, activityNewButton(v.Base, "")),
 		),
 		searchBox(v.Base+"/activity-log", v.Query, "Cari aktivitas — subjek…", "Cari aktivitas"),
 	}
@@ -56,21 +60,6 @@ func AllActivitiesList(v AllActivitiesListView) g.Node {
 		body = append(body, allActivitiesTable(v), allActivitiesPager(v))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
-}
-
-// allActivityNewButtons = tombol buat aktivitas (tanpa pre-fill target).
-// Reuse URL /activities/new (form Sales Activity yang sudah ada) karena CRUD
-// belum dipecah per-context di iterasi ini. Baris flex-wrap agar tak mendorong.
-func allActivityNewButtons(base string) g.Node {
-	btn := func(label, kind string) g.Node {
-		return h.A(
-			h.Href(base+"/activities/new?kind="+kind),
-			h.Class("btn btn-sm btn-primary min-h-11"), g.Text(label))
-	}
-	return h.Div(
-		h.Class("flex flex-wrap items-center gap-2"),
-		btn("Tugas", "task"), btn("Panggilan", "call"), btn("Catatan", "note"),
-	)
 }
 
 // allActivitiesTable = tabel aktivitas lintas-context. Menambah kolom "Konteks"
