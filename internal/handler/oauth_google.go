@@ -133,6 +133,12 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	// Datang lewat tautan undangan sebelum punya akun? Google = jalur auth
+	// PRODUKSI → auto-accept di sini (meniru dua jalur password dev-only di
+	// auth.go/auth_login.go). SETELAH startIdentity (butuh UserID di session),
+	// SEBELUM WriteCookie (agar SetActiveTenant/ClearPendingInvite ikut ter-commit
+	// ke cookie). Fail-soft & one-shot tertanam di acceptPendingInvite.
+	h.acceptPendingInvite(r)
 	if err := session.WriteCookie(ctx, w); err != nil {
 		h.Log.Error("google callback: write cookie", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
