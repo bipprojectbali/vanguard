@@ -1,119 +1,152 @@
 package panel
 
 import (
-	"strconv"
-
-	"go_starter/internal/ui"
-
 	g "maragu.dev/gomponents"
 	h "maragu.dev/gomponents/html"
 )
 
-// reports_support.go — Support Report (Modul 8, wireframe 8.3): view
-// MURNI-DATA, handler (internal/handler/reports_support.go) yang menghitung.
-// KPI cards reuse ticketKPICard (tickets_list.go, package sama) & TicketKPIs
-// (tipe reuse, tak diredefinisi) — TANPA href (report bukan navigasi filter
-// tab seperti /tickets). Tabel breakdown dibungkus ui.TableScroll (WAJIB).
+// reports_support.go — Support Report (Modul 8, wireframe 8.3, BL-46): view
+// MURNI-DATA; handler (internal/handler/reports_support*.go) yang menghitung &
+// memformat (persen/jam/koma Indonesia). Struktur data 5 panel di sini; fungsi
+// render tiap panel di reports_support_panels.go (pola sama reports_cs). Kartu
+// KPI meniru dashboardKPICard (package sama); tiap <table> dibungkus
+// ui.TableScroll (WAJIB, gotcha overflow).
+//
+// Panel/kolom yang datanya BELUM ADA TAK dirender — keputusan sadar BL-46
+// (docs/crm/tasks.md, "data belum ada DILEWATKAN dulu"): CSAT (KPI ke-4, tak
+// ada tabel survei), bar per-kategori & Kanal (tak ada kolom), Respons pertama
+// & FCR/Sekali-selesai (tak ada first_response_at/reopen), KB rating/deflection/
+// membantu (tak ada kolomnya).
 
-// ReportTicketStatusRow = satu baris tabel breakdown status tiket.
-// AvgHoursToResolve sudah diformat handler (numericStr) — "" bila belum ada
-// tiket selesai di grup.
-type ReportTicketStatusRow struct {
-	Status            string
-	Count             int64
-	Breached          int64
-	AvgHoursToResolve string
+// ── Struktur data 5 panel (semua string SUDAH diformat di handler) ──
+
+// SupportVolumeRow = satu baris bulanan panel 1 (Ticket Volume). Backlog =
+// kumulatif (masuk−selesai berjalan) DIHITUNG handler dari urutan bulan.
+type SupportVolumeRow struct {
+	Period  string
+	Masuk   int64
+	Selesai int64
+	Backlog int64
 }
 
-// ReportsSupportView — data siap-render /reports/support.
+// SupportSLARow = satu baris per-prioritas panel 2 (SLA Compliance). Target =
+// "N jam" atau "—" (tak ada policy). MetPct "%"; BarPct = kepatuhan tingkat itu.
+type SupportSLARow struct {
+	Priority string
+	Target   string
+	MetPct   string
+	Breached int64
+	BarPct   int
+}
+
+// SupportResolutionRow = satu baris per-prioritas panel 3 (bar rata jam
+// penyelesaian). Avg "N,N jam" atau "—"; BarPct relatif prioritas terlama.
+type SupportResolutionRow struct {
+	Priority string
+	Avg      string
+	Count    int64
+	BarPct   int
+}
+
+// SupportKBRow = satu artikel Published panel 4 (sebagian besar dilewatkan).
+type SupportKBRow struct {
+	Title  string
+	Views  int64
+	Status string
+}
+
+// SupportAgentRow = satu agen panel 5. Semua kolom SUDAH diformat; Status =
+// badge kinerja (label + kelas daisyUI) diturunkan handler dari kepatuhan SLA
+// + rasio penyelesaian (const ambang, bukan hardcode tersebar).
+type SupportAgentRow struct {
+	Agent         string
+	Handled       int64
+	Resolved      int64
+	AvgResolution string
+	SLACompliance string
+	StatusLabel   string
+	StatusClass   string
+}
+
+// ReportsSupportView — data siap-render /reports/support (3 KPI nyata + 5
+// panel; CSAT dilewatkan). String KPI "—" bila tak bermakna.
 type ReportsSupportView struct {
 	Base string
-	KPIs TicketKPIs
-	Rows []ReportTicketStatusRow
+
+	// KPI ringkas (CSAT dilewatkan → 3 kartu).
+	TotalTickets  string
+	SLACompliance string
+	AvgResolution string
+
+	// Panel 1 — Ticket Volume Report.
+	VolumeRows []SupportVolumeRow
+
+	// Panel 2 — SLA Compliance Report.
+	SLAMetPct    string
+	SLABreachPct string
+	SLAAtRisk    int64
+	SLARows      []SupportSLARow
+
+	// Panel 3 — Resolution Time Report.
+	ResolutionRows []SupportResolutionRow
+	ResThisLabel   string
+	ResThisMonth   string
+	ResPrevLabel   string
+	ResPrevMonth   string
+	ResChange      string
+
+	// Panel 4 — KB Usage Report (sebagian besar dilewatkan).
+	KBRows []SupportKBRow
+
+	// Panel 5 — Agent Performance Report.
+	AgentRows []SupportAgentRow
 }
 
-// ReportsSupportBody merender kartu KPI (reuse ticketKPICard, tanpa href) +
-// tabel breakdown per status + link Export CSV. Mobile-first: KPI
-// grid-cols-2 (dasar) → md:grid-cols-5 (pola sama ticketKPICards).
+// ReportsSupportBody merender header + 3 KPI + 5 panel. Mobile-first: KPI
+// grid-cols-1 (dasar) → sm:grid-cols-3; panel ditumpuk grid-cols-1 →
+// lg:grid-cols-2; Agent Performance selebar penuh (tabel banyak kolom).
 func ReportsSupportBody(v ReportsSupportView) g.Node {
 	return h.Div(h.Class("grid gap-4 min-w-0"),
 		h.Div(
-			h.Class("flex flex-wrap items-center justify-between gap-2"),
-			h.Div(
-				h.H1(h.Class("text-xl font-semibold"), g.Text("Support Report")),
-				h.P(h.Class("text-base-content/70"), g.Text("Volume tiket, SLA, dan resolusi per status.")),
-			),
-			h.A(h.Href(v.Base+"/reports/support/export"), h.Class("btn btn-outline min-h-11"), g.Text("Export CSV")),
+			h.H1(h.Class("text-xl font-semibold"), g.Text("Support Report")),
+			h.P(h.Class("text-base-content/70"), g.Text("Volume tiket, SLA, waktu penyelesaian, KB, & kinerja agen — panel lain menyusul saat datanya tersedia.")),
 		),
-		reportsSupportKPICards(v.KPIs),
-		reportsSupportTable(v),
+		reportsSupportKPICards(v),
+		h.Div(h.Class("grid grid-cols-1 lg:grid-cols-2 gap-4 min-w-0"),
+			reportsVolumePanel(v),
+			reportsSLAPanel(v),
+			reportsResolutionPanel(v),
+			reportsKBPanel(v),
+		),
+		reportsAgentPanel(v),
 	)
 }
 
-func reportsSupportKPICards(k TicketKPIs) g.Node {
-	return h.Div(h.Class("grid grid-cols-2 md:grid-cols-5 gap-3 min-w-0"),
-		reportsSupportKPICard("Tiket Terbuka", strconv.Itoa(k.Open), ""),
-		reportsSupportKPICard("Belum Ditugaskan", strconv.Itoa(k.Unassigned), "text-warning"),
-		reportsSupportKPICard("SLA Berisiko", strconv.Itoa(k.AtRisk), "text-warning"),
-		reportsSupportKPICard("SLA Terlanggar", strconv.Itoa(k.Breached), "text-error"),
-		reportsSupportKPICard("Selesai Hari Ini", strconv.Itoa(k.ResolvedToday), "text-success"),
+func reportsSupportKPICards(v ReportsSupportView) g.Node {
+	return h.Div(h.Class("grid grid-cols-1 sm:grid-cols-3 gap-3"),
+		dashboardKPICard("Total Tiket", v.TotalTickets, "text-primary"),
+		dashboardKPICard("Kepatuhan SLA", v.SLACompliance, "text-success"),
+		dashboardKPICard("Rata Penyelesaian", v.AvgResolution, "text-secondary"),
 	)
 }
 
-// reportsSupportKPICard = kartu KPI statis (TANPA href — beda dari
-// ticketKPICard/tickets_list.go yang link ke tab filter; report bukan
-// halaman ber-tab).
-func reportsSupportKPICard(label, value, colorCls string) g.Node {
-	numCls := "text-2xl font-bold"
-	if colorCls != "" {
-		numCls += " " + colorCls
-	}
+// reportSupportPanelCard = pembungkus kartu panel seragam Support: judul +
+// tautan Export CSV per-panel (panelKey → ?panel=…) + isi. min-w-0 agar card
+// menyusut (bukan meluber) di grid mobile. Pola sama reportCSPanelCard.
+func reportSupportPanelCard(base, title, panelKey string, body ...g.Node) g.Node {
+	href := base + "/reports/support/export?panel=" + panelKey
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body p-3"),
-			h.P(h.Class("text-xs text-base-content/60 truncate"), g.Text(label)),
-			h.P(h.Class(numCls), g.Text(value)),
-		),
-	)
-}
-
-// reportsSupportTable = tabel breakdown per status, dibungkus ui.TableScroll
-// (scroll terkurung, tak meluberkan viewport 375px).
-func reportsSupportTable(v ReportsSupportView) g.Node {
-	if len(v.Rows) == 0 {
-		return h.Div(
-			h.Class("card bg-base-100 border border-base-300"),
-			h.Div(h.Class("card-body items-start"),
-				h.P(h.Class("text-base-content/70"), g.Text("Belum ada data tiket.")),
+		h.Div(h.Class("card-body min-w-0"),
+			h.Div(h.Class("flex flex-wrap items-center justify-between gap-2 mb-2"),
+				h.H2(h.Class("font-semibold"), g.Text(title)),
+				h.A(
+					h.Href(href),
+					h.Class("btn btn-outline btn-sm min-h-11"),
+					g.Text("Export CSV"),
+				),
 			),
-		)
-	}
-	rows := make([]g.Node, 0, len(v.Rows))
-	for _, s := range v.Rows {
-		rows = append(rows, h.Tr(
-			h.Class("border-b border-base-300/50"),
-			h.Td(h.Class("py-2 pr-4 font-medium"), g.Text(s.Status)),
-			h.Td(h.Class("py-2 pr-4"), g.Text(strconv.FormatInt(s.Count, 10))),
-			h.Td(h.Class("py-2 pr-4"), g.Text(strconv.FormatInt(s.Breached, 10))),
-			h.Td(h.Class("py-2"), g.Text(orDash(s.AvgHoursToResolve))),
-		))
-	}
-	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body min-w-0"),
-			ui.TableScroll(h.Table(
-				h.Class("w-full text-sm"),
-				h.THead(h.Tr(
-					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Status")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Jumlah")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("SLA Terlanggar")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("Rata-rata Resolusi (jam)")),
-				)),
-				h.TBody(g.Group(rows)),
-			)),
+			g.Group(body),
 		),
 	)
 }

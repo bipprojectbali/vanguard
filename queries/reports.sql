@@ -225,37 +225,3 @@ WHERE (
 )
 GROUP BY e.owner_id, u.name, u.email
 ORDER BY total DESC, owner_id;
-
--- name: ReportTicketsByStatus :many
--- Support Report (wireframe 8.3): breakdown tiket per status + jumlah
--- terlanggar SLA + rata-rata jam resolusi (hanya tiket 'selesai'). F3
--- ownership PERSIS ListTickets/CountTicketKPIs (tickets.sql) — TERMASUK
--- override Support (TicketsListFilterFor: data_scope='none' + canWrite →
--- ScopeAll). avg_resolution_hours NULL bila belum ada tiket selesai di grup.
-SELECT
-    t.status          AS status,
-    COUNT(*)::bigint  AS ticket_count,
-    COUNT(*) FILTER (WHERE t.sla_deadline_at IS NOT NULL
-                       AND t.sla_deadline_at < now()
-                       AND t.status <> 'selesai')::bigint AS breached_count,
-    ROUND((AVG(EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 3600.0)
-           FILTER (WHERE t.status = 'selesai' AND t.resolved_at IS NOT NULL))::numeric, 1)
-                      AS avg_resolution_hours
-FROM tickets t
-JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
-WHERE (
-    sqlc.arg(scope_all)::boolean
-    OR (sqlc.arg(is_own)::boolean AND (
-        a.account_owner = sqlc.arg(uid)
-        OR a.assigned_csm = sqlc.arg(uid)
-        OR a.backup_csm = sqlc.arg(uid)
-    ))
-)
-GROUP BY t.status
-ORDER BY CASE t.status
-    WHEN 'baru'     THEN 1
-    WHEN 'diproses' THEN 2
-    WHEN 'menunggu' THEN 3
-    WHEN 'selesai'  THEN 4
-    ELSE 5
-END;
