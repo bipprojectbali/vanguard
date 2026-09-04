@@ -246,10 +246,11 @@ func TestWorkspaceNav_ReportsGroup(t *testing.T) {
 }
 
 // TestWorkspaceNav_SettingsGroupChildren: Settings = grup bersarang; anak enabled
-// mengikuti izin masing-masing (sumber sama dengan gerbang halaman), plus dua
-// placeholder disabled. Semua izin → ketiga anak hadir dengan href benar.
-// "Workspace Settings" (/settings) SENGAJA tak lagi di sini — identitas & siklus
-// hidup workspace pindah ke /dev sebagai wewenang platform (BL-53).
+// mengikuti izin masing-masing (sumber sama dengan gerbang halaman). Semua izin →
+// ketiga anak hadir dengan href benar. Placeholder "Automation / Workflow" &
+// "Integrations" SENGAJA disembunyikan (BL-55) — fiturnya belum ada, kurangi menu
+// mati. "Workspace Settings" (/settings) SENGAJA tak lagi di sini — identitas &
+// siklus hidup workspace pindah ke /dev sebagai wewenang platform (BL-53).
 func TestWorkspaceNav_SettingsGroupChildren(t *testing.T) {
 	nav := workspaceNav("acme", true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true)
 	grp, ok := findItem(nav, "Settings")
@@ -281,9 +282,8 @@ func TestWorkspaceNav_SettingsGroupChildren(t *testing.T) {
 		}
 	}
 	for _, label := range []string{"Automation / Workflow", "Integrations"} {
-		ch, ok := findItem(grp.Children, label)
-		if !ok || !ch.Disabled {
-			t.Errorf("placeholder %q harus ada & disabled", label)
+		if _, ok := findItem(grp.Children, label); ok {
+			t.Errorf("placeholder %q harus tidak ada — disembunyikan (BL-55)", label)
 		}
 	}
 }
@@ -291,7 +291,7 @@ func TestWorkspaceNav_SettingsGroupChildren(t *testing.T) {
 // TestWorkspaceNav_SettingsGatingPerIzin: tiap anak enabled muncul HANYA jika
 // izinnya diberikan — menu tak menawarkan pintu yang lalu ditolak 403.
 func TestWorkspaceNav_SettingsGatingPerIzin(t *testing.T) {
-	// Hanya canRoles → grup ada, tapi cuma Roles yang enabled (+placeholder).
+	// Hanya canRoles → grup ada, tapi cuma Roles yang enabled.
 	nav := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false)
 	grp, ok := findItem(nav, "Settings")
 	if !ok {
