@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"go_starter/internal/authz"
 	"go_starter/internal/codes"
 	"go_starter/internal/db"
 
@@ -283,5 +284,130 @@ func TestDashboard_NoBusinessRoleFallsBackToPlaceholder(t *testing.T) {
 	}
 	if !strings.Contains(body, "Selamat datang di") {
 		t.Errorf("tanpa business_role harus tetap melihat Placeholder sapaan, body:\n%s", body)
+	}
+}
+
+// --- BL-59a: section domain Sales (komposisi per-izin) -----------------------
+//
+// Beranda redesain (BL-59) mengomposisi section per-domain berdasar kapabilitas
+// role: domain "Sales" hanya muncul bila role punya ≥1 dari crm:deals /
+// crm:sales_activity / crm:leads (read). Selaras F2/F3 — role KUSTOM otomatis
+// dapat section sesuai modulnya. Tiga sumbu diuji: visibilitas per-role bawaan,
+// role kustom (union parsial), dan F3 (angka section menghormati data_scope).
+
+// seedClosingDeal menaruh satu deal TERBUKA yang expected_close_date-nya jatuh
+// di bulan kalender berjalan — untuk KPI section Sales "Deal Tutup Bulan Ini".
+func (e *testEnv) seedClosingDeal(t *testing.T, accountID int64, owner *int64) db.Deal {
+	t.Helper()
+	code, err := e.q.GenerateEntityCode(t.Context(), e.tenantID, codes.EntityDeal)
+	if err != nil {
+		t.Fatalf("generate deal code: %v", err)
+	}
+	now := time.Now().UTC()
+	first := pgtype.Date{
+		Time:  time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC),
+		Valid: true,
+	}
+	d, err := e.q.CreateDeal(t.Context(), db.CreateDealParams{
+		TenantID: e.tenantID, EntityCode: &code, DealName: "Deal Tutup",
+		AccountID: accountID, DealOwner: owner, Stage: dealInitialStage,
+		ExpectedCloseDate: first, CreatedBy: owner,
+	})
+	if err != nil {
+		t.Fatalf("seed closing deal: %v", err)
+	}
+	return d
+}
+
+// TestDashboardSales_DomainVisibleByCapability: role dgn ≥1 kapabilitas Sales
+// (admin/manager/sales) melihat heading section "Sales" + KPI Win Rate;
+// role tanpanya (csm/support) TAK melihat section Sales sama sekali (heading tak
+// berdiri kosong).
+func TestDashboardSales_DomainVisibleByCapability(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa Sales Dom", &uid, nil, nil)
+	env.seedDeal(t, acc.ID, &uid) // pipeline non-kosong utk yg berhak
+
+	for _, role := range []string{"admin", "manager", "sales"} {
+		t.Run(role+" melihat section Sales", func(t *testing.T) {
+			body := env.dashboardBody(t, uid, "owner", role)
+			if !strings.Contains(body, ">Sales</h2>") {
+				t.Errorf("role %q harus melihat heading section Sales, body:\n%s", role, body)
+			}
+			if !strings.Contains(body, "Win Rate") {
+				t.Errorf("role %q (crm:deals) harus melihat KPI Win Rate di section Sales", role)
+			}
+			if !strings.Contains(body, "chart-pipeline") {
+				t.Errorf("role %q (crm:deals) harus melihat chart-pipeline di section Sales", role)
+			}
+		})
+	}
+
+	for _, role := range []string{"csm", "support"} {
+		t.Run(role+" tak melihat section Sales", func(t *testing.T) {
+			body := env.dashboardBody(t, uid, "owner", role)
+			if strings.Contains(body, ">Sales</h2>") {
+				t.Errorf("role %q (tanpa kapabilitas Sales) TAK boleh melihat section Sales, body:\n%s", role, body)
+			}
+			if strings.Contains(body, "chart-pipeline") {
+				t.Errorf("role %q TAK boleh melihat chart-pipeline", role)
+			}
+		})
+	}
+}
+
+// TestDashboardSales_CustomRoleLeadsOnly: role KUSTOM dgn hanya crm:dashboard +
+// crm:leads (read) melihat section Sales berisi HANYA panel Lead (chart-leads),
+// TANPA butir Deals (chart-pipeline / Win Rate) — bukti komposisi union parsial
+// per-kapabilitas, bukan section utuh-atau-tak-ada.
+func TestDashboardSales_CustomRoleLeadsOnly(t *testing.T) {
+	env, uid := setupAccounts(t)
+	env.loadBusinessRolesWith(t,
+		authz.BusinessPerm{Role: "leadsonly", Obj: "crm:dashboard", Act: "read"},
+		authz.BusinessPerm{Role: "leadsonly", Obj: "crm:leads", Act: "read"},
+	)
+	acc := env.seedAccount(t, "Desa Custom", &uid, nil, nil)
+	env.seedDeal(t, acc.ID, &uid) // deal ADA tapi role tak berhak melihatnya
+
+	req := accountsReq(http.MethodGet, "/w/test/", nil, "")
+	rec := env.runAccountScope(uid, "member", "leadsonly", "all", req, env.h.WorkspaceHome)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, ">Sales</h2>") {
+		t.Errorf("role kustom (crm:leads) harus melihat section Sales, body:\n%s", body)
+	}
+	if !strings.Contains(body, "chart-leads") {
+		t.Error("role kustom (crm:leads) harus melihat chart-leads")
+	}
+	if strings.Contains(body, "chart-pipeline") {
+		t.Error("role kustom tanpa crm:deals TAK boleh melihat chart-pipeline")
+	}
+	if strings.Contains(body, "Win Rate") {
+		t.Error("role kustom tanpa crm:deals TAK boleh melihat KPI Win Rate")
+	}
+}
+
+// TestDashboardSales_DealsClosingScopedByOwnership (F3): KPI "Deal Tutup Bulan
+// Ini" menghormati data_scope — sales (own) hanya menghitung deal miliknya;
+// manager (all) menghitung lintas-owner. Sumber filter = DealsListFilterFor,
+// sama dgn papan Kanban (bukan logic scope duplikat).
+func TestDashboardSales_DealsClosingScopedByOwnership(t *testing.T) {
+	env, uid := setupAccounts(t)
+	other := env.seedMember(t, "otherdeal@local", "member", 0).ID
+	accMine := env.seedAccount(t, "Desa Deal Mine", &uid, nil, nil)
+	accOther := env.seedAccount(t, "Desa Deal Other", &other, nil, nil)
+	env.seedClosingDeal(t, accMine.ID, &uid)
+	env.seedClosingDeal(t, accOther.ID, &other)
+
+	const label = "Deal Tutup Bulan Ini"
+	own := env.dashboardBody(t, uid, "owner", "sales")
+	if got := dashboardKPIValue(t, own, label); got != "1" {
+		t.Errorf("sales own-scope: %q = %q, want \"1\" (hanya miliknya)", label, got)
+	}
+	all := env.dashboardBody(t, uid, "owner", "manager")
+	if got := dashboardKPIValue(t, all, label); got != "2" {
+		t.Errorf("manager all-scope: %q = %q, want \"2\" (lintas-owner)", label, got)
 	}
 }

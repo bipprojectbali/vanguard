@@ -13,18 +13,18 @@ import (
 	g "maragu.dev/gomponents"
 )
 
-// dashboard.go — Beranda ruang kerja (Modul 1, tasks.md M1-1/M1-2): kartu KPI
-// (ARR total, pipeline per-stage, distribusi health, renewal jatuh tempo) +
-// dua chart ECharts vendored (CSP-safe via <script type=application/json>,
-// dirender charts.js). Query di queries/dashboard.sql; distribusi health
-// REUSE CountHealthScoreKPIs (health_score.sql) via helper health_score_view.go
-// — tak dituliskan ulang. F2 gate di dashboard_view.go; F3 ownership pakai
-// filter modul ASAL tiap tabel (deals → DealsListFilter, subscriptions →
-// SubscriptionsListFilter, health → AccountsListFilter lewat healthScoreListParams)
-// — sumber SATU, bukan duplikat logic scope. F4: ARR pakai kebijakan
-// subscriptions (canSeeSubscriptionARR/maskSubscriptionARR) BUKAN kebijakan
-// deals — spec M1-3 "manager cross-team, ARR terbatas" cocok dgn Admin+Manager
-// saja. Health TAK di-mask (kebijakan sengaja, lihat fls.go).
+// dashboard.go — Beranda ruang kerja (Modul 1). BL-59 redesain: baris KPI ringkas
+// GLOBAL (ARR total, renewal jatuh tempo, ARR berisiko, health dinilai) + distribusi
+// health DIPERTAHANKAN di atas; di bawahnya SECTION per-domain (Sales/…) yang
+// dikomposisi per-izin (dashboard_sales.go dst). Tiap domain merender bila role
+// punya kapabilitas modulnya — selaras F2/F3 yang sudah ada, role kustom otomatis
+// dapat section sesuai modulnya tanpa kode baru.
+//
+// Query global di queries/dashboard.sql; distribusi health REUSE
+// CountHealthScoreKPIs (health_score.sql). F2 gate di dashboard_view.go; F3
+// ownership pakai filter modul ASAL tiap tabel (subscriptions → SubscriptionsListFilter,
+// health → healthScoreListParams). F4: ARR pakai kebijakan BL-58 (kapabilitas
+// crm:subscriptions/arr, bukan nama role). Health TAK di-mask (kebijakan sengaja).
 
 // dashboardHome merakit body Beranda: fail-soft (pola sama dgn notifBadge di
 // shell_nav.go) — tanpa izin ATAU gagal query, jatuh ke Placeholder biasa.
@@ -43,8 +43,10 @@ func (h *Handler) dashboardHome(ctx context.Context) g.Node {
 	return panel.DashboardBody(view)
 }
 
-// dashboardData menjalankan keempat agregasi (empat round-trip kecil, rule 13
-// — bukan hitung di Go atas seluruh baris) & merakit view-model siap-render.
+// dashboardData menjalankan agregasi GLOBAL (baris KPI ringkas + distribusi
+// health) lalu mengomposisi section per-domain (BL-59). Tiap domain builder
+// (dashSalesDomain, …) menggate butirnya per-kapabilitas & hanya ditambahkan
+// bila punya isi — role melihat UNION section modul yang boleh diaksesnya.
 func (h *Handler) dashboardData(ctx context.Context) (panel.DashboardView, error) {
 	dataScope := session.BusinessDataScope(ctx)
 	canARR := canSeeSubscriptionARR(ctx) // BL-58: kapabilitas, bukan nama role
@@ -58,22 +60,6 @@ func (h *Handler) dashboardData(ctx context.Context) (panel.DashboardView, error
 	})
 	if err != nil {
 		return panel.DashboardView{}, err
-	}
-
-	// BL-11: chart Pipeline per-Stage bersumber Deals — gerbangi pada
-	// canViewDeals (crm:deals read, bukan cek role khusus). Role tanpa izin
-	// (CS pasca-BL-11, Support) melewati query ini (hemat 1 round-trip);
-	// PipelineChart tetap "" → kartu tak dirender (dashboard.go view).
-	pipelineChart := ""
-	if canViewDeals(ctx) {
-		dealsFilter := db.DealsListFilterFor(dataScope)
-		stages, err := q.DashboardPipelineByStage(ctx, db.DashboardPipelineByStageParams{
-			ScopeAll: dealsFilter.ScopeAll, IsOwn: dealsFilter.IsOwn, Uid: &uid,
-		})
-		if err != nil {
-			return panel.DashboardView{}, err
-		}
-		pipelineChart = h.marshalChart(pipelineChartOption(stages))
 	}
 
 	now := time.Now().In(appTZ)
@@ -93,15 +79,24 @@ func (h *Handler) dashboardData(ctx context.Context) (panel.DashboardView, error
 		return panel.DashboardView{}, err
 	}
 
-	return panel.DashboardView{
+	view := panel.DashboardView{
 		ARRTotal:       maskSubscriptionARR(formatRupiah(arrTotal), canARR),
-		PipelineChart:  pipelineChart,
 		HealthChart:    h.marshalChart(healthChartOption(health)),
 		HealthTotal:    health.Total,
 		HealthScored:   health.Scored,
 		RenewalsDue:    due.DueCount,
 		RenewalsDueARR: maskSubscriptionARR(formatRupiah(due.DueArr), canARR),
-	}, nil
+	}
+
+	// Section per-domain (BL-59). 59a: Sales. 59b–59d menyusul (Subscription/
+	// CS/Support) — tiap domain builder ditambah di sini dengan pola sama.
+	if d, ok, err := h.dashSalesDomain(ctx, dataScope, uid); err != nil {
+		return panel.DashboardView{}, err
+	} else if ok {
+		view.Domains = append(view.Domains, d)
+	}
+
+	return view, nil
 }
 
 // marshalChart men-marshal option ECharts → JSON siap-tanam; gagal → di-log +

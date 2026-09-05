@@ -46,6 +46,95 @@ func (q *Queries) DashboardARRTotal(ctx context.Context, arg DashboardARRTotalPa
 	return arr_total, err
 }
 
+const dashboardDealsClosingThisMonth = `-- name: DashboardDealsClosingThisMonth :one
+SELECT COUNT(*)::bigint AS deal_count
+FROM deals
+WHERE deleted_at IS NULL
+  AND stage NOT IN ('Closed Won', 'Closed Lost')
+  AND expected_close_date >= $1::date
+  AND expected_close_date <= $2::date
+  AND (
+      $3::boolean
+      OR ($4::boolean AND deal_owner = $5)
+  )
+`
+
+type DashboardDealsClosingThisMonthParams struct {
+	MonthStart pgtype.Date `json:"month_start"`
+	MonthEnd   pgtype.Date `json:"month_end"`
+	ScopeAll   bool        `json:"scope_all"`
+	IsOwn      bool        `json:"is_own"`
+	Uid        *int64      `json:"uid"`
+}
+
+// BL-59a (section Sales) — jumlah deal TERBUKA yang expected_close_date jatuh
+// dalam bulan berjalan (month_start..month_end inklusif). Rentang bulan dihitung
+// di handler (appTZ) & dioper sbg date agar tak ada AT TIME ZONE di query (gotcha
+// #14). Exclude Closed Won/Lost (sama kanban); ownership F3 pakai flag
+// DealsListFilter (deal_owner) — sumber SATU dgn modul Deals. Hanya COUNT (bukan
+// nilai Rp) → tak butuh masking F4 di section ini.
+func (q *Queries) DashboardDealsClosingThisMonth(ctx context.Context, arg DashboardDealsClosingThisMonthParams) (int64, error) {
+	row := q.db.QueryRow(ctx, dashboardDealsClosingThisMonth,
+		arg.MonthStart,
+		arg.MonthEnd,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+	)
+	var deal_count int64
+	err := row.Scan(&deal_count)
+	return deal_count, err
+}
+
+const dashboardLeadsBySource = `-- name: DashboardLeadsBySource :many
+SELECT
+    COALESCE(NULLIF(lead_source, ''), '(Tanpa sumber)')::text AS source,
+    COUNT(*)::bigint                                     AS lead_count
+FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      $1::boolean
+      OR ($2::boolean AND lead_owner = $3)
+  )
+GROUP BY COALESCE(NULLIF(lead_source, ''), '(Tanpa sumber)')
+ORDER BY lead_count DESC, source
+`
+
+type DashboardLeadsBySourceParams struct {
+	ScopeAll bool   `json:"scope_all"`
+	IsOwn    bool   `json:"is_own"`
+	Uid      *int64 `json:"uid"`
+}
+
+type DashboardLeadsBySourceRow struct {
+	Source    string `json:"source"`
+	LeadCount int64  `json:"lead_count"`
+}
+
+// BL-59a (section Sales) — jumlah lead per sumber (lead_source) dalam cakupan
+// ownership. lead_source nullable/kosong → COALESCE ke '(Tanpa sumber)' agar
+// selalu satu kategori terbaca di chart. Ownership F3 pakai flag LeadsListFilter
+// (lead_owner). ORDER count DESC → sumber terbanyak di atas.
+func (q *Queries) DashboardLeadsBySource(ctx context.Context, arg DashboardLeadsBySourceParams) ([]DashboardLeadsBySourceRow, error) {
+	rows, err := q.db.Query(ctx, dashboardLeadsBySource, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DashboardLeadsBySourceRow{}
+	for rows.Next() {
+		var i DashboardLeadsBySourceRow
+		if err := rows.Scan(&i.Source, &i.LeadCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const dashboardPipelineByStage = `-- name: DashboardPipelineByStage :many
 SELECT
     stage,
