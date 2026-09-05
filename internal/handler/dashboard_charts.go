@@ -68,3 +68,38 @@ func leadsBySourceChartOption(rows []db.DashboardLeadsBySourceRow) map[string]an
 		},
 	}
 }
+
+// mrrMovementChartOption — bar MRR baru vs churn (BL-59b, section Langganan).
+// Dua batang nilai Rp dari komponen ReportSubMRR (jendela "bulan ini"). Hanya
+// dirakit saat pemakai berhak lihat nilai (canSeeARR) — chart tak memasking.
+func mrrMovementChartOption(m db.ReportSubMRRRow) map[string]any {
+	return map[string]any{
+		"tooltip": map[string]any{"trigger": "axis"},
+		"grid":    map[string]any{"left": "3%", "right": "4%", "bottom": "3%", "containLabel": true},
+		"xAxis":   map[string]any{"type": "category", "data": []string{"MRR Baru", "Churn"}},
+		"yAxis":   map[string]any{"type": "value"},
+		"series": []any{
+			map[string]any{"name": "MRR", "type": "bar", "data": []float64{numericFloat(m.NewMrr), numericFloat(m.ChurnMrr)}},
+		},
+	}
+}
+
+// revenueByPlanChartOption — bar MRR aktif per paket (BL-59b). Nama paket dari
+// data tenant (bukan hardcode); urutan MRR terbesar sudah dari query.
+func revenueByPlanChartOption(rows []db.ReportRevenueByPlanRow) map[string]any {
+	names := make([]string, len(rows))
+	values := make([]float64, len(rows))
+	for i, r := range rows {
+		names[i] = r.PlanName
+		values[i] = numericFloat(r.Mrr)
+	}
+	return map[string]any{
+		"tooltip": map[string]any{"trigger": "axis"},
+		"grid":    map[string]any{"left": "3%", "right": "4%", "bottom": "3%", "containLabel": true},
+		"xAxis":   map[string]any{"type": "category", "data": names},
+		"yAxis":   map[string]any{"type": "value"},
+		"series": []any{
+			map[string]any{"name": "MRR", "type": "bar", "data": values},
+		},
+	}
+}
