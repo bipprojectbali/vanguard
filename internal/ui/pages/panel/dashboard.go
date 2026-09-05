@@ -89,11 +89,39 @@ func dashboardKPICard(label, value, valueClass string) g.Node {
 }
 
 // dashboardGlobalCharts — chart GLOBAL yang bertahan di atas section domain.
-// BL-59: distribusi health tetap di sini (akan pindah ke domain CS di 59c).
+// BL-59: distribusi health tetap di sini. Kolom dipilih dashPanelCols agar chart
+// tunggal mengisi penuh-lebar (bukan setengah kosong).
 func dashboardGlobalCharts(v DashboardView) g.Node {
-	return h.Div(h.Class("grid grid-cols-1 md:grid-cols-2 gap-4"),
+	return h.Div(h.Class(dashPanelCols(1)),
 		dashboardChartCard("Distribusi Health", "chart-health", v.HealthChart),
 	)
+}
+
+// dashKPICols memilih kelas grid strip KPI agar baris terisi penuh — tak ada sel
+// kosong menggantung saat jumlah kartu < kolom (mis. 3 KPI di grid 4-kolom).
+// Kolom = jumlah kartu, dibatasi 4; 6 → 3 (2 baris rapi). Mobile tetap 2 kolom
+// (1 kartu → 1). Kelas WAJIB literal penuh agar tak ter-tree-shake Tailwind
+// (gotcha #4) — jangan rakit string "md:grid-cols-"+n.
+func dashKPICols(n int) string {
+	switch n {
+	case 0, 1:
+		return "grid grid-cols-1 gap-3 mb-4"
+	case 2:
+		return "grid grid-cols-2 gap-3 mb-4"
+	case 3, 6:
+		return "grid grid-cols-2 md:grid-cols-3 gap-3 mb-4"
+	default: // 4,5,7+ → 4 kolom (baris penuh utk kelipatan 4)
+		return "grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"
+	}
+}
+
+// dashPanelCols — 1 panel → penuh-lebar (tak setengah kosong); ≥2 → 2 kolom
+// desktop. Kelas literal penuh (gotcha #4).
+func dashPanelCols(n int) string {
+	if n <= 1 {
+		return "grid grid-cols-1 gap-4"
+	}
+	return "grid grid-cols-1 md:grid-cols-2 gap-4"
 }
 
 // dashboardDomain — heading section + strip KPI + grid panel. Dipanggil hanya
@@ -106,14 +134,14 @@ func dashboardDomain(d DashDomain) g.Node {
 		for i, k := range d.KPIs {
 			cards[i] = dashboardKPICard(k.Label, k.Value, k.ValueClass)
 		}
-		kpiStrip = h.Div(h.Class("grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"), g.Group(cards))
+		kpiStrip = h.Div(h.Class(dashKPICols(len(d.KPIs))), g.Group(cards))
 	}
 	if len(d.Panels) > 0 {
 		cards := make([]g.Node, len(d.Panels))
 		for i, p := range d.Panels {
 			cards[i] = dashboardChartCard(p.Title, p.ChartID, p.ChartJSON)
 		}
-		panelGrid = h.Div(h.Class("grid grid-cols-1 md:grid-cols-2 gap-4"), g.Group(cards))
+		panelGrid = h.Div(h.Class(dashPanelCols(len(d.Panels))), g.Group(cards))
 	}
 	return h.Section(h.Class("mt-8"),
 		h.H2(h.Class("text-lg font-semibold mb-3"), g.Text(d.Title)),
