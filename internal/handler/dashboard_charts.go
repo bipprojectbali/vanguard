@@ -124,3 +124,44 @@ func onboardingChartOption(o db.ReportOnboardingRow) map[string]any {
 		},
 	}
 }
+
+// ticketsByPriorityChartOption — bar jumlah tiket per-prioritas (BL-59d, section
+// Support) dari ReportSLAByPriority. Label prioritas di-Indonesia-kan via
+// ticketPriorityLabelID; count murni → tanpa masking.
+func ticketsByPriorityChartOption(rows []db.ReportSLAByPriorityRow) map[string]any {
+	labels := make([]string, len(rows))
+	counts := make([]int64, len(rows))
+	for i, r := range rows {
+		labels[i] = ticketPriorityLabelID(r.Priority)
+		counts[i] = r.Total
+	}
+	return map[string]any{
+		"tooltip": map[string]any{"trigger": "axis"},
+		"grid":    map[string]any{"left": "3%", "right": "4%", "bottom": "3%", "containLabel": true},
+		"xAxis":   map[string]any{"type": "category", "data": labels},
+		"yAxis":   map[string]any{"type": "value", "minInterval": 1},
+		"series": []any{
+			map[string]any{"name": "Tiket", "type": "bar", "data": counts},
+		},
+	}
+}
+
+// agentWorkloadChartOption — bar jumlah tiket ditangani per-agen (BL-59d) dari
+// ReportAgentPerformance. Nama via dashAgentLabel (email fallback DI-MASK).
+func agentWorkloadChartOption(rows []db.ReportAgentPerformanceRow) map[string]any {
+	names := make([]string, len(rows))
+	handled := make([]int64, len(rows))
+	for i, r := range rows {
+		names[i] = dashAgentLabel(r)
+		handled[i] = r.Handled
+	}
+	return map[string]any{
+		"tooltip": map[string]any{"trigger": "axis"},
+		"grid":    map[string]any{"left": "3%", "right": "4%", "bottom": "3%", "containLabel": true},
+		"xAxis":   map[string]any{"type": "category", "data": names},
+		"yAxis":   map[string]any{"type": "value", "minInterval": 1},
+		"series": []any{
+			map[string]any{"name": "Ditangani", "type": "bar", "data": handled},
+		},
+	}
+}

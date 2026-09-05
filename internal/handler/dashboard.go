@@ -89,8 +89,7 @@ func (h *Handler) dashboardData(ctx context.Context) (panel.DashboardView, error
 	}
 
 	// Section per-domain (BL-59). 59a: Sales, 59b: Langganan, 59c: Customer
-	// Success. 59d menyusul (Support) — tiap domain builder ditambah di sini
-	// dengan pola sama.
+	// Success, 59d: Support — tiap domain builder ditambah di sini dengan pola sama.
 	if d, ok, err := h.dashSalesDomain(ctx, dataScope, uid); err != nil {
 		return panel.DashboardView{}, err
 	} else if ok {
@@ -102,6 +101,11 @@ func (h *Handler) dashboardData(ctx context.Context) (panel.DashboardView, error
 		view.Domains = append(view.Domains, d)
 	}
 	if d, ok, err := h.dashCSDomain(ctx, dataScope, uid); err != nil {
+		return panel.DashboardView{}, err
+	} else if ok {
+		view.Domains = append(view.Domains, d)
+	}
+	if d, ok, err := h.dashSupportDomain(ctx, dataScope, uid); err != nil {
 		return panel.DashboardView{}, err
 	} else if ok {
 		view.Domains = append(view.Domains, d)
