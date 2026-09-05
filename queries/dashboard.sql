@@ -61,3 +61,38 @@ WHERE deleted_at IS NULL
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND subscription_owner = sqlc.arg(uid))
   );
+
+-- name: DashboardDealsClosingThisMonth :one
+-- BL-59a (section Sales) — jumlah deal TERBUKA yang expected_close_date jatuh
+-- dalam bulan berjalan (month_start..month_end inklusif). Rentang bulan dihitung
+-- di handler (appTZ) & dioper sbg date agar tak ada AT TIME ZONE di query (gotcha
+-- #14). Exclude Closed Won/Lost (sama kanban); ownership F3 pakai flag
+-- DealsListFilter (deal_owner) — sumber SATU dgn modul Deals. Hanya COUNT (bukan
+-- nilai Rp) → tak butuh masking F4 di section ini.
+SELECT COUNT(*)::bigint AS deal_count
+FROM deals
+WHERE deleted_at IS NULL
+  AND stage NOT IN ('Closed Won', 'Closed Lost')
+  AND expected_close_date >= sqlc.arg(month_start)::date
+  AND expected_close_date <= sqlc.arg(month_end)::date
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
+  );
+
+-- name: DashboardLeadsBySource :many
+-- BL-59a (section Sales) — jumlah lead per sumber (lead_source) dalam cakupan
+-- ownership. lead_source nullable/kosong → COALESCE ke '(Tanpa sumber)' agar
+-- selalu satu kategori terbaca di chart. Ownership F3 pakai flag LeadsListFilter
+-- (lead_owner). ORDER count DESC → sumber terbanyak di atas.
+SELECT
+    COALESCE(NULLIF(lead_source, ''), '(Tanpa sumber)')::text AS source,
+    COUNT(*)::bigint                                     AS lead_count
+FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND lead_owner = sqlc.arg(uid))
+  )
+GROUP BY COALESCE(NULLIF(lead_source, ''), '(Tanpa sumber)')
+ORDER BY lead_count DESC, source;

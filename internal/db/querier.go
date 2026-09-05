@@ -336,6 +336,18 @@ type Querier interface {
 	// MRR×12, keputusan skema §5); F4 (masking non-manager) urusan handler/view,
 	// bukan query — nilai mentah selalu dihitung, disembunyikan di lapis tampilan.
 	DashboardARRTotal(ctx context.Context, arg DashboardARRTotalParams) (pgtype.Numeric, error)
+	// BL-59a (section Sales) — jumlah deal TERBUKA yang expected_close_date jatuh
+	// dalam bulan berjalan (month_start..month_end inklusif). Rentang bulan dihitung
+	// di handler (appTZ) & dioper sbg date agar tak ada AT TIME ZONE di query (gotcha
+	// #14). Exclude Closed Won/Lost (sama kanban); ownership F3 pakai flag
+	// DealsListFilter (deal_owner) — sumber SATU dgn modul Deals. Hanya COUNT (bukan
+	// nilai Rp) → tak butuh masking F4 di section ini.
+	DashboardDealsClosingThisMonth(ctx context.Context, arg DashboardDealsClosingThisMonthParams) (int64, error)
+	// BL-59a (section Sales) — jumlah lead per sumber (lead_source) dalam cakupan
+	// ownership. lead_source nullable/kosong → COALESCE ke '(Tanpa sumber)' agar
+	// selalu satu kategori terbaca di chart. Ownership F3 pakai flag LeadsListFilter
+	// (lead_owner). ORDER count DESC → sumber terbanyak di atas.
+	DashboardLeadsBySource(ctx context.Context, arg DashboardLeadsBySourceParams) ([]DashboardLeadsBySourceRow, error)
 	// Pipeline per-stage (bukan agregat open/won/lost seperti DealPipelineStats) —
 	// satu baris per stage TERBUKA (exclude Closed Won/Lost, sama seperti kanban),
 	// diurutkan CASE mengikuti urutan alami dealStageOptions (sales_deals_form.go)

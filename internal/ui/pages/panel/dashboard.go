@@ -7,30 +7,62 @@ import (
 	h "maragu.dev/gomponents/html"
 )
 
-// dashboard.go — Beranda ruang kerja (Modul 1, tasks.md M1-2): view MURNI-DATA,
-// handler (internal/handler/dashboard.go) yang menghitung & memasking ARR (F4).
-// Meniru pola kartu health_score_list.go (grid card) + chart activityChart
-// dev/logs.go (JSON ditanam <script type=application/json>, CSP-safe).
+// dashboard.go — Beranda ruang kerja (Modul 1, tasks.md M1-2 + BL-59): view
+// MURNI-DATA, handler (internal/handler/dashboard.go) yang menghitung, memasking
+// ARR (F4), & mengomposisi section per-domain per-izin. Meniru pola kartu
+// health_score_list.go (grid card) + chart activityChart dev/logs.go (JSON
+// ditanam <script type=application/json>, CSP-safe).
 
 // DashboardView — data siap-render Beranda. String KPI (ARRTotal/RenewalsDueARR)
 // SUDAH diformat & di-mask di handler (bisa "Rp 1.000.000" atau "•••") — view
-// tak pernah memutuskan tampil/sembunyi sendiri.
+// tak pernah memutuskan tampil/sembunyi sendiri. Domains = section per-domain
+// (Sales/…) yang sudah difilter per-kapabilitas di handler (BL-59).
 type DashboardView struct {
 	ARRTotal       string
-	PipelineChart  string // JSON option ECharts (bar per-stage), sudah di-marshal
 	HealthChart    string // JSON option ECharts (donut health), sudah di-marshal
 	HealthTotal    int64
 	HealthScored   int64
 	RenewalsDue    int64
 	RenewalsDueARR string
+	Domains        []DashDomain
 }
 
-// DashboardBody merender kartu KPI + dua chart. Mobile-first: KPI grid-cols-2
-// (dasar) → md:grid-cols-4; chart grid-cols-1 (dasar, tumpuk) → md:grid-cols-2.
+// DashDomain — satu section domain (mis. "Sales"). Hanya dirakit handler bila
+// role punya ≥1 kapabilitas modulnya; heading dirender hanya bila ada isi.
+type DashDomain struct {
+	Title  string
+	KPIs   []DashKPI
+	Panels []DashPanel
+}
+
+// DashKPI — kartu angka ringkas dalam section domain. Value sudah diformat di
+// handler (bisa mask F4).
+type DashKPI struct {
+	Label      string
+	Value      string
+	ValueClass string
+}
+
+// DashPanel — kartu chart dalam section domain. ChartJSON sudah di-marshal;
+// ChartID wajib unik per-halaman (charts.js auto-discover via id$="-data").
+type DashPanel struct {
+	Title     string
+	ChartID   string
+	ChartJSON string
+}
+
+// DashboardBody merender baris KPI GLOBAL + distribusi health, lalu tiap section
+// domain. Mobile-first: KPI grid-cols-2 (dasar) → md:grid-cols-4; chart/panel
+// grid-cols-1 (dasar, tumpuk) → md:grid-cols-2.
 func DashboardBody(v DashboardView) g.Node {
+	domains := make([]g.Node, len(v.Domains))
+	for i, d := range v.Domains {
+		domains[i] = dashboardDomain(d)
+	}
 	return h.Div(
 		dashboardKPICards(v),
-		dashboardCharts(v),
+		dashboardGlobalCharts(v),
+		g.Group(domains),
 		// Runtime ECharts (vendored) + init — same-origin, CSP-safe (gotcha #12).
 		h.Script(h.Src("/static/echarts.min.js")),
 		h.Script(h.Src("/static/charts.js"), h.Defer()),
@@ -56,14 +88,37 @@ func dashboardKPICard(label, value, valueClass string) g.Node {
 	)
 }
 
-func dashboardCharts(v DashboardView) g.Node {
-	// BL-11: kartu Pipeline per-Stage hanya untuk role dgn crm:deals read.
-	// Handler mengosongkan PipelineChart bila tak berhak (CS pasca-BL-11,
-	// Support) → kartu tak dirender di sini; grid menyusut ke satu kolom.
+// dashboardGlobalCharts — chart GLOBAL yang bertahan di atas section domain.
+// BL-59: distribusi health tetap di sini (akan pindah ke domain CS di 59c).
+func dashboardGlobalCharts(v DashboardView) g.Node {
 	return h.Div(h.Class("grid grid-cols-1 md:grid-cols-2 gap-4"),
-		g.If(v.PipelineChart != "",
-			dashboardChartCard("Pipeline per-Stage", "chart-pipeline", v.PipelineChart)),
 		dashboardChartCard("Distribusi Health", "chart-health", v.HealthChart),
+	)
+}
+
+// dashboardDomain — heading section + strip KPI + grid panel. Dipanggil hanya
+// untuk domain yang punya isi (handler menyaring), jadi heading tak pernah
+// berdiri kosong.
+func dashboardDomain(d DashDomain) g.Node {
+	var kpiStrip, panelGrid g.Node
+	if len(d.KPIs) > 0 {
+		cards := make([]g.Node, len(d.KPIs))
+		for i, k := range d.KPIs {
+			cards[i] = dashboardKPICard(k.Label, k.Value, k.ValueClass)
+		}
+		kpiStrip = h.Div(h.Class("grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"), g.Group(cards))
+	}
+	if len(d.Panels) > 0 {
+		cards := make([]g.Node, len(d.Panels))
+		for i, p := range d.Panels {
+			cards[i] = dashboardChartCard(p.Title, p.ChartID, p.ChartJSON)
+		}
+		panelGrid = h.Div(h.Class("grid grid-cols-1 md:grid-cols-2 gap-4"), g.Group(cards))
+	}
+	return h.Section(h.Class("mt-8"),
+		h.H2(h.Class("text-lg font-semibold mb-3"), g.Text(d.Title)),
+		g.If(kpiStrip != nil, kpiStrip),
+		g.If(panelGrid != nil, panelGrid),
 	)
 }
 

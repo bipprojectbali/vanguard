@@ -48,3 +48,23 @@ func healthChartOption(k db.CountHealthScoreKPIsRow) map[string]any {
 		},
 	}
 }
+
+// leadsBySourceChartOption membangun option bar jumlah lead per sumber (BL-59a,
+// section Sales). Urutan sudah dari query (count DESC) — tak perlu re-sort.
+func leadsBySourceChartOption(rows []db.DashboardLeadsBySourceRow) map[string]any {
+	sources := make([]string, len(rows))
+	counts := make([]int64, len(rows))
+	for i, r := range rows {
+		sources[i] = r.Source
+		counts[i] = r.LeadCount
+	}
+	return map[string]any{
+		"tooltip": map[string]any{"trigger": "axis"},
+		"grid":    map[string]any{"left": "3%", "right": "4%", "bottom": "3%", "containLabel": true},
+		"xAxis":   map[string]any{"type": "category", "data": sources},
+		"yAxis":   map[string]any{"type": "value", "minInterval": 1},
+		"series": []any{
+			map[string]any{"name": "Lead", "type": "bar", "data": counts},
+		},
+	}
+}
