@@ -103,3 +103,24 @@ func revenueByPlanChartOption(rows []db.ReportRevenueByPlanRow) map[string]any {
 		},
 	}
 }
+
+// onboardingChartOption — donut distribusi onboarding_status (BL-59c, section
+// Customer Success) dari ReportOnboarding. Empat status Indonesia; count/porsi
+// murni (tanpa Rp) → tak butuh masking. Pola donut sama dgn healthChartOption.
+func onboardingChartOption(o db.ReportOnboardingRow) map[string]any {
+	return map[string]any{
+		"tooltip": map[string]any{"trigger": "item"},
+		"legend":  map[string]any{"bottom": 0},
+		"series": []any{
+			map[string]any{
+				"name": "Onboarding", "type": "pie", "radius": []string{"45%", "70%"},
+				"data": []any{
+					map[string]any{"name": "Selesai", "value": o.Completed},
+					map[string]any{"name": "Berjalan", "value": o.InProgress},
+					map[string]any{"name": "Belum Mulai", "value": o.NotStarted},
+					map[string]any{"name": "Tersendat", "value": o.Stalled},
+				},
+			},
+		},
+	}
+}
