@@ -22,8 +22,6 @@ p, manager, crm:contacts, write
 p, manager, crm:leads, write
 p, manager, crm:deals, write
 p, manager, crm:deals, approve
-p, manager, crm:quotes, write
-p, manager, crm:quotes, approve
 p, manager, crm:sales_activity, write
 p, manager, crm:subscriptions, write
 p, manager, crm:renewals, write
@@ -37,7 +35,6 @@ p, manager, crm:engagements, write
 p, manager, crm:renewal_mgmt, write
 p, manager, crm:renewal_mgmt, approve
 p, manager, crm:playbooks, write
-p, manager, crm:voc, write
 p, manager, crm:tickets, write
 p, manager, crm:kb, write
 p, manager, crm:sla, write
@@ -51,7 +48,6 @@ p, sales, crm:accounts, write
 p, sales, crm:contacts, write
 p, sales, crm:leads, write
 p, sales, crm:deals, write
-p, sales, crm:quotes, write
 p, sales, crm:sales_activity, write
 p, sales, crm:subscriptions, read
 p, sales, crm:renewals, read
@@ -80,7 +76,6 @@ p, csm, crm:adoption, write
 p, csm, crm:engagements, write
 p, csm, crm:renewal_mgmt, write
 p, csm, crm:playbooks, write
-p, csm, crm:voc, write
 p, csm, crm:tickets, read
 p, csm, crm:kb, read
 p, csm, crm:sla, read

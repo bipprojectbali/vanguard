@@ -64,6 +64,42 @@ func TestRoles_UpdateMatrixAndReload(t *testing.T) {
 	env.assertAudited(t, "crm.role.update")
 }
 
+// TestRoles_UpdateIgnoresDroppedColumns: sel matriks untuk objek yang SUDAH
+// dibuang dari editor (crm:quotes BL-56 mewarisi Deals, crm:voc BL-57 belum ada
+// modulnya) TAK boleh tembus ke DB/enforcer walau diselipkan langsung ke form.
+// Penjaganya struktural: readRoleMatrix hanya membaca level.<obj> untuk objek di
+// CRMModules() (daftar tertutup) — objek di luar daftar tak pernah dibaca. Sel
+// valid di request yang sama tetap tersimpan (bukti form-nya sendiri sah).
+func TestRoles_UpdateIgnoresDroppedColumns(t *testing.T) {
+	env, uid := setupRoles(t)
+	env.seedRole(t, "finance", "Keuangan", "own", false)
+
+	form := roleFormValues("Keuangan", "all")
+	form.Set("level.crm:accounts", "write") // sel sah
+	form.Set("level.crm:quotes", "write")   // kolom dibuang (BL-56)
+	form.Set("approve.crm:quotes", "1")     // approve kolom dibuang
+	form.Set("level.crm:voc", "write")      // kolom dibuang (BL-57)
+	req := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleUpdate)
+
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=saved") {
+		t.Fatalf("harus ok=saved, got %q (status %d)", loc, rec.Code)
+	}
+	if !env.hasPerm(t, "finance", "crm:accounts", "write") {
+		t.Error("sel sah crm:accounts write harus tetap tersimpan")
+	}
+	for _, obj := range []string{"crm:quotes", "crm:voc"} {
+		for _, act := range []string{"read", "write", "approve"} {
+			if env.hasPerm(t, "finance", obj, act) {
+				t.Errorf("%s %s TAK boleh tersimpan (kolom dibuang)", obj, act)
+			}
+			if env.canBiz(uid, "finance", obj, act) {
+				t.Errorf("enforcer TAK boleh mengizinkan %s %s (kolom dibuang)", obj, act)
+			}
+		}
+	}
+}
+
 // TestRoles_UpdateSystemRejected: peran sistem (admin) kebal sunting → err,
 // nama tampilannya tak berubah.
 func TestRoles_UpdateSystemRejected(t *testing.T) {

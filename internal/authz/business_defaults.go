@@ -68,7 +68,6 @@ func DefaultBusinessRoles() []DefaultRole {
 				{"crm:accounts", "write"}, {"crm:contacts", "write"},
 				{"crm:leads", "write"},
 				{"crm:deals", "write"}, {"crm:deals", "approve"},
-				{"crm:quotes", "write"}, {"crm:quotes", "approve"},
 				{"crm:sales_activity", "write"},
 				{"crm:subscriptions", "write"}, {"crm:renewals", "write"},
 				{"crm:plans", "read"}, {"crm:churn", "write"},
@@ -76,7 +75,7 @@ func DefaultBusinessRoles() []DefaultRole {
 				{"crm:success_plans", "write"}, {"crm:adoption", "write"},
 				{"crm:engagements", "write"},
 				{"crm:renewal_mgmt", "write"}, {"crm:renewal_mgmt", "approve"},
-				{"crm:playbooks", "write"}, {"crm:voc", "write"},
+				{"crm:playbooks", "write"},
 				{"crm:tickets", "write"}, {"crm:kb", "write"},
 				{"crm:sla", "write"}, {"crm:activities", "write"},
 				{"crm:reports", "read"},
@@ -90,7 +89,7 @@ func DefaultBusinessRoles() []DefaultRole {
 				{"crm:dashboard", "read"},
 				{"crm:accounts", "write"}, {"crm:contacts", "write"},
 				{"crm:leads", "write"}, {"crm:deals", "write"},
-				{"crm:quotes", "write"}, {"crm:sales_activity", "write"},
+				{"crm:sales_activity", "write"},
 				{"crm:subscriptions", "read"}, {"crm:renewals", "read"},
 				{"crm:plans", "read"}, {"crm:churn", "read"},
 				{"crm:health", "read"}, {"crm:journey", "read"},
@@ -115,7 +114,7 @@ func DefaultBusinessRoles() []DefaultRole {
 				{"crm:journey", "write"}, {"crm:success_plans", "write"},
 				{"crm:adoption", "write"}, {"crm:engagements", "write"},
 				{"crm:renewal_mgmt", "write"}, {"crm:playbooks", "write"},
-				{"crm:voc", "write"}, {"crm:tickets", "read"},
+				{"crm:tickets", "read"},
 				{"crm:kb", "read"}, {"crm:sla", "read"},
 				{"crm:activities", "write"}, {"crm:reports", "read"},
 			},
@@ -142,27 +141,32 @@ func DefaultBusinessRoles() []DefaultRole {
 type ModuleDef struct {
 	Obj        string // objek Casbin, mis. "crm:accounts"
 	Label      string // label layar (docs/crm/sistem-dan-role.md §4)
-	CanApprove bool   // true → kolom "approve" aktif (hanya Deals/Quotes/Renewal Mgmt)
+	CanApprove bool   // true → kolom "approve" aktif (hanya Deals/Renewal Mgmt)
 }
 
 // crmModules = SELURUH modul CRM sebagai kolom matriks, urut sesuai nomor menu
 // §4 (Dashboard … Reports). Settings (§9) & Customer Portal (§6.12) SENGAJA tak
 // di sini: Settings ditegakkan sumbu tenant (canEditWorkspace), Portal di luar
-// lingkup internal. "approve" hanya untuk tiga modul yang punya alur persetujuan
-// (Deals, Quotes, Renewal Management) — sel approve modul lain tak bermakna dan
-// tak dirender.
+// lingkup internal. "approve" hanya untuk dua modul yang punya alur persetujuan
+// (Deals, Renewal Management) — sel approve modul lain tak bermakna dan tak
+// dirender.
 //
 // crm:roles TIDAK di daftar ini: ia gerbang panel manajemen peran itu sendiri
 // (dimiliki admin lewat glob crm:*), bukan modul yang matriksnya disunting orang
 // — menampilkannya sebagai kolom akan mengundang admin mencabut aksesnya sendiri
 // ke luar dari editor lewat pintu selain admin-lock.
+//
+// crm:quotes (BL-56) & crm:voc (BL-57) SENGAJA tak di daftar ini walau objeknya
+// ada di enforcer. Quotes: akses quote MEWARISI crm:deals (nest di bawah deal,
+// tak ada satu pun CanBusiness(ctx,"crm:quotes",…)) → kolomnya inert; dibuang
+// agar editor tak menawarkan toggle tanpa efek. VoC: modulnya belum dibangun
+// (nol route/handler/menu) → dikembalikan ke daftar ini saat modul VoC dibangun.
 var crmModules = []ModuleDef{
 	{"crm:dashboard", "Dashboard", false},
 	{"crm:accounts", "Accounts (Desa)", false},
 	{"crm:contacts", "Contacts", false},
 	{"crm:leads", "Leads", false},
 	{"crm:deals", "Deals", true},
-	{"crm:quotes", "Quotes", true},
 	{"crm:sales_activity", "Sales Activity Log", false},
 	{"crm:subscriptions", "Active Subscriptions", false},
 	{"crm:renewals", "Renewals", false},
@@ -175,7 +179,6 @@ var crmModules = []ModuleDef{
 	{"crm:engagements", "Engagements", false},
 	{"crm:renewal_mgmt", "Renewal Management", true},
 	{"crm:playbooks", "Playbooks", false},
-	{"crm:voc", "Voice of Customer", false},
 	{"crm:tickets", "Tickets / Cases", false},
 	{"crm:kb", "Knowledge Base", false},
 	{"crm:sla", "SLA Management", false},

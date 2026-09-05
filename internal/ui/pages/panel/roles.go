@@ -39,8 +39,11 @@ type ScopeOption struct {
 func Roles(base string, rows []RoleRow, scopes []ScopeOption, canEdit bool, errMsg, okMsg string) g.Node {
 	body := []g.Node{
 		h.H1(h.Class("text-xl font-semibold mb-2"), g.Text("Peran CRM")),
-		h.P(h.Class("text-base-content/70 mb-4"),
+		h.P(h.Class("text-base-content/70 mb-1"),
 			g.Text("Atur peran bisnis workspace ini dan izin tiap modul CRM.")),
+		h.P(h.Class("text-xs text-base-content/60 mb-4"),
+			g.Text("Quotes mengikuti izin Deals — peran yang boleh mengelola Deals "+
+				"otomatis boleh membuat & menyunting Quote di bawahnya.")),
 	}
 	if errMsg != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "roles-err", g.Text(errMsg)))

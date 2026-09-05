@@ -105,6 +105,7 @@ func RoleEdit(base string, rc RoleCard, scopes []ScopeOption, canEdit bool, errM
 					disabledIf(!canEdit)),
 			),
 			roleMatrix(rc, canEdit),
+			quotesInheritNote(),
 			ui.When(canEdit, h.Button(h.Type("submit"),
 				h.Class("btn btn-primary min-h-11 justify-self-start"),
 				g.Text("Simpan Perubahan"))),
@@ -120,6 +121,17 @@ func RoleEdit(base string, rc RoleCard, scopes []ScopeOption, canEdit bool, errM
 		))
 	}
 	return roleEditShell(body)
+}
+
+// quotesInheritNote = keterangan di bawah matriks bahwa Quotes TAK punya kolom
+// tersendiri (BL-56): akses quote mewarisi izin Deals (quote nest di bawah deal),
+// jadi hilangnya kolom bukan "fitur dicabut" melainkan kolom yang tak pernah
+// ditegakkan. Teks statik → tetap murni-data.
+func quotesInheritNote() g.Node {
+	return h.P(h.Class("text-xs text-base-content/60"),
+		g.Text("Quotes mengikuti izin Deals — peran yang boleh mengelola Deals "+
+			"otomatis boleh membuat & menyunting Quote di bawahnya, jadi tak ada "+
+			"kolom Quotes tersendiri."))
 }
 
 // roleEditShell = kartu tunggal berlebar terbatas (max-w-3xl) agar form editor
