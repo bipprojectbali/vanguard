@@ -14,6 +14,7 @@
 # --- ADMIN: konfigurasi sistem, semua modul tanpa batas (matriks kolom Admin = ✓) ---
 p, admin, crm:*, write
 p, admin, crm:*, approve
+p, admin, crm:*, arr
 
 # --- MANAGER: lintas-tim, menyetujui. ✓ hampir semua KECUALI Plans (👁) & Settings (✕) ---
 p, manager, crm:dashboard, read
@@ -24,6 +25,7 @@ p, manager, crm:deals, write
 p, manager, crm:deals, approve
 p, manager, crm:sales_activity, write
 p, manager, crm:subscriptions, write
+p, manager, crm:subscriptions, arr
 p, manager, crm:renewals, write
 p, manager, crm:plans, read
 p, manager, crm:churn, write

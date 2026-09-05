@@ -20,8 +20,10 @@ type RoleModulePerm struct {
 	Obj        string
 	Label      string
 	CanApprove bool
+	CanARR     bool // true → sel "Lihat ARR" dirender (hanya Subscriptions, BL-58)
 	Level      string
 	Approve    bool
+	ARR        bool // tersetel → kotak "Lihat ARR" tercentang
 }
 
 // RoleCard = satu peran CRM workspace beserta matriksnya. Name = identitas mesin
@@ -152,25 +154,12 @@ func roleEditShell(inner []g.Node) g.Node {
 func roleMatrix(rc RoleCard, canEdit bool) g.Node {
 	rows := make([]g.Node, 0, len(rc.Modules))
 	for _, m := range rc.Modules {
-		approveCell := g.Node(h.Span(h.Class("text-base-content/40"), g.Text("—")))
-		if m.CanApprove {
-			attrs := []g.Node{
-				h.Type("checkbox"), h.Class("checkbox checkbox-sm"),
-				h.Name("approve." + m.Obj), h.Value("1"),
-			}
-			if m.Approve {
-				attrs = append(attrs, h.Checked())
-			}
-			if !canEdit {
-				attrs = append(attrs, h.Disabled())
-			}
-			approveCell = h.Input(attrs...)
-		}
 		rows = append(rows, h.Tr(
 			h.Class("border-b border-base-300/50"),
 			h.Td(h.Class("py-2 pr-4"), g.Text(m.Label)),
 			h.Td(h.Class("py-2 pr-4"), levelSelect(m.Obj, m.Level, !canEdit)),
-			h.Td(h.Class("py-2 text-center"), approveCell),
+			h.Td(h.Class("py-2 pr-4 text-center"), permCheckCell("approve."+m.Obj, m.CanApprove, m.Approve, canEdit)),
+			h.Td(h.Class("py-2 text-center"), permCheckCell("arr."+m.Obj, m.CanARR, m.ARR, canEdit)),
 		))
 	}
 	return ui.TableScroll(h.Table(
@@ -179,10 +168,32 @@ func roleMatrix(rc RoleCard, canEdit bool) g.Node {
 			h.Class("border-b border-base-300 text-left text-base-content/70"),
 			h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Modul")),
 			h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Akses")),
-			h.Th(h.Class("py-2 font-medium text-center"), g.Text("Setujui")),
+			h.Th(h.Class("py-2 pr-4 font-medium text-center"), g.Text("Setujui")),
+			h.Th(h.Class("py-2 font-medium text-center"), g.Text("Lihat ARR")),
 		)),
 		h.TBody(g.Group(rows)),
 	))
+}
+
+// permCheckCell = satu sel kotak-centang matriks (approve/arr). show=false →
+// "—" (modul tak mendukung kapabilitas ini); show=true → checkbox name=name,
+// value=1, tercentang bila checked, terkunci bila !canEdit. Menyatukan pola
+// approve & arr (BL-58) agar tak ada dua salinan builder yang bisa menyimpang.
+func permCheckCell(name string, show, checked, canEdit bool) g.Node {
+	if !show {
+		return h.Span(h.Class("text-base-content/40"), g.Text("—"))
+	}
+	attrs := []g.Node{
+		h.Type("checkbox"), h.Class("checkbox checkbox-sm"),
+		h.Name(name), h.Value("1"),
+	}
+	if checked {
+		attrs = append(attrs, h.Checked())
+	}
+	if !canEdit {
+		attrs = append(attrs, h.Disabled())
+	}
+	return h.Input(attrs...)
 }
 
 // levelSelect = dropdown tingkat izin satu modul (name="level.<obj>").

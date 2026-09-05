@@ -69,6 +69,7 @@ func (h *Handler) SubscriptionDetail(w http.ResponseWriter, r *http.Request) {
 // label cadangan, tak menggagalkan halaman).
 func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscription, names map[int64]string) panel.SubDetailView {
 	br := session.BusinessRole(ctx)
+	canARR := canSeeSubscriptionARR(ctx) // BL-58: kapabilitas ter-matriks, bukan nama role
 	return panel.SubDetailView{
 		Base:         base,
 		ID:           s.ID,
@@ -78,7 +79,7 @@ func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscript
 		Plan:         h.planLabel(ctx, s.PlanID),
 		Status:       s.Status,
 		MRR:          maskARR(formatRupiah(s.Mrr), br),
-		ARR:          maskSubscriptionARR(formatRupiah(s.Arr), br),
+		ARR:          maskSubscriptionARR(formatRupiah(s.Arr), canARR),
 		BillingCycle: deref(s.BillingCycle),
 		AutoRenew:    s.AutoRenew,
 		Start:        dateStr(s.StartDate),
@@ -86,7 +87,7 @@ func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscript
 		Seats:        int32Str(s.QuantitySeats),
 		PaymentState: deref(s.PaymentStatus),
 		Owner:        ownerName(s.SubscriptionOwner, names),
-		Chain:        h.renewalChainView(ctx, s.ID, br),
+		Chain:        h.renewalChainView(ctx, s.ID, br, canARR),
 
 		// Flag aksi (M5-3c) diprecompute di sini — view murni-data (tak panggil authz).
 		CanRenew:     canRenewSubscriptions(ctx),
@@ -100,7 +101,7 @@ func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscript
 // renewalChainView memuat riwayat rantai renewal (lama→baru) untuk kartu di
 // detail. Best-effort (mirror dealQuotesPreview): gagal query → nil + log, detail
 // tetap terbaca. ARR tiap periode disamarkan mengikuti kebijakan yang sama.
-func (h *Handler) renewalChainView(ctx context.Context, id int64, businessRole string) []panel.SubChainRow {
+func (h *Handler) renewalChainView(ctx context.Context, id int64, businessRole string, canARR bool) []panel.SubChainRow {
 	rows, err := h.q(ctx).ListRenewalChain(ctx, id)
 	if err != nil {
 		h.Log.Error("subscriptions: renewal chain", "err", err)
@@ -113,7 +114,7 @@ func (h *Handler) renewalChainView(ctx context.Context, id int64, businessRole s
 			IsThis: c.ID == id,
 			Status: c.Status,
 			MRR:    maskARR(formatRupiah(c.Mrr), businessRole),
-			ARR:    maskSubscriptionARR(formatRupiah(c.Arr), businessRole),
+			ARR:    maskSubscriptionARR(formatRupiah(c.Arr), canARR),
 			Start:  dateStr(c.StartDate),
 			End:    dateStr(c.EndDate),
 		})

@@ -47,7 +47,7 @@ func (h *Handler) dashboardHome(ctx context.Context) g.Node {
 // — bukan hitung di Go atas seluruh baris) & merakit view-model siap-render.
 func (h *Handler) dashboardData(ctx context.Context) (panel.DashboardView, error) {
 	dataScope := session.BusinessDataScope(ctx)
-	businessRole := session.BusinessRole(ctx)
+	canARR := canSeeSubscriptionARR(ctx) // BL-58: kapabilitas, bukan nama role
 	uid := session.UserID(ctx)
 	q := h.q(ctx)
 
@@ -94,13 +94,13 @@ func (h *Handler) dashboardData(ctx context.Context) (panel.DashboardView, error
 	}
 
 	return panel.DashboardView{
-		ARRTotal:       maskSubscriptionARR(formatRupiah(arrTotal), businessRole),
+		ARRTotal:       maskSubscriptionARR(formatRupiah(arrTotal), canARR),
 		PipelineChart:  pipelineChart,
 		HealthChart:    h.marshalChart(healthChartOption(health)),
 		HealthTotal:    health.Total,
 		HealthScored:   health.Scored,
 		RenewalsDue:    due.DueCount,
-		RenewalsDueARR: maskSubscriptionARR(formatRupiah(due.DueArr), businessRole),
+		RenewalsDueARR: maskSubscriptionARR(formatRupiah(due.DueArr), canARR),
 	}, nil
 }
 

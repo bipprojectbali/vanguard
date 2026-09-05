@@ -50,13 +50,15 @@ func scopeLabel(value string) string {
 // Level: write bila ada write, else read bila ada read, else none. write⊇read
 // (business.conf) jadi "write" tak perlu menyimpan read terpisah. approve hanya
 // dibaca untuk modul yang mendukungnya (ModuleCanApprove) — sel approve modul
-// lain tak bermakna dan tak dirender.
+// lain tak bermakna dan tak dirender. arr (BL-58, visibilitas ARR) sama: hanya
+// dibaca untuk modul ber-CanARR (Subscriptions).
 func roleModuleRows(cells map[string]*permCell) []panel.RoleModulePerm {
 	mods := authz.CRMModules()
 	rows := make([]panel.RoleModulePerm, 0, len(mods))
 	for _, m := range mods {
 		level := "none"
 		approve := false
+		arr := false
 		if c := cells[m.Obj]; c != nil {
 			switch {
 			case c.write:
@@ -65,13 +67,16 @@ func roleModuleRows(cells map[string]*permCell) []panel.RoleModulePerm {
 				level = "read"
 			}
 			approve = c.approve && m.CanApprove
+			arr = c.arr && m.CanARR
 		}
 		rows = append(rows, panel.RoleModulePerm{
 			Obj:        m.Obj,
 			Label:      m.Label,
 			CanApprove: m.CanApprove,
+			CanARR:     m.CanARR,
 			Level:      level,
 			Approve:    approve,
+			ARR:        arr,
 		})
 	}
 	return rows
