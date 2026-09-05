@@ -46,6 +46,21 @@ func canChurnSubscriptions(ctx context.Context) bool {
 	return authz.CanBusiness(ctx, "crm:churn", "write")
 }
 
+// canViewRenewals = gerbang READ ringkasan renewal (rate, jatuh tempo) untuk
+// Beranda (BL-59b). Berbeda dari canRenewSubscriptions (WRITE) — melihat metrik
+// renewal tak sama dengan berhak memperpanjang. Default: admin (glob), manager,
+// sales, csm punya crm:renewals read (business_defaults); support tidak.
+func canViewRenewals(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:renewals", "read")
+}
+
+// canViewChurn = gerbang READ metrik churn (rate, MRR hilang) untuk Beranda
+// (BL-59b). Berbeda dari canChurnSubscriptions (WRITE tandai churn). Default:
+// admin, manager, sales, csm punya crm:churn read; support tidak.
+func canViewChurn(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:churn", "read")
+}
+
 // canApproveRenewal = gerbang APPROVE renewal Upsell yang menunggu. HANYA admin &
 // manager (aksi approve, bukan write); csm punya write renewal_mgmt tapi TAK approve.
 func canApproveRenewal(ctx context.Context) bool {
