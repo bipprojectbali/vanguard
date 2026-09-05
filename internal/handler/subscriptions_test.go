@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"go_starter/internal/authz"
 	"go_starter/internal/codes"
 	"go_starter/internal/db"
 )
@@ -16,8 +17,10 @@ import (
 //     lolos; support & "" ditolak 403 — support TAK punya objek ini).
 //   - F3 (ownership): sales/csm data_scope 'own' → hanya langganan yang dimilikinya
 //     (subscription_owner = uid); di luar cakupan → 404 (keberadaan tak diungkap).
-//   - F4 (masking ARR): ARR hanya admin/manager; sales/csm melihat penanda flsHidden.
-//     MRR terlihat sales/csm/manager (kebijakan umum canSeeARR, beda dari ARR)
+//   - F4 (masking ARR): visibilitas ARR = KAPABILITAS ter-matriks crm:subscriptions/arr
+//     (BL-58) — default admin/manager; sales/csm/support melihat penanda flsHidden;
+//     peran CUSTOM ber-grant melihat ARR. MRR terlihat sales/csm/manager (kebijakan
+//     umum canSeeARR, beda dari ARR)
 //     — Support (satu-satunya role dikecualikan) tak diuji lewat HTTP di sini
 //     krn F2/F3 sudah memblokirnya total dari halaman ini; wiring maskARR MRR
 //     diuji langsung di subscriptions_fls_test.go (audit FLS M9-1).
@@ -173,13 +176,13 @@ func TestSubscriptions_DetailNotFoundWhenOutOfScope(t *testing.T) {
 // --- F4: masking ARR -------------------------------------------------------
 
 // TestSubscriptions_ARRMaskedForNonManager: ARR disamarkan (flsHidden) untuk
-// sales & csm, tampil apa adanya untuk admin & manager (canSeeSubscriptionARR
-// = admin OR manager, subscriptions_view.go). MRR terlihat di SEMUA kasus.
-// Diuji di detail (satu halaman memuat MRR & ARR sekaligus). Matriks 4-role
-// via HTTP; Support tak diuji di sini — F2 (crm:subscriptions) memblokirnya
-// total sebelum halaman ini terbuka (lihat TestSubscriptions_GateRead di atas
-// & comment file baris 19-22), wiring ARR utk Support diuji langsung lewat
-// predikat di fls_test.go:TestFLS_SubscriptionARR.
+// sales & csm, tampil apa adanya untuk admin & manager — DEFAULT grant
+// kapabilitas crm:subscriptions/arr (BL-58, business_defaults.go). MRR terlihat
+// di SEMUA kasus. Diuji di detail (satu halaman memuat MRR & ARR sekaligus).
+// Matriks 4-role via HTTP; Support tak diuji di sini — F2 (crm:subscriptions)
+// memblokirnya total sebelum halaman ini terbuka (lihat TestSubscriptions_GateRead
+// di atas). Peran CUSTOM ber-grant/tanpa-grant diuji di
+// TestSubscriptions_ARRCustomRoleCapability.
 func TestSubscriptions_ARRMaskedForNonManager(t *testing.T) {
 	env, uid := setupAccounts(t)
 	planID := env.seedPlan(t, "Paket Nilai", "PLAN-VAL", "1000000")
@@ -228,4 +231,56 @@ func TestSubscriptions_ARRMaskedForNonManager(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSubscriptions_ARRCustomRoleCapability — inti BL-58: visibilitas ARR
+// mengikuti KAPABILITAS ter-matriks (crm:subscriptions/arr), bukan cek nama role
+// hardcode. Sebelum BL-58, `role == admin || == manager` mengunci ARR ke nama
+// peran sistem sehingga peran custom (mis. "Direktur"/"Finance") TAK PERNAH bisa
+// melihat ARR walau diberi cakupan penuh — kontra desain role-aware. Dua peran
+// custom bercakupan 'all' diuji berdampingan: "direktur" DIBERI grant arr →
+// melihat ARR; "finance" TANPA grant → tersamar (flsHidden). Keduanya punya read
+// (agar F2 lolos) & scope 'all' (agar F3 tak menyaring baris), jadi satu-satunya
+// pembeda adalah grant arr. MRR (maskARR) berbasis NAMA role & ortogonal (peran
+// custom melihatnya tersamar) — di luar cakupan BL-58, jadi tak di-assert di sini.
+func TestSubscriptions_ARRCustomRoleCapability(t *testing.T) {
+	env, uid := setupAccounts(t)
+	// Peran custom: keduanya read (lolos F2). "direktur" + arr, "finance" tanpa.
+	env.loadBusinessRolesWith(t,
+		authz.BusinessPerm{Role: "direktur", Obj: "crm:subscriptions", Act: "read"},
+		authz.BusinessPerm{Role: "direktur", Obj: "crm:subscriptions", Act: "arr"},
+		authz.BusinessPerm{Role: "finance", Obj: "crm:subscriptions", Act: "read"},
+	)
+	planID := env.seedPlan(t, "Paket Custom", "PLAN-CST", "1000000")
+	acc := env.seedAccount(t, "Desa Custom", &uid, nil, nil)
+	sub := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "5000000", "60000000")
+
+	const wantARR = "Rp 60.000.000"
+
+	open := func(t *testing.T, role string) string {
+		t.Helper()
+		req := accountsReq(http.MethodGet, "/w/test/subscriptions/"+itoa(sub.ID), nil, itoa(sub.ID))
+		rec := env.runAccountScope(uid, "member", role, authz.DataScopeAll, req, env.h.SubscriptionDetail)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("role %q detail status = %d, want 200\n%s", role, rec.Code, rec.Body.String())
+		}
+		return rec.Body.String()
+	}
+
+	t.Run("custom role WITH arr grant sees ARR", func(t *testing.T) {
+		body := open(t, "direktur")
+		if !strings.Contains(body, wantARR) {
+			t.Errorf("direktur: ARR %q harus terlihat (grant crm:subscriptions/arr)", wantARR)
+		}
+	})
+
+	t.Run("custom role WITHOUT arr grant masks ARR", func(t *testing.T) {
+		body := open(t, "finance")
+		if !strings.Contains(body, flsHidden) {
+			t.Errorf("finance: ARR harus tersamar (%s) — tanpa grant arr", flsHidden)
+		}
+		if strings.Contains(body, wantARR) {
+			t.Errorf("finance: ARR mentah %q tak boleh bocor tanpa grant", wantARR)
+		}
+	})
 }

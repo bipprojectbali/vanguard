@@ -56,7 +56,8 @@ func DefaultBusinessRoles() []DefaultRole {
 			Description: "Akses penuh seluruh modul & konfigurasi sistem",
 			DataScope:   DataScopeAll, IsSystem: true,
 			Perms: []DefaultPerm{
-				{"crm:*", "write"}, {"crm:*", "approve"}, {"crm:roles", "write"},
+				{"crm:*", "write"}, {"crm:*", "approve"}, {"crm:*", "arr"},
+				{"crm:roles", "write"},
 			},
 		},
 		{
@@ -69,7 +70,8 @@ func DefaultBusinessRoles() []DefaultRole {
 				{"crm:leads", "write"},
 				{"crm:deals", "write"}, {"crm:deals", "approve"},
 				{"crm:sales_activity", "write"},
-				{"crm:subscriptions", "write"}, {"crm:renewals", "write"},
+				{"crm:subscriptions", "write"}, {"crm:subscriptions", "arr"},
+				{"crm:renewals", "write"},
 				{"crm:plans", "read"}, {"crm:churn", "write"},
 				{"crm:health", "write"}, {"crm:journey", "write"},
 				{"crm:success_plans", "write"}, {"crm:adoption", "write"},
@@ -142,6 +144,7 @@ type ModuleDef struct {
 	Obj        string // objek Casbin, mis. "crm:accounts"
 	Label      string // label layar (docs/crm/sistem-dan-role.md §4)
 	CanApprove bool   // true → kolom "approve" aktif (hanya Deals/Renewal Mgmt)
+	CanARR     bool   // true → kolom "Lihat ARR" aktif (hanya Subscriptions, BL-58)
 }
 
 // crmModules = SELURUH modul CRM sebagai kolom matriks, urut sesuai nomor menu
@@ -161,29 +164,32 @@ type ModuleDef struct {
 // tak ada satu pun CanBusiness(ctx,"crm:quotes",…)) → kolomnya inert; dibuang
 // agar editor tak menawarkan toggle tanpa efek. VoC: modulnya belum dibangun
 // (nol route/handler/menu) → dikembalikan ke daftar ini saat modul VoC dibangun.
+// Kolom (Obj, Label, CanApprove, CanARR). CanApprove hanya Deals/Renewal Mgmt
+// (punya alur persetujuan). CanARR hanya Subscriptions (BL-58): visibilitas ARR
+// = kapabilitas ter-matriks (crm:subscriptions/arr), bukan cek nama role.
 var crmModules = []ModuleDef{
-	{"crm:dashboard", "Dashboard", false},
-	{"crm:accounts", "Accounts (Desa)", false},
-	{"crm:contacts", "Contacts", false},
-	{"crm:leads", "Leads", false},
-	{"crm:deals", "Deals", true},
-	{"crm:sales_activity", "Sales Activity Log", false},
-	{"crm:subscriptions", "Active Subscriptions", false},
-	{"crm:renewals", "Renewals", false},
-	{"crm:plans", "Plans & Pricing", false},
-	{"crm:churn", "Churn / Cancellations", false},
-	{"crm:health", "Health Score", false},
-	{"crm:journey", "Journey / Onboarding", false},
-	{"crm:success_plans", "Success Plans", false},
-	{"crm:adoption", "Product Adoption", false},
-	{"crm:engagements", "Engagements", false},
-	{"crm:renewal_mgmt", "Renewal Management", true},
-	{"crm:playbooks", "Playbooks", false},
-	{"crm:tickets", "Tickets / Cases", false},
-	{"crm:kb", "Knowledge Base", false},
-	{"crm:sla", "SLA Management", false},
-	{"crm:activities", "Activities", false},
-	{"crm:reports", "Reports", false},
+	{"crm:dashboard", "Dashboard", false, false},
+	{"crm:accounts", "Accounts (Desa)", false, false},
+	{"crm:contacts", "Contacts", false, false},
+	{"crm:leads", "Leads", false, false},
+	{"crm:deals", "Deals", true, false},
+	{"crm:sales_activity", "Sales Activity Log", false, false},
+	{"crm:subscriptions", "Active Subscriptions", false, true},
+	{"crm:renewals", "Renewals", false, false},
+	{"crm:plans", "Plans & Pricing", false, false},
+	{"crm:churn", "Churn / Cancellations", false, false},
+	{"crm:health", "Health Score", false, false},
+	{"crm:journey", "Journey / Onboarding", false, false},
+	{"crm:success_plans", "Success Plans", false, false},
+	{"crm:adoption", "Product Adoption", false, false},
+	{"crm:engagements", "Engagements", false, false},
+	{"crm:renewal_mgmt", "Renewal Management", true, false},
+	{"crm:playbooks", "Playbooks", false, false},
+	{"crm:tickets", "Tickets / Cases", false, false},
+	{"crm:kb", "Knowledge Base", false, false},
+	{"crm:sla", "SLA Management", false, false},
+	{"crm:activities", "Activities", false, false},
+	{"crm:reports", "Reports", false, false},
 }
 
 // CRMModules mengembalikan salinan daftar modul (kolom matriks) agar pemanggil
@@ -212,6 +218,17 @@ func ModuleCanApprove(obj string) bool {
 	for _, m := range crmModules {
 		if m.Obj == obj {
 			return m.CanApprove
+		}
+	}
+	return false
+}
+
+// ModuleCanARR melaporkan apakah objek modul mendukung aksi "arr" (visibilitas
+// ARR, BL-58) — penjaga agar sel arr tak ditulis untuk modul selain Subscriptions.
+func ModuleCanARR(obj string) bool {
+	for _, m := range crmModules {
+		if m.Obj == obj {
+			return m.CanARR
 		}
 	}
 	return false

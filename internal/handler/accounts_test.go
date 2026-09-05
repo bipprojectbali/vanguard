@@ -112,6 +112,48 @@ func (e *testEnv) runAccount(
 	return rec
 }
 
+// runAccountScope = runAccount dengan data_scope EKSPLISIT alih-alih diturunkan
+// dari nama role. Diperlukan untuk peran CUSTOM (di luar DefaultBusinessRoles)
+// yang DefaultDataScope-nya jatuh ke None — mis. uji BL-58 (peran custom
+// ber-cakupan 'all' + kapabilitas crm:subscriptions/arr).
+func (e *testEnv) runAccountScope(
+	uid int64, tenantRole, businessRole, dataScope string, req *http.Request, fn http.HandlerFunc,
+) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	e.sm.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		session.SetIdentity(ctx, uid, "test@local", tenantRole, false,
+			e.tenantID, "Test", "test", "")
+		session.SetBusinessRole(ctx, businessRole)
+		session.SetBusinessDataScope(ctx, dataScope)
+		fn(w, r.WithContext(withQueries(ctx, e.q)))
+	})).ServeHTTP(rec, req)
+	return rec
+}
+
+// loadBusinessRolesWith menyegarkan enforcer bisnis tenant test dengan peran
+// bawaan (DefaultBusinessRoles) DITAMBAH izin custom `extra` — untuk menguji
+// grant kapabilitas pada peran non-bawaan (BL-58) tanpa menyentuh matriks
+// bawaan. TenantID di-set di sini agar pemanggil cukup memberi Role/Obj/Act.
+func (e *testEnv) loadBusinessRolesWith(t *testing.T, extra ...authz.BusinessPerm) {
+	t.Helper()
+	var perms []authz.BusinessPerm
+	for _, r := range authz.DefaultBusinessRoles() {
+		for _, p := range r.Perms {
+			perms = append(perms, authz.BusinessPerm{
+				TenantID: e.tenantID, Role: r.Name, Obj: p.Obj, Act: p.Act,
+			})
+		}
+	}
+	for _, x := range extra {
+		x.TenantID = e.tenantID
+		perms = append(perms, x)
+	}
+	if err := authz.ReloadBusinessTenant(e.tenantID, perms); err != nil {
+		t.Fatalf("ReloadBusinessTenant: %v", err)
+	}
+}
+
 // seedAccount menaruh satu desa langsung lewat pool (bypass handler) dengan
 // kolom kepemilikan tertentu — untuk menguji F3 tanpa merangkai create.
 func (e *testEnv) seedAccount(t *testing.T, name string, owner, assignedCSM, backupCSM *int64) db.Account {

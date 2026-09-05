@@ -71,20 +71,27 @@ func subscriptionsMsg(code string) string {
 	}
 }
 
-// canSeeSubscriptionARR — ARR (annual recurring revenue) hanya utk pengambil
-// keputusan komersial: admin + manager. Sales/CSM lihat MRR tapi ARR di-mask
-// (spec M5-4 tasks.md). Sengaja BEDA dari kebijakan ARR deals (maskARR) yang
-// mengizinkan sales/csm — langganan lebih sensitif nilai tahunannya.
-func canSeeSubscriptionARR(businessRole string) bool {
-	return businessRole == authz.BusinessRoleAdmin || businessRole == authz.BusinessRoleManager
+// canSeeSubscriptionARR — visibilitas ARR (annual recurring revenue) kini
+// KAPABILITAS ter-matriks (crm:subscriptions/arr), bukan cek nama role hardcode
+// (BL-58). Sebelumnya `role == admin || == manager`, yang mengunci ARR ke nama
+// peran sistem sehingga peran KUSTOM (mis. "Direktur"/"Finance") tak pernah bisa
+// melihat ARR walau diberi data_scope=all — kontra desain role-aware F2/F3.
+// Default kapabilitas ini diberikan ke Administrator (glob crm:*) + Manager
+// (business_defaults.go); operator bisa memberikannya ke peran lain lewat editor
+// peran. Sengaja BEDA dari MRR (maskARR, umum kecuali Support) — ARR langganan
+// lebih sensitif nilai tahunannya (spec M5-4). Dihitung di batas handler (punya
+// ctx ber-sesi), hasilnya (bool) dialirkan ke view-mapper murni-data.
+func canSeeSubscriptionARR(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:subscriptions", "arr")
 }
 
 // maskSubscriptionARR mengembalikan ARR siap-tampil (string SUDAH diformat) bila
-// berhak, atau penanda tersembunyi (flsHidden) bila tidak. Nilai asli tak pernah
-// keluar saat tersembunyi. MRR pakai kebijakan terpisah (maskARR, kebijakan umum
-// kecuali Support) — diperbaiki audit FLS M9-1, sebelumnya sengaja tanpa masking.
-func maskSubscriptionARR(formatted, businessRole string) string {
-	if canSeeSubscriptionARR(businessRole) {
+// canSee, atau penanda tersembunyi (flsHidden) bila tidak. Nilai asli tak pernah
+// keluar saat tersembunyi. Menerima bool (bukan ctx) agar view-mapper tetap
+// murni-data & unit-testable tanpa enforcer — pemanggil hitung sekali via
+// canSeeSubscriptionARR(ctx). MRR pakai kebijakan terpisah (maskARR).
+func maskSubscriptionARR(formatted string, canSee bool) string {
+	if canSee {
 		return formatted
 	}
 	return flsHidden

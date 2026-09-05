@@ -74,7 +74,8 @@ type rolePerm struct{ Obj, Act string }
 // tertutup CRMModules — objek liar dari form tak bisa menyelinap): Level "read"→
 // (obj,read), "write"→(obj,write); "none"/nilai lain→lewati. Approve ditulis
 // HANYA untuk modul yang mendukungnya (ModuleCanApprove) walau form mengirimnya
-// untuk modul lain — penjaga agar sel tak bermakna tak jadi p-rule.
+// untuk modul lain — penjaga agar sel tak bermakna tak jadi p-rule. arr (BL-58,
+// visibilitas ARR) sama: hanya modul ber-CanARR (Subscriptions).
 //
 // write TAK menulis read tambahan: matcher bisnis membuat write mencakup read
 // (business.conf), jadi satu baris (obj,write) sudah memberi keduanya.
@@ -90,6 +91,9 @@ func readRoleMatrix(r *http.Request) []rolePerm {
 		}
 		if m.CanApprove && r.FormValue("approve."+m.Obj) == "1" {
 			perms = append(perms, rolePerm{m.Obj, "approve"})
+		}
+		if m.CanARR && r.FormValue("arr."+m.Obj) == "1" {
+			perms = append(perms, rolePerm{m.Obj, "arr"})
 		}
 	}
 	return perms

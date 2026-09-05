@@ -29,6 +29,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
 	br := session.BusinessRole(ctx)
+	canARR := canSeeSubscriptionARR(ctx) // BL-58: kapabilitas ter-matriks, bukan nama role
 
 	cursorAt, cursorID := pageCursor(r)
 	// Default tab = Active (BL-20): menu bernama "Subscription Lists" tetap
@@ -72,7 +73,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]panel.SubRow, 0, len(shown))
 	for _, s := range shown {
-		items = append(items, subRowView(s, names, br))
+		items = append(items, subRowView(s, names, br, canARR))
 	}
 
 	base := wsPath(slugFromRequest(r), "")
@@ -97,13 +98,13 @@ func (h *Handler) renderSubscriptionsForbidden(w http.ResponseWriter, r *http.Re
 		panel.SalesForbidden("Subscription Lists"))
 }
 
-// subRowView memetakan satu baris daftar → baris tabel + F4. ARR: hanya
-// admin/manager (maskSubscriptionARR, spec M5-4). MRR: kebijakan umum
+// subRowView memetakan satu baris daftar → baris tabel + F4. ARR: kapabilitas
+// ter-matriks crm:subscriptions/arr (canARR, BL-58 — bukan nama role). MRR: kebijakan umum
 // canSeeARR/maskARR (skema.md §9, "MRR/ARR/amount disembunyikan dari Support")
 // — SEMUA role kecuali Support, beda dari ARR yang juga mengecualikan
 // sales/csm. Diperbaiki audit FLS M9-1 (sebelumnya MRR sengaja tanpa masking,
 // kontra skema.md §9). Owner diresolusi dari peta anggota.
-func subRowView(s db.ListSubscriptionsRow, names map[int64]string, businessRole string) panel.SubRow {
+func subRowView(s db.ListSubscriptionsRow, names map[int64]string, businessRole string, canARR bool) panel.SubRow {
 	return panel.SubRow{
 		ID:         s.ID,
 		EntityCode: deref(s.EntityCode),
@@ -111,7 +112,7 @@ func subRowView(s db.ListSubscriptionsRow, names map[int64]string, businessRole 
 		Plan:       s.PlanName,
 		Status:     s.Status,
 		MRR:        maskARR(formatRupiah(s.Mrr), businessRole),
-		ARR:        maskSubscriptionARR(formatRupiah(s.Arr), businessRole),
+		ARR:        maskSubscriptionARR(formatRupiah(s.Arr), canARR),
 		Start:      dateStr(s.StartDate),
 		End:        dateStr(s.EndDate),
 		Owner:      ownerName(s.SubscriptionOwner, names),

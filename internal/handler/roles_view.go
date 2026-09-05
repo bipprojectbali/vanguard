@@ -31,7 +31,7 @@ func canManageRoles(ctx context.Context) bool {
 // kotak centang akan membingungkan (write tanpa read tak bermakna). approve
 // berdiri sendiri — tegak lurus level (bisa approve tanpa write, walau jarang).
 type permCell struct {
-	read, write, approve bool
+	read, write, approve, arr bool
 }
 
 // roleRows memetakan definisi peran → baris tabel daftar (/roles). Ringkas:
@@ -75,6 +75,8 @@ func permsByRole(perms []db.ListBusinessRolePermissionsByTenantRow) map[string]m
 			c.write = true
 		case "approve":
 			c.approve = true
+		case "arr":
+			c.arr = true
 		}
 	}
 	return byRole

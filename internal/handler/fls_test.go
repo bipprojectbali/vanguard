@@ -110,37 +110,23 @@ func TestFLS_InternalNotes(t *testing.T) {
 	}
 }
 
-// TestFLS_SubscriptionARR — kebijakan KHUSUS subscriptions (spec M5-4,
-// subscriptions_view.go): ARR hanya admin+manager, BEDA dari canSeeARR umum
-// (yang meloloskan sales & csm juga). Sales/CSM tetap lihat MRR (canSeeARR)
-// tapi TIDAK ARR subscription — dua kebijakan berlainan pada dua field yang
-// terlihat mirip. Predikat ini sebelumnya tanpa test predikat langsung (hanya
-// tersentuh lewat test HTTP di dashboard_test.go/subscriptions_test.go);
-// gap M9-2.
+// TestFLS_SubscriptionARR — kontrak masker ARR subscription murni-data (BL-58):
+// canSee=true → nilai utuh, false → penanda tersembunyi (flsHidden); nilai asli
+// tak pernah bocor. Sejak BL-58 visibilitas ARR adalah KAPABILITAS ter-matriks
+// (crm:subscriptions/arr), bukan cek nama role — predikatnya (canSeeSubscriptionARR)
+// membaca enforcer dari ctx, jadi diuji end-to-end di subscriptions_test.go
+// (peran bawaan admin/manager melihat; sales/csm/support tidak; peran CUSTOM
+// ber-grant melihat). Di sini dikunci masker bool-nya sendiri — murni-data,
+// tanpa enforcer.
 func TestFLS_SubscriptionARR(t *testing.T) {
-	cases := []struct {
-		role string
-		see  bool
-	}{
-		{"admin", true},
-		{"manager", true},
-		{"sales", false}, // BEDA dari canSeeARR umum: sales lihat MRR, bukan ARR
-		{"csm", false},   // BEDA dari canSeeARR umum: csm lihat MRR, bukan ARR
-		{"support", false},
-		{"", false},
+	if got := maskSubscriptionARR(arrValue, true); got != arrValue {
+		t.Errorf("canSee=true: ARR harus tampil utuh, got %q", got)
 	}
-	for _, c := range cases {
-		gotCan := canSeeSubscriptionARR(c.role)
-		if gotCan != c.see {
-			t.Errorf("canSeeSubscriptionARR(%q) = %v, want %v", c.role, gotCan, c.see)
-		}
-		got := maskSubscriptionARR(arrValue, c.role)
-		if c.see && got != arrValue {
-			t.Errorf("ARR subscription utk %q harus tampil utuh, got %q", c.role, got)
-		}
-		if !c.see && got == arrValue {
-			t.Errorf("ARR subscription utk %q BOCOR — nilai asli lolos ke yang tak berhak", c.role)
-		}
+	if got := maskSubscriptionARR(arrValue, false); got != flsHidden {
+		t.Errorf("canSee=false: ARR harus tersamar (%s), got %q", flsHidden, got)
+	}
+	if maskSubscriptionARR(arrValue, false) == arrValue {
+		t.Error("canSee=false: nilai asli ARR BOCOR ke yang tak berhak")
 	}
 }
 
