@@ -4,16 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
-	"strconv"
 	"strings"
-	"time"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // all_activities_unified.go — linimasa TERPADU untuk halaman Activities GLOBAL
@@ -51,109 +46,6 @@ import (
 // activities menyaring owner_id (ActivitiesListFilter); engagements menyaring
 // via kolom accounts account_owner/assigned_csm/backup_csm (EngagementsListFilter).
 // RLS h.q(ctx) mengurung tenant di bawah keduanya. Platform → ScopeAll dua sumber.
-
-// subCursor = posisi keyset (created_at, id) satu sumber. Salinan bentuk yang
-// dipakai pageCursor, tapi eksplisit agar cursor komposit merakit dua darinya.
-type subCursor struct {
-	at pgtype.Timestamptz
-	id int64
-}
-
-// dualCursor = pasangan sub-cursor (activities + engagements) untuk satu posisi
-// halaman feed terpadu. Tiap sumber maju independen: sumber yang tak menyumbang
-// baris ke halaman ini biarkan sub-cursornya tak berubah (halaman berikut mulai
-// dari titik yang sama untuk sumber itu).
-type dualCursor struct {
-	act subCursor
-	eng subCursor
-}
-
-// firstSubCursor = sub-cursor halaman pertama: (created_at, id) maksimum
-// (Infinity, MaxInt64) sehingga semua baris lolos syarat keyset `< cursor`.
-// Sejajar firstPageCursor (dev_users.go) tapi dibungkus subCursor.
-func firstSubCursor() subCursor {
-	at, id := firstPageCursor()
-	return subCursor{at: at, id: id}
-}
-
-// firstDualCursor = posisi awal feed (kedua sumber di halaman pertama).
-func firstDualCursor() dualCursor {
-	return dualCursor{act: firstSubCursor(), eng: firstSubCursor()}
-}
-
-// subFieldSentinel menandai sub-cursor "di awal" (firstSubCursor) dalam token.
-// Panjang 1 → mustahil bentrok dengan pengkodean baris nyata (selalu ≥20 char:
-// 19 digit nano + ≥1 digit id).
-const subFieldSentinel = "0"
-
-// subFieldNanoWidth = lebar zero-pad UnixNano dalam token. MaxInt64 = 19 digit;
-// nano baris nyata (pasca-1970) selalu positif & muat 19 digit, jadi lebar tetap
-// membuat pemisahan nano|id deterministik (potong di indeks 19).
-const subFieldNanoWidth = 19
-
-// encodeSubCursor mengemas satu sub-cursor jadi field digit-murni untuk token.
-// firstSubCursor / tak-valid → sentinel "0". Baris nyata → 19-digit-nano + id.
-func encodeSubCursor(c subCursor) string {
-	if !c.at.Valid || c.at.InfinityModifier != pgtype.Finite {
-		return subFieldSentinel
-	}
-	nano := c.at.Time.UTC().UnixNano()
-	if nano < 0 {
-		// Mustahil di praktik (created_at selalu pasca-1970); jaga token tetap
-		// digit-murni bila terjadi anomali data.
-		return subFieldSentinel
-	}
-	return fmt.Sprintf("%0*d%d", subFieldNanoWidth, nano, c.id)
-}
-
-// decodeSubCursor membalik encodeSubCursor. Sentinel/rusak/kependekan → halaman
-// pertama sub-sumber (fail-open ke awal, sejalan filosofi pageCursor: masukan
-// URL yang bisa disunting tak boleh menggagalkan render).
-func decodeSubCursor(field string) subCursor {
-	if len(field) < subFieldNanoWidth+1 {
-		return firstSubCursor()
-	}
-	nano, err1 := strconv.ParseInt(field[:subFieldNanoWidth], 10, 64)
-	id, err2 := strconv.ParseInt(field[subFieldNanoWidth:], 10, 64)
-	if err1 != nil || err2 != nil {
-		return firstSubCursor()
-	}
-	return subCursor{
-		at: pgtype.Timestamptz{Time: time.Unix(0, nano).UTC(), Valid: true},
-		id: id,
-	}
-}
-
-// encodeDualCursor merakit token halaman = "<fieldAct>_<fieldEng>". Tepat satu
-// underscore, kedua sisi digit-murni → lolos ui.validTrailToken, jadi mengalir
-// lewat jejak BL-7 tanpa perlakuan khusus.
-func encodeDualCursor(c dualCursor) string {
-	return encodeSubCursor(c.act) + cursorSep + encodeSubCursor(c.eng)
-}
-
-// decodeDualCursor membaca ?after= jadi dualCursor. Kosong/rusak → halaman
-// pertama (kedua sumber dari awal).
-func decodeDualCursor(raw string) dualCursor {
-	if raw == "" {
-		return firstDualCursor()
-	}
-	actField, engField, ok := strings.Cut(raw, cursorSep)
-	if !ok {
-		return firstDualCursor()
-	}
-	return dualCursor{act: decodeSubCursor(actField), eng: decodeSubCursor(engField)}
-}
-
-// feedEntry = satu baris terpadu + kunci mentah untuk merge-sort & memajukan
-// sub-cursor sumbernya. source membedakan asal ("sales" activities / "cs"
-// engagements).
-type feedEntry struct {
-	at     time.Time
-	id     int64
-	source string
-	row    panel.ActivityRow
-	cur    subCursor // (created_at, id) baris ini → titik lanjut sub-cursor sumber
-}
 
 // buildUnifiedActivityFeed menjalankan satu halaman feed terpadu: query dua
 // sumber (lengan CS gated), merge-sort created_at DESC, potong pageSize, dan
@@ -232,71 +124,7 @@ func (h *Handler) buildUnifiedActivityFeed(
 			cur: subCursor{at: e.CreatedAt, id: e.ID},
 		})
 	}
-	sort.SliceStable(entries, func(i, j int) bool {
-		if !entries[i].at.Equal(entries[j].at) {
-			return entries[i].at.After(entries[j].at)
-		}
-		if entries[i].id != entries[j].id {
-			return entries[i].id > entries[j].id
-		}
-		return entries[i].source < entries[j].source
-	})
 
-	// ── Potong ke pageSize; kelebihan = penanda "masih ada" (sama pola
-	// splitPage). Kombinasi ≤ pageSize ⟹ tak ada sumber yang menyentuh +1 ⟹
-	// keduanya habis ⟹ tak ada lagi (lihat rasional di BL-41 tasks). ──────────
-	more := len(entries) > pageSize
-	if more {
-		entries = entries[:pageSize]
-	}
-
-	// ── Majukan tiap sub-cursor ke baris TERAKHIR yang DITAMPILKAN dari sumber
-	// itu (entries sudah urut turun → kemunculan terakhir = terkecil = titik
-	// lanjut benar). Sumber tanpa baris tampil → sub-cursor tak berubah (baris
-	// yang di-fetch tapi tak tampil akan di-query ulang halaman berikut). ─────
-	next := dc
-	for _, e := range entries {
-		switch e.source {
-		case "sales":
-			next.act = e.cur
-		case "cs":
-			next.eng = e.cur
-		}
-	}
-	nextCursor := ""
-	if more {
-		nextCursor = encodeDualCursor(next)
-	}
-
-	items := make([]panel.ActivityRow, 0, len(entries))
-	for _, e := range entries {
-		items = append(items, e.row)
-	}
+	items, nextCursor := pageEntries(entries, dc)
 	return items, nextCursor, nil
-}
-
-// engagementFeedRowView memetakan satu baris ListEngagementsFeed → ActivityRow
-// bertanda Source="cs" untuk tabel Activities global. Read-only: TargetType/ID =
-// desa induk (view menaut ke /accounts/{id}, bukan /activities/{id}). Kolom
-// Jenis pakai TypeLabel (engagement_type), Status pakai peta engagement
-// (engagementStatusLabel → label + badge daisyUI). Konteks="cs" → chip "CS".
-func engagementFeedRowView(e db.ListEngagementsFeedRow) panel.ActivityRow {
-	statusLabel, statusBadge := engagementStatusLabel(e.Status)
-	owner := ""
-	if e.OwnerName != nil {
-		owner = *e.OwnerName
-	}
-	return panel.ActivityRow{
-		ID:               e.ID,
-		Subject:          e.Subject,
-		TargetType:       "account",
-		TargetID:         e.AccountID,
-		Owner:            owner,
-		Status:           statusLabel,
-		StatusBadgeClass: statusBadge, // "badge-info"/…; view menambah prefiks "badge "
-		Created:          fmtLocal(e.CreatedAt),
-		Context:          "cs",
-		Source:           "cs",
-		TypeLabel:        engagementTypeLabel(e.EngagementType),
-	}
 }

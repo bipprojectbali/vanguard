@@ -140,35 +140,3 @@ func (h *Handler) accountUnifiedTimelineFor(
 		Title:      "Linimasa", // kartu menggabungkan sumber Sales + CS (BL-31)
 	}
 }
-
-// engagementTimelineItemView memetakan satu baris engagement → item linimasa
-// terpadu. Source="cs" → chip CS; TypeLabel + StatusBadgeClass dipakai view
-// karena peta jenis/status engagement berbeda dari activity. Waktu = scheduled_at
-// di zona workspace (gotcha #14), konsisten dgn pengurutan ListEngagements.
-func engagementTimelineItemView(e db.ListEngagementsByAccountRow) panel.ActivityTimelineItem {
-	statusLabel, statusBadge := engagementStatusLabel(e.Status)
-	owner := ""
-	if e.OwnerName != nil {
-		owner = *e.OwnerName
-	}
-	return panel.ActivityTimelineItem{
-		ID:               e.ID,
-		Subject:          e.Subject,
-		Date:             fmtLocal(e.ScheduledAt),
-		Status:           statusLabel,
-		StatusBadgeClass: "badge " + statusBadge,
-		Owner:            owner,
-		Source:           "cs",
-		TypeLabel:        engagementTypeLabel(e.EngagementType),
-	}
-}
-
-// tsTime menormalkan pgtype.Timestamptz → time.Time untuk merge-sort. Baris tak
-// valid (mustahil di praktik: kedua kolom NOT NULL) jatuh ke zero-time → terurut
-// paling akhir, tak pernah panik.
-func tsTime(ts pgtype.Timestamptz) time.Time {
-	if !ts.Valid {
-		return time.Time{}
-	}
-	return ts.Time
-}
