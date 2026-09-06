@@ -25,6 +25,8 @@ func TestSubList_SearchBoxAndThreading(t *testing.T) {
 	}))
 
 	assertSearchBox(t, out, "/w/desa/subscriptions", "kali muara")
+	// BL-68: tab status & kotak cari sebaris dalam satu wrapper justify-between.
+	assertTabSearchRow(t, out, "/w/desa/subscriptions")
 	// Status aktif dijaga lewat input tersembunyi saat submit.
 	if !strings.Contains(out, `<input type="hidden" name="status" value="Active">`) {
 		t.Errorf("form cari harus menjaga status aktif via input tersembunyi status=Active:\n%s", out)

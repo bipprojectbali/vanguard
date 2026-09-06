@@ -41,3 +41,16 @@ func TestTicketsList_SearchNoMatchEmptyState(t *testing.T) {
 		t.Errorf("tautan reset harus menjaga tab tapi membuang q:\n%s", out)
 	}
 }
+
+// TestTicketsList_TabSearchRow — regresi BL-68: bilah tab Tiket & kotak cari harus
+// sebaris dalam satu wrapper justify-between (search terdorong ke pojok kanan),
+// bukan dua baris terpisah.
+func TestTicketsList_TabSearchRow(t *testing.T) {
+	out := renderLeads(t, TicketsList(TicketsListView{
+		Base:  "/w/desa",
+		Tab:   "baru",
+		Query: "kali muara",
+		Items: []TicketRow{{ID: 1, AccountName: "Desa Cocok", Subject: "Internet mati"}},
+	}))
+	assertTabSearchRow(t, out, "/w/desa/tickets")
+}

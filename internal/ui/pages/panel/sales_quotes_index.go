@@ -42,16 +42,22 @@ type QuotesIndexView struct {
 // QuotesIndex merender header + alert + tabel quote lintas-deal (atau state kosong)
 // + pager keyset.
 func QuotesIndex(v QuotesIndexView) g.Node {
+	// BL-68: Quote tak punya bilah tab → sejajarkan kotak cari ke pojok kanan
+	// sebaris dgn judul halaman (justify-between), varian INLINE (lebar terbatas
+	// agar input+tombol sebaris). flex-wrap → di 375px search turun ke baris bawah.
 	body := []g.Node{
 		h.Div(
-			h.Class("min-w-0 mb-2"),
-			h.H1(h.Class("text-xl font-semibold truncate"), g.Text("Quote")),
-			h.P(h.Class("text-base-content/70 truncate"),
-				g.Text("Semua penawaran dalam cakupan Anda. Buat quote dari detail deal.")),
+			h.Class("flex flex-wrap items-center justify-between gap-2 min-w-0 mb-2"),
+			h.Div(
+				h.Class("min-w-0"),
+				h.H1(h.Class("text-xl font-semibold truncate"), g.Text("Quote")),
+				h.P(h.Class("text-base-content/70 truncate"),
+					g.Text("Semua penawaran dalam cakupan Anda. Buat quote dari detail deal.")),
+			),
+			searchBoxInline(v.Base+"/quotes", v.Query,
+				"Cari quote — nama, kode, atau deal…", "Cari quote"),
 		),
 	}
-	body = append(body, searchBox(v.Base+"/quotes", v.Query,
-		"Cari quote — nama, kode, atau deal…", "Cari quote"))
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "quotes-err", g.Text(v.Err)))
 	}

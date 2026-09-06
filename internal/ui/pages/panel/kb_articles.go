@@ -73,10 +73,10 @@ func KBArticleList(v KBArticleListView) g.Node {
 		ui.Alert(ui.VariantDefault, "kb-portal-notice",
 			g.Text("Visibilitas belum berefek — Portal self-service belum tersedia. "+
 				"Semua artikel hanya terlihat staf internal.")),
-		kbArticlesTabs(v),
-		searchBox(v.Base+"/kb-articles", v.Query,
-			"Cari artikel — judul, kata kunci, atau kategori…", "Cari artikel Knowledge Base",
-			hiddenField{"tab", kbTabParam(v.Tab)}),
+		tabSearchRow(kbArticlesTabs(v),
+			searchBoxInline(v.Base+"/kb-articles", v.Query,
+				"Cari artikel — judul, kata kunci, atau kategori…", "Cari artikel Knowledge Base",
+				hiddenField{"tab", kbTabParam(v.Tab)})),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "kb-articles-err", g.Text(v.Err)))

@@ -41,3 +41,17 @@ func TestSuccessPlansList_SearchNoMatchEmptyState(t *testing.T) {
 		t.Errorf("tautan reset harus menjaga tab tapi membuang q:\n%s", out)
 	}
 }
+
+// TestSuccessPlansList_TabSearchRow — regresi BL-68: bilah tab Success Plans &
+// kotak cari harus sebaris dalam satu wrapper justify-between (search terdorong
+// ke pojok kanan), bukan dua baris terpisah.
+func TestSuccessPlansList_TabSearchRow(t *testing.T) {
+	out := renderLeads(t, SuccessPlansList(SuccessPlansListView{
+		Base:  "/w/desa",
+		Tab:   "Active",
+		Tabs:  []SuccessPlanTab{{Key: "", Label: "Semua"}, {Key: "Active", Label: "Aktif"}},
+		Query: "kali muara",
+		Items: []SuccessPlanRow{{ID: 1, AccountName: "Desa Cocok", PlanName: "Adopsi"}},
+	}))
+	assertTabSearchRow(t, out, "/w/desa/success-plans")
+}

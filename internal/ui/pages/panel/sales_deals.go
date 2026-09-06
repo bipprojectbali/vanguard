@@ -90,9 +90,13 @@ func DealPipeline(v DealPipelineView) g.Node {
 		),
 		dealViewToggle(v),
 	}
-	// Toggle "Deal Saya" (BL-10): hanya bagi cakupan 'all'. Ditaruh di bawah toggle
-	// view agar berlaku untuk KEDUA tampilan (pipeline & tabel).
-	if v.ShowMineToggle {
+	// Toggle "Deal Saya" (BL-10): hanya bagi cakupan 'all'. Berlaku untuk KEDUA
+	// tampilan (pipeline & tabel). Di view Tabel disejajarkan sebaris dgn kotak
+	// cari (BL-68, keputusan user 7 Sep: align dgn Semua/Deal Saya, bukan toggle
+	// view) → dirender di dalam tabSearchRow di bawah, JANGAN di sini agar tak
+	// dobel. Di view Pipeline (tanpa search) ia berdiri sendiri.
+	tableView := v.View == "table"
+	if v.ShowMineToggle && !tableView {
 		body = append(body, dealMineToggle(v))
 	}
 	if v.Err != "" {
@@ -102,13 +106,25 @@ func DealPipeline(v DealPipelineView) g.Node {
 		body = append(body, ui.Alert(ui.VariantDefault, "deals-ok", g.Text(v.Msg)))
 	}
 
-	if v.View == "table" {
+	if tableView {
 		// Search hanya di view Tabel (berkeyset); papan Kanban di luar lingkup slice.
 		// mine dipertahankan lintas submit search agar toggle tak tereset.
-		body = append(body, searchBox(v.Base+"/deals", v.Query,
-			"Cari deal — nama atau kode…", "Cari deal",
-			hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
-			hiddenField{"mine", dealMineParam(v.Mine)}))
+		// BL-68: bila toggle Semua/Deal Saya tampil (cakupan 'all'), sejajarkan
+		// search ke pojok kanan sebaris dgn toggle itu — varian INLINE (lebar
+		// terbatas agar input+tombol sebaris); tanpa toggle (cakupan 'own'), search
+		// berdiri sendiri full-width.
+		if v.ShowMineToggle {
+			body = append(body, tabSearchRow(dealMineToggle(v),
+				searchBoxInline(v.Base+"/deals", v.Query,
+					"Cari deal — nama atau kode…", "Cari deal",
+					hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
+					hiddenField{"mine", dealMineParam(v.Mine)})))
+		} else {
+			body = append(body, searchBox(v.Base+"/deals", v.Query,
+				"Cari deal — nama atau kode…", "Cari deal",
+				hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
+				hiddenField{"mine", dealMineParam(v.Mine)}))
+		}
 		if len(v.Items) == 0 {
 			body = append(body, emptyDeals(v))
 		} else {

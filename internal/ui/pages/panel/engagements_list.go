@@ -101,10 +101,10 @@ func EngagementsList(v EngagementsListView) g.Node {
 			)),
 		),
 		engagementKPICards(v.KPIs, v.Base),
-		engagementTabsNav(v),
-		searchBox(v.Base+"/engagements", v.Query,
-			"Cari engagement — subjek atau desa…", "Cari engagement",
-			hiddenField{"tab", v.Tab}),
+		tabSearchRow(engagementTabsNav(v),
+			searchBoxInline(v.Base+"/engagements", v.Query,
+				"Cari engagement — subjek atau desa…", "Cari engagement",
+				hiddenField{"tab", v.Tab})),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "engagements-err", g.Text(v.Err)))
