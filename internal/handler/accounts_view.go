@@ -59,8 +59,9 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 	return panel.AccountDetailView{
 		Base:        base,
 		ID:          a.ID,
-		EntityCode:  deref(a.EntityCode),
 		VillageName: a.VillageName,
+		// BL-61: entity_code tak lagi dipetakan ke view detail (badge dihapus);
+		// yang tampil = VillageCode (Kemendagri). entity_code tetap ada di DB.
 		VillageCode: deref(a.VillageCode),
 		AccountType: accountTypeLabel(a.AccountType),
 		Website:     deref(a.Website),
