@@ -20,7 +20,12 @@ import (
 // agar view netral terhadap tipe DB. Population/HamletsCount/Budget sebagai
 // string apa adanya untuk input number/text.
 type AccountFormFields struct {
-	VillageName           string
+	VillageName string
+	// VillageID = id master regions level 4 (Desa/Kelurahan) terpilih, utk
+	// preselect dropdown Desa saat edit (BL-66). Kosong = legacy/village_code tak
+	// cocok master → dropdown Desa dibiarkan kosong (nama tersimpan tetap tampil
+	// sbg catatan). VillageName kini catatan read-only, bukan input.
+	VillageID             string
 	AccountType           string
 	Website               string
 	Description           string
@@ -57,6 +62,11 @@ type AccountFormView struct {
 	// RegionsJSON = dataset penuh master wilayah (h.regionsJSON), diembed sekali
 	// utk cascading dropdown Provinsi/Kabupaten-Kota/Kecamatan (ADR 0009).
 	RegionsJSON string
+
+	// VillagesURL = endpoint lazy-fetch daftar Desa per Kecamatan (BL-66),
+	// mis. "/w/{slug}/accounts/villages". Dataset Desa (~83.762) terlalu besar
+	// utk diembed di RegionsJSON → dropdown level 4 memuatnya on-demand.
+	VillagesURL string
 
 	PhoneEditable bool
 
@@ -99,7 +109,8 @@ func AccountForm(v AccountFormView) g.Node {
 		h.Class("grid gap-4 min-w-0"),
 
 		formCard("Identitas",
-			field("Nama Desa", "village_name", v.Fields.VillageName, true, "text"),
+			// BL-66: input "Nama Desa" dilepas — nama diturunkan dari Desa yang
+			// dipilih di kartu Wilayah (master Kemendagri), bukan diketik bebas.
 			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.Types, true,
 				"Prospect = calon pelanggan (belum berlangganan) · Customer = pelanggan aktif · "+
 					"Former Customer = pernah berlangganan, sudah berhenti."),
@@ -111,7 +122,14 @@ func AccountForm(v AccountFormView) g.Node {
 			textareaField("Deskripsi", "description", v.Fields.Description),
 		),
 		formCard("Wilayah",
-			regionSelect("account", v.RegionsJSON, v.Fields.DistrictID, !v.IsEdit),
+			// BL-66: cascading 4 level (Provinsi→Kab/Kota→Kecamatan→Desa). Desa
+			// (level 4) menentukan village_code Kemendagri + district_id; nama desa
+			// diturunkan darinya. Saat edit desa lama tak cocok master, dropdown
+			// Desa kosong → tampilkan nama tersimpan sbg catatan agar tak hilang.
+			g.If(v.IsEdit && v.Fields.VillageName != "",
+				h.P(h.Class("text-sm text-base-content/60 sm:col-span-2"),
+					g.Text("Desa saat ini: "+v.Fields.VillageName+". Pilih ulang di bawah untuk mengubah."))),
+			regionSelectWithVillage("account", v.RegionsJSON, v.Fields.DistrictID, v.Fields.VillageID, v.VillagesURL, !v.IsEdit),
 			field("Alamat", "village_address", v.Fields.VillageAddress, false, "text"),
 			field("Kode Pos", "postal_code", v.Fields.PostalCode, false, "text"),
 			// BL-60: field "Teritori" dilepas dari UI untuk sementara. Kolomnya &

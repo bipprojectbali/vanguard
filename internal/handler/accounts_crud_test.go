@@ -3,26 +3,26 @@ package handler
 import (
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"testing"
 )
 
 // accounts_crud_test.go — jalur CRUD happy-path Desa (create/update/soft-delete)
-// plus validasi backend. Pembuatan otomatis kedua kode (village_code Kemendagri +
-// entity_code sistem) & tabrakannya diuji di accounts_codes_test.go; sumbu izin
-// (F2/F3/F4) & keyset di accounts_test.go / accounts_fls_test.go; helper bersama
-// di sana.
+// plus validasi backend. BL-66: create memilih Desa master (village_id level 4);
+// village_code Kemendagri + nama diturunkan dari master, entity_code sistem
+// otomatis. Tabrakan kode & Desa-wajib diuji di accounts_codes_test.go; sumbu
+// izin (F2/F3/F4) & keyset di accounts_test.go / accounts_fls_test.go; helper
+// bersama (villages/firstVillage/withVillage) di sana.
 
 // TestAccounts_CreateSuccess: create sebagai sales → 303 ke detail dengan
-// ok=created, baris tersimpan dengan pembuat sebagai owner, entity_code terisi,
-// audit tercatat.
+// ok=created, baris tersimpan dengan pembuat sebagai owner, entity_code +
+// village_code + nama diturunkan dari master Desa, audit tercatat.
 func TestAccounts_CreateSuccess(t *testing.T) {
 	env, uid := setupAccounts(t)
-	districtID := firstDistrictID(t, env)
-	form := accountFormValues("Desa Sukamaju", "prospect")
-	// village_code TAK lagi input manual — dibuat otomatis dari Kecamatan.
-	form.Set("district_id", strconv.FormatInt(districtID, 10))
+	v := firstVillage(t, env)
+	// Desa dipilih via dropdown (village_id); nama+village_code TAK diketik —
+	// diturunkan handler dari master.
+	form := withVillage(accountFormValues("prospect"), v)
 	form.Set("contact_phone", "0812-1111-2222")
 	req := accountsReq(http.MethodPost, "/w/test/accounts", form, "")
 	rec := env.runAccount(uid, "owner", "sales", req, env.h.AccountCreate)
@@ -38,8 +38,8 @@ func TestAccounts_CreateSuccess(t *testing.T) {
 		t.Fatalf("harus 1 baris, ada %d", len(rows))
 	}
 	a := rows[0]
-	if a.VillageName != "Desa Sukamaju" {
-		t.Errorf("nama = %q", a.VillageName)
+	if a.VillageName != v.Name {
+		t.Errorf("nama = %q, want %q (nama master Desa)", a.VillageName, v.Name)
 	}
 	if a.AccountOwner == nil || *a.AccountOwner != uid {
 		t.Errorf("pembuat harus jadi owner awal (F3), got %v", a.AccountOwner)
@@ -47,40 +47,41 @@ func TestAccounts_CreateSuccess(t *testing.T) {
 	if a.EntityCode == nil || *a.EntityCode == "" {
 		t.Error("entity_code harus dialokasikan saat create")
 	}
-	if a.VillageCode == nil || *a.VillageCode == "" {
-		t.Error("village_code (Kemendagri) harus dibuat otomatis saat create")
+	if got := deref(a.VillageCode); got != v.Code {
+		t.Errorf("village_code = %q, want %q (kode Kemendagri master)", got, v.Code)
 	}
-	if a.DistrictID == nil || *a.DistrictID != districtID {
-		t.Errorf("district_id harus tersimpan sesuai input, got %v want %d", a.DistrictID, districtID)
+	if a.DistrictID == nil || *a.DistrictID != v.DistrictID {
+		t.Errorf("district_id harus mengikuti Kecamatan induk master, got %v want %d", a.DistrictID, v.DistrictID)
 	}
 	env.assertAudited(t, "account.create")
 }
 
-// TestAccounts_CreateRejectsUnknownDistrict: district_id yang tak ada di
-// master regions (FK violation, SQLSTATE 23503) ditolak dengan pesan spesifik
-// ("district_id"), bukan 500 mentah — accountWriteErr mengenali constraint
-// accounts_district_id_fkey (ADR 0009).
-func TestAccounts_CreateRejectsUnknownDistrict(t *testing.T) {
+// TestAccounts_CreateRejectsUnknownVillage: village_id yang tak ada / bukan
+// level 4 di master regions ditolak dengan pesan spesifik ("village_id"),
+// bukan 500 mentah — AccountCreate memanggil GetVillageRegion (level=4) yang
+// balikin ErrNoRows utk id tak valid.
+func TestAccounts_CreateRejectsUnknownVillage(t *testing.T) {
 	env, uid := setupAccounts(t)
-	form := accountFormValues("Desa X", "prospect")
-	form.Set("district_id", "999999999") // tak pernah ada di seed ~7.817 baris.
+	form := accountFormValues("prospect")
+	form.Set("village_id", "999999999") // tak pernah ada di seed regions.
 	req := accountsReq(http.MethodPost, "/w/test/accounts", form, "")
 	rec := env.runAccount(uid, "owner", "sales", req, env.h.AccountCreate)
 
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303; body:\n%s", rec.Code, rec.Body.String())
 	}
-	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=district_id") {
-		t.Errorf("redirect harus err=district_id, got %q", loc)
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=village_id") {
+		t.Errorf("redirect harus err=village_id, got %q", loc)
 	}
 	if rows := env.allAccounts(t); len(rows) != 0 {
-		t.Errorf("FK violation harus membatalkan create, ada %d baris", len(rows))
+		t.Errorf("Desa tak dikenal harus membatalkan create, ada %d baris", len(rows))
 	}
 }
 
 // firstDistrictID mengambil satu id Kecamatan (level 3) dari master regions
-// yang di-seed migrasi 00026 — dipakai test yang butuh district_id valid tanpa
-// menghardcode ID yang bisa berubah bila urutan seed migration berubah.
+// yang di-seed migrasi 00026 — dipakai test leads yang masih 3-level (village_id
+// hanya di Accounts, BL-66) tanpa menghardcode ID yang bisa berubah bila urutan
+// seed migration berubah.
 func firstDistrictID(t *testing.T, env *testEnv) int64 {
 	t.Helper()
 	rows, err := env.q.ListAllRegions(t.Context())
@@ -97,16 +98,17 @@ func firstDistrictID(t *testing.T, env *testEnv) int64 {
 }
 
 // TestAccounts_CreateRejectsInvalid: input yang melanggar validasi backend
-// (bukan cuma atribut form) ditolak → redirect err + tak menyentuh DB.
+// (bukan cuma atribut form) ditolak → redirect err + tak menyentuh DB. Kasus di
+// sini gagal SEBELUM village_id diperiksa (urutan parse: account_type/angka
+// dulu), jadi tak perlu village_id.
 func TestAccounts_CreateRejectsInvalid(t *testing.T) {
 	cases := []struct {
 		name    string
 		form    url.Values
 		wantErr string
 	}{
-		{"nama kosong", accountFormValues("", "prospect"), "err=village_name"},
-		{"tipe asing", accountFormValues("Desa X", "bukan_tipe"), "err=account_type"},
-		{"penduduk negatif", withField(accountFormValues("Desa X", "prospect"), "population", "-5"), "err=number"},
+		{"tipe asing", accountFormValues("bukan_tipe"), "err=account_type"},
+		{"penduduk negatif", withField(accountFormValues("prospect"), "population", "-5"), "err=number"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -123,13 +125,15 @@ func TestAccounts_CreateRejectsInvalid(t *testing.T) {
 	}
 }
 
-// TestAccounts_UpdateSuccess: update sebagai owner (business admin) → tersimpan,
-// redirect ok=saved, audit tercatat.
+// TestAccounts_UpdateSuccess: update sebagai owner (business admin) memilih Desa
+// master baru (village_id) → nama+village_code diturunkan dari master, tipe
+// tersimpan, redirect ok=saved, audit tercatat.
 func TestAccounts_UpdateSuccess(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Lama", &uid, nil, nil)
+	v := firstVillage(t, env)
 
-	form := accountFormValues("Desa Baru", "customer")
+	form := withVillage(accountFormValues("customer"), v)
 	req := accountsReq(http.MethodPost, "/w/test/accounts/"+itoa(a.ID), form, itoa(a.ID))
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.AccountUpdate)
 
@@ -137,8 +141,11 @@ func TestAccounts_UpdateSuccess(t *testing.T) {
 		t.Errorf("harus ok=saved, got %q (status %d)", loc, rec.Code)
 	}
 	got, _ := env.q.GetAccount(t.Context(), a.ID)
-	if got.VillageName != "Desa Baru" || got.AccountType != "customer" {
+	if got.VillageName != v.Name || got.AccountType != "customer" {
 		t.Errorf("update tak tersimpan: %q / %q", got.VillageName, got.AccountType)
+	}
+	if code := deref(got.VillageCode); code != v.Code {
+		t.Errorf("village_code harus diturunkan dari master, got %q want %q", code, v.Code)
 	}
 	env.assertAudited(t, "account.update")
 }

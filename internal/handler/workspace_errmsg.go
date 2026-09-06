@@ -52,6 +52,10 @@ func wsErrMsg(code string) string {
 		return "Kecamatan yang dipilih tidak valid."
 	case "district_required":
 		return "Kecamatan wajib dipilih."
+	case "village_required":
+		return "Desa/Kelurahan wajib dipilih."
+	case "village_id":
+		return "Desa/Kelurahan yang dipilih tidak valid."
 	case "classification":
 		return "Klasifikasi (IDM) tidak valid."
 	case "number":

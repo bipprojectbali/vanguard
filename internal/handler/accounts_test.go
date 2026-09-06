@@ -221,11 +221,78 @@ func (e *testEnv) assertAudited(t *testing.T, action string) {
 }
 
 // accountFormValues merakit form values minimal yang valid untuk create/update.
-func accountFormValues(name, accountType string) url.Values {
+// BL-66: nama Desa TAK lagi diketik — diturunkan handler dari village_id (master
+// regions level 4). Create WAJIB village_id (pakai withVillage); update opsional.
+func accountFormValues(accountType string) url.Values {
 	return url.Values{
-		"village_name": {name},
 		"account_type": {accountType},
 	}
+}
+
+// villageRow = satu Desa/Kelurahan master (regions level 4) untuk test create:
+// id (dropdown), kode Kemendagri, nama, dan Kecamatan induk — semuanya dari
+// baris master yang SAMA, seperti yang diturunkan handler (BL-66).
+type villageRow struct {
+	ID         int64
+	Code       string
+	Name       string
+	DistrictID int64
+}
+
+// villages mengambil n Desa REAL DISTINCT (regions level 4, seed migrasi 00039)
+// dari Kecamatan pertama yang punya cukup desa — dipakai test create yang butuh
+// village_id valid + village_code UNIK per baris (idx_accounts_code: satu desa =
+// satu account). Menelusuri provinsi→kab/kota→kecamatan hingga menemukan yang
+// memuat ≥ n desa (tanpa menghardcode ID yang bisa bergeser antar seed).
+func villages(t *testing.T, env *testEnv, n int) []villageRow {
+	t.Helper()
+	ctx := t.Context()
+	provinces, err := env.q.ListProvinces(ctx)
+	if err != nil || len(provinces) == 0 {
+		t.Fatalf("list provinces: %v (len=%d)", err, len(provinces))
+	}
+	for _, p := range provinces {
+		pid := p.ID
+		regencies, err := env.q.ListRegenciesByProvince(ctx, &pid)
+		if err != nil {
+			t.Fatalf("list regencies: %v", err)
+		}
+		for _, reg := range regencies {
+			rid := reg.ID
+			districts, err := env.q.ListDistrictsByRegency(ctx, &rid)
+			if err != nil {
+				t.Fatalf("list districts: %v", err)
+			}
+			for _, d := range districts {
+				did := d.ID
+				vs, err := env.q.ListVillagesByDistrict(ctx, &did)
+				if err != nil {
+					t.Fatalf("list villages: %v", err)
+				}
+				if len(vs) >= n {
+					out := make([]villageRow, n)
+					for i := 0; i < n; i++ {
+						out[i] = villageRow{ID: vs[i].ID, Code: vs[i].Code, Name: vs[i].Name, DistrictID: did}
+					}
+					return out
+				}
+			}
+		}
+	}
+	t.Fatalf("tak ada Kecamatan dgn >=%d Desa — seed 00039 tak wajar", n)
+	return nil
+}
+
+// firstVillage = satu Desa REAL (shortcut villages(...,1)[0]).
+func firstVillage(t *testing.T, env *testEnv) villageRow {
+	t.Helper()
+	return villages(t, env, 1)[0]
+}
+
+// withVillage menyetel village_id pada form (create WAJIB village_id sejak BL-66).
+func withVillage(f url.Values, v villageRow) url.Values {
+	f.Set("village_id", strconv.FormatInt(v.ID, 10))
+	return f
 }
 
 // withField menyetel satu field lalu mengembalikan form (untuk tabel kasus).
@@ -312,10 +379,10 @@ func TestAccounts_GateWrite(t *testing.T) {
 	for _, c := range cases {
 		t.Run("role="+c.role, func(t *testing.T) {
 			env, uid := setupAccounts(t)
-			form := accountFormValues("Desa Uji", "prospect")
-			// Kecamatan kini WAJIB di create (village_code diturunkan darinya) —
-			// tanpa ini jalur "allow" ditolak district_required sebelum menyentuh gate.
-			form.Set("district_id", strconv.FormatInt(firstDistrictID(t, env), 10))
+			form := accountFormValues("prospect")
+			// Desa WAJIB di create (village_code+nama diturunkan darinya, BL-66) —
+			// tanpa ini jalur "allow" ditolak village_required sebelum menyentuh gate.
+			withVillage(form, firstVillage(t, env))
 			req := accountsReq(http.MethodPost, "/w/test/accounts", form, "")
 			rec := env.runAccount(uid, "owner", c.role, req, env.h.AccountCreate)
 

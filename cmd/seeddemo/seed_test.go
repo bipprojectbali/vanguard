@@ -187,9 +187,10 @@ func TestSeedInto(t *testing.T) {
 		}
 	}
 
-	// 6. village_code berformat pseudo-Kemendagri (3 segmen kode kecamatan ASLI
-	// + 1 segmen urut fiktif), BUKAN prefix "VC-"/"VC-LEAD-" lama — mengunci
-	// perubahan format di accounts.go/leads.go (lihat desaSeqOffset di util.go).
+	// 6. village_code = kode Kemendagri ASLI 4-segmen dari master Desa (regions
+	// level 4, BL-66), format NN.NN.NN.NNNN — BUKAN prefix "VC-"/"VC-LEAD-" lama
+	// maupun segmen ke-4 fiktif. Mengunci bahwa seed menarik dari villagePool
+	// (regions.go), bukan merakit kode sendiri.
 	villageCodeRe := regexp.MustCompile(`^[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]{4}$`)
 	vcRows, err := pkgPool.Query(ctx,
 		`SELECT village_code FROM accounts WHERE tenant_id = $1 AND village_code IS NOT NULL`, tenantID)

@@ -66,6 +66,63 @@ func (q *Queries) GetRegionAncestry(ctx context.Context, districtID int64) (GetR
 	return i, err
 }
 
+const getVillageByCode = `-- name: GetVillageByCode :one
+SELECT id, code, name, parent_region_id FROM regions
+WHERE code = $1 AND level = 4
+`
+
+type GetVillageByCodeRow struct {
+	ID             int64  `json:"id"`
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	ParentRegionID *int64 `json:"parent_region_id"`
+}
+
+// Cari Desa/Kelurahan (level 4) via Kode Kemendagri — dipakai prefill form
+// Sunting akun (BL-66): akun menyimpan village_code (bukan region id), jadi untuk
+// pra-pilih dropdown Desa perlu memetakan balik code → id region. Tak ketemu
+// (kode akun lama non-Kemendagri) → pgx.ErrNoRows, pemanggil biarkan dropdown kosong.
+func (q *Queries) GetVillageByCode(ctx context.Context, code string) (GetVillageByCodeRow, error) {
+	row := q.db.QueryRow(ctx, getVillageByCode, code)
+	var i GetVillageByCodeRow
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.ParentRegionID,
+	)
+	return i, err
+}
+
+const getVillageRegion = `-- name: GetVillageRegion :one
+SELECT id, code, name, parent_region_id FROM regions
+WHERE id = $1 AND level = 4
+`
+
+type GetVillageRegionRow struct {
+	ID             int64  `json:"id"`
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	ParentRegionID *int64 `json:"parent_region_id"`
+}
+
+// Resolusi SATU Desa/Kelurahan (level 4) dari id pilihan form → dipakai
+// AccountCreate/AccountUpdate (BL-66) menurunkan village_code (=code, 4 segmen
+// Kemendagri asli), village_name (=name), district_id (=parent_region_id
+// Kecamatan induk). Filter level = 4 eksplisit: id level lain / tak ada →
+// pgx.ErrNoRows → galat "village_id" (payload bukan Desa sah).
+func (q *Queries) GetVillageRegion(ctx context.Context, id int64) (GetVillageRegionRow, error) {
+	row := q.db.QueryRow(ctx, getVillageRegion, id)
+	var i GetVillageRegionRow
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.ParentRegionID,
+	)
+	return i, err
+}
+
 const listAllRegions = `-- name: ListAllRegions :many
 SELECT id, parent_region_id, level, name FROM regions
 ORDER BY level, name
@@ -206,6 +263,44 @@ func (q *Queries) ListRegenciesByProvince(ctx context.Context, parentRegionID *i
 			&i.Code,
 			&i.Name,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVillagesByDistrict = `-- name: ListVillagesByDistrict :many
+SELECT id, code, name FROM regions
+WHERE level = 4 AND parent_region_id = $1
+ORDER BY name
+`
+
+type ListVillagesByDistrictRow struct {
+	ID   int64  `json:"id"`
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// Daftar Desa/Kelurahan (level 4) di bawah SATU Kecamatan (level 3) — dipakai
+// endpoint server GET /accounts/villages (BL-66). TAK di-embed ke payload
+// dropdown seperti 3 level di atas karena volume desa se-Indonesia (~83rb baris,
+// ADR 0009): meng-embed semua akan membengkakkan HTML form → di-fetch same-origin
+// per Kecamatan saat dipilih (lolos CSP default-src 'self'). `code` = Kode
+// Kemendagri desa 4-segmen (mis. "32.01.01.2001") yang jadi village_code akun.
+func (q *Queries) ListVillagesByDistrict(ctx context.Context, parentRegionID *int64) ([]ListVillagesByDistrictRow, error) {
+	rows, err := q.db.Query(ctx, listVillagesByDistrict, parentRegionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListVillagesByDistrictRow{}
+	for rows.Next() {
+		var i ListVillagesByDistrictRow
+		if err := rows.Scan(&i.ID, &i.Code, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -118,6 +118,11 @@ func TestUpdateAccount_TakSentuhKepemilikan(t *testing.T) {
 			ID:          acc.ID,
 			VillageName: newName,
 			AccountType: "customer",
+			// BL-66: village_code KINI di kolom SET UpdateAccount — preservasi
+			// (edit tanpa ganti Desa) jadi tanggung jawab CALLER yang meneruskan
+			// nilai lama; handler AccountUpdate melakukannya. Di sini kita tiru:
+			// teruskan vc → membuktikan nilai yang diteruskan tersimpan utuh.
+			VillageCode: &vc,
 		})
 		return e
 	}); err != nil {
@@ -127,12 +132,13 @@ func TestUpdateAccount_TakSentuhKepemilikan(t *testing.T) {
 	if upd.VillageName != "Baru" || upd.AccountType != "customer" {
 		t.Errorf("profil harus terupdate, got name=%q type=%q", upd.VillageName, upd.AccountType)
 	}
-	// entity_code, village_code, dan account_owner TAK boleh berubah lewat edit profil.
+	// entity_code & account_owner TAK boleh berubah lewat edit profil (di luar SET
+	// UpdateAccount); village_code = nilai yang diteruskan caller (BL-66).
 	if upd.EntityCode == nil || *upd.EntityCode != *acc.EntityCode {
 		t.Errorf("entity_code tak boleh berubah saat edit profil, got %v", upd.EntityCode)
 	}
 	if upd.VillageCode == nil || *upd.VillageCode != vc {
-		t.Errorf("village_code tak boleh berubah saat edit profil, got %v", upd.VillageCode)
+		t.Errorf("village_code yang diteruskan caller harus tersimpan, got %v", upd.VillageCode)
 	}
 	if upd.AccountOwner == nil || *upd.AccountOwner != owner.ID {
 		t.Errorf("account_owner tak boleh berubah saat edit profil, got %v", upd.AccountOwner)

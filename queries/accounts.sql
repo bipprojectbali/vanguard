@@ -80,12 +80,15 @@ ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
 -- name: UpdateAccount :one
--- Sunting profil desa. entity_code & village_code tak diubah di sini (kode identitas
--- yang dikutip; village_code punya jalur khusus bila kelak perlu). Penugasan
--- (owner/CSM) juga TERPISAH (AssignAccountCSM) agar perubahan wewenang terlihat
--- sebagai aksi tersendiri, bukan efek samping edit profil.
+-- Sunting profil desa. entity_code tak diubah (kode identitas internal yang
+-- dikutip, stabil). village_code KINI ikut diperbarui (BL-66): saat pengguna
+-- mengganti pilihan Desa/Kelurahan, village_code/village_name/district_id
+-- diturunkan ulang dari region terpilih; narg agar bisa NULL (edit tanpa ganti
+-- desa mempertahankan nilai lama yang dioper handler). Penugasan (owner/CSM)
+-- TETAP TERPISAH (AssignAccountCSM) agar perubahan wewenang jadi aksi tersendiri.
 UPDATE accounts SET
     village_name          = sqlc.arg(village_name),
+    village_code          = sqlc.narg(village_code),
     account_type          = sqlc.arg(account_type),
     website               = sqlc.narg(website),
     description           = sqlc.narg(description),

@@ -169,7 +169,8 @@ func TestAccounts_F4_NonSalesTakBisaTimpaPhone(t *testing.T) {
 	a := env.seedAccountWithPhone(t, "Desa Kontak", uid, phone)
 
 	// Admin menyunting: form mengirim mask (flsHidden) sebagai contact_phone.
-	form := accountFormValues("Desa Kontak", "prospect")
+	// Tanpa village_id, nama Desa dipertahankan dari seed (BL-66).
+	form := accountFormValues("prospect")
 	form.Set("contact_phone", flsHidden)
 	req := accountsReq(http.MethodPost, "/w/test/accounts/"+itoa(a.ID), form, itoa(a.ID))
 	if rec := env.runAccount(uid, "owner", "admin", req, env.h.AccountUpdate); rec.Code != http.StatusSeeOther {

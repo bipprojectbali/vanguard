@@ -9,21 +9,11 @@ import (
 	"go_starter/internal/db"
 )
 
-// accounts.go — 40 "desa" (Account), hub seluruh modul CRM. Nama desa gabungan
-// prefix+suffix umum di Indonesia (bukan daftar nyata — hindari klaim atas desa
-// sungguhan) dipasangkan ke satu kecamatan REAL dari pickDistricts. Semua kolom
-// nullable diisi supaya kolom di UI/laporan tak pernah kosong-total.
-
-var villagePrefixes = []string{
-	"Suka", "Mekar", "Cipayung", "Marga", "Karang", "Tanjung", "Sindang",
-	"Cibeunying", "Wonosari", "Sumber", "Bumi", "Giri", "Pasir", "Cinta",
-	"Rawa", "Kebon", "Batu", "Tegal", "Sido", "Panca",
-}
-
-var villageSuffixes = []string{
-	"maju", "sari", "mulya", "asih", "jaya", "asri", "indah", "makmur",
-	"agung", "rejo", "wangi", "lestari", "utama", "harja", "tirta",
-}
+// accounts.go — 40 "desa" (Account), hub seluruh modul CRM. BL-66: tiap desa
+// diambil dari villagePool (Desa/Kelurahan REAL regions level 4) — nama,
+// village_code Kemendagri asli, dan district_id induk semua dari baris master
+// yang sama (satu sumber kebenaran), bukan lagi nama fiktif + kode buatan.
+// Semua kolom nullable diisi supaya kolom di UI/laporan tak pernah kosong-total.
 
 var villageAddresses = []string{
 	"Jl. Raya Desa No. 1", "Jl. Poros Kecamatan Km 3", "Jl. Merdeka No. 12",
@@ -40,8 +30,8 @@ type accountInfo struct {
 }
 
 // seedAccounts membuat 40 desa: 28 customer / 8 prospect / 4 former_customer
-// (weightedPick), tersebar merata ke semua district yg tersedia.
-func seedAccounts(ctx context.Context, q *db.Queries, tenantID int64, tag string, rng *rand.Rand, owner *int64, districts []district) ([]accountInfo, error) {
+// (weightedPick). Tiap desa mengambil satu Desa REAL dari pool (DISTINCT).
+func seedAccounts(ctx context.Context, q *db.Queries, tenantID int64, tag string, rng *rand.Rand, owner *int64, pool *villagePool) ([]accountInfo, error) {
 	const total = 40
 	typeWeights := []weighted[string]{
 		{"customer", 28}, {"prospect", 8}, {"former_customer", 4},
@@ -54,22 +44,20 @@ func seedAccounts(ctx context.Context, q *db.Queries, tenantID int64, tag string
 		{"Tertinggal", 6}, {"Sangat Tertinggal", 2},
 	}
 
-	// Kombinasi prefix×suffix di-shuffle sekali lalu diambil berurutan — 40
-	// nama TANPA duplikat (300 kombinasi tersedia), bukan pick() acak per-desa
-	// yang bisa mengulang nama yang sama dan terasa tidak nyata.
-	names := shuffledVillageNames(rng)
-
 	var out []accountInfo
 	for i := 0; i < total; i++ {
+		desa, err := pool.next()
+		if err != nil {
+			return nil, err
+		}
 		code, err := q.GenerateEntityCode(ctx, tenantID, codes.EntityAccount)
 		if err != nil {
 			return nil, fmt.Errorf("kode entitas: %w", err)
 		}
-		d := districts[i%len(districts)]
-		name := names[i]
-		// Pseudo-Kemendagri: 3 segmen depan = kode kecamatan ASLI (d.Code, mis.
-		// "32.01.01"), segmen ke-4 = urutan desa fiktif (lihat desaSeqOffset).
-		villageCode := fmt.Sprintf("%s.%04d", d.Code, (desaSeqOffset(tag)+i+1)%10000)
+		// BL-66: kode Kemendagri ASLI + nama + kecamatan induk dari master Desa.
+		villageCode := desa.Code
+		name := desa.Name
+		districtID := desa.DistrictID
 		accType := weightedPick(rng, typeWeights)
 
 		var accOwner, csm *int64
@@ -108,7 +96,7 @@ func seedAccounts(ctx context.Context, q *db.Queries, tenantID int64, tag string
 			AccountOwner:          accOwner,
 			AssignedCsm:           csm,
 			Website:               website,
-			DistrictID:            &d.ID,
+			DistrictID:            &districtID,
 			VillageAddress:        &address,
 			PostalCode:            &postal,
 			Territory:             territory,
@@ -128,20 +116,6 @@ func seedAccounts(ctx context.Context, q *db.Queries, tenantID int64, tag string
 		out = append(out, accountInfo{ID: acc.ID, Type: accType})
 	}
 	return out, nil
-}
-
-// shuffledVillageNames menghasilkan slice "Desa {Prefix}{Suffix}" dari SELURUH
-// kombinasi prefix×suffix (300), diacak Fisher-Yates dgn rng yang sama dgn
-// pemanggil (deterministik per tag run, tapi beda tiap run).
-func shuffledVillageNames(rng *rand.Rand) []string {
-	var combos []string
-	for _, p := range villagePrefixes {
-		for _, s := range villageSuffixes {
-			combos = append(combos, "Desa "+p+s)
-		}
-	}
-	rng.Shuffle(len(combos), func(i, j int) { combos[i], combos[j] = combos[j], combos[i] })
-	return combos
 }
 
 // villageSlug menghasilkan slug pendek deterministik dari nama+index — dipakai

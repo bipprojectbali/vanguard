@@ -518,6 +518,17 @@ type Querier interface {
 	GetUser(ctx context.Context, id int64) (User, error)
 	// Soft-delete gotcha: user terhapus tak boleh login.
 	GetUserByEmail(ctx context.Context, email string) (User, error)
+	// Cari Desa/Kelurahan (level 4) via Kode Kemendagri — dipakai prefill form
+	// Sunting akun (BL-66): akun menyimpan village_code (bukan region id), jadi untuk
+	// pra-pilih dropdown Desa perlu memetakan balik code → id region. Tak ketemu
+	// (kode akun lama non-Kemendagri) → pgx.ErrNoRows, pemanggil biarkan dropdown kosong.
+	GetVillageByCode(ctx context.Context, code string) (GetVillageByCodeRow, error)
+	// Resolusi SATU Desa/Kelurahan (level 4) dari id pilihan form → dipakai
+	// AccountCreate/AccountUpdate (BL-66) menurunkan village_code (=code, 4 segmen
+	// Kemendagri asli), village_name (=name), district_id (=parent_region_id
+	// Kecamatan induk). Filter level = 4 eksplisit: id level lain / tak ada →
+	// pgx.ErrNoRows → galat "village_id" (payload bukan Desa sah).
+	GetVillageRegion(ctx context.Context, id int64) (GetVillageRegionRow, error)
 	// Benar bila sudah ADA langganan Active hidup untuk (account, plan) di tenant ini —
 	// cermin partial-unique idx_subs_one_active (1 Active per account+plan). Dipakai
 	// create-from-deal (BL-21) untuk menolak lebih dini dengan pesan ramah SEBELUM INSERT
@@ -1024,6 +1035,13 @@ type Querier interface {
 	ListTickets(ctx context.Context, arg ListTicketsParams) ([]ListTicketsRow, error)
 	// Panel /dev: keyset pagination, hanya user aktif (belum soft-delete).
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	// Daftar Desa/Kelurahan (level 4) di bawah SATU Kecamatan (level 3) — dipakai
+	// endpoint server GET /accounts/villages (BL-66). TAK di-embed ke payload
+	// dropdown seperti 3 level di atas karena volume desa se-Indonesia (~83rb baris,
+	// ADR 0009): meng-embed semua akan membengkakkan HTML form → di-fetch same-origin
+	// per Kecamatan saat dipilih (lolos CSP default-src 'self'). `code` = Kode
+	// Kemendagri desa 4-segmen (mis. "32.01.01.2001") yang jadi village_code akun.
+	ListVillagesByDistrict(ctx context.Context, parentRegionID *int64) ([]ListVillagesByDistrictRow, error)
 	// Tautkan hasil konversi ke lead + kunci statusnya. Dipanggil DALAM tx konversi
 	// (bersama INSERT account/contact/deal) → gagal-sebagian rollback penuh. Guard
 	// "hanya Qualified & belum converted" ada di WHERE agar konversi ganda idempotent-
@@ -1447,10 +1465,12 @@ type Querier interface {
 	// PLATFORM-ONLY. Membersihkan jejak suspensi agar kolomnya tak jadi sisa yang
 	// menyesatkan saat suspensi berikutnya.
 	UnsuspendTenant(ctx context.Context, id int64) error
-	// Sunting profil desa. entity_code & village_code tak diubah di sini (kode identitas
-	// yang dikutip; village_code punya jalur khusus bila kelak perlu). Penugasan
-	// (owner/CSM) juga TERPISAH (AssignAccountCSM) agar perubahan wewenang terlihat
-	// sebagai aksi tersendiri, bukan efek samping edit profil.
+	// Sunting profil desa. entity_code tak diubah (kode identitas internal yang
+	// dikutip, stabil). village_code KINI ikut diperbarui (BL-66): saat pengguna
+	// mengganti pilihan Desa/Kelurahan, village_code/village_name/district_id
+	// diturunkan ulang dari region terpilih; narg agar bisa NULL (edit tanpa ganti
+	// desa mempertahankan nilai lama yang dioper handler). Penugasan (owner/CSM)
+	// TETAP TERPISAH (AssignAccountCSM) agar perubahan wewenang jadi aksi tersendiri.
 	UpdateAccount(ctx context.Context, arg UpdateAccountParams) (Account, error)
 	// Sunting aktivitas. kind & target TAK di sini: kind menentukan bentuk form
 	// (immutable saat edit), target ditetapkan saat create. status punya jalur

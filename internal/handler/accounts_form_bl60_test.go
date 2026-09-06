@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -40,7 +39,7 @@ func TestAccountUpdate_PreservesTerritory(t *testing.T) {
 		t.Fatalf("seed account: %v", err)
 	}
 
-	form := accountFormValues("Desa Berteritori", "customer") // tak ada "territory"
+	form := accountFormValues("customer") // tak ada "territory"; nama dipertahankan (tanpa village_id)
 	req := accountsReq(http.MethodPost, "/w/test/accounts/"+itoa(a.ID), form, itoa(a.ID))
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.AccountUpdate)
 	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=saved") {
@@ -60,16 +59,15 @@ func TestAccountUpdate_PreservesTerritory(t *testing.T) {
 // ("5.000.000") diterima backend & tersimpan sebagai 5000000 (cleanThousands).
 func TestAccountCreate_BudgetGroupedThousands(t *testing.T) {
 	env, uid := setupAccounts(t)
-	districtID := firstDistrictID(t, env)
+	v := firstVillage(t, env)
 
-	form := accountFormValues("Desa Anggaran", "prospect")
-	form.Set("district_id", strconv.FormatInt(districtID, 10))
+	form := withVillage(accountFormValues("prospect"), v)
 	form.Set("village_budget", "5.000.000")
 	if rec := createAccountForm(t, env, uid, form); rec.Code != http.StatusSeeOther {
 		t.Fatalf("create gagal: %d\n%s", rec.Code, rec.Body.String())
 	}
 
-	got := accountByName(t, env, "Desa Anggaran")
+	got := accountByVillageCode(t, env, v.Code)
 	if s := moneyRupiahStr(got.VillageBudget); s != "5000000" {
 		t.Errorf("anggaran terkelompok harus tersimpan 5000000, got %q", s)
 	}
@@ -79,10 +77,9 @@ func TestAccountCreate_BudgetGroupedThousands(t *testing.T) {
 // (err=budget) — bukan 500 mentah, dan tak menyimpan baris.
 func TestAccountCreate_BudgetInvalidRejected(t *testing.T) {
 	env, uid := setupAccounts(t)
-	districtID := firstDistrictID(t, env)
 
-	form := accountFormValues("Desa Salah", "prospect")
-	form.Set("district_id", strconv.FormatInt(districtID, 10))
+	// Anggaran diparse SEBELUM village_id, jadi err=budget muncul tanpa village_id.
+	form := accountFormValues("prospect")
 	form.Set("village_budget", "abc")
 	rec := createAccountForm(t, env, uid, form)
 	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=budget") {

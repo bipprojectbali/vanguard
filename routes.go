@@ -286,6 +286,10 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// antar-desa (F3) menyaring baris di dalam handler/query.
 		r.Get("/accounts", h.AccountsList)
 		r.Get("/accounts/new", h.AccountNew)
+		// BL-66: lazy-fetch Desa/Kelurahan per Kecamatan (cascading level 4).
+		// WAJIB sebelum "/accounts/{id}" — chi cocokkan statis dulu, tapi urutan
+		// eksplisit menjaga niat tetap terbaca.
+		r.Get("/accounts/villages", h.AccountVillages)
 		r.Post("/accounts", h.AccountCreate)
 		r.Get("/accounts/{id}", h.AccountDetail)
 		r.Get("/accounts/{id}/edit", h.AccountEdit)

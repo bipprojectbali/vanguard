@@ -54,6 +54,7 @@ func (h *Handler) AccountNew(w http.ResponseWriter, r *http.Request) {
 		IsEdit:          false,
 		Err:             wsErrMsg(r.URL.Query().Get("err")),
 		RegionsJSON:     h.regionsJSON(ctx),
+		VillagesURL:     base + "/accounts/villages",
 		PhoneEditable:   canEditPhone(ctx),
 		Types:           accountTypeOptions,
 		Statuses:        villageStatusOptions,

@@ -12,10 +12,11 @@ import "strings"
 func parseAccountForm(fv func(string) string) (accountForm, string) {
 	var f accountForm
 
-	f.VillageName = strings.TrimSpace(fv("village_name"))
-	if f.VillageName == "" || len(f.VillageName) > maxVillageNameLen {
-		return accountForm{}, "village_name"
-	}
+	// BL-66: Nama Desa & Kecamatan TAK lagi diketik/dipilih langsung — diturunkan
+	// handler dari Desa (VillageID) via master regions. Di sini cukup parse
+	// village_id sbg ID sah; keberadaannya (level 4) diverifikasi handler
+	// (GetVillageRegion). Kosong = biarkan handler memutuskan (wajib saat create,
+	// pertahankan lama saat update).
 
 	f.AccountType = strings.TrimSpace(fv("account_type"))
 	if _, ok := validAccountTypes[f.AccountType]; !ok {
@@ -60,15 +61,15 @@ func parseAccountForm(fv func(string) string) (accountForm, string) {
 	}
 	f.VillageBudget = budget
 
-	// Kecamatan: FK ke master regions (0009), bukan lagi teks bebas. <select>
-	// bernilai ID dipopulasikan cascading di client (static/regions.js) — di sini
-	// cukup parse & pastikan bentuknya ID sah; keberadaannya di DB dijaga FK
-	// (pelanggaran → SQLSTATE 23503, ditangani createAccount/updateAccount).
-	did, code := optInt64(fv("district_id"))
+	// Desa/Kelurahan (BL-66): <select name="village_id"> level 4 dari cascading
+	// (static/regions.js lazy-fetch). Cukup parse bentuk ID sah di sini; handler
+	// resolve ke master (GetVillageRegion) utk village_code/nama/district. Kosong
+	// → nil (handler: wajib saat create, pertahankan desa lama saat update).
+	vid, code := optInt64(fv("village_id"))
 	if code != "" {
-		return accountForm{}, "district_id"
+		return accountForm{}, "village_id"
 	}
-	f.DistrictID = did
+	f.VillageID = vid
 
 	// entity_code (kode sistem) OPSIONAL: kosong → nil (dibuat otomatis di
 	// create); terisi → override manual, dibatasi panjangnya (keunikan dijaga

@@ -552,29 +552,31 @@ func (q *Queries) SoftDeleteAccount(ctx context.Context, arg SoftDeleteAccountPa
 const updateAccount = `-- name: UpdateAccount :one
 UPDATE accounts SET
     village_name          = $1,
-    account_type          = $2,
-    website               = $3,
-    description           = $4,
-    district_id           = $5,
-    village_address       = $6,
-    postal_code           = $7,
-    territory             = $8,
-    village_status        = $9,
-    village_classification = $10,
-    population            = $11,
-    hamlets_count         = $12,
-    village_budget        = $13,
-    contact_phone         = $14,
-    office_phone          = $15,
-    office_email          = $16,
-    updated_by            = $17,
+    village_code          = $2,
+    account_type          = $3,
+    website               = $4,
+    description           = $5,
+    district_id           = $6,
+    village_address       = $7,
+    postal_code           = $8,
+    territory             = $9,
+    village_status        = $10,
+    village_classification = $11,
+    population            = $12,
+    hamlets_count         = $13,
+    village_budget        = $14,
+    contact_phone         = $15,
+    office_phone          = $16,
+    office_email          = $17,
+    updated_by            = $18,
     updated_at            = now()
-WHERE id = $18 AND deleted_at IS NULL
+WHERE id = $19 AND deleted_at IS NULL
 RETURNING id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province_legacy, regency_legacy, district_legacy, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code, district_id
 `
 
 type UpdateAccountParams struct {
 	VillageName           string         `json:"village_name"`
+	VillageCode           *string        `json:"village_code"`
 	AccountType           string         `json:"account_type"`
 	Website               *string        `json:"website"`
 	Description           *string        `json:"description"`
@@ -594,13 +596,16 @@ type UpdateAccountParams struct {
 	ID                    int64          `json:"id"`
 }
 
-// Sunting profil desa. entity_code & village_code tak diubah di sini (kode identitas
-// yang dikutip; village_code punya jalur khusus bila kelak perlu). Penugasan
-// (owner/CSM) juga TERPISAH (AssignAccountCSM) agar perubahan wewenang terlihat
-// sebagai aksi tersendiri, bukan efek samping edit profil.
+// Sunting profil desa. entity_code tak diubah (kode identitas internal yang
+// dikutip, stabil). village_code KINI ikut diperbarui (BL-66): saat pengguna
+// mengganti pilihan Desa/Kelurahan, village_code/village_name/district_id
+// diturunkan ulang dari region terpilih; narg agar bisa NULL (edit tanpa ganti
+// desa mempertahankan nilai lama yang dioper handler). Penugasan (owner/CSM)
+// TETAP TERPISAH (AssignAccountCSM) agar perubahan wewenang jadi aksi tersendiri.
 func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) (Account, error) {
 	row := q.db.QueryRow(ctx, updateAccount,
 		arg.VillageName,
+		arg.VillageCode,
 		arg.AccountType,
 		arg.Website,
 		arg.Description,
