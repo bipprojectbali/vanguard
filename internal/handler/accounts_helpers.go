@@ -64,15 +64,17 @@ func accountFormFields(a db.Account, phoneEditable bool) panel.AccountFormFields
 		DistrictID:            int64PtrStr(a.DistrictID),
 		VillageAddress:        deref(a.VillageAddress),
 		PostalCode:            deref(a.PostalCode),
-		Territory:             deref(a.Territory),
 		VillageStatus:         deref(a.VillageStatus),
 		VillageClassification: deref(a.VillageClassification),
 		Population:            int32Str(a.Population),
 		HamletsCount:          int32Str(a.HamletsCount),
-		VillageBudget:         numericStr(a.VillageBudget),
-		ContactPhone:          phone,
-		OfficePhone:           deref(a.OfficePhone),
-		OfficeEmail:           deref(a.OfficeEmail),
+		// BL-60: prefill APBDes pakai moneyRupiahStr (tanpa ".00") — numgroup.js
+		// membuang non-digit, jadi "750000000.00" dari numericStr akan salah
+		// tampil "75000000000". Territory tak lagi punya field form (di-drop UI).
+		VillageBudget: moneyRupiahStr(a.VillageBudget),
+		ContactPhone:  phone,
+		OfficePhone:   deref(a.OfficePhone),
+		OfficeEmail:   deref(a.OfficeEmail),
 	}
 }
 

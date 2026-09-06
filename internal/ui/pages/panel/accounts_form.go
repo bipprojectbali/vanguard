@@ -27,7 +27,6 @@ type AccountFormFields struct {
 	DistrictID            string
 	VillageAddress        string
 	PostalCode            string
-	Territory             string
 	VillageStatus         string
 	VillageClassification string
 	Population            string
@@ -104,7 +103,10 @@ func AccountForm(v AccountFormView) g.Node {
 			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.Types, true,
 				"Prospect = calon pelanggan (belum berlangganan) · Customer = pelanggan aktif · "+
 					"Former Customer = pernah berlangganan, sudah berhenti."),
-			entityCodeField(v.IsEdit),
+			// BL-60: input "Kode Sistem" (entity_code) dilepas dari UI — kode desa
+			// yang dipakai manusia adalah village_code (Kemendagri). entity_code
+			// TETAP dibuat otomatis & disimpan (accounts_codes.go); hanya pintu
+			// override manual di form yang dihapus.
 			field("Website", "website", v.Fields.Website, false, "url"),
 			textareaField("Deskripsi", "description", v.Fields.Description),
 		),
@@ -112,9 +114,9 @@ func AccountForm(v AccountFormView) g.Node {
 			regionSelect("account", v.RegionsJSON, v.Fields.DistrictID, !v.IsEdit),
 			field("Alamat", "village_address", v.Fields.VillageAddress, false, "text"),
 			field("Kode Pos", "postal_code", v.Fields.PostalCode, false, "text"),
-			field("Teritori", "territory", v.Fields.Territory, false, "text",
-				"Pembagian wilayah kerja Sales/CS internal (bebas isi) — beda dari Kabupaten/Kota "+
-					"administratif di atas."),
+			// BL-60: field "Teritori" dilepas dari UI untuk sementara. Kolomnya &
+			// data lama DIPERTAHANKAN (tetap tampil di detail; AccountUpdate tak
+			// menimpanya) — cukup input form yang disembunyikan.
 		),
 		formCard("Profil Desa",
 			selectField("Status", "village_status", v.Fields.VillageStatus, v.Statuses, false,
@@ -125,7 +127,10 @@ func AccountForm(v AccountFormView) g.Node {
 					"Tertinggal > Sangat Tertinggal."),
 			field("Jumlah Penduduk", "population", v.Fields.Population, false, "number"),
 			field("Jumlah Dusun", "hamlets_count", v.Fields.HamletsCount, false, "number"),
-			field("Anggaran (APBDes)", "village_budget", v.Fields.VillageBudget, false, "text"),
+			// BL-60: APBDes = input UANG (prefix "Rp", keypad angka, pengelompokan
+			// ribuan) — bukan teks bebas. Nilai dinormalkan digit polos sebelum
+			// submit (numgroup.js); backend cleanThousands penjaga tanpa JS.
+			moneyFieldRp("Anggaran (APBDes)", "village_budget", v.Fields.VillageBudget),
 		),
 		formCard("Kontak",
 			phoneField(v.PhoneEditable, v.Fields.ContactPhone),
@@ -146,6 +151,9 @@ func AccountForm(v AccountFormView) g.Node {
 	// Cascading dropdown wilayah (regionSelect di atas cuma menanam data + markup;
 	// interaksi berjenjangnya di sini, same-origin CSP-safe, gotcha #12).
 	body = append(body, h.Script(h.Src("/static/regions.js"), h.Defer()))
+	// BL-60: pengelompokan ribuan utk Anggaran (APBDes) (data-numgroup di
+	// moneyFieldRp) — format tampilan + normalisasi digit polos saat submit.
+	body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }

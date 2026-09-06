@@ -41,6 +41,31 @@ func moneyField(label, name, val string) g.Node {
 	)
 }
 
+// moneyFieldRp = moneyField dengan afiks "Rp" di kiri (BL-60, APBDes). Pola
+// daisyUI 5: kelas .input dipasang pada <label> pembungkus (jadi flex-row), teks
+// "Rp" + <input> polos di dalamnya — input dalam TAK memakai kelas .input lagi
+// agar tak berbingkai ganda. Atribut numerik & data-numgroup identik moneyField
+// (keypad angka + pengelompokan ribuan + normalisasi digit saat submit); text-base
+// (≥16px) di input dalam agar iOS tak auto-zoom. Backend cleanThousands tetap
+// penjaga bila JS mati.
+func moneyFieldRp(label, name, val string) g.Node {
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor(label, "f-"+name, false),
+		h.Label(
+			h.Class("input text-base w-full flex items-center gap-2"),
+			h.Span(h.Class("text-base-content/60"), g.Text("Rp")),
+			h.Input(
+				h.ID("f-"+name), h.Name(name), h.Type("text"),
+				g.Attr("inputmode", "numeric"), g.Attr("pattern", "[0-9.]*"),
+				g.Attr("data-numgroup", ""),
+				h.Value(val), h.Placeholder("mis. 5.000.000"),
+				h.Class("grow text-base"),
+			),
+		),
+	)
+}
+
 // phoneNumField = nomor telepon (HP/WhatsApp). type="tel" memberi semantik +
 // keypad telepon; inputmode="numeric" menjaga keypad angka konsisten. pattern
 // mengizinkan digit, '+' (prefix negara), spasi & tanda hubung sebagai pemisah.

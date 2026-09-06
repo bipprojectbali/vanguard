@@ -8,7 +8,7 @@ import (
 )
 
 // accounts_form_fields.go — primitif field form generik (formCard, field,
-// entityCodeField, phoneField, textareaField, selectField, hint/wrap), dipisah
+// phoneField, textareaField, selectField, hint/wrap), dipisah
 // dari accounts_form.go agar tiap file di bawah ambang tipe View/Component (300).
 // Dipakai bersama oleh view lain (sales_quotes_detail dsb) — satu paket.
 
@@ -95,21 +95,6 @@ func dateFieldMin(label, name, val, min string) g.Node {
 		labelFor(label, "f-"+name, false),
 		ui.Input(attrs...),
 	)
-}
-
-// entityCodeField = override OPSIONAL kode sistem (entity_code), HANYA di form
-// tambah. Kosong → dibuat otomatis (mis. DESA-001); diisi → menetapkan kode
-// sendiri. Disembunyikan saat sunting: entity_code adalah identitas stabil yang
-// dikutip manusia ("cek DESA-014") — jalur update sengaja tak menyentuhnya
-// (accounts_codes.go), jadi menawarkannya di edit akan menyesatkan. Kembalikan
-// node kosong saat edit (formCard.g.Group menoleransinya).
-func entityCodeField(isEdit bool) g.Node {
-	if isEdit {
-		return g.Text("")
-	}
-	return field("Kode Sistem (opsional)", "entity_code", "", false, "text",
-		"Kosongkan untuk dibuat otomatis (mis. DESA-001). Isi hanya bila ingin "+
-			"menetapkan kode sendiri.")
 }
 
 // phoneField = HP kontak. Bila tak boleh disunting (bukan Sales), field dikunci
