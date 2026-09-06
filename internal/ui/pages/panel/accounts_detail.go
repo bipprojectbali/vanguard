@@ -20,8 +20,9 @@ import (
 type AccountDetailView struct {
 	Base        string
 	ID          int64
-	EntityCode  string
 	VillageName string
+	// VillageCode = Kode Desa (Kemendagri) yang ditampilkan; entity_code (kode
+	// sistem) sengaja TAK di-view lagi (BL-61) — tetap auto-generated di backend.
 	VillageCode string
 	AccountType string
 	Website     string
@@ -86,9 +87,12 @@ func AccountDetail(v AccountDetailView) g.Node {
 			h.H1(h.Class("text-xl font-semibold truncate"), g.Text(v.VillageName)),
 			h.Div(
 				h.Class("flex flex-wrap items-center gap-2 mt-1"),
-				ui.When(v.EntityCode != "", h.Span(
-					h.Class("badge badge-neutral font-mono"), g.Text(v.EntityCode))),
-				h.Span(h.Class("badge badge-ghost"), g.Text(v.AccountType)),
+				// BL-61: badge Kode Sistem (entity_code) dihapus dari detail —
+				// operator cukup lihat "Kode Desa (Kemendagri)" (village_code) di
+				// kartu Identitas. entity_code tetap dibuat & tersimpan di backend.
+				// Tipe Akun kini badge terisi (badge-neutral) — mewarisi gaya
+				// background badge kode sistem yang dilepas, bukan ghost.
+				h.Span(h.Class("badge badge-neutral"), g.Text(v.AccountType)),
 			),
 		),
 		ui.When(v.CanWrite, h.Div(
