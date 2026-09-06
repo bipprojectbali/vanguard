@@ -121,3 +121,25 @@ func TestFlattenNav_LewatiHeaderDanDisabled(t *testing.T) {
 	var sb strings.Builder
 	g.Group([]g.Node{navList(items, "/")}).Render(&sb)
 }
+
+// TestNavGroup_SubnavKaitCollapse (BL-71): kontainer anak grup WAJIB membawa
+// kelas app-subnav — kait CSS yang memaksa ikon submenu tetap tampak & terpusat
+// saat sidebar collapse jadi rail 4rem. Tanpa kelas ini, grup yang default
+// tertutup menyembunyikan seluruh anaknya di rail (chevron/label expand ikut
+// tersembunyi → toggle tak terjangkau). Regresi: bila kelas hilang, ikon submenu
+// kembali tak terlihat saat collapse.
+func TestNavGroup_SubnavKaitCollapse(t *testing.T) {
+	items := []NavItem{{
+		Label:    "Settings",
+		Children: []NavItem{{Label: "User Management", Href: "/w/acme/members"}},
+	}}
+	out := renderNav(items, "/w/acme") // grup tertutup (tak ada anak aktif)
+	if !strings.Contains(out, "app-subnav") {
+		t.Errorf("kontainer anak grup harus punya kelas app-subnav (kait CSS rail collapse):\n%s", out)
+	}
+	// app-subnav harus di kontainer anak, bukan menggantikan pl-3 (indent tetap
+	// dipakai saat sidebar EXPANDED; CSS hanya menimpanya saat collapse).
+	if !strings.Contains(out, "app-subnav flex flex-col gap-1 pl-3") {
+		t.Errorf("app-subnav harus berdampingan dgn indent pl-3 (indent expanded dipertahankan):\n%s", out)
+	}
+}
