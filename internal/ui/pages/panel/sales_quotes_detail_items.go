@@ -40,25 +40,45 @@ func quoteLineItems(v QuoteDetailView, quoteBase string) g.Node {
 		rows = append(rows, h.Tr(h.Td(
 			g.Attr("colspan", strconv.Itoa(span)),
 			h.Class("py-3 text-base-content/60"),
-			g.Text("Belum ada item. Tambahkan plan di bawah."),
+			g.Text("Belum ada item. Tambahkan lewat tombol Tambah Item."),
 		)))
+	}
+
+	// Header: judul + (bila boleh mutasi) tombol pemicu modal Tambah Item & Edit
+	// Pajak (BL-70) — aksi sesekali kini on-demand, tak lagi kartu selalu-tampil.
+	header := []g.Node{h.H2(h.Class("font-semibold"), g.Text("Line Items & Amounts"))}
+	if v.CanMutate() {
+		header = append(header, h.Div(
+			h.Class("flex flex-wrap items-center gap-2"),
+			modalTrigger("quote-additem", "Tambah Item", "btn btn-sm btn-primary min-h-11"),
+			modalTrigger("quote-tax", "Edit Pajak", "btn btn-sm min-h-11"),
+		))
+	}
+
+	body := []g.Node{
+		h.Div(h.Class("flex flex-wrap items-center justify-between gap-2"), g.Group(header)),
+		ui.TableScroll(h.Table(
+			h.Class("w-full text-sm"),
+			h.THead(h.Tr(
+				h.Class("border-b border-base-300 text-left text-base-content/70"),
+				g.Group(head),
+			)),
+			h.TBody(g.Group(rows)),
+		)),
+		quoteTotals(v),
+	}
+	// Modal dialog (checkbox-toggle CSP-safe) berisi form add-item & pajak; form
+	// native POST → 303 di dalamnya utuh. Dirender hanya bila boleh mutasi.
+	if v.CanMutate() {
+		body = append(body,
+			modalDialog("quote-additem", "Tambah Item", quoteAddItemBody(v, quoteBase)),
+			modalDialog("quote-tax", "Pajak", quoteTaxBody(v, quoteBase)),
+		)
 	}
 
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body min-w-0 gap-3"),
-			h.H2(h.Class("font-semibold"), g.Text("Line Items & Amounts")),
-			ui.TableScroll(h.Table(
-				h.Class("w-full text-sm"),
-				h.THead(h.Tr(
-					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					g.Group(head),
-				)),
-				h.TBody(g.Group(rows)),
-			)),
-			quoteTotals(v),
-		),
+		h.Div(h.Class("card-body min-w-0 gap-3"), g.Group(body)),
 	)
 }
 

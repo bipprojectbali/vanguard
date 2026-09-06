@@ -43,13 +43,16 @@ func quoteStatusControl(v QuoteDetailView, quoteBase string) g.Node {
 	)
 }
 
-// quoteTaxControl = kontrol pajak builder (BL-14). Toggle mode Persentase/Nominal +
-// satu input yang relevan. <select> di-bind signal $taxmode (data.Bind) → input Tarif
-// (%) tampil saat 'percent', Nominal (Rp) saat 'amount' (showWhen = data.Show). KEDUA
-// input selalu terkirim (pola dealStageControl BL-12); backend baca hanya yang cocok
-// mode & bersihkan sisanya. Native POST → 303 (gotcha #16). Nilai mode = literal
-// cermin taxModePercent/taxModeAmount di handler (paket berbeda, tak bisa impor const).
-func quoteTaxControl(v QuoteDetailView, quoteBase string) g.Node {
+// quoteTaxBody = isi modal Pajak (BL-70; kontrol pajak builder BL-14). Toggle mode
+// Persentase/Nominal + satu input yang relevan. <select> di-bind signal $taxmode
+// (data.Bind) → input Tarif (%) tampil saat 'percent', Nominal (Rp) saat 'amount'
+// (showWhen = data.Show). KEDUA input selalu terkirim (pola dealStageControl BL-12);
+// backend baca hanya yang cocok mode & bersihkan sisanya. Native POST → 303
+// (gotcha #16); modal hanya WADAH — form tak berubah. Nilai mode = literal cermin
+// taxModePercent/taxModeAmount di handler (paket berbeda, tak bisa impor const).
+// $taxmode = toggle FIELD (bukan mekanisme modal): modal buka/tutup via
+// checkbox-toggle CSS (modalDialog) — dua concern beda, tak dicampur.
+func quoteTaxBody(v QuoteDetailView, quoteBase string) g.Node {
 	modeOpt := func(val, label string) g.Node {
 		attrs := []g.Node{h.Value(val)}
 		if val == v.TaxMode {
@@ -58,37 +61,33 @@ func quoteTaxControl(v QuoteDetailView, quoteBase string) g.Node {
 		return h.Option(append(attrs, g.Text(label))...)
 	}
 	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body min-w-0 gap-3"),
-			h.H2(h.Class("font-semibold"), g.Text("Pajak")),
-			h.P(h.Class("text-sm text-base-content/60"),
-				g.Text("Persentase mengikuti subtotal otomatis (mis. PPN 11%). "+
-					"Nominal = nilai rupiah tetap (mis. materai).")),
-			h.FormEl(
-				h.Method("post"), h.Action(quoteBase+"/tax"),
-				data.Signals(map[string]any{"taxmode": v.TaxMode}),
-				h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
-				h.Div(
-					h.Class("grid gap-1 min-w-0"),
-					labelFor("Jenis Pajak", "f-tax_mode", true),
-					h.Select(
-						h.ID("f-tax_mode"), h.Name("tax_mode"), h.Required(),
-						data.Bind("taxmode"),
-						h.Class("select text-base w-full"),
-						modeOpt("percent", "Persentase (%)"),
-						modeOpt("amount", "Nominal (Rp)"),
-					),
+		h.Class("grid gap-3 min-w-0"),
+		h.P(h.Class("text-sm text-base-content/60"),
+			g.Text("Persentase mengikuti subtotal otomatis (mis. PPN 11%). "+
+				"Nominal = nilai rupiah tetap (mis. materai).")),
+		h.FormEl(
+			h.Method("post"), h.Action(quoteBase+"/tax"),
+			data.Signals(map[string]any{"taxmode": v.TaxMode}),
+			h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
+			h.Div(
+				h.Class("grid gap-1 min-w-0"),
+				labelFor("Jenis Pajak", "f-tax_mode", true),
+				h.Select(
+					h.ID("f-tax_mode"), h.Name("tax_mode"), h.Required(),
+					data.Bind("taxmode"),
+					h.Class("select text-base w-full"),
+					modeOpt("percent", "Persentase (%)"),
+					modeOpt("amount", "Nominal (Rp)"),
 				),
-				showWhen("$taxmode == 'percent'", "min-w-0",
-					field("Tarif Pajak (%)", "tax_rate", v.TaxRateInput, false, "number")),
-				showWhen("$taxmode == 'amount'", "min-w-0",
-					field("Nominal Pajak (Rp)", "tax_amount", v.TaxAmountInput, false, "number")),
-				h.Div(
-					h.Class("sm:col-span-2"),
-					h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
-						g.Text("Simpan Pajak")),
-				),
+			),
+			showWhen("$taxmode == 'percent'", "min-w-0",
+				field("Tarif Pajak (%)", "tax_rate", v.TaxRateInput, false, "number")),
+			showWhen("$taxmode == 'amount'", "min-w-0",
+				field("Nominal Pajak (Rp)", "tax_amount", v.TaxAmountInput, false, "number")),
+			h.Div(
+				h.Class("sm:col-span-2"),
+				h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
+					g.Text("Simpan Pajak")),
 			),
 		),
 	)
