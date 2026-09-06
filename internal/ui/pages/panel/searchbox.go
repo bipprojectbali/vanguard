@@ -27,8 +27,9 @@ type hiddenField struct{ Name, Value string }
 
 // searchBox merender form GET pencarian. action = URL daftar (tanpa query); q =
 // nilai saat ini; placeholder + ariaLabel menyesuaikan entitas; keep = field
-// tersembunyi yang dipertahankan (tab/view/stage). Tombol "Reset" hanya muncul
-// saat ADA query aktif — menaut ke daftar tanpa ?q= (keep tetap dipertahankan).
+// tersembunyi yang dipertahankan (tab/view/stage). Tanpa tombol "Reset": ikon X
+// bawaan input type=search sudah mengosongkan kata kunci; tekan "Cari" saat
+// kosong → daftar kembali tak tersaring.
 func searchBox(action, q, placeholder, ariaLabel string, keep ...hiddenField) g.Node {
 	fields := []g.Node{
 		h.Input(
@@ -47,12 +48,8 @@ func searchBox(action, q, placeholder, ariaLabel string, keep ...hiddenField) g.
 	fields = append(fields, h.Button(
 		h.Type("submit"), h.Class("btn btn-primary min-h-11"), g.Text("Cari"),
 	))
-	if q != "" {
-		fields = append(fields, h.A(
-			h.Href(withQuery(action, "", keep...)), h.Class("btn btn-ghost min-h-11"),
-			g.Text("Reset"),
-		))
-	}
+	// Tak ada tombol "Reset": input type=search sudah punya ikon X bawaan untuk
+	// mengosongkan kata kunci; kosongkan lalu tekan "Cari" → daftar tak tersaring.
 	return h.Form(
 		h.Method("get"), h.Action(action),
 		h.Class("flex flex-wrap items-center gap-2 min-w-0"),

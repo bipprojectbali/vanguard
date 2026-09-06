@@ -119,7 +119,7 @@ func emptyLeads(v LeadsListView) g.Node {
 			h.Div(h.Class("card-body items-start"),
 				h.P(h.Class("text-base-content/70"),
 					g.Text("Belum ada lead yang cocok pada tampilan ini.")),
-				h.A(h.Href(withQuery(v.Base+"/leads", v.Query, hiddenField{"tab", v.Tab})),
+				h.A(h.Href(withQuery(v.Base+"/leads", "", hiddenField{"tab", v.Tab})),
 					h.Class("btn btn-ghost btn-sm min-h-11"), g.Text("« Kembali ke awal")),
 			),
 		)

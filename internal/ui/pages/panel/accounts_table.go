@@ -29,7 +29,6 @@ func accountsTable(v AccountsListView) g.Node {
 				h.Class("w-full text-sm"),
 				h.THead(h.Tr(
 					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Kode")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Tipe")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Kab/Kota")),
@@ -50,7 +49,6 @@ func accountRow(base string, a AccountRow) g.Node {
 	}
 	return h.Tr(
 		h.Class("border-b border-base-300/50 hover:bg-base-200/50"),
-		link(orDash(a.EntityCode), "py-2 pr-4 font-mono text-xs"),
 		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), h.Class("block min-w-0"),
 			h.Div(h.Class("truncate font-medium"), g.Text(a.VillageName)),
 			ui.When(a.VillageCode != "", h.Div(

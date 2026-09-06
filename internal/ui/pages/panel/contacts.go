@@ -155,7 +155,9 @@ func ContactsAll(v ContactsAllView) g.Node {
 		body = append(body, ui.Alert(ui.VariantDefault, "contacts-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
-		body = append(body, emptyContacts(contactsListHref(v.Base, v.ActiveView, v.Query),
+		// backHref MEMBUANG q: tanpa tombol Reset, ini satu-satunya jalan keluar
+		// dari pencarian tanpa hasil, jadi ia harus mengosongkan kata kunci.
+		body = append(body, emptyContacts(contactsListHref(v.Base, v.ActiveView, ""),
 			v.NextCursor, "Belum ada kontak yang cocok."))
 	} else {
 		// base per-baris = URL desa induk masing-masing (dirakit dari AccountID).

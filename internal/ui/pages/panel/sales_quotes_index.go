@@ -132,7 +132,7 @@ func emptyQuotesIndex(v QuotesIndexView) g.Node {
 		h.Div(h.Class("card-body items-start"),
 			h.P(h.Class("text-base-content/70"),
 				g.Text("Belum ada quote yang cocok pada tampilan ini.")),
-			h.A(h.Href(withQuery(v.Base+"/quotes", v.Query)),
+			h.A(h.Href(withQuery(v.Base+"/quotes", "")),
 				h.Class("btn btn-ghost btn-sm min-h-11"), g.Text("« Kembali ke awal")),
 		),
 	)
