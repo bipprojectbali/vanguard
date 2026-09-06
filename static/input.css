@@ -90,6 +90,15 @@
     padding-inline: 0;
   }
 
+  /* BL-65: ikon ⓘ tap-friendly untuk keterangan field (selectField/field hint).
+     Reveal via <details> = CSP-safe (tanpa JS inline) & TAP bukan hover (hover
+     mati di sentuh — lih. enum_field.go BL-3/BL-4). Sembunyikan segitiga
+     disclosure bawaan; summary sudah display:flex (utility) jadi bukan list-item,
+     tapi tetap tutup marker webkit lama agar konsisten lintas engine. Konten
+     keterangan mengalir inline (bukan absolut) → tak pernah meluber di 375px. */
+  .hint-reveal > summary { list-style: none; }
+  .hint-reveal > summary::-webkit-details-marker { display: none; }
+
   /* Toast flash: muncul lalu memudar sendiri (~3.2s) tanpa JS. */
   .toast-flash {
     animation: toast-life 3.2s ease forwards;
