@@ -128,6 +128,30 @@ func TestDealsTable_SearchNoMatchEmptyState(t *testing.T) {
 	}
 }
 
+// TestDealsTable_TabSearchRow — regresi BL-68 (keputusan user: align dgn toggle
+// Semua/Deal Saya). Di view Tabel dgn ShowMineToggle, toggle Semua/Deal Saya &
+// kotak cari harus sebaris dalam satu wrapper justify-between; tanpa toggle
+// (cakupan 'own'), search berdiri sendiri full-width.
+func TestDealsTable_TabSearchRow(t *testing.T) {
+	withToggle := renderLeads(t, DealPipeline(DealPipelineView{
+		Base: "/w/desa", View: "table", ShowMineToggle: true,
+		Query: "sumur bor", Items: []DealRow{{ID: 9, DealName: "Deal Cocok"}},
+	}))
+	assertTabSearchRow(t, withToggle, "/w/desa/deals")
+
+	// Tanpa toggle (cakupan 'own'): search tetap ada tapi TAK dibungkus wrapper.
+	noToggle := renderLeads(t, DealPipeline(DealPipelineView{
+		Base: "/w/desa", View: "table", ShowMineToggle: false,
+		Query: "sumur bor", Items: []DealRow{{ID: 9, DealName: "Deal Cocok"}},
+	}))
+	if !strings.Contains(noToggle, `action="/w/desa/deals"`) {
+		t.Errorf("tanpa toggle, form cari harus tetap dirender:\n%s", noToggle)
+	}
+	if strings.Contains(noToggle, tabSearchWrapperClass) {
+		t.Errorf("tanpa toggle, TAK boleh ada wrapper tab+search:\n%s", noToggle)
+	}
+}
+
 // --- Kontak (global) -------------------------------------------------------
 
 func TestContactsAll_SearchBoxAndThreading(t *testing.T) {
