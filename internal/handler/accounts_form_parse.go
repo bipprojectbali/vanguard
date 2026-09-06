@@ -1,10 +1,6 @@
 package handler
 
-import (
-	"strings"
-
-	"github.com/jackc/pgx/v5/pgtype"
-)
+import "strings"
 
 // accounts_form_parse.go — parseAccountForm: baca & validasi field form Account
 // (Desa) menjadi accountForm tervalidasi. Dipisah dari accounts_form.go (const
@@ -54,14 +50,15 @@ func parseAccountForm(fv func(string) string) (accountForm, string) {
 	}
 	f.HamletsCount = ham
 
-	// Anggaran (APBDes): kosong = NULL; terisi wajib angka desimal sah.
-	if s := strings.TrimSpace(fv("village_budget")); s != "" {
-		var n pgtype.Numeric
-		if err := n.Scan(s); err != nil {
-			return accountForm{}, "budget"
-		}
-		f.VillageBudget = n
+	// Anggaran (APBDes): kosong = NULL; terisi wajib angka sah. BL-60: input jadi
+	// UANG bulat → buang pemisah ribuan (cleanThousands) sebelum parse, agar
+	// "5.000.000" (dari numgroup.js maupun ketikan manual) & digit polos sama
+	// sahnya, dan tanpa JS pun form tetap jalan.
+	budget, code := optNumeric(cleanThousands(fv("village_budget")), "budget")
+	if code != "" {
+		return accountForm{}, code
 	}
+	f.VillageBudget = budget
 
 	// Kecamatan: FK ke master regions (0009), bukan lagi teks bebas. <select>
 	// bernilai ID dipopulasikan cascading di client (static/regions.js) — di sini
@@ -76,7 +73,10 @@ func parseAccountForm(fv func(string) string) (accountForm, string) {
 	// entity_code (kode sistem) OPSIONAL: kosong → nil (dibuat otomatis di
 	// create); terisi → override manual, dibatasi panjangnya (keunikan dijaga
 	// index DB, dicek saat INSERT). Hanya bermakna di jalur create — update tak
-	// menyentuh entity_code.
+	// menyentuh entity_code. BL-60: input override DILEPAS dari UI (form tak lagi
+	// mengirim entity_code → selalu nil → selalu otomatis); jalur parse+override
+	// ini SENGAJA dipertahankan (masih teruji, dipakai seed/test) — penghapusan
+	// bersifat UI-only.
 	if s := strings.TrimSpace(fv("entity_code")); s != "" {
 		if len(s) > maxEntityCodeLen {
 			return accountForm{}, "entity_code"

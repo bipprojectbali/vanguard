@@ -91,6 +91,9 @@ func (h *Handler) AccountUpdate(w http.ResponseWriter, r *http.Request) {
 		contactPhone = a.ContactPhone
 	}
 
+	// BL-60: field Teritori dilepas dari UI → form tak lagi mengirimnya
+	// (form.Territory selalu nil). Pertahankan nilai tersimpan agar edit profil
+	// tak menghapus data teritori lama (pola sama dgn contactPhone di atas).
 	uid := session.UserID(ctx)
 	if _, err := h.q(ctx).UpdateAccount(ctx, db.UpdateAccountParams{
 		VillageName:           form.VillageName,
@@ -100,7 +103,7 @@ func (h *Handler) AccountUpdate(w http.ResponseWriter, r *http.Request) {
 		DistrictID:            form.DistrictID,
 		VillageAddress:        form.VillageAddress,
 		PostalCode:            form.PostalCode,
-		Territory:             form.Territory,
+		Territory:             a.Territory,
 		VillageStatus:         form.VillageStatus,
 		VillageClassification: form.VillageClassification,
 		Population:            form.Population,
