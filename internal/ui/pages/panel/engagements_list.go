@@ -102,7 +102,7 @@ func EngagementsList(v EngagementsListView) g.Node {
 		),
 		engagementKPICards(v.KPIs, v.Base),
 		tabSearchRow(engagementTabsNav(v),
-			searchBox(v.Base+"/engagements", v.Query,
+			searchBoxInline(v.Base+"/engagements", v.Query,
 				"Cari engagement — subjek atau desa…", "Cari engagement",
 				hiddenField{"tab", v.Tab})),
 	}

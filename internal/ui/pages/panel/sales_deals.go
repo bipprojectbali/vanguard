@@ -109,17 +109,21 @@ func DealPipeline(v DealPipelineView) g.Node {
 	if tableView {
 		// Search hanya di view Tabel (berkeyset); papan Kanban di luar lingkup slice.
 		// mine dipertahankan lintas submit search agar toggle tak tereset.
-		search := searchBox(v.Base+"/deals", v.Query,
-			"Cari deal — nama atau kode…", "Cari deal",
-			hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
-			hiddenField{"mine", dealMineParam(v.Mine)})
 		// BL-68: bila toggle Semua/Deal Saya tampil (cakupan 'all'), sejajarkan
-		// search ke pojok kanan sebaris dgn toggle itu; tanpa toggle (cakupan 'own'),
-		// search berdiri sendiri full-width.
+		// search ke pojok kanan sebaris dgn toggle itu — varian INLINE (lebar
+		// terbatas agar input+tombol sebaris); tanpa toggle (cakupan 'own'), search
+		// berdiri sendiri full-width.
 		if v.ShowMineToggle {
-			body = append(body, tabSearchRow(dealMineToggle(v), search))
+			body = append(body, tabSearchRow(dealMineToggle(v),
+				searchBoxInline(v.Base+"/deals", v.Query,
+					"Cari deal — nama atau kode…", "Cari deal",
+					hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
+					hiddenField{"mine", dealMineParam(v.Mine)})))
 		} else {
-			body = append(body, search)
+			body = append(body, searchBox(v.Base+"/deals", v.Query,
+				"Cari deal — nama atau kode…", "Cari deal",
+				hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
+				hiddenField{"mine", dealMineParam(v.Mine)}))
 		}
 		if len(v.Items) == 0 {
 			body = append(body, emptyDeals(v))

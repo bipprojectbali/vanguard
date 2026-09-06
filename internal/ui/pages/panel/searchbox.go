@@ -31,11 +31,32 @@ type hiddenField struct{ Name, Value string }
 // bawaan input type=search sudah mengosongkan kata kunci; tekan "Cari" saat
 // kosong → daftar kembali tak tersaring.
 func searchBox(action, q, placeholder, ariaLabel string, keep ...hiddenField) g.Node {
+	// Standalone (baris tersendiri): input MEMENUHI lebar di mobile (w-full),
+	// dibatasi sm:max-w-xs di layar lebar agar tak melebar berlebihan.
+	return searchForm(action, q, placeholder, ariaLabel,
+		"input input-bordered text-base w-full sm:max-w-xs min-h-11 min-w-0", keep...)
+}
+
+// searchBoxInline = varian untuk DI DALAM tabSearchRow (sebaris dgn tab). Lebar
+// input TERBATAS (w-44 sm:w-64, BUKAN w-full) meniru accountsSearch: dgn w-full,
+// input menyita seluruh lebar form → tombol "Cari" terdorong ke baris bawah &
+// tak sejajar (BL-68 follow-up). min-w-0 tetap izinkan menyusut di 375px, tempat
+// flex-wrap tabSearchRow menurunkan seluruh form ke baris sendiri.
+func searchBoxInline(action, q, placeholder, ariaLabel string, keep ...hiddenField) g.Node {
+	return searchForm(action, q, placeholder, ariaLabel,
+		"input input-bordered text-base w-44 sm:w-64 min-h-11 min-w-0", keep...)
+}
+
+// searchForm = badan bersama searchBox/searchBoxInline: form GET native (native
+// GET, bookmarkable, lolos gotcha #16) berisi input pencarian + field tersembunyi
+// + tombol "Cari". inputClass membedakan lebar (full vs terbatas). Tak ada tombol
+// "Reset": ikon X bawaan input type=search sudah mengosongkan kata kunci.
+func searchForm(action, q, placeholder, ariaLabel, inputClass string, keep ...hiddenField) g.Node {
 	fields := []g.Node{
 		h.Input(
 			h.Type("search"), h.Name("q"), h.Value(q),
 			h.Placeholder(placeholder),
-			h.Class("input input-bordered text-base w-full sm:max-w-xs min-h-11 min-w-0"),
+			h.Class(inputClass),
 			g.Attr("aria-label", ariaLabel),
 		),
 	}
@@ -48,8 +69,6 @@ func searchBox(action, q, placeholder, ariaLabel string, keep ...hiddenField) g.
 	fields = append(fields, h.Button(
 		h.Type("submit"), h.Class("btn btn-primary min-h-11"), g.Text("Cari"),
 	))
-	// Tak ada tombol "Reset": input type=search sudah punya ikon X bawaan untuk
-	// mengosongkan kata kunci; kosongkan lalu tekan "Cari" → daftar tak tersaring.
 	return h.Form(
 		h.Method("get"), h.Action(action),
 		h.Class("flex flex-wrap items-center gap-2 min-w-0"),

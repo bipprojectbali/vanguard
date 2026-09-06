@@ -143,14 +143,16 @@ func ContactsAll(v ContactsAllView) g.Node {
 	if v.ActiveView != "" && v.ActiveView != ContactViewAll {
 		viewKeep = v.ActiveView
 	}
-	search := searchBox(v.Base+"/contacts", v.Query,
-		"Cari kontak — nama atau desa…", "Cari kontak", hiddenField{"view", viewKeep})
 	// BL-68: saat ada tab, sejajarkan search ke pojok kanan sebaris tab (pola
-	// accounts.go); tanpa tab, search berdiri sendiri full-width di bawah header.
+	// accounts.go) — varian INLINE (lebar terbatas agar input+tombol sebaris);
+	// tanpa tab, search berdiri sendiri full-width di bawah header.
 	if v.ShowTabs {
-		body = append(body, tabSearchRow(contactsTabs(v), search))
+		body = append(body, tabSearchRow(contactsTabs(v),
+			searchBoxInline(v.Base+"/contacts", v.Query,
+				"Cari kontak — nama atau desa…", "Cari kontak", hiddenField{"view", viewKeep})))
 	} else {
-		body = append(body, search)
+		body = append(body, searchBox(v.Base+"/contacts", v.Query,
+			"Cari kontak — nama atau desa…", "Cari kontak", hiddenField{"view", viewKeep}))
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "contacts-err", g.Text(v.Err)))

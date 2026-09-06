@@ -101,7 +101,7 @@ func CSTrainingsList(v CSTrainingsListView) g.Node {
 		),
 		csTrainingKPICards(v.KPIs, v.Base),
 		tabSearchRow(csTrainingTabsNav(v),
-			searchBox(v.Base+"/trainings", v.Query,
+			searchBoxInline(v.Base+"/trainings", v.Query,
 				"Cari training — topik atau desa…", "Cari training",
 				hiddenField{"tab", v.Tab})),
 	}

@@ -98,10 +98,12 @@ func TicketsList(v TicketsListView) g.Node {
 			)),
 		),
 		ticketKPICards(v.KPIs, v.Base),
-		ticketTabsNav(v),
-		searchBox(v.Base+"/tickets", v.Query,
-			"Cari tiket — subjek atau desa…", "Cari tiket",
-			hiddenField{"tab", v.Tab}),
+		// BL-68: tab + kotak cari sebaris (search terdorong ke pojok kanan), varian
+		// INLINE agar input+tombol sebaris. tab aktif dijaga lintas submit search.
+		tabSearchRow(ticketTabsNav(v),
+			searchBoxInline(v.Base+"/tickets", v.Query,
+				"Cari tiket — subjek atau desa…", "Cari tiket",
+				hiddenField{"tab", v.Tab})),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "tickets-err", g.Text(v.Err)))

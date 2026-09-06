@@ -66,7 +66,7 @@ func SubList(v SubListView) g.Node {
 			),
 		),
 		tabSearchRow(subStatusFilter(v),
-			searchBox(v.Base+"/subscriptions", v.Query,
+			searchBoxInline(v.Base+"/subscriptions", v.Query,
 				"Cari langganan — desa, paket, atau kode…", "Cari langganan",
 				hiddenField{"status", v.StatusFilter})),
 	}

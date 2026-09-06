@@ -53,10 +53,12 @@ func SuccessPlansList(v SuccessPlansListView) g.Node {
 	return h.Div(h.Class("space-y-4"),
 		successPlansListHeader(v),
 		successPlansListAlert(v.Msg, v.Err),
-		successPlanTabsNav(v),
-		searchBox(v.Base+"/success-plans", v.Query,
-			"Cari plan — nama plan atau desa…", "Cari success plan",
-			hiddenField{"tab", v.Tab}),
+		// BL-68: tab + kotak cari sebaris (search terdorong ke pojok kanan), varian
+		// INLINE agar input+tombol sebaris. tab aktif dijaga lintas submit search.
+		tabSearchRow(successPlanTabsNav(v),
+			searchBoxInline(v.Base+"/success-plans", v.Query,
+				"Cari plan — nama plan atau desa…", "Cari success plan",
+				hiddenField{"tab", v.Tab})),
 		successPlansTable(v),
 		successPlansPager(v),
 	)

@@ -74,7 +74,7 @@ func KBArticleList(v KBArticleListView) g.Node {
 			g.Text("Visibilitas belum berefek — Portal self-service belum tersedia. "+
 				"Semua artikel hanya terlihat staf internal.")),
 		tabSearchRow(kbArticlesTabs(v),
-			searchBox(v.Base+"/kb-articles", v.Query,
+			searchBoxInline(v.Base+"/kb-articles", v.Query,
 				"Cari artikel — judul, kata kunci, atau kategori…", "Cari artikel Knowledge Base",
 				hiddenField{"tab", kbTabParam(v.Tab)})),
 	}

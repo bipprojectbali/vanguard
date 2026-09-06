@@ -73,9 +73,12 @@ func LeadsList(v LeadsListView) g.Node {
 				g.Text("Lead Baru"),
 			)),
 		),
-		leadTabsNav(v),
-		searchBox(v.Base+"/leads", v.Query, "Cari lead — nama atau kode…", "Cari lead",
-			hiddenField{"tab", v.Tab}),
+		// BL-68: tab + kotak cari sebaris (search terdorong ke pojok kanan), varian
+		// INLINE (lebar terbatas agar input+tombol sebaris). tab aktif dipertahankan
+		// lintas submit search via hiddenField.
+		tabSearchRow(leadTabsNav(v),
+			searchBoxInline(v.Base+"/leads", v.Query, "Cari lead — nama atau kode…", "Cari lead",
+				hiddenField{"tab", v.Tab})),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "leads-err", g.Text(v.Err)))

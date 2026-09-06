@@ -51,7 +51,7 @@ func HealthScoreList(v HealthScoreListView) g.Node {
 	return h.Div(h.Class("space-y-4"),
 		healthScoreKPICards(v.KPIs),
 		tabSearchRow(healthScoreTabs(v.Base, v.ActiveTab, v.Query),
-			searchBox(v.Base+"/health-scores", v.Query,
+			searchBoxInline(v.Base+"/health-scores", v.Query,
 				"Cari desa…", "Cari health score",
 				hiddenField{"tab", v.ActiveTab})),
 		healthScoreTable(v),

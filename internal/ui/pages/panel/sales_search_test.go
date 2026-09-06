@@ -82,6 +82,19 @@ func TestLeadsList_SearchNoMatchEmptyState(t *testing.T) {
 	}
 }
 
+// TestLeadsList_TabSearchRow — regresi BL-68: bilah tab Leads & kotak cari harus
+// sebaris dalam satu wrapper justify-between (search terdorong ke pojok kanan),
+// bukan dua baris terpisah.
+func TestLeadsList_TabSearchRow(t *testing.T) {
+	out := renderLeads(t, LeadsList(LeadsListView{
+		Base:  "/w/desa",
+		Tab:   "my",
+		Query: "kali muara",
+		Items: []LeadRow{{ID: 7, LeadName: "Lead Cocok"}},
+	}))
+	assertTabSearchRow(t, out, "/w/desa/leads")
+}
+
 // --- Deals (tabel) ---------------------------------------------------------
 
 func TestDealsTable_SearchBoxAndThreading(t *testing.T) {
@@ -215,5 +228,31 @@ func TestQuotesIndex_SearchNoMatchEmptyState(t *testing.T) {
 	empty := renderLeads(t, QuotesIndex(QuotesIndexView{Base: "/w/desa"}))
 	if !strings.Contains(empty, "Buka sebuah deal") {
 		t.Errorf("daftar benar-benar kosong harus mengarahkan buat quote dari deal:\n%s", empty)
+	}
+}
+
+// TestQuotesIndex_HeaderSearchRow — regresi BL-68: Quote tak punya bilah tab, jadi
+// kotak cari disejajarkan ke pojok kanan sebaris dgn judul halaman dalam satu
+// wrapper justify-between (judul kiri, search kanan) — bukan baris terpisah.
+func TestQuotesIndex_HeaderSearchRow(t *testing.T) {
+	out := renderLeads(t, QuotesIndex(QuotesIndexView{
+		Base:  "/w/desa",
+		Query: "paket hemat",
+		Items: []QuoteIndexRow{{QuoteID: 2, DealID: 4, QuoteName: "Quote Cocok"}},
+	}))
+	const headerRow = "flex flex-wrap items-center justify-between gap-2 min-w-0 mb-2"
+	hi := strings.Index(out, headerRow)
+	if hi < 0 {
+		t.Fatalf("BL-68: header row justify-between tak ditemukan (search tak sebaris judul?):\n%s", out)
+	}
+	fi := strings.Index(out, `action="/w/desa/quotes"`)
+	if fi < 0 || fi < hi {
+		t.Fatalf("BL-68: form cari harus berada DI DALAM header row (setelah pembukanya):\n%s", out)
+	}
+	// Judul "Quote" mendahului form cari (judul kiri, search kanan).
+	qi := strings.Index(out, ">Quote<")
+	if !(hi < qi && qi < fi) {
+		t.Errorf("BL-68: urutan harus header < judul < form cari (header@%d judul@%d form@%d):\n%s",
+			hi, qi, fi, out)
 	}
 }
