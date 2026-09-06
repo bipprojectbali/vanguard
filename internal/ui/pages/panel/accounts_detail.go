@@ -162,14 +162,20 @@ func AccountDetail(v AccountDetailView) g.Node {
 			h.A(h.Href(base+"/customer-success"), h.Class("btn btn-sm btn-ghost min-h-11"),
 				g.Text("Customer Success »")),
 		),
+		// BL-62: SATU grid 2-kolom (bukan dua stack independen) agar tiap PASANGAN
+		// kartu berbagi baris grid yang sama → tinggi sejajar. Grid item meregang
+		// default (align-self: stretch; ditegaskan items-stretch) sehingga kartu
+		// terpendek mengikuti tinggi pasangannya, tepi bawah rata. Urutan
+		// diselang-seling detail↔ringkasan agar pasangan jatuh sebaris: Identitas↔
+		// Langganan, Wilayah↔Customer Success, Profil Desa↔Sistem, Kontak↔(—).
+		// Mobile (grid-cols-1) tetap 1 kolom menumpuk urutan ini (tinggi seragam
+		// tak relevan saat 1 kolom).
 		h.Div(
-			h.Class("grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0"),
-			h.Div(h.Class("grid gap-4 min-w-0"), identitas, wilayah, profilDesa, kontak),
-			h.Div(h.Class("grid gap-4 min-w-0"),
-				SubscriptionSummaryCard(v.Subscription),
-				CustomerSuccessSummaryCard(v.CustomerSuccess),
-				sistem,
-			),
+			h.Class("grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0 items-stretch"),
+			identitas, SubscriptionSummaryCard(v.Subscription),
+			wilayah, CustomerSuccessSummaryCard(v.CustomerSuccess),
+			profilDesa, sistem,
+			kontak,
 		),
 		RelatedRecords(v.Related),
 		ActivityTimeline(v.Activities),
