@@ -42,6 +42,13 @@ func TestAccountDetail_DropsSystemCodeBadge(t *testing.T) {
 	if strings.Contains(out, "badge badge-neutral font-mono") {
 		t.Errorf("badge Kode Sistem (entity_code) harus dihapus dari detail (BL-61):\n%s", out)
 	}
+
+	// Tipe Akun di header kini badge TERISI (badge-neutral, mewarisi gaya kode
+	// sistem), bukan ghost. Cek span eksplisitnya (badge-ghost masih sah dipakai
+	// kartu lain seperti status langganan, jadi jangan cek ghost global).
+	if !strings.Contains(out, `<span class="badge badge-neutral">Pelanggan</span>`) {
+		t.Errorf("Tipe Akun harus badge terisi (badge-neutral), bukan ghost:\n%s", out)
+	}
 }
 
 // TestAccountDetail_SystemCodeValueNotLeaked: kalaupun ada nilai kode sistem

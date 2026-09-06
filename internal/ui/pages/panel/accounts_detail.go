@@ -90,7 +90,9 @@ func AccountDetail(v AccountDetailView) g.Node {
 				// BL-61: badge Kode Sistem (entity_code) dihapus dari detail —
 				// operator cukup lihat "Kode Desa (Kemendagri)" (village_code) di
 				// kartu Identitas. entity_code tetap dibuat & tersimpan di backend.
-				h.Span(h.Class("badge badge-ghost"), g.Text(v.AccountType)),
+				// Tipe Akun kini badge terisi (badge-neutral) — mewarisi gaya
+				// background badge kode sistem yang dilepas, bukan ghost.
+				h.Span(h.Class("badge badge-neutral"), g.Text(v.AccountType)),
 			),
 		),
 		ui.When(v.CanWrite, h.Div(
