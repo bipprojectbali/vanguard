@@ -87,10 +87,13 @@ func TestLeadForm_FieldNumerik(t *testing.T) {
 	}
 }
 
-// TestLeadForm_LegendaEnum — regresi BL-3: dropdown Status & Rating harus disertai
-// legenda makna tiap opsi (pengguna baru tak tahu beda Contacted vs Qualified,
-// Hot vs Cold). Legenda statis (bukan input user) → CSP-safe. Kita jaga bahwa
-// makna kunci tiap enum ter-render bersama istilahnya.
+// TestLeadForm_LegendaEnum — regresi BL-3 + BL-69: dropdown Status & Rating tetap
+// disertai legenda makna tiap opsi (pengguna baru tak tahu beda Contacted vs
+// Qualified, Hot vs Cold), TAPI sejak BL-69 legenda pindah ke balik ikon ⓘ
+// tap-friendly di label (enumFieldHinted, pola BL-65) — bukan lagi baris statis di
+// bawah select. Legenda tetap statis (bukan input user) → CSP-safe. Kita jaga
+// bahwa (a) makna kunci tiap enum tetap ter-render (terjangkau lewat reveal) &
+// (b) ia berada di dalam reveal label, di ATAS select-nya.
 func TestLeadForm_LegendaEnum(t *testing.T) {
 	out := renderLeads(t, LeadForm(LeadFormView{
 		Base:        "/w/desa",
@@ -100,7 +103,8 @@ func TestLeadForm_LegendaEnum(t *testing.T) {
 		RegionsJSON: "[]",
 	}))
 
-	// Istilah + potongan makna (tanpa '&' agar tak terpengaruh escape g.Text).
+	// (a) Istilah + potongan makna tetap ada (terjangkau; tanpa '&' agar tak
+	// terpengaruh escape g.Text).
 	for _, want := range []string{
 		"Contacted:", "Sudah dihubungi",
 		"Qualified:", "siap dikonversi",
@@ -112,5 +116,28 @@ func TestLeadForm_LegendaEnum(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("legenda enum lead harus memuat %q:\n%s", want, out)
 		}
+	}
+
+	// (b) BL-69: legenda kini di balik reveal ⓘ (details.hint-reveal + summary +
+	// ikon), bukan baris statis di bawah select.
+	for _, want := range []string{
+		`class="hint-reveal`,  // pembungkus reveal
+		`class="hint-summary`, // baris label yg bisa di-tap
+		`aria-hidden="true"`,  // ikon ⓘ (dekoratif)
+		`size-4`,              // lucide.Info
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("BL-69: reveal ikon ⓘ harus memuat %q:\n%s", want, out)
+		}
+	}
+
+	// (b') Struktur: makna Status berada SEBELUM select lead_status (di dalam
+	// reveal label, bukan baris statis SESUDAH select seperti enumField lama).
+	iMakna := strings.Index(out, "Sudah dihubungi")
+	iSelect := strings.Index(out, `name="lead_status"`)
+	if iMakna < 0 || iSelect < 0 || iMakna > iSelect {
+		t.Errorf("BL-69: legenda Status harus di dalam reveal label (sebelum select), "+
+			"bukan baris statis di bawahnya (iMakna=%d, iSelect=%d):\n%s",
+			iMakna, iSelect, out)
 	}
 }

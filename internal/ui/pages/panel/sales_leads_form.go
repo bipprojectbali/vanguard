@@ -76,8 +76,12 @@ func LeadForm(v LeadFormView) g.Node {
 			field("Sumber Lead", "lead_source", v.Fields.LeadSource, false, "text"),
 		),
 		formCard("Kualifikasi",
-			enumField("Status", "lead_status", v.Fields.LeadStatus, v.Statuses, true, leadStatusLegend),
-			enumField("Rating", "rating", v.Fields.Rating, v.Ratings, false, leadRatingLegend),
+			// BL-69: legenda makna Status/Rating pindah ke balik ikon ⓘ tap-friendly
+			// di label (enumFieldHinted, pola BL-65) — bukan baris statis di bawah
+			// select yang memaksa field melebar. Form Tambah Lead kini seragam dgn
+			// form Tambah Desa.
+			enumFieldHinted("Status", "lead_status", v.Fields.LeadStatus, v.Statuses, true, leadStatusLegend),
+			enumFieldHinted("Rating", "rating", v.Fields.Rating, v.Ratings, false, leadRatingLegend),
 			moneyField("Nilai Estimasi (Rp)", "estimated_value", v.Fields.EstimatedValue),
 			textareaField("Alasan Unqualified", "unqualified_reason", v.Fields.UnqualifiedReason),
 		),
