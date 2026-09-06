@@ -85,6 +85,19 @@ func TestActiveNavHref_Root(t *testing.T) {
 	}
 }
 
+// TestAppShell_RailCollapseHooks (BL-64): header & footer sidebar membawa kait
+// collapse (app-shellhead/app-shelluser) agar input.css bisa men-tengah-kan
+// tombol collapse dan menumpuk avatar+tema saat rail 4rem. Regresi: menghapus
+// kait mengembalikan tombol mepet tepi / tombol tema terpotong keluar rail.
+func TestAppShell_RailCollapseHooks(t *testing.T) {
+	out := renderShell("/dev/users")
+	for _, want := range []string{"app-shellhead", "app-shelluser"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("shell harus membawa kait collapse %q (BL-64):\n%s", want, out)
+		}
+	}
+}
+
 func TestWhen(t *testing.T) {
 	var yes, no strings.Builder
 	When(true, g.Text("TAMPIL")).Render(&yes)

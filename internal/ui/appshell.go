@@ -151,8 +151,13 @@ func shellSidebar(d ShellData) g.Node {
 
 		// Header sidebar: brand + tombol collapse (desktop). Brand = nama workspace
 		// (utama) + konteks panel (sub-label kecil). Platform tanpa nama → BrandLabel.
+		// app-shellhead = kait collapse (BL-64): saat rail 4rem, brand tersembunyi
+		// (.app-brand) → header disetel justify-center + padding-inline:0 di
+		// input.css agar tombol collapse TEPAT di tengah rail (bukan mepet kiri
+		// sisa px-4). Tanpa kait ini, justify-between bawaan menyisakan tombol
+		// menempel tepi.
 		h.Div(
-			h.Class("h-16 flex items-center gap-2 px-4 border-b border-base-300"),
+			h.Class("app-shellhead h-16 flex items-center gap-2 px-4 border-b border-base-300"),
 			shellBrand(d),
 			h.Button(
 				h.Type("button"),
