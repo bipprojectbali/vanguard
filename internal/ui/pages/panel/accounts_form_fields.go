@@ -3,6 +3,7 @@ package panel
 import (
 	"go_starter/internal/ui"
 
+	lucide "github.com/eduardolat/gomponents-lucide"
 	g "maragu.dev/gomponents"
 	h "maragu.dev/gomponents/html"
 )
@@ -25,39 +26,47 @@ func formCard(title string, fields ...g.Node) g.Node {
 	)
 }
 
-// fieldHint = baris penjelasan opsional di bawah input, dipanggil field/
-// selectField saat hint diisi. Variadic pada pemanggil agar dropdown pemanggil
-// lama (mayoritas field self-explanatory) tak perlu ikut berubah — kirim ""
-// atau tak sama sekali = tanpa hint, sama seperti pola phoneField sebelumnya.
-func fieldHint(hint []string) g.Node {
+// labelWithHint = label field + (opsional) ikon ⓘ tap-friendly (BL-65).
+// Tanpa hint → label biasa (labelFor). Dengan hint → seluruh baris label
+// dibungkus <details class="hint-reveal"> (CSP-safe, tanpa JS inline): summary
+// memuat label + ikon ⓘ, dan keterangan muncul INLINE penuh-lebar di bawahnya
+// saat di-TAP/klik/Enter — BUKAN hover (hover mati di sentuh; ini menjawab
+// keberatan enum_field.go BL-3/BL-4 terhadap tooltip/title). Karena keterangan
+// mengalir (bukan absolut) ia membungkus teks & tak pernah meluber di 375px.
+// Menggantikan (a) baris fieldHint lama di bawah input dan (b) pelebaran
+// sm:col-span-2 field ber-hint — sekarang semua field tetap single-column
+// seragam. Tap-target ikon ≥44px (min-h-11 min-w-11).
+func labelWithHint(text, forID string, required bool, hint []string) g.Node {
 	if len(hint) == 0 || hint[0] == "" {
-		return g.Text("")
+		return labelFor(text, forID, required)
 	}
-	return h.P(h.Class("text-xs text-base-content/60"), g.Text(hint[0]))
-}
-
-// fieldWrapClass menentukan lebar grid satu field di formCard (sm:grid-cols-2).
-// Field TANPA hint tetap setengah lebar (dua per baris, seperti semula). Field
-// BER-hint dilebarkan penuh (sm:col-span-2) — sebelum ini, field ber-hint yang
-// kebetulan berpasangan dgn field tanpa hint pada baris grid yang sama (mis.
-// "Kode Pos" vs "Teritori", "Nama Desa" vs "Tipe Akun") membuat baris itu
-// tampak timpang: sel bertetangga jauh lebih pendek, menyisakan ruang kosong
-// di bawahnya karena tinggi baris grid mengikuti sel tertinggi. Melebarkan
-// penuh field ber-hint memutus pasangannya dgn field tak terkait sehingga tiap
-// baris tetap rata — pola yang sama dgn textareaField yang sudah lebih dulu
-// full-width.
-func fieldWrapClass(hint []string) string {
-	if len(hint) > 0 && hint[0] != "" {
-		return "grid gap-1 min-w-0 sm:col-span-2"
-	}
-	return "grid gap-1 min-w-0"
+	return h.Details(
+		h.Class("hint-reveal min-w-0"),
+		h.Summary(
+			// flex → display:flex (bukan list-item) sekaligus menghapus segitiga
+			// disclosure bawaan; .hint-reveal (input.css) menutup sisa marker.
+			h.Class("hint-summary flex items-center gap-1 min-w-0 cursor-pointer"),
+			labelFor(text, forID, required),
+			h.Span(
+				// min-h/w-11 = tap-target 44px; -my-2 tarik kembali agar baris
+				// label tak menggemuk (area klik tetap 44px, meluap ke margin).
+				h.Class("inline-flex items-center justify-center min-h-11 min-w-11 -my-2 shrink-0 text-base-content/50"),
+				g.Attr("aria-hidden", "true"),
+				lucide.Info(h.Class("size-4")),
+			),
+		),
+		h.P(
+			h.Class("mt-1 text-xs font-normal text-base-content/70 break-words"),
+			g.Text(hint[0]),
+		),
+	)
 }
 
 // field = satu input teks/angka. required menandai wajib (jaring klien; backend
 // tetap memvalidasi). text-base (≥16px) agar iOS tak auto-zoom saat fokus. hint
 // (opsional, variadic) = penjelasan singkat utk field yang maknanya tak jelas
-// hanya dari label (mis. beda Teritori vs Kabupaten/Kota administratif). Field
-// ber-hint dilebarkan penuh (fieldWrapClass) — lihat komentarnya soal alasan.
+// hanya dari label (mis. beda Teritori vs Kabupaten/Kota administratif); kini
+// tampil sebagai ikon ⓘ tap-friendly di label (labelWithHint), bukan baris teks.
 func field(label, name, val string, required bool, typ string, hint ...string) g.Node {
 	attrs := []g.Node{
 		h.ID("f-" + name), h.Name(name), h.Type(typ),
@@ -70,10 +79,9 @@ func field(label, name, val string, required bool, typ string, hint ...string) g
 		attrs = append(attrs, g.Attr("min", "0"))
 	}
 	return h.Div(
-		h.Class(fieldWrapClass(hint)),
-		labelFor(label, "f-"+name, required),
+		h.Class("grid gap-1 min-w-0"),
+		labelWithHint(label, "f-"+name, required, hint),
 		ui.Input(attrs...),
-		fieldHint(hint),
 	)
 }
 
@@ -130,9 +138,10 @@ func textareaField(label, name, val string) g.Node {
 
 // selectField = dropdown enum. Opsi kosong "—" hanya bila tak wajib (nilai
 // opsional boleh dikosongkan = NULL). hint (opsional, variadic) = penjelasan
-// arti tiap opsi utk enum yang nilainya bukan kata umum (mis. IDM) — lihat
-// fieldHint. Backward-compatible: pemanggil existing yang tak lewat hint tak
-// perlu ikut berubah.
+// arti tiap opsi utk enum yang nilainya bukan kata umum (mis. IDM) — kini
+// tampil sebagai ikon ⓘ tap-friendly di label (labelWithHint), bukan baris teks
+// di bawah select yang dulu memaksa field melebar sm:col-span-2. Field tetap
+// single-column seragam. Backward-compatible: pemanggil tanpa hint tak berubah.
 func selectField(label, name, current string, opts []string, required bool, hint ...string) g.Node {
 	sel := []g.Node{
 		h.ID("f-" + name), h.Name(name), h.Class("select text-base w-full"),
@@ -141,10 +150,9 @@ func selectField(label, name, current string, opts []string, required bool, hint
 		sel = append(sel, h.Required())
 	}
 	return h.Div(
-		h.Class(fieldWrapClass(hint)),
-		labelFor(label, "f-"+name, required),
+		h.Class("grid gap-1 min-w-0"),
+		labelWithHint(label, "f-"+name, required, hint),
 		h.Select(append(sel, g.Group(enumOptions(current, opts, !required)))...),
-		fieldHint(hint),
 	)
 }
 

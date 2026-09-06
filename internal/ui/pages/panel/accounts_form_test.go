@@ -92,3 +92,25 @@ func TestAccountForm_BudgetPrefillNoDecimal(t *testing.T) {
 		t.Errorf("prefill anggaran TAK boleh membawa desimal (.00):\n%s", out)
 	}
 }
+
+// TestAccountForm_HintAsTapInfoIcon (BL-65): field ber-hint (mis. Tipe Akun) TAK
+// lagi melebar sm:col-span-2 — cell tetap single-column `grid gap-1 min-w-0` —
+// dan keterangan pindah ke ikon ⓘ tap-friendly (<details class="hint-reveal">),
+// bukan baris teks di bawah input. Keterangan tetap ADA & tap-target ikon ≥44px.
+func TestAccountForm_HintAsTapInfoIcon(t *testing.T) {
+	out := renderAccountForm(t, baseFormView())
+
+	// (1) cell field ber-hint single-column + LANGSUNG membungkus reveal ⓘ →
+	//     membuktikan pelebaran sm:col-span-2 lama sudah dilepas.
+	if !strings.Contains(out, `class="grid gap-1 min-w-0"><details class="hint-reveal`) {
+		t.Errorf("field ber-hint harus single-column + membungkus <details hint-reveal> (BL-65):\n%s", out)
+	}
+	// (2) keterangan tetap ada (contoh: hint Tipe Akun), dipindah ke ikon ⓘ.
+	if !strings.Contains(out, "Prospect = calon pelanggan") {
+		t.Errorf("keterangan (hint) harus tetap ada:\n%s", out)
+	}
+	// (3) tap-target ikon ⓘ ≥44px.
+	if !strings.Contains(out, "min-h-11 min-w-11") {
+		t.Errorf("ikon ⓘ harus tap-target ≥44px (min-h-11 min-w-11):\n%s", out)
+	}
+}
