@@ -14,9 +14,11 @@ import (
 // nilai pra-isi dari lead (handler), semua bisa disunting sebelum submit. Reuse
 // helper formCard/field/selectField dari accounts_form.go (satu paket panel).
 //
-// Nomor telepon: bila PhoneEditable=false (bukan Sales), field dikunci &
-// menampilkan mask TANPA name → tak ikut ter-submit; handler menyalin nomor asli
-// lead server-side (F4). Sama pola dengan phoneField accounts.
+// Nomor telepon (F4/FLS §5, DUA sumbu): PhoneVisible = boleh LIHAT nomor penuh
+// (Sales+Admin), PhoneEditable = boleh SUNTING (Sales saja). Sales → input biasa;
+// Admin → read-only berisi nomor asli; selain itu → read-only berisi mask. Field
+// read-only TANPA name → tak ter-submit; handler menyalin nomor asli lead
+// server-side. Sama pola dengan phoneField accounts.
 
 // ConvertFormFields = nilai pra-isi review (dari lead). Semua string agar view
 // netral terhadap tipe DB. BL-67: Desa dipilih dari master Kemendagri (dropdown
@@ -60,7 +62,11 @@ type LeadConvertView struct {
 	LeadName string
 	LeadCode string
 
+	// PhoneEditable = boleh menyunting nomor (Sales); PhoneVisible = boleh melihat
+	// nomor penuh (Sales+Admin, FLS §5). Visible-tapi-tak-editable (Admin) →
+	// nomor asli tampil read-only. Lihat convertPhoneField.
 	PhoneEditable bool
+	PhoneVisible  bool
 	AccountTypes  []string
 	Fields        ConvertFormFields
 	Duplicates    []DuplicateCandidate
@@ -125,8 +131,8 @@ func LeadConvert(v LeadConvertView) g.Node {
 			field("Nama Depan", "first_name", v.Fields.FirstName, true, "text"),
 			field("Nama Belakang", "last_name", v.Fields.LastName, false, "text"),
 			field("Jabatan", "job_title", v.Fields.JobTitle, false, "text"),
-			convertPhoneField("HP", "mobile_phone", v.Fields.MobilePhone, v.PhoneEditable),
-			convertPhoneField("WhatsApp", "whatsapp_number", v.Fields.Whatsapp, v.PhoneEditable),
+			convertPhoneField("HP", "mobile_phone", v.Fields.MobilePhone, v.PhoneEditable, v.PhoneVisible),
+			convertPhoneField("WhatsApp", "whatsapp_number", v.Fields.Whatsapp, v.PhoneEditable, v.PhoneVisible),
 			field("Email", "email", v.Fields.Email, false, "email"),
 		),
 		formCard("Deal",
@@ -203,12 +209,19 @@ func duplicateWarning(base string, dupes []DuplicateCandidate) g.Node {
 	)
 }
 
-// convertPhoneField = input telepon yang menghormati F4. Editable (Sales) →
-// input biasa. Terkunci (bukan Sales) → input disabled menampilkan mask, TANPA
-// name agar tak ter-submit; handler menyalin nomor asli lead server-side.
-func convertPhoneField(label, name, val string, editable bool) g.Node {
+// convertPhoneField = input telepon yang menghormati F4/FLS §5 pada DUA sumbu:
+//   - editable (Sales): input biasa, bisa disunting.
+//   - visible tapi tak editable (Admin): input read-only berisi nomor ASLI —
+//     TANPA name agar tak ter-submit; handler menyalin nomor asli lead server-side.
+//   - tak visible (Manager/CSM/Support): input read-only berisi MASK; nilai asli
+//     tak pernah sampai ke browser (sudah disamarkan di convertPrefill).
+func convertPhoneField(label, name, val string, editable, visible bool) g.Node {
 	if editable {
 		return field(label, name, val, false, "tel")
+	}
+	note := "Nomor disamarkan; disalin dari lead saat konversi."
+	if visible {
+		note = "Hanya-baca; disalin dari lead saat konversi."
 	}
 	return h.Div(
 		h.Class("grid gap-1 min-w-0"),
@@ -217,7 +230,6 @@ func convertPhoneField(label, name, val string, editable bool) g.Node {
 			h.ID("f-"+name+"_ro"), h.Type("tel"), h.Value(val),
 			h.Disabled(), h.Class("input text-base w-full"),
 		),
-		h.P(h.Class("text-xs text-base-content/60"),
-			g.Text("Nomor disamarkan; disalin dari lead saat konversi.")),
+		h.P(h.Class("text-xs text-base-content/60"), g.Text(note)),
 	)
 }

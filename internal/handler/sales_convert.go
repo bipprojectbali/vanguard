@@ -38,7 +38,14 @@ func (h *Handler) LeadConvertPage(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	base := wsPath(slugFromRequest(r), "")
-	phoneEditable := canEditPhone(ctx) // F4: hanya Sales lihat/sunting nomor penuh.
+	// F4 (FLS §5): DUA sumbu terpisah — Sales & Admin boleh MELIHAT nomor penuh
+	// (canSeeFullPhone), tapi hanya Sales boleh MENYUNTINGNYA (canEditPhone).
+	// Halaman ini dulu menyamakan keduanya di canEditPhone → Admin ikut kena mask
+	// walau berhak lihat (tak konsisten dgn detail lead yang pakai maskPhone/
+	// canSeeFullPhone). Pisahkan: visibilitas (mask/tidak) = canSeeFullPhone,
+	// editability (field terkunci) = canEditPhone.
+	phoneVisible := canSeeFullPhone(session.BusinessRole(ctx))
+	phoneEditable := canEditPhone(ctx)
 	errCode := r.URL.Query().Get("err")
 	v := panel.LeadConvertView{
 		Base:          base,
@@ -48,10 +55,11 @@ func (h *Handler) LeadConvertPage(w http.ResponseWriter, r *http.Request) {
 		LeadName:      l.LeadName,
 		LeadCode:      deref(l.EntityCode),
 		PhoneEditable: phoneEditable,
+		PhoneVisible:  phoneVisible,
 		RegionsJSON:   h.regionsJSON(ctx),
 		VillagesURL:   base + "/accounts/villages", // BL-67: lazy-fetch Desa level 4
 		AccountTypes:  accountTypeOptions,
-		Fields:        convertPrefill(l, phoneEditable),
+		Fields:        convertPrefill(l, phoneVisible),
 		Duplicates:    h.findDuplicateVillages(ctx, session.TenantID(ctx), l.LeadName, l.DistrictID),
 	}
 	// BL-67: blokir desa yang sudah ber-akun (village_code_dup) menautkan operator
@@ -73,15 +81,17 @@ func (h *Handler) LeadConvertPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // convertPrefill memetakan Lead → nilai review pra-isi. Nomor telepon disamarkan
-// bila aktor bukan Sales (F4): nilai asli TAK pernah dikirim ke browsernya —
-// handler POST menyalin nomor asli lead server-side sebagai gantinya.
-func convertPrefill(l db.Lead, phoneEditable bool) panel.ConvertFormFields {
+// bila aktor tak berhak MELIHATnya (F4/FLS §5: bukan Sales maupun Admin) — nilai
+// asli TAK pernah dikirim ke browsernya; handler POST menyalin nomor asli lead
+// server-side sebagai gantinya. Visibilitas (di sini) ≠ editability: Admin boleh
+// melihat nomor asli namun field-nya tetap read-only (lihat convertPhoneField).
+func convertPrefill(l db.Lead, phoneVisible bool) panel.ConvertFormFields {
 	firstName := deref(l.ContactPerson)
 	if firstName == "" {
 		firstName = l.LeadName // tak ada nama kontak → pakai nama lead sebagai awal.
 	}
 	mobile, whatsapp := deref(l.MobilePhone), deref(l.Whatsapp)
-	if !phoneEditable {
+	if !phoneVisible {
 		if mobile != "" {
 			mobile = flsHidden
 		}
