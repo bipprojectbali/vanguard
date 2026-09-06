@@ -17,8 +17,9 @@ func sidebarUser(d ShellData) g.Node {
 		// app-shelluser = kait collapse (BL-64): saat rail 4rem, email
 		// (.app-navlabel) tersembunyi sehingga hanya avatar + tombol tema tersisa.
 		// justify-between bawaan mendorong keduanya ke tepi → keluar rail sempit;
-		// di collapse input.css mengubahnya jadi kolom ter-tengah (flex-col +
-		// items-center) agar avatar di atas tombol tema, keduanya tampak utuh.
+		// di collapse input.css mengubahnya jadi kolom ter-tengah column-reverse
+		// (tombol tema DI ATAS avatar) + mengarahkan dropdown tema membuka ke kanan
+		// rail agar pilihan tema tak terpotong keluar layar.
 		h.Div(
 			h.Class("app-shelluser flex items-center justify-between gap-2 min-w-0"),
 			h.Div(

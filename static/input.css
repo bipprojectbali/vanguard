@@ -109,14 +109,28 @@
    unlayered (pola sama komentar token daisyUI di atas file ini).
    - Header (.app-shellhead): brand tersembunyi → tombol collapse di-tengah-kan
      (justify-center) + buang sisa px-4 agar benar-benar center di rail 64px.
-   - Footer (.app-shelluser): avatar + tombol tema jadi kolom ter-tengah (bukan
-     justify-between yang mendorong tombol tema keluar rail sempit). */
+   - Footer (.app-shelluser): tombol tema + avatar jadi kolom ter-tengah (bukan
+     justify-between yang mendorong tombol tema keluar rail sempit). column-REVERSE
+     agar tombol tema DI ATAS avatar (urut DOM avatar→tema dibalik tanpa mengubah
+     tata letak expanded). */
 html[data-sidebar="collapsed"] .app-shellhead {
   justify-content: center;
   padding-inline: 0;
 }
 html[data-sidebar="collapsed"] .app-shelluser {
-  flex-direction: column;
+  flex-direction: column-reverse;
   align-items: center;
   justify-content: center;
+}
+/* Saat collapse, dropdown tema (dropdown-top dropdown-end) menempel rail 64px:
+   menu w-40 (160px) yang default membuka ke KIRI jatuh ke luar layar (left ~ -112px)
+   → pilihan tema tak terlihat. Arahkan menu membuka ke KANAN rail (ke area konten),
+   tetap tersangkut ke tepi bawah tombol (bottom:0). Hanya berlaku saat collapse;
+   expanded tetap pakai posisi daisyUI bawaan. */
+html[data-sidebar="collapsed"] .app-shelluser .dropdown-content {
+  left: 100%;
+  right: auto;
+  bottom: 0;
+  margin-left: 0.5rem;
+  margin-bottom: 0;
 }
