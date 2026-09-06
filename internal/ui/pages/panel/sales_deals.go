@@ -195,8 +195,10 @@ func emptyDeals(v DealPipelineView) g.Node {
 				h.P(h.Class("text-base-content/70"), g.Text("Belum ada deal."))),
 		)
 	}
-	// Kembali ke awal mempertahankan view=table + stage + q + mine agar tak melompat keluar.
-	back := withQuery(v.Base+"/deals", v.Query,
+	// Kembali ke awal mempertahankan view=table + stage + mine, tapi MEMBUANG q:
+	// tanpa tombol Reset, tautan ini satu-satunya jalan keluar dari pencarian
+	// tanpa hasil, jadi ia harus mengosongkan kata kunci (bukan mengulanginya).
+	back := withQuery(v.Base+"/deals", "",
 		hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
 		hiddenField{"mine", dealMineParam(v.Mine)})
 	return h.Div(

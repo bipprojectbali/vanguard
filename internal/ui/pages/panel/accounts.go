@@ -21,7 +21,6 @@ import (
 // belum ditugaskan → dirender "—".
 type AccountRow struct {
 	ID          int64
-	EntityCode  string
 	VillageName string
 	VillageCode string
 	AccountType string
@@ -82,9 +81,21 @@ func AccountsList(v AccountsListView) g.Node {
 		),
 	}
 	if v.ShowTabs {
-		body = append(body, accountsTabs(v))
+		// Tab & kotak cari sebaris: tab di kiri, pencarian terdorong ke pojok
+		// kanan (justify-between). flex-wrap → di 375px pencarian turun ke baris
+		// bawah alih-alih meluber. Penjelasan tab aktif tetap di baris tersendiri
+		// di bawahnya.
+		body = append(body,
+			h.Div(
+				h.Class("flex flex-wrap items-center justify-between gap-2 min-w-0"),
+				accountsTablist(v),
+				accountsSearch(v),
+			),
+			h.P(h.Class("text-xs text-base-content/60"), g.Text(accountsTabDesc(v.ActiveView))),
+		)
+	} else {
+		body = append(body, accountsSearch(v))
 	}
-	body = append(body, accountsSearch(v))
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "accounts-err", g.Text(v.Err)))
 	}
@@ -100,20 +111,19 @@ func AccountsList(v AccountsListView) g.Node {
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
-// accountsTabs = bilah tab cakupan (All/My/Belum-ada-Owner) untuk peran 'all',
-// plus satu baris penjelasan di bawahnya yang MENYESUAIKAN tab aktif (bukan
-// satu kalimat statis merangkum ketiganya) — arti tab yang sedang dilihat
-// lebih relevan daripada penjelasan tab lain yang tak aktif; lihat
-// accountsTabDesc. Navigasi tautan <a> biasa (bookmarkable + reload penuh,
-// lolos CSP gotcha #16), BUKAN Datastar. flex-wrap agar tak mendorong lebar
-// di 375px; tiap tab min-h-11 (tap target 44px). role="tablist" seperti
-// bilah tab panel lain (a11y).
+// accountsTablist = bilah tab cakupan (All/My/Belum-ada-Owner) untuk peran
+// 'all'. Penjelasan tab aktif dirender terpisah oleh pemanggil (AccountsList),
+// sebab kotak cari kini sebaris dengan tab sehingga penjelasan harus jatuh ke
+// baris di bawah keduanya; lihat accountsTabDesc. Navigasi tautan <a> biasa
+// (bookmarkable + reload penuh, lolos CSP gotcha #16), BUKAN Datastar. flex-wrap
+// agar tak mendorong lebar di 375px; tiap tab min-h-11 (tap target 44px).
+// role="tablist" seperti bilah tab panel lain (a11y).
 //
 // Varian tabs-box (BUKAN tabs-boxed — nama daisyUI v4 yang sudah tak ada di v5,
 // jadi tree-shaken → tak bergaya; gotcha #4): satu-satunya varian yang ikut
 // terkompilasi ke app.css. tabs-box sudah memberi permukaan berkotak sendiri,
 // jadi tak perlu bg/border manual.
-func accountsTabs(v AccountsListView) g.Node {
+func accountsTablist(v AccountsListView) g.Node {
 	tab := func(label, view string) g.Node {
 		cls := "tab min-h-11"
 		if v.ActiveView == view {
@@ -121,16 +131,13 @@ func accountsTabs(v AccountsListView) g.Node {
 		}
 		return h.A(h.Href(accountsListHref(v.Base, view, v.Query)), h.Class(cls), g.Text(label))
 	}
-	return g.Group([]g.Node{
-		h.Div(
-			h.Role("tablist"),
-			h.Class("tabs tabs-box flex-wrap"),
-			tab("Semua Desa", AccViewAll),
-			tab("Desa Saya", AccViewMy),
-			tab("Belum ada Owner", AccViewUnowned),
-		),
-		h.P(h.Class("text-xs text-base-content/60"), g.Text(accountsTabDesc(v.ActiveView))),
-	})
+	return h.Div(
+		h.Role("tablist"),
+		h.Class("tabs tabs-box flex-wrap"),
+		tab("Semua Desa", AccViewAll),
+		tab("Desa Saya", AccViewMy),
+		tab("Belum ada Owner", AccViewUnowned),
+	)
 }
 
 // accountsTabDesc = penjelasan satu tab AKTIF (bukan ketiganya sekaligus).
@@ -175,7 +182,11 @@ func accountsSearch(v AccountsListView) g.Node {
 		h.Input(
 			h.Type("search"), h.Name("q"), h.Value(v.Query),
 			h.Placeholder("Cari desa — nama atau kode…"),
-			h.Class("input input-bordered text-base w-full sm:max-w-xs min-h-11 min-w-0"),
+			// Lebar TERBATAS (bukan w-full): sebaris dengan tab, input w-full akan
+			// menyita seluruh lebar form → tombol "Cari" terdorong ke baris bawah.
+			// w-44 di mobile, w-64 di sm+; min-w-0 tetap mengizinkan menyusut di
+			// viewport sempit.
+			h.Class("input input-bordered text-base w-44 sm:w-64 min-h-11 min-w-0"),
 			g.Attr("aria-label", "Cari desa"),
 		),
 	}
@@ -183,11 +194,8 @@ func accountsSearch(v AccountsListView) g.Node {
 		fields = append(fields, h.Input(h.Type("hidden"), h.Name("view"), h.Value(v.ActiveView)))
 	}
 	fields = append(fields, h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"), g.Text("Cari")))
-	if v.Query != "" {
-		fields = append(fields, h.A(
-			h.Href(accountsListHref(v.Base, v.ActiveView, "")),
-			h.Class("btn btn-ghost min-h-11"), g.Text("Reset")))
-	}
+	// Tanpa tombol "Reset": ikon X bawaan input type=search sudah mengosongkan
+	// kata kunci; kosongkan lalu tekan "Cari" → daftar kembali tak tersaring.
 	return h.Form(
 		h.Method("get"), h.Action(v.Base+"/accounts"),
 		h.Class("flex flex-wrap items-center gap-2 min-w-0"),

@@ -24,7 +24,6 @@ func accountRowView(a db.Account, names map[int64]string, regions map[int64]regi
 	_, regency, province := regionNames(regions, a.DistrictID)
 	return panel.AccountRow{
 		ID:          a.ID,
-		EntityCode:  deref(a.EntityCode),
 		VillageName: a.VillageName,
 		VillageCode: deref(a.VillageCode),
 		AccountType: accountTypeLabel(a.AccountType),
