@@ -10,6 +10,18 @@
   themes: light --default, dark --prefersdark, cupcake, nord, dim, sunset;
 }
 
+/* Radius seragam lintas tema (samakan ke baseline light/sistem) ───────────────
+   Tiap tema daisyUI membawa --radius-box/field/selector sendiri (mis. cupcake
+   jauh lebih bulat: box 1rem, field 2rem). Override di sini agar sudut
+   card/input/tombol KONSISTEN walau tema diganti. UNLAYERED (di luar @layer)
+   → menang atas token per-tema daisyUI yang berada di @layer base, tanpa
+   !important dan tanpa bergantung urutan sumber/specificity. */
+:root {
+  --radius-box: 0.5rem;      /* card, modal, alert (rounded-box) */
+  --radius-field: 0.25rem;   /* input, select, textarea (rounded-field) */
+  --radius-selector: 0.5rem; /* btn, badge, tab (rounded-selector) */
+}
+
 /* Scan class di file Go (gomponents). */
 @source "../internal";
 
