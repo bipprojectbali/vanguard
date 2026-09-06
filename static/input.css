@@ -89,6 +89,20 @@
   html[data-sidebar="collapsed"] .app-sidebar .btn {
     padding-inline: 0;
   }
+  /* BL-64: rapikan header & footer sidebar saat rail 4rem. Header: brand
+     tersembunyi, tombol collapse di-tengah-kan (buang sisa px-4). Footer:
+     avatar + tombol tema jadi kolom ter-tengah (bukan justify-between yang
+     mendorong keduanya keluar rail sempit). Hanya berlaku md:+ karena atribut
+     collapsed cuma dipasang di desktop. */
+  html[data-sidebar="collapsed"] .app-shellhead {
+    justify-content: center;
+    padding-inline: 0;
+  }
+  html[data-sidebar="collapsed"] .app-shelluser {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
 
   /* Toast flash: muncul lalu memudar sendiri (~3.2s) tanpa JS. */
   .toast-flash {

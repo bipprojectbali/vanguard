@@ -14,8 +14,13 @@ import (
 func sidebarUser(d ShellData) g.Node {
 	return h.Div(
 		h.Class("border-t border-base-300 p-3 flex flex-col gap-2"),
+		// app-shelluser = kait collapse (BL-64): saat rail 4rem, email
+		// (.app-navlabel) tersembunyi sehingga hanya avatar + tombol tema tersisa.
+		// justify-between bawaan mendorong keduanya ke tepi → keluar rail sempit;
+		// di collapse input.css mengubahnya jadi kolom ter-tengah (flex-col +
+		// items-center) agar avatar di atas tombol tema, keduanya tampak utuh.
 		h.Div(
-			h.Class("flex items-center justify-between gap-2 min-w-0"),
+			h.Class("app-shelluser flex items-center justify-between gap-2 min-w-0"),
 			h.Div(
 				h.Class("flex items-center gap-2 min-w-0"),
 				Avatar(d.AvatarURL, "", d.UserEmail, 32),
