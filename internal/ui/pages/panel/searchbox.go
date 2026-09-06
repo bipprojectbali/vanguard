@@ -57,6 +57,18 @@ func searchBox(action, q, placeholder, ariaLabel string, keep ...hiddenField) g.
 	)
 }
 
+// tabSearchRow menyejajarkan bilah tab (kiri) dengan kotak cari yang terdorong ke
+// pojok kanan (justify-between) dalam SATU baris (BL-68), meniru pola acuan
+// accounts.go. Sebelumnya tiap daftar menaruh search di baris terpisah full-width
+// di bawah tab → tampak tak seragam. flex-wrap → di 375px kotak cari TURUN ke
+// baris bawah alih-alih meluber; min-w-0 cegah overflow horizontal.
+func tabSearchRow(tablist, search g.Node) g.Node {
+	return h.Div(
+		h.Class("flex flex-wrap items-center justify-between gap-2 min-w-0"),
+		tablist, search,
+	)
+}
+
 // withQuery merakit "action" + query string dari keep (field tak kosong) + q
 // (bila tak kosong), nilai di-escape lewat url.Values.Encode. Dipakai tautan
 // Reset (q kosong, keep bertahan) & bisa dipakai ulang pager/empty-state agar

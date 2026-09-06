@@ -65,10 +65,10 @@ func SubList(v SubListView) g.Node {
 					g.Text("Langganan berjalan — paket, nilai berulang, dan masa berlaku.")),
 			),
 		),
-		subStatusFilter(v),
-		searchBox(v.Base+"/subscriptions", v.Query,
-			"Cari langganan — desa, paket, atau kode…", "Cari langganan",
-			hiddenField{"status", v.StatusFilter}),
+		tabSearchRow(subStatusFilter(v),
+			searchBox(v.Base+"/subscriptions", v.Query,
+				"Cari langganan — desa, paket, atau kode…", "Cari langganan",
+				hiddenField{"status", v.StatusFilter})),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "subs-err", g.Text(v.Err)))

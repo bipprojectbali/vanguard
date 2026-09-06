@@ -100,10 +100,10 @@ func CSTrainingsList(v CSTrainingsListView) g.Node {
 			)),
 		),
 		csTrainingKPICards(v.KPIs, v.Base),
-		csTrainingTabsNav(v),
-		searchBox(v.Base+"/trainings", v.Query,
-			"Cari training — topik atau desa…", "Cari training",
-			hiddenField{"tab", v.Tab}),
+		tabSearchRow(csTrainingTabsNav(v),
+			searchBox(v.Base+"/trainings", v.Query,
+				"Cari training — topik atau desa…", "Cari training",
+				hiddenField{"tab", v.Tab})),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "cs-trainings-err", g.Text(v.Err)))

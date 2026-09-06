@@ -18,6 +18,8 @@ func TestCSTrainingsList_SearchBoxAndThreading(t *testing.T) {
 	}))
 
 	assertSearchBox(t, out, "/w/desa/trainings", "kali muara")
+	// BL-68: tab & kotak cari sebaris dalam satu wrapper justify-between.
+	assertTabSearchRow(t, out, "/w/desa/trainings")
 	if !strings.Contains(out, `<input type="hidden" name="tab" value="scheduled">`) {
 		t.Errorf("form cari harus menjaga tab aktif via input tersembunyi tab=scheduled:\n%s", out)
 	}

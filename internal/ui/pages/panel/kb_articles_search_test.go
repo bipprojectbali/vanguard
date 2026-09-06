@@ -24,6 +24,8 @@ func TestKBArticleList_SearchBoxAndThreading(t *testing.T) {
 	}))
 
 	assertSearchBox(t, out, "/w/desa/kb-articles", "kartu keluarga")
+	// BL-68: tab Aktif/Arsip & kotak cari sebaris dalam satu wrapper justify-between.
+	assertTabSearchRow(t, out, "/w/desa/kb-articles")
 	// Pager membawa after + q ('&' dirender &amp; → q dicek terpisah).
 	if !strings.Contains(out, "after=99_9") {
 		t.Errorf("pager harus membawa after=99_9:\n%s", out)

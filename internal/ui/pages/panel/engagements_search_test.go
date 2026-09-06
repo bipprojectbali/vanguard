@@ -18,6 +18,8 @@ func TestEngagementsList_SearchBoxAndThreading(t *testing.T) {
 	}))
 
 	assertSearchBox(t, out, "/w/desa/engagements", "kali muara")
+	// BL-68: tab & kotak cari sebaris dalam satu wrapper justify-between.
+	assertTabSearchRow(t, out, "/w/desa/engagements")
 	if !strings.Contains(out, `<input type="hidden" name="tab" value="planned">`) {
 		t.Errorf("form cari harus menjaga tab aktif via input tersembunyi tab=planned:\n%s", out)
 	}

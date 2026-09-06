@@ -137,17 +137,21 @@ func ContactsAll(v ContactsAllView) g.Node {
 			)),
 		),
 	}
-	if v.ShowTabs {
-		body = append(body, contactsTabs(v))
-	}
 	// Search hanya di daftar GLOBAL (per-desa gerbangnya desa induk). view aktif
 	// dipertahankan agar tab & pencarian tak saling menghapus.
 	viewKeep := ""
 	if v.ActiveView != "" && v.ActiveView != ContactViewAll {
 		viewKeep = v.ActiveView
 	}
-	body = append(body, searchBox(v.Base+"/contacts", v.Query,
-		"Cari kontak — nama atau desa…", "Cari kontak", hiddenField{"view", viewKeep}))
+	search := searchBox(v.Base+"/contacts", v.Query,
+		"Cari kontak — nama atau desa…", "Cari kontak", hiddenField{"view", viewKeep})
+	// BL-68: saat ada tab, sejajarkan search ke pojok kanan sebaris tab (pola
+	// accounts.go); tanpa tab, search berdiri sendiri full-width di bawah header.
+	if v.ShowTabs {
+		body = append(body, tabSearchRow(contactsTabs(v), search))
+	} else {
+		body = append(body, search)
+	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "contacts-err", g.Text(v.Err)))
 	}
