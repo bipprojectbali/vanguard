@@ -13,10 +13,12 @@ import (
 // convertForm = nilai review konversi yang SUDAH divalidasi. Menggabungkan tiga
 // entitas hasil (desa + kontak utama + deal) menjadi satu submit.
 type convertForm struct {
-	// Desa (Account)
-	VillageName string
+	// Desa (Account). BL-67: desa dipilih dari master Kemendagri (regions level
+	// 4) lewat VillageID — SAMA seperti AccountCreate langsung — bukan lagi nama
+	// teks bebas + Kecamatan. village_code/village_name/district_id DITURUNKAN
+	// handler dari VillageID (GetVillageRegion), tak diketik operator.
+	VillageID   *int64
 	AccountType string
-	DistrictID  *int64
 	// Kontak utama (Contact)
 	FirstName   string
 	LastName    *string
@@ -31,15 +33,21 @@ type convertForm struct {
 
 // parseConvertForm membaca & memvalidasi form review. (form, "") bila sah, atau
 // (zero, kode) yang dipetakan wsErrMsg. Enum & panjang dicermin dari form desa/
-// deal (sumber sama: validAccountTypes, maxVillageNameLen, maxDealNameLen,
-// maxContactNameLen) agar konversi tak menerima nilai yang ditolak create biasa.
+// deal (sumber sama: validAccountTypes, maxDealNameLen, maxContactNameLen) agar
+// konversi tak menerima nilai yang ditolak create biasa.
 func parseConvertForm(fv func(string) string) (convertForm, string) {
 	var f convertForm
 
-	f.VillageName = strings.TrimSpace(fv("village_name"))
-	if f.VillageName == "" || len(f.VillageName) > maxVillageNameLen {
-		return convertForm{}, "village_name"
+	// Desa/Kelurahan (BL-67): <select name="village_id"> level 4 dari cascading
+	// (static/regions.js lazy-fetch), SAMA pola parseAccountForm. Di sini cukup
+	// pastikan bentuk ID sah; WAJIB-nya & keberadaan level 4 diverifikasi handler
+	// (LeadConvert) via GetVillageRegion — sejajar AccountCreate.
+	vid, code := optInt64(fv("village_id"))
+	if code != "" {
+		return convertForm{}, "village_id"
 	}
+	f.VillageID = vid
+
 	f.AccountType = strings.TrimSpace(fv("account_type"))
 	if _, ok := validAccountTypes[f.AccountType]; !ok {
 		return convertForm{}, "account_type"
@@ -59,15 +67,6 @@ func parseConvertForm(fv func(string) string) (convertForm, string) {
 		return convertForm{}, code
 	}
 	f.Amount = amt
-
-	// district_id: sama pola parseAccountForm/parseLeadForm — cukup parse & pastikan
-	// bentuknya ID sah; keberadaannya di DB dijaga FK (pelanggaran → SQLSTATE 23503,
-	// ditangani accountWriteErr di sales_convert_action.go).
-	did, code := optInt64(fv("district_id"))
-	if code != "" {
-		return convertForm{}, "district_id"
-	}
-	f.DistrictID = did
 
 	// Teks bebas opsional: trim, kosong → NULL.
 	f.LastName = optTrim(fv("last_name"))

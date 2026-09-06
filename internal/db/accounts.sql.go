@@ -331,6 +331,38 @@ func (q *Queries) GetAccount(ctx context.Context, id int64) (Account, error) {
 	return i, err
 }
 
+const getAccountByVillageCode = `-- name: GetAccountByVillageCode :one
+SELECT id, entity_code, village_name FROM accounts
+WHERE tenant_id = $1
+  AND village_code = $2
+  AND deleted_at IS NULL
+`
+
+type GetAccountByVillageCodeParams struct {
+	TenantID    int64   `json:"tenant_id"`
+	VillageCode *string `json:"village_code"`
+}
+
+type GetAccountByVillageCodeRow struct {
+	ID          int64   `json:"id"`
+	EntityCode  *string `json:"entity_code"`
+	VillageName string  `json:"village_name"`
+}
+
+// Akun HIDUP (belum soft-delete) di tenant yang sudah memakai village_code ini —
+// dipakai LeadConvert (BL-67) untuk MEMBLOKIR konversi ke desa yang sudah punya
+// akun, sekaligus menautkan operator ke akun eksisting (id + kode sistem + nama).
+// Filter deleted_at IS NULL mengikuti idx_accounts_code (partial: satu desa HIDUP
+// = satu akun); pola cek-sebelum-INSERT — SELECT tak membatalkan tx ber-tenant,
+// beda dari mengandalkan pelanggaran UNIQUE yang meracuni tx atomik konversi. Tak
+// ketemu → pgx.ErrNoRows → konversi lanjut.
+func (q *Queries) GetAccountByVillageCode(ctx context.Context, arg GetAccountByVillageCodeParams) (GetAccountByVillageCodeRow, error) {
+	row := q.db.QueryRow(ctx, getAccountByVillageCode, arg.TenantID, arg.VillageCode)
+	var i GetAccountByVillageCodeRow
+	err := row.Scan(&i.ID, &i.EntityCode, &i.VillageName)
+	return i, err
+}
+
 const listAccounts = `-- name: ListAccounts :many
 SELECT id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province_legacy, regency_legacy, district_legacy, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code, district_id FROM accounts
 WHERE deleted_at IS NULL

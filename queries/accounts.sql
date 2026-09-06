@@ -169,6 +169,19 @@ SELECT EXISTS(
     WHERE tenant_id = sqlc.arg(tenant_id) AND village_code = sqlc.arg(village_code)
 ) AS exists;
 
+-- name: GetAccountByVillageCode :one
+-- Akun HIDUP (belum soft-delete) di tenant yang sudah memakai village_code ini —
+-- dipakai LeadConvert (BL-67) untuk MEMBLOKIR konversi ke desa yang sudah punya
+-- akun, sekaligus menautkan operator ke akun eksisting (id + kode sistem + nama).
+-- Filter deleted_at IS NULL mengikuti idx_accounts_code (partial: satu desa HIDUP
+-- = satu akun); pola cek-sebelum-INSERT — SELECT tak membatalkan tx ber-tenant,
+-- beda dari mengandalkan pelanggaran UNIQUE yang meracuni tx atomik konversi. Tak
+-- ketemu → pgx.ErrNoRows → konversi lanjut.
+SELECT id, entity_code, village_name FROM accounts
+WHERE tenant_id = sqlc.arg(tenant_id)
+  AND village_code = sqlc.arg(village_code)
+  AND deleted_at IS NULL;
+
 -- name: AccountEntityCodeExists :one
 -- Apakah entity_code (kode sistem, mis. "DESA-001") ini sudah dipakai di tenant
 -- (SEMUA baris). Dipakai allocEntityCode agar jalur OTOMATIS melewati slot yang

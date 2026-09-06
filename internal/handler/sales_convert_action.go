@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"go_starter/internal/codes"
 	"go_starter/internal/db"
 	"go_starter/internal/session"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // sales_convert_action.go — AKSI atomik LeadConvert (INTI Modul 4): konversi
@@ -58,6 +61,46 @@ func (h *Handler) LeadConvert(w http.ResponseWriter, r *http.Request) {
 	}
 	convertErr := "/leads/" + idStr + "/convert"
 
+	// BL-67: desa hasil konversi diambil dari master Kemendagri (regions level 4)
+	// — SAMA seperti AccountCreate langsung — agar akun hasil convert punya
+	// village_code Kemendagri asli & tunduk aturan "satu desa hidup = satu akun".
+	// WAJIB: konversi hanya saat lead Qualified (convert_guard) → desa sudah pasti;
+	// nil → village_required. Desa tak dikenal (id palsu / bukan level 4) →
+	// "village_id".
+	if form.VillageID == nil {
+		wsRedirect(w, r, convertErr, "village_required")
+		return
+	}
+	reg, err := h.q(ctx).GetVillageRegion(ctx, *form.VillageID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			wsRedirect(w, r, convertErr, "village_id")
+			return
+		}
+		h.Log.Error("convert: get village region", "err", err)
+		wsRedirect(w, r, convertErr, "failed")
+		return
+	}
+	vcode := reg.Code
+
+	// Blokir (bukan soft-warning nama): desa ini sudah punya akun HIDUP di
+	// workspace → tolak konversi & tautkan operator ke akun eksisting (dup=<id>,
+	// dirender jadi <a> di halaman review). Pre-check lewat SELECT SEBELUM INSERT
+	// karena konversi = satu tx atomik — pelanggaran UNIQUE (idx_accounts_code)
+	// akan meracuni seluruh tx (pola sama VillageCodeExists). Unique index tetap
+	// jaring balapan (accountWriteErr, di bawah).
+	if existing, derr := h.q(ctx).GetAccountByVillageCode(ctx, db.GetAccountByVillageCodeParams{
+		TenantID:    tenantID,
+		VillageCode: &vcode,
+	}); derr == nil {
+		wsRedirect(w, r, convertErr, "village_code_dup&dup="+strconv.FormatInt(existing.ID, 10))
+		return
+	} else if !errors.Is(derr, pgx.ErrNoRows) {
+		h.Log.Error("convert: check village dup", "err", derr)
+		wsRedirect(w, r, convertErr, "failed")
+		return
+	}
+
 	// --- SATU tx ber-tenant (h.q ambient): gagal-sebagian = rollback penuh. ---
 	accountCode, err := h.q(ctx).GenerateEntityCode(ctx, tenantID, codes.EntityAccount)
 	if err != nil {
@@ -68,10 +111,11 @@ func (h *Handler) LeadConvert(w http.ResponseWriter, r *http.Request) {
 	acc, err := h.q(ctx).CreateAccount(ctx, db.CreateAccountParams{
 		TenantID:     tenantID,
 		EntityCode:   &accountCode,
-		VillageName:  form.VillageName,
+		VillageName:  reg.Name, // BL-67: nama dari master Desa, bukan input teks
+		VillageCode:  &vcode,   // BL-67: kode Kemendagri asli (kini tak lagi NULL)
 		AccountType:  form.AccountType,
 		AccountOwner: owner,
-		DistrictID:   form.DistrictID,
+		DistrictID:   reg.ParentRegionID, // BL-67: Kecamatan induk Desa dari master
 		CreatedBy:    &uid,
 	})
 	if err != nil {

@@ -400,6 +400,14 @@ type Querier interface {
 	// ter-soft-delete. Tak menerapkan ownership — pemanggil (handler) yang memutuskan
 	// apakah aktor boleh membuka baris ini (detail bisa dibuka lewat tautan langsung).
 	GetAccount(ctx context.Context, id int64) (Account, error)
+	// Akun HIDUP (belum soft-delete) di tenant yang sudah memakai village_code ini —
+	// dipakai LeadConvert (BL-67) untuk MEMBLOKIR konversi ke desa yang sudah punya
+	// akun, sekaligus menautkan operator ke akun eksisting (id + kode sistem + nama).
+	// Filter deleted_at IS NULL mengikuti idx_accounts_code (partial: satu desa HIDUP
+	// = satu akun); pola cek-sebelum-INSERT — SELECT tak membatalkan tx ber-tenant,
+	// beda dari mengandalkan pelanggaran UNIQUE yang meracuni tx atomik konversi. Tak
+	// ketemu → pgx.ErrNoRows → konversi lanjut.
+	GetAccountByVillageCode(ctx context.Context, arg GetAccountByVillageCodeParams) (GetAccountByVillageCodeRow, error)
 	// Satu aktivitas hidup. RLS menjamin tenant_id; ownership diputuskan handler
 	// (ActivitiesListFilter.Allows) atas baris.
 	GetActivity(ctx context.Context, id int64) (Activity, error)
