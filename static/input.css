@@ -89,20 +89,6 @@
   html[data-sidebar="collapsed"] .app-sidebar .btn {
     padding-inline: 0;
   }
-  /* BL-64: rapikan header & footer sidebar saat rail 4rem. Header: brand
-     tersembunyi, tombol collapse di-tengah-kan (buang sisa px-4). Footer:
-     avatar + tombol tema jadi kolom ter-tengah (bukan justify-between yang
-     mendorong keduanya keluar rail sempit). Hanya berlaku md:+ karena atribut
-     collapsed cuma dipasang di desktop. */
-  html[data-sidebar="collapsed"] .app-shellhead {
-    justify-content: center;
-    padding-inline: 0;
-  }
-  html[data-sidebar="collapsed"] .app-shelluser {
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
 
   /* Toast flash: muncul lalu memudar sendiri (~3.2s) tanpa JS. */
   .toast-flash {
@@ -114,4 +100,23 @@
     85% { opacity: 1; transform: translateY(0); }
     100% { opacity: 0; transform: translateY(0.25rem); }
   }
+}
+
+/* BL-64: rapikan header & footer sidebar saat rail collapse (4rem, md:+ saja).
+   UNLAYERED (sengaja di luar @layer components) → menang atas utility Tailwind
+   `justify-between`/`px-4` yang ada di @layer utilities; layer belakang menang
+   tanpa peduli specificity, jadi override yang bersaing dgn utility WAJIB
+   unlayered (pola sama komentar token daisyUI di atas file ini).
+   - Header (.app-shellhead): brand tersembunyi → tombol collapse di-tengah-kan
+     (justify-center) + buang sisa px-4 agar benar-benar center di rail 64px.
+   - Footer (.app-shelluser): avatar + tombol tema jadi kolom ter-tengah (bukan
+     justify-between yang mendorong tombol tema keluar rail sempit). */
+html[data-sidebar="collapsed"] .app-shellhead {
+  justify-content: center;
+  padding-inline: 0;
+}
+html[data-sidebar="collapsed"] .app-shelluser {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
