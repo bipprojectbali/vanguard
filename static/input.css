@@ -143,3 +143,18 @@ html[data-sidebar="collapsed"] .app-shelluser .dropdown-content {
   margin-left: 0.5rem;
   margin-bottom: 0;
 }
+
+/* BL-71: rail collapse — submenu (anak grup nav) tetap tampak sebagai IKON.
+   Di rail 4rem, mekanisme expand/collapse grup (chevron + label) ikut tersembunyi
+   (app-navlabel display:none), sehingga grup yang default tertutup menyembunyikan
+   SELURUH anaknya → ikon submenu tak terlihat & tak terjangkau. Paksa kontainer
+   anak selalu tampak + buang indent pl-3 agar tiap ikon anak ter-center di rail
+   seperti item top-level (tiap anak sudah punya title → tooltip label saat hover).
+   UNLAYERED (sengaja di luar @layer) — pola sama BL-64: menang atas utility pl-3
+   di @layer utilities tanpa peduli specificity. !important pada display mengalahkan
+   inline style Datastar (data-show) & display:none server-side. Hanya saat collapse;
+   expanded tetap dikendalikan toggle Datastar. */
+html[data-sidebar="collapsed"] .app-subnav {
+  display: flex !important;
+  padding-left: 0;
+}

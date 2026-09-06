@@ -219,8 +219,11 @@ func navGroup(it NavItem, activeHref string) g.Node {
 	}
 	// Anak-anak indent (pl-3 + garis pemisah tipis). display:none inline saat
 	// default tertutup → tak ada kedip "terbuka sesaat" sebelum Datastar aktif
-	// (pola sama dengan backdrop di AppShell).
-	kidsAttrs := []g.Node{h.Class("flex flex-col gap-1 pl-3"), data.Show("$" + sig)}
+	// (pola sama dengan backdrop di AppShell). app-subnav (BL-71): kait CSS agar
+	// saat sidebar collapse jadi rail 4rem, kontainer anak DIPAKSA tampak (ikon
+	// submenu terlihat & terpusat) — di rail chevron/label tersembunyi jadi toggle
+	// expand tak terjangkau; tanpa ini grup tertutup menyembunyikan ikon anaknya.
+	kidsAttrs := []g.Node{h.Class("app-subnav flex flex-col gap-1 pl-3"), data.Show("$" + sig)}
 	if !childActive {
 		kidsAttrs = append(kidsAttrs, g.Attr("style", "display:none"))
 	}
