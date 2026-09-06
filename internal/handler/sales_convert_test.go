@@ -84,19 +84,22 @@ func TestLeadConvertPage_DuplicateWarning_HiddenWhenNoMatch(t *testing.T) {
 	}
 }
 
-// TestLeadConvert_SucceedsDespiteDuplicate: SOFT-WARNING — POST konversi tetap
-// menghasilkan account+contact+deal baru walau kandidat duplikat ada, TIDAK
-// diblokir. Membuktikan cek duplikat murni informatif di sisi GET.
+// TestLeadConvert_SucceedsDespiteDuplicate: SOFT-WARNING NAMA — POST konversi
+// tetap menghasilkan account+contact+deal baru walau ada desa lain BERNAMA sama,
+// TIDAK diblokir. Soft-warning berbasis NAMA (GET) sengaja HIDUP berdampingan
+// dgn blok keras BL-67 berbasis village_code (POST): akun kandidat di sini
+// ber-village_code NULL (seedAccount), Desa yang dipilih saat convert kode
+// Kemendagri berbeda → tak memicu village_code_dup.
 func TestLeadConvert_SucceedsDespiteDuplicate(t *testing.T) {
 	env, uid := setupAccounts(t)
-	env.seedAccount(t, "Sukamaju", &uid, nil, nil) // kandidat duplikat.
+	env.seedAccount(t, "Sukamaju", &uid, nil, nil) // kandidat duplikat NAMA (village_code NULL).
 	lead := env.seedQualifiedLead(t, "Sukamaju", uid, nil)
 
 	form := url.Values{}
-	form.Set("village_name", "Sukamaju")
 	form.Set("account_type", "prospect")
 	form.Set("first_name", "Kontak Utama")
 	form.Set("deal_name", "Deal Sukamaju")
+	withVillage(form, firstVillage(t, env)) // BL-67: Desa Kemendagri WAJIB saat convert.
 
 	req := accountsReq(http.MethodPost, "/w/test/leads/"+itoa(lead.ID)+"/convert", form, itoa(lead.ID))
 	rec := env.runAccount(uid, "owner", "sales", req, env.h.LeadConvert)

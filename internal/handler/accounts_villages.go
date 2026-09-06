@@ -13,14 +13,17 @@ import (
 // tenant_id/RLS), tak menyentuh data tenant.
 
 // AccountVillages — GET /w/{workspace}/accounts/villages?district=<id>. Balas
-// JSON [{id,code,name}] Desa di bawah Kecamatan itu, terurut nama. Digerbang
-// requireAccountWrite (dipakai HANYA di form buat/sunting desa). district tak
-// sah → 400; kosong hasil = array kosong (bukan error).
+// JSON [{id,code,name}] Desa di bawah Kecamatan itu, terurut nama. Master global
+// READ-only → digerbang izin tulis Desa ATAU tulis Lead: dropdown Desa dipakai
+// form buat/sunting desa (crm:accounts write) DAN halaman konversi Lead (BL-67,
+// crm:leads write). district tak sah → 400; kosong hasil = array kosong (bukan
+// error).
 func (h *Handler) AccountVillages(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAccountWrite(w, r) {
+	ctx := r.Context()
+	if !canWriteAccountsPerm(ctx) && !canWriteLeadsPerm(ctx) {
+		h.renderAccountsForbidden(w, r)
 		return
 	}
-	ctx := r.Context()
 	did, code := optInt64(r.URL.Query().Get("district"))
 	if code != "" || did == nil {
 		http.Error(w, "parameter district tidak valid", http.StatusBadRequest)

@@ -19,9 +19,10 @@ import (
 // lead server-side (F4). Sama pola dengan phoneField accounts.
 
 // ConvertFormFields = nilai pra-isi review (dari lead). Semua string agar view
-// netral terhadap tipe DB.
+// netral terhadap tipe DB. BL-67: Desa dipilih dari master Kemendagri (dropdown
+// level 4 name="village_id"), bukan lagi nama teks bebas — VillageName dilepas;
+// DistrictID tetap prefill Kecamatan (turun jadi filter di regionSelectWithVillage).
 type ConvertFormFields struct {
-	VillageName string
 	AccountType string
 	DistrictID  string
 
@@ -67,6 +68,15 @@ type LeadConvertView struct {
 	// RegionsJSON = dataset penuh master wilayah (h.regionsJSON), diembed sekali
 	// utk cascading dropdown Provinsi/Kabupaten-Kota/Kecamatan (ADR 0009).
 	RegionsJSON string
+	// VillagesURL = endpoint lazy-fetch Desa level 4 (BL-66/67); dipakai
+	// regionSelectWithVillage karena dataset Desa terlalu besar utk diembed.
+	VillagesURL string
+
+	// BL-67: bila konversi ditolak karena desa sudah ber-akun (village_code_dup),
+	// handler memuat akun eksisting agar operator bisa MENUJU ke sana. DupAccountID
+	// != 0 → render pesan Err + tautan ke /accounts/{id}. Kosong → pesan Err polos.
+	DupAccountID    int64
+	DupAccountLabel string
 }
 
 // LeadConvert merender halaman review lengkap: header konteks, banner penjelasan,
@@ -95,7 +105,7 @@ func LeadConvert(v LeadConvertView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "convert-err", g.Text(v.Err)))
+		body = append(body, convertErrAlert(v))
 	}
 	if len(v.Duplicates) > 0 {
 		body = append(body, duplicateWarning(v.Base, v.Duplicates))
@@ -106,9 +116,10 @@ func LeadConvert(v LeadConvertView) g.Node {
 		h.Class("grid gap-4 min-w-0"),
 
 		formCard("Desa (Account)",
-			field("Nama Desa", "village_name", v.Fields.VillageName, true, "text"),
 			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.AccountTypes, true),
-			regionSelect("convert", v.RegionsJSON, v.Fields.DistrictID, false),
+			// BL-67: Desa dari master Kemendagri (level 4, wajib) — SAMA AccountForm;
+			// village_code/village_name/district_id diturunkan handler dari village_id.
+			regionSelectWithVillage("convert", v.RegionsJSON, v.Fields.DistrictID, "", v.VillagesURL, true),
 		),
 		formCard("Kontak Utama",
 			field("Nama Depan", "first_name", v.Fields.FirstName, true, "text"),
@@ -135,6 +146,29 @@ func LeadConvert(v LeadConvertView) g.Node {
 	body = append(body, h.Script(h.Src("/static/regions.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// convertErrAlert merender alert galat konversi. Untuk village_code_dup (BL-67:
+// desa sudah ber-akun HIDUP), handler menyertakan akun eksisting (DupAccountID) →
+// pesan disusul TAUTAN ke akun itu agar operator bisa menuju ke sana alih-alih
+// menebak. Galat lain (atau dup tanpa akun termuat) → alert pesan polos.
+func convertErrAlert(v LeadConvertView) g.Node {
+	if v.DupAccountID == 0 {
+		return ui.Alert(ui.VariantDestructive, "convert-err", g.Text(v.Err))
+	}
+	return ui.Alert(ui.VariantDestructive, "convert-err",
+		h.Div(
+			h.P(g.Text(v.Err)),
+			h.P(h.Class("mt-1"),
+				g.Text("Buka akun yang sudah ada: "),
+				h.A(
+					h.Href(v.Base+"/accounts/"+strconv.FormatInt(v.DupAccountID, 10)),
+					h.Class("link link-hover font-semibold"),
+					g.Text(v.DupAccountLabel),
+				),
+			),
+		),
+	)
 }
 
 // duplicateWarning merender banner SOFT-WARNING (bukan hard block — nama desa
