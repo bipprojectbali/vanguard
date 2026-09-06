@@ -9,15 +9,16 @@ import (
 )
 
 // regions_test.go — bukti master wilayah administratif GLOBAL (ADR 0009):
-// Provinsi → Kabupaten/Kota → Kecamatan, di-seed migrasi 00026 (bukan data yang
-// ditulis test ini sendiri — tabel ini TANPA RLS/tenant_id, dibaca lewat
-// New(pool) langsung, sama pola dgn q.CreateTenant di accounts_test.go).
+// Provinsi → Kabupaten/Kota → Kecamatan (00026) → Desa/Kelurahan (00039, BL-66),
+// di-seed migrasi (bukan data yang ditulis test ini sendiri — tabel ini TANPA
+// RLS/tenant_id, dibaca lewat New(pool) langsung, sama pola dgn q.CreateTenant di
+// accounts_test.go).
 //
 // Yang dijaga di sini, bila rusak, tak terlihat dari perilaku aplikasi sampai
 // dropdown wilayah kosong/salah jenjang di form:
 //
-//   (1) 3 level ter-seed dgn jumlah wajar (34 provinsi, ratusan kab/kota, ribuan
-//       kecamatan) — bukan cuma tabel kosong yang lolos migrasi.
+//   (1) 4 level ter-seed dgn jumlah wajar (34+ provinsi, ratusan kab/kota, ribuan
+//       kecamatan, puluhan ribu desa) — bukan cuma tabel kosong yang lolos migrasi.
 //   (2) ListRegenciesByProvince/ListDistrictsByRegency benar-benar MENYARING ke
 //       parent_region_id yang diminta, bukan balikin semua baris.
 //   (3) GetRegionAncestry balikin 3 nama sekaligus (Kecamatan/Kab-Kota/Provinsi)
@@ -44,7 +45,7 @@ func TestListProvinces_SeededFromMigration(t *testing.T) {
 	}
 }
 
-func TestListAllRegions_ThreeLevels(t *testing.T) {
+func TestListAllRegions_FourLevels(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 	q := New(pool)
@@ -53,10 +54,12 @@ func TestListAllRegions_ThreeLevels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list all regions: %v", err)
 	}
-	if len(rows) < 7000 {
-		t.Fatalf("harus >=7000 baris (3 level, cahyadsn/wilayah), got %d", len(rows))
+	// BL-66: migrasi 00039 menambah level 4 (Desa/Kelurahan, ~83.762 baris) di
+	// atas 3 level 00026 (~7.837) → total puluhan ribu.
+	if len(rows) < 80000 {
+		t.Fatalf("harus >=80000 baris (4 level, cahyadsn/wilayah), got %d", len(rows))
 	}
-	var l1, l2, l3 int
+	var l1, l2, l3, l4 int
 	for _, r := range rows {
 		switch r.Level {
 		case 1:
@@ -65,12 +68,14 @@ func TestListAllRegions_ThreeLevels(t *testing.T) {
 			l2++
 		case 3:
 			l3++
+		case 4:
+			l4++
 		default:
-			t.Fatalf("level di luar 1-3 lolos seed: %d (%s)", r.Level, r.Name)
+			t.Fatalf("level di luar 1-4 lolos seed: %d (%s)", r.Level, r.Name)
 		}
 	}
-	if l1 == 0 || l2 == 0 || l3 == 0 {
-		t.Fatalf("ketiga level harus terisi, got provinsi=%d kab/kota=%d kecamatan=%d", l1, l2, l3)
+	if l1 == 0 || l2 == 0 || l3 == 0 || l4 == 0 {
+		t.Fatalf("keempat level harus terisi, got provinsi=%d kab/kota=%d kecamatan=%d desa=%d", l1, l2, l3, l4)
 	}
 }
 

@@ -22,24 +22,6 @@ func newRNG(tag string) *rand.Rand {
 	return rand.New(rand.NewSource(seed))
 }
 
-// desaSeqOffset menghasilkan angka 0-4999 deterministik dari tag run (hash
-// string sederhana, pola sama newRNG) — basis segmen ke-4 village_code
-// pseudo-Kemendagri (lihat accounts.go/leads.go). Digeser seragam thd basis
-// lokal yang SUDAH disjoint (1..40 akun biasa vs 1000+seq akun hasil
-// konversi lead) supaya tak tabrakan sesama baris satu run, DAN beda tiap
-// run (tag beda) supaya rerun ke tenant yang sama tak bentrok idx_accounts_code
-// (UNIQUE tenant_id, village_code) — pengganti prefix "VC-<tag>-" lama.
-func desaSeqOffset(tag string) int {
-	var h int
-	for _, c := range tag {
-		h = h*31 + int(c)
-	}
-	if h < 0 {
-		h = -h
-	}
-	return h % 5000
-}
-
 // num mengubah string desimal → pgtype.Numeric (pola sama cmd/seedsubs).
 func num(s string) (pgtype.Numeric, error) {
 	var n pgtype.Numeric

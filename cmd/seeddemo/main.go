@@ -9,9 +9,13 @@
 //	go run ./cmd/seeddemo                 # ke workspace primer
 //	go run ./cmd/seeddemo -slug my-space  # ke workspace tertentu
 //
-// Idempotent-friendly: tiap run memakai tag waktu unik pada kode/nama entitas
-// (village_code, plan_code, dst) sehingga rerun tak bentrok unique index. Data
-// ini bertanda seed — aman dihapus manual kapan saja.
+// Idempotent-friendly SEBAGIAN: tiap run memakai tag waktu unik pada kode/nama
+// entitas ber-tag (entity_code, plan_code, email, dst) sehingga rerun tak
+// bentrok unique index. PENGECUALIAN sejak BL-66: village_code kini kode
+// Kemendagri ASLI dari kolam Desa tetap (regions level 4), jadi rerun ke tenant
+// SAMA akan bentrok idx_accounts_code — hapus dulu accounts lama sebelum seed
+// ulang (keputusan "hapus saja, seed ulang"). Data ini bertanda seed — aman
+// dihapus manual kapan saja.
 package main
 
 import (
@@ -131,6 +135,13 @@ func seedInto(ctx context.Context, q *db.Queries, tenantID int64, tag string) (s
 	if err != nil {
 		return stats, fmt.Errorf("pilih kecamatan: %w", err)
 	}
+	// BL-66: kolam Desa/Kelurahan REAL (regions level 4) dibagikan DISTINCT ke
+	// accounts + leads (+ account hasil konversi) — village_code = kode
+	// Kemendagri asli, bukan segmen ke-4 fiktif.
+	pool, err := newVillagePool(ctx, q, rng, districts)
+	if err != nil {
+		return stats, fmt.Errorf("kolam desa: %w", err)
+	}
 
 	masters, err := seedMasters(ctx, q, tenantID, tag, owner)
 	if err != nil {
@@ -141,7 +152,7 @@ func seedInto(ctx context.Context, q *db.Queries, tenantID int64, tag string) (s
 	stats.Playbooks = masters.playbookCount
 	stats.KBArticles = masters.kbArticleCount
 
-	accounts, err := seedAccounts(ctx, q, tenantID, tag, rng, owner, districts)
+	accounts, err := seedAccounts(ctx, q, tenantID, tag, rng, owner, pool)
 	if err != nil {
 		return stats, fmt.Errorf("accounts: %w", err)
 	}
@@ -153,7 +164,7 @@ func seedInto(ctx context.Context, q *db.Queries, tenantID int64, tag string) (s
 	}
 	stats.Contacts = len(contacts)
 
-	leadResult, err := seedLeads(ctx, q, tenantID, tag, rng, owner, districts)
+	leadResult, err := seedLeads(ctx, q, tenantID, tag, rng, owner, pool)
 	if err != nil {
 		return stats, fmt.Errorf("leads: %w", err)
 	}

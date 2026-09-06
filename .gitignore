@@ -24,3 +24,6 @@
 *.test
 *.out
 NOTE.md
+
+# seeddemo: binari Mach-O hasil `go build ./cmd/seeddemo` (bukan sumber)
+/seeddemo

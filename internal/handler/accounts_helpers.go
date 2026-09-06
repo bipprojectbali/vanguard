@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -37,6 +38,22 @@ func (h *Handler) loadOwnedAccount(w http.ResponseWriter, r *http.Request, id in
 		return db.Account{}, false
 	}
 	return a, true
+}
+
+// villageIDForCode me-resolve village_code (Kemendagri) tersimpan → id master
+// regions level 4, utk preselect dropdown Desa saat edit (BL-66). Kosong/legacy/
+// tak cocok master (kode pra-BL-66 buatan sistem, atau NULL) → "" (dropdown Desa
+// dibiarkan kosong; nama tersimpan tetap tampil sbg catatan di form). Soft-fail:
+// resolusi hanya kenyamanan prefill, bukan syarat form bisa dibuka.
+func (h *Handler) villageIDForCode(ctx context.Context, code *string) string {
+	if code == nil || *code == "" {
+		return ""
+	}
+	v, err := h.q(ctx).GetVillageByCode(ctx, *code)
+	if err != nil {
+		return ""
+	}
+	return strconv.FormatInt(v.ID, 10)
 }
 
 // int64PtrStr memformat *int64 → string ("" bila nil) untuk prefill dropdown.

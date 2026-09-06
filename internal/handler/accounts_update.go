@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -9,6 +10,8 @@ import (
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // accounts_update.go — sunting profil desa: form terisi (AccountEdit) + simpan
@@ -42,14 +45,21 @@ func (h *Handler) AccountEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fields := accountFormFields(a, canEditPhone(ctx))
+	// BL-66: preselect dropdown Desa dari village_code tersimpan (resolve → id
+	// master). Legacy/kode tak cocok → "" (dropdown kosong; nama tetap tampil
+	// sbg catatan di view).
+	fields.VillageID = h.villageIDForCode(ctx, a.VillageCode)
+
 	v := panel.AccountFormView{
 		Base:            base,
 		Action:          base + "/accounts/" + idStr,
 		IsEdit:          true,
 		Err:             wsErrMsg(r.URL.Query().Get("err")),
 		RegionsJSON:     h.regionsJSON(ctx),
+		VillagesURL:     base + "/accounts/villages",
 		PhoneEditable:   canEditPhone(ctx),
-		Fields:          accountFormFields(a, canEditPhone(ctx)),
+		Fields:          fields,
 		Types:           accountTypeOptions,
 		Statuses:        villageStatusOptions,
 		Classifications: classificationOptions,
@@ -91,16 +101,41 @@ func (h *Handler) AccountUpdate(w http.ResponseWriter, r *http.Request) {
 		contactPhone = a.ContactPhone
 	}
 
+	// BL-66: Desa/Kelurahan (village_id) opsional saat edit. Terpilih → turunkan
+	// nama, village_code (Kemendagri), & district_id dari master (satu sumber).
+	// Kosong → pertahankan nilai tersimpan (desa legacy yang dropdown-nya tak bisa
+	// preselect tak boleh kehilangan datanya) — pola sama dgn Teritori/contactPhone.
+	villageName := a.VillageName
+	villageCode := a.VillageCode
+	districtID := a.DistrictID
+	if form.VillageID != nil {
+		reg, err := h.q(ctx).GetVillageRegion(ctx, *form.VillageID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				wsRedirect(w, r, "/accounts/"+strconv.FormatInt(id, 10)+"/edit", "village_id")
+				return
+			}
+			h.Log.Error("accounts: get village region", "err", err)
+			wsRedirect(w, r, "/accounts/"+strconv.FormatInt(id, 10)+"/edit", "failed")
+			return
+		}
+		c := reg.Code
+		villageName = reg.Name
+		villageCode = &c
+		districtID = reg.ParentRegionID
+	}
+
 	// BL-60: field Teritori dilepas dari UI → form tak lagi mengirimnya
 	// (form.Territory selalu nil). Pertahankan nilai tersimpan agar edit profil
 	// tak menghapus data teritori lama (pola sama dgn contactPhone di atas).
 	uid := session.UserID(ctx)
 	if _, err := h.q(ctx).UpdateAccount(ctx, db.UpdateAccountParams{
-		VillageName:           form.VillageName,
+		VillageName:           villageName,
+		VillageCode:           villageCode,
 		AccountType:           form.AccountType,
 		Website:               form.Website,
 		Description:           form.Description,
-		DistrictID:            form.DistrictID,
+		DistrictID:            districtID,
 		VillageAddress:        form.VillageAddress,
 		PostalCode:            form.PostalCode,
 		Territory:             a.Territory,

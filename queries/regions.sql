@@ -58,3 +58,31 @@ WHERE d.id = sqlc.arg(district_id) AND d.level = 3;
 -- ke galat "district_id" (payload district_id bukan Kecamatan sah).
 SELECT code FROM regions
 WHERE id = sqlc.arg(id) AND level = 3;
+
+-- name: ListVillagesByDistrict :many
+-- Daftar Desa/Kelurahan (level 4) di bawah SATU Kecamatan (level 3) — dipakai
+-- endpoint server GET /accounts/villages (BL-66). TAK di-embed ke payload
+-- dropdown seperti 3 level di atas karena volume desa se-Indonesia (~83rb baris,
+-- ADR 0009): meng-embed semua akan membengkakkan HTML form → di-fetch same-origin
+-- per Kecamatan saat dipilih (lolos CSP default-src 'self'). `code` = Kode
+-- Kemendagri desa 4-segmen (mis. "32.01.01.2001") yang jadi village_code akun.
+SELECT id, code, name FROM regions
+WHERE level = 4 AND parent_region_id = sqlc.arg(parent_region_id)
+ORDER BY name;
+
+-- name: GetVillageRegion :one
+-- Resolusi SATU Desa/Kelurahan (level 4) dari id pilihan form → dipakai
+-- AccountCreate/AccountUpdate (BL-66) menurunkan village_code (=code, 4 segmen
+-- Kemendagri asli), village_name (=name), district_id (=parent_region_id
+-- Kecamatan induk). Filter level = 4 eksplisit: id level lain / tak ada →
+-- pgx.ErrNoRows → galat "village_id" (payload bukan Desa sah).
+SELECT id, code, name, parent_region_id FROM regions
+WHERE id = sqlc.arg(id) AND level = 4;
+
+-- name: GetVillageByCode :one
+-- Cari Desa/Kelurahan (level 4) via Kode Kemendagri — dipakai prefill form
+-- Sunting akun (BL-66): akun menyimpan village_code (bukan region id), jadi untuk
+-- pra-pilih dropdown Desa perlu memetakan balik code → id region. Tak ketemu
+-- (kode akun lama non-Kemendagri) → pgx.ErrNoRows, pemanggil biarkan dropdown kosong.
+SELECT id, code, name, parent_region_id FROM regions
+WHERE code = sqlc.arg(code) AND level = 4;

@@ -42,10 +42,17 @@ var (
 // Create/UpdateAccountParams. Kolom opsional bertipe pointer (nil = NULL);
 // village_budget pgtype.Numeric (nil-valid = NULL).
 type accountForm struct {
+	// VillageName & DistrictID TAK lagi berasal dari form (BL-66) — keduanya
+	// DITURUNKAN handler dari VillageID (master regions level 4): nama = regions.name,
+	// district = regions.parent_region_id, village_code = regions.code. Field
+	// tetap ada di struct sbg wadah nilai turunan yang dioper ke Create/Update.
 	VillageName string
+	// VillageID = id Desa/Kelurahan (regions level 4) terpilih. Wajib saat create
+	// (village_code Kemendagri diturunkan darinya); saat update nil = pertahankan
+	// desa lama (form edit desa legacy yang dropdown-nya tak bisa preselect).
+	VillageID *int64
 	// EntityCode = override kode sistem OPSIONAL (nil = auto). village_code
-	// (Kemendagri) TAK lagi field form — dibuat otomatis dari Kecamatan di jalur
-	// create (accounts_codes.go).
+	// (Kemendagri) TAK lagi field form — diturunkan dari Desa terpilih (VillageID).
 	EntityCode            *string
 	AccountType           string
 	Website               *string

@@ -81,3 +81,55 @@ func regionDistrictSelect(embedID, selectedDistrictID string, required bool) g.N
 		h.Select(sel...),
 	)
 }
+
+// regionSelectWithVillage = varian regionSelect + level 4 (Desa/Kelurahan) — utk
+// AccountForm SAJA (BL-66). Kecamatan di sini TURUN pangkat jadi filter murni
+// (name="district_id" tetap ter-submit tapi tak wajib & tak jadi sumber
+// kebenaran) — yang benar-benar dipakai handler adalah village_id, dari mana
+// village_code Kemendagri + district_id diturunkan. Berbeda dari 3 level di atas,
+// dataset Desa (~83.762 baris) TERLALU besar untuk diembed → level 4 di-lazy-fetch
+// server per Kecamatan lewat villagesURL (static/regions.js), bukan dari JSON
+// embed. selectedVillageID = prefill (form edit; kosong bila legacy/tak cocok →
+// dropdown Desa dibiarkan kosong, nama tersimpan tetap tampil sbg catatan di
+// view). required (create) menandai Desa wajib; Kecamatan diteruskan false.
+func regionSelectWithVillage(embedID, regionsJSON, selectedDistrictID, selectedVillageID, villagesURL string, required bool) g.Node {
+	return g.Group([]g.Node{
+		h.Script(
+			h.Type("application/json"),
+			g.Attr("data-region-json", embedID),
+			g.Raw(regionsJSON),
+		),
+		regionFieldSelect("Provinsi", embedID, "1"),
+		regionFieldSelect("Kabupaten/Kota", embedID, "2"),
+		regionDistrictSelect(embedID, selectedDistrictID, false),
+		regionVillageSelect(embedID, selectedVillageID, villagesURL, required),
+	})
+}
+
+// regionVillageSelect = level 4 (Desa/Kelurahan) — SATU-SATUNYA select yang
+// menentukan village_code (name="village_id"). data-villages-url dibaca
+// static/regions.js utk lazy-fetch daftar Desa saat Kecamatan berubah (dataset
+// terlalu besar utk embed); data-selected-value memicu preselect saat init (form
+// edit). Disabled() awal — regions.js mengaktifkan setelah Kecamatan terpilih &
+// daftar Desa termuat (sama pola level 3; kontrol disabled dikecualikan validasi
+// HTML, jadi Required baru mengikat setelah aktif). Penegakan sebenarnya di
+// backend (AccountCreate: village_id wajib).
+func regionVillageSelect(embedID, selectedVillageID, villagesURL string, required bool) g.Node {
+	id := "f-village_id-" + embedID
+	sel := []g.Node{
+		h.ID(id), h.Name("village_id"), h.Class("select text-base w-full"), h.Disabled(),
+		g.Attr("data-region-level", "4"),
+		g.Attr("data-region-group", embedID),
+		g.Attr("data-selected-value", selectedVillageID),
+		g.Attr("data-villages-url", villagesURL),
+		h.Option(h.Value(""), g.Text("— Pilih Desa/Kelurahan —")),
+	}
+	if required {
+		sel = append(sel, h.Required())
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor("Desa/Kelurahan", id, required),
+		h.Select(sel...),
+	)
+}

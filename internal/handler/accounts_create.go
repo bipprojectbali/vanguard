@@ -8,6 +8,7 @@ import (
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -29,30 +30,32 @@ func (h *Handler) AccountCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Kecamatan WAJIB di create (dijaga di sini, bukan di parseAccountForm yang
-	// dipakai bersama update — baris lama tanpa district tetap boleh disunting):
-	// village_code otomatis diturunkan darinya, tak bisa dirakit tanpa Kecamatan.
-	if form.DistrictID == nil {
-		wsRedirect(w, r, "/accounts/new", "district_required")
+	// Desa/Kelurahan WAJIB di create (dijaga di sini, bukan di parseAccountForm
+	// yang dipakai bersama update — desa lama tanpa Desa master tetap boleh
+	// disunting): village_code Kemendagri diturunkan darinya, tak bisa dirakit
+	// tanpa Desa terpilih.
+	if form.VillageID == nil {
+		wsRedirect(w, r, "/accounts/new", "village_required")
 		return
 	}
 
 	uid := session.UserID(ctx)
 	tenantID := session.TenantID(ctx)
 
-	// village_code Kemendagri OTOMATIS dari Kecamatan (validasi Kecamatan sah
-	// terjadi di sini: errInvalidDistrict → "district_id"). Didahulukan sebelum
-	// entity_code agar district palsu tak sempat memajukan counter kode sistem.
-	vcode, err := h.generateVillageCode(ctx, tenantID, *form.DistrictID)
+	// BL-66: village_code = kode Kemendagri ASLI dari master regions level 4,
+	// nama & district_id ikut diturunkan dari baris yang sama (satu sumber
+	// kebenaran). Desa tak dikenal (id palsu / bukan level 4) → "village_id".
+	reg, err := h.q(ctx).GetVillageRegion(ctx, *form.VillageID)
 	if err != nil {
-		if errors.Is(err, errInvalidDistrict) {
-			wsRedirect(w, r, "/accounts/new", "district_id")
+		if errors.Is(err, pgx.ErrNoRows) {
+			wsRedirect(w, r, "/accounts/new", "village_id")
 			return
 		}
-		h.Log.Error("accounts: generate village_code", "err", err)
+		h.Log.Error("accounts: get village region", "err", err)
 		wsRedirect(w, r, "/accounts/new", "failed")
 		return
 	}
+	vcode := reg.Code
 
 	// entity_code sistem: otomatis (form.EntityCode == nil) atau override manual.
 	code, err := h.allocEntityCode(ctx, tenantID, form.EntityCode)
@@ -65,13 +68,13 @@ func (h *Handler) AccountCreate(w http.ResponseWriter, r *http.Request) {
 	a, err := h.q(ctx).CreateAccount(ctx, db.CreateAccountParams{
 		TenantID:              tenantID,
 		EntityCode:            &code,
-		VillageName:           form.VillageName,
-		VillageCode:           &vcode,
+		VillageName:           reg.Name, // BL-66: nama dari master, bukan input
+		VillageCode:           &vcode,   // BL-66: kode Kemendagri asli
 		AccountType:           form.AccountType,
 		AccountOwner:          &uid, // pembuat = pemilik awal (dasar F3 ScopeOwn)
 		Website:               form.Website,
 		Description:           form.Description,
-		DistrictID:            form.DistrictID,
+		DistrictID:            reg.ParentRegionID, // BL-66: Kecamatan induk Desa
 		VillageAddress:        form.VillageAddress,
 		PostalCode:            form.PostalCode,
 		Territory:             form.Territory,

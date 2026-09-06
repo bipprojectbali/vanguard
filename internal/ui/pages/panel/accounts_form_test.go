@@ -28,6 +28,7 @@ func baseFormView() AccountFormView {
 		Action:          "/w/desa/accounts",
 		IsEdit:          false,
 		RegionsJSON:     "[]",
+		VillagesURL:     "/w/desa/accounts/villages",
 		PhoneEditable:   true,
 		Types:           []string{"prospect", "customer"},
 		Statuses:        []string{"Desa"},
@@ -52,6 +53,26 @@ func TestAccountForm_DropsSystemCodeAndTerritory(t *testing.T) {
 			if strings.Contains(out, banned) {
 				t.Errorf("isEdit=%v: form TAK boleh memuat %q (dilepas BL-60):\n%s", isEdit, banned, out)
 			}
+		}
+	}
+}
+
+// TestAccountForm_HasVillageSelect (BL-66): form memuat dropdown Desa/Kelurahan
+// (name="village_id") — level 4 wilayah yang jadi SATU-SATUNYA sumber village_code
+// Kemendagri — dgn kait lazy-fetch (data-villages-url dari VillagesURL) &
+// placeholder "— Pilih Desa/Kelurahan —"; wajib (required) di form tambah.
+func TestAccountForm_HasVillageSelect(t *testing.T) {
+	out := renderAccountForm(t, baseFormView())
+
+	for _, want := range []string{
+		`name="village_id"`,                             // dropdown Desa level 4
+		`data-region-level="4"`,                         // ditangani regions.js sbg level 4
+		`data-villages-url="/w/desa/accounts/villages"`, // endpoint lazy-fetch (VillagesURL)
+		"— Pilih Desa/Kelurahan —",                      // placeholder
+		"Desa/Kelurahan",                                // label
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("form tambah harus memuat %q utk dropdown Desa (BL-66):\n%s", want, out)
 		}
 	}
 }

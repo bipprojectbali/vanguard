@@ -10,9 +10,11 @@ import (
 )
 
 // leads.go — 25 leads across 5 status (8 New/6 Contacted/5 Qualified/
-// 3 Unqualified/3 Converted). 3 Converted MENIRU alur nyata
-// internal/handler/sales_convert_action.go: buat account+contact+deal lalu
-// MarkLeadConverted — bukan cuma set kolom status.
+// 3 Unqualified/3 Converted). Tiap lead mengambil satu Desa REAL dari pool
+// (BL-66): lead_name = nama Desa asli, district_id = kecamatan induk. 3 Converted
+// MENIRU alur nyata internal/handler/sales_convert_action.go (buat account+
+// contact+deal lalu MarkLeadConverted) dan account hasilnya MEMAKAI Desa yang
+// sama (nama + village_code Kemendagri asli), bukan cuma set kolom status.
 
 var leadSources = []string{"Website", "Referral", "Cold Call", "Event", "Pemda", "Media Sosial"}
 var unqualifiedReasons = []string{"Anggaran tidak cukup", "Sudah pakai kompetitor", "Tidak responsif", "Bukan target segmen"}
@@ -25,7 +27,7 @@ type leadResult struct {
 	convertedAccounts []accountInfo
 }
 
-func seedLeads(ctx context.Context, q *db.Queries, tenantID int64, tag string, rng *rand.Rand, owner *int64, districts []district) (leadResult, error) {
+func seedLeads(ctx context.Context, q *db.Queries, tenantID int64, tag string, rng *rand.Rand, owner *int64, pool *villagePool) (leadResult, error) {
 	var out leadResult
 
 	specs := []struct {
@@ -34,24 +36,20 @@ func seedLeads(ctx context.Context, q *db.Queries, tenantID int64, tag string, r
 	}{
 		{"New", 8}, {"Contacted", 6}, {"Qualified", 5}, {"Unqualified", 3}, {"Converted", 3},
 	}
-	names := shuffledVillageNames(rng)
-	nameIdx := 0
-	nextName := func() string {
-		n := names[nameIdx%len(names)]
-		nameIdx++
-		return n
-	}
 
 	seq := 0
 	for _, spec := range specs {
 		for i := 0; i < spec.count; i++ {
 			seq++
+			desa, err := pool.next()
+			if err != nil {
+				return out, err
+			}
 			code, err := q.GenerateEntityCode(ctx, tenantID, codes.EntityLead)
 			if err != nil {
 				return out, fmt.Errorf("kode lead: %w", err)
 			}
-			leadName := nextName()
-			d := districts[seq%len(districts)]
+			did := desa.DistrictID
 			contact := pick(rng, firstNames) + " " + pick(rng, lastNames)
 			mobile := fmt.Sprintf("0813%08d", rng.Intn(100000000))
 			email := fmt.Sprintf("lead%d.%s@contoh.id", seq, tag)
@@ -80,7 +78,7 @@ func seedLeads(ctx context.Context, q *db.Queries, tenantID int64, tag string, r
 			lead, err := q.CreateLead(ctx, db.CreateLeadParams{
 				TenantID:          tenantID,
 				EntityCode:        &code,
-				LeadName:          leadName,
+				LeadName:          desa.Name, // BL-66: nama Desa REAL, sama dgn account bila dikonversi
 				LeadOwner:         leadOwner,
 				ContactPerson:     &contact,
 				JobTitle:          ptr(pick(rng, positionCategories)),
@@ -89,7 +87,7 @@ func seedLeads(ctx context.Context, q *db.Queries, tenantID int64, tag string, r
 				Rating:            rating,
 				UnqualifiedReason: unqualified,
 				EstimatedValue:    estVal,
-				DistrictID:        &d.ID,
+				DistrictID:        &did,
 				MobilePhone:       &mobile,
 				Whatsapp:          &mobile,
 				Email:             &email,
@@ -103,7 +101,7 @@ func seedLeads(ctx context.Context, q *db.Queries, tenantID int64, tag string, r
 			if spec.status != "Converted" {
 				continue
 			}
-			acc, err := convertLead(ctx, q, tenantID, tag, seq, owner, lead, contact, d)
+			acc, err := convertLead(ctx, q, tenantID, owner, lead, contact, desa)
 			if err != nil {
 				return out, fmt.Errorf("konversi lead #%d: %w", lead.ID, err)
 			}
@@ -115,23 +113,24 @@ func seedLeads(ctx context.Context, q *db.Queries, tenantID int64, tag string, r
 
 // convertLead meniru alur sales_convert_action.go: Account → Contact → Deal
 // (stage awal "Prospecting") → MarkLeadConverted menautkan ketiganya ke lead.
-func convertLead(ctx context.Context, q *db.Queries, tenantID int64, tag string, seq int, owner *int64, lead db.Lead, contactName string, d district) (accountInfo, error) {
+// BL-66: account hasil konversi memakai Desa REAL yang sama dgn lead (nama +
+// village_code Kemendagri asli + kecamatan induk).
+func convertLead(ctx context.Context, q *db.Queries, tenantID int64, owner *int64, lead db.Lead, contactName string, desa village) (accountInfo, error) {
 	accCode, err := q.GenerateEntityCode(ctx, tenantID, codes.EntityAccount)
 	if err != nil {
 		return accountInfo{}, fmt.Errorf("kode account: %w", err)
 	}
-	// Basis 1000+seq (bukan seq langsung) supaya disjoint dari basis 1..40
-	// akun biasa di accounts.go — lihat desaSeqOffset.
-	villageCode := fmt.Sprintf("%s.%04d", d.Code, (desaSeqOffset(tag)+1000+seq)%10000)
+	villageCode := desa.Code
+	districtID := desa.DistrictID
 	acc, err := q.CreateAccount(ctx, db.CreateAccountParams{
 		TenantID:      tenantID,
 		EntityCode:    &accCode,
-		VillageName:   lead.LeadName,
+		VillageName:   desa.Name,
 		VillageCode:   &villageCode,
 		AccountType:   "customer",
 		AccountOwner:  owner,
 		AssignedCsm:   owner,
-		DistrictID:    &d.ID,
+		DistrictID:    &districtID,
 		VillageStatus: ptr("Desa"),
 		CreatedBy:     owner,
 	})
