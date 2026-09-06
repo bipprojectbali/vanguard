@@ -68,3 +68,45 @@ func TestAccountDetail_SystemCodeValueNotLeaked(t *testing.T) {
 		t.Errorf("nilai kode sistem (pola DESA-XXX) tak boleh terrender di detail:\n%s", out)
 	}
 }
+
+// TestAccountDetail_PairedSectionsEqualHeight (BL-62): kartu detail & ringkasan
+// dirender dalam SATU grid 2-kolom ber-items-stretch (bukan dua stack tertumpuk
+// independen) dan berurutan selang-seling, sehingga tiap pasangan berbagi baris
+// grid → grid-item meregang setinggi pasangan tertinggi (tepi bawah rata).
+// Regresi: kembali ke dua stack membuat urutan mengelompok kiri-lalu-kanan &
+// menghapus items-stretch.
+func TestAccountDetail_PairedSectionsEqualHeight(t *testing.T) {
+	v := AccountDetailView{
+		Base:        "/w/desa",
+		ID:          3,
+		VillageName: "Desa Sejajar",
+		VillageCode: "10.01.01.2001",
+		AccountType: "Pelanggan",
+	}
+	out := renderAccountDetail(t, v)
+
+	// items-stretch menegaskan pasangan sebaris meregang setinggi yang tertinggi.
+	if !strings.Contains(out, "items-stretch") {
+		t.Errorf("grid detail harus items-stretch agar pasangan setinggi:\n%s", out)
+	}
+
+	// Urutan selang-seling: tiap ringkasan (kanan) jatuh SETELAH kartu detail
+	// pasangannya (kiri) dan SEBELUM kartu kiri berikutnya — bukti keduanya
+	// sebaris. Di layout lama semua kartu kiri mendahului seluruh ringkasan.
+	order := []string{
+		"Identitas", "Ringkasan Langganan",
+		"Wilayah", "Ringkasan Customer Success",
+		"Profil Desa", "Sistem",
+	}
+	prev := -1
+	for _, title := range order {
+		i := strings.Index(out, title)
+		if i < 0 {
+			t.Fatalf("judul kartu %q tak ditemukan:\n%s", title, out)
+		}
+		if i <= prev {
+			t.Errorf("urutan kartu salah: %q (idx %d) harus setelah judul sebelumnya (idx %d) — pasangan tak sebaris:\n%s", title, i, prev, out)
+		}
+		prev = i
+	}
+}
