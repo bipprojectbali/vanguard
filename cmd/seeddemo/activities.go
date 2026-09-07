@@ -21,7 +21,18 @@ import (
 // (task/meeting/call/chat/note). email belum ber-form → tak diseed agar list tak
 // menampilkan jenis yang tak bisa dibuat/disunting user.
 var activityKinds = []string{"task", "meeting", "call", "chat", "note"}
-var activityStatuses = []string{"Not Started", "In Progress", "Completed", "Deferred", "Planned", "Held", "Cancelled", "No-Show"}
+
+// activityStatusByKind — status SAH per jenis, cermin partisi form UI
+// (internal/handler/sales_activities_form.go: validTaskStatuses/validMeetingStatuses)
+// & parser (sales_activities_parse.go). Kind tanpa entri (call/chat/note) TAK
+// ber-field status di form → status tetap NULL. Sebelumnya seed memilih ACAK
+// dari gabungan semua status (mis. Pertemuan ber-"Deferred") — data tak realistis;
+// map ini menegakkan partisi yang sama dengan yang dibuat user via UI (BL-72).
+var activityStatusByKind = map[string][]string{
+	"task":    {"Not Started", "In Progress", "Completed", "Deferred"},
+	"meeting": {"Planned", "Held", "Cancelled", "No-Show"},
+	// call/chat/note: form tak punya field status → NULL.
+}
 
 const activityTotal = 90
 
@@ -70,7 +81,12 @@ func seedActivities(ctx context.Context, q *db.Queries, tenantID int64, rng *ran
 		}
 
 		kind := activityKinds[i%len(activityKinds)]
-		status := pick(rng, activityStatuses)
+		// status per-kind: task/meeting ber-daur hidup; call/chat/note NULL.
+		var status *string
+		if opts, ok := activityStatusByKind[kind]; ok {
+			s := pick(rng, opts)
+			status = &s
+		}
 		priority := pick(rng, []string{"Low", "Normal", "High"})
 		subject := subjectFor(kind, t.targetType)
 
@@ -127,7 +143,7 @@ func seedActivities(ctx context.Context, q *db.Queries, tenantID int64, rng *ran
 			TargetID:        targetID,
 			OwnerID:         activityOwner,
 			ActivityContext: &t.context,
-			Status:          &status,
+			Status:          status,
 			Notes:           ptr("Dicatat via seeddemo untuk keperluan demo dasbor."),
 			DueDate:         dueDate,
 			Priority:        &priority,

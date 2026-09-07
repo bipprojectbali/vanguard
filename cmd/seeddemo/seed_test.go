@@ -215,4 +215,53 @@ func TestSeedInto(t *testing.T) {
 	if villageCodeCount == 0 {
 		t.Error("tidak ada account dgn village_code terisi — seharusnya semua desa demo punya kode")
 	}
+
+	// 7. Status aktivitas mengikuti PARTISI per-kind seperti form UI (BL-72):
+	// task ∈ {Not Started, In Progress, Completed, Deferred}; meeting ∈
+	// {Planned, Held, Cancelled, No-Show}; call/chat/note TAK ber-field status →
+	// NULL. Sebelum fix, seed memilih acak dari gabungan semua status sehingga
+	// mis. Pertemuan bisa ber-"Deferred" (data tak realistis, mustahil via UI).
+	allowedByKind := map[string]map[string]bool{
+		"task":    {"Not Started": true, "In Progress": true, "Completed": true, "Deferred": true},
+		"meeting": {"Planned": true, "Held": true, "Cancelled": true, "No-Show": true},
+	}
+	actRows, err := pkgPool.Query(ctx,
+		`SELECT kind, status FROM activities WHERE tenant_id = $1`, tenantID)
+	if err != nil {
+		t.Fatalf("query activities kind/status: %v", err)
+	}
+	var seenTaskStatus, seenMeetingStatus bool
+	for actRows.Next() {
+		var kind string
+		var status *string
+		if err := actRows.Scan(&kind, &status); err != nil {
+			t.Fatalf("scan activity kind/status: %v", err)
+		}
+		switch kind {
+		case "task", "meeting":
+			if status == nil {
+				t.Errorf("aktivitas kind %q ber-status NULL — seharusnya terisi", kind)
+				continue
+			}
+			if !allowedByKind[kind][*status] {
+				t.Errorf("aktivitas kind %q ber-status %q di luar partisi UI", kind, *status)
+			}
+			if kind == "task" {
+				seenTaskStatus = true
+			} else {
+				seenMeetingStatus = true
+			}
+		case "call", "chat", "note":
+			if status != nil {
+				t.Errorf("aktivitas kind %q ber-status %q — form tak punya field status, seharusnya NULL", kind, *status)
+			}
+		}
+	}
+	actRows.Close()
+	if !seenTaskStatus {
+		t.Error("tidak ada aktivitas task ber-status — partisi status task tak terverifikasi")
+	}
+	if !seenMeetingStatus {
+		t.Error("tidak ada aktivitas meeting ber-status — partisi status meeting tak terverifikasi")
+	}
 }
