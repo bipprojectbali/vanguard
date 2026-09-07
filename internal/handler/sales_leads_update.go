@@ -39,6 +39,7 @@ func (h *Handler) LeadEdit(w http.ResponseWriter, r *http.Request) {
 		Fields:      leadFormFields(l, canEditPhone(ctx)),
 		Statuses:    leadStatusOptions,
 		Ratings:     leadRatingOptions,
+		Sources:     leadSourceOptions,
 	}
 	h.renderWorkspaceShell(w, r, "Sunting Lead", "/leads", panel.LeadForm(v))
 }

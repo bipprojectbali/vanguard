@@ -16,7 +16,11 @@ import (
 // contact+deal lalu MarkLeadConverted) dan account hasilnya MEMAKAI Desa yang
 // sama (nama + village_code Kemendagri asli), bukan cuma set kolom status.
 
-var leadSources = []string{"Website", "Referral", "Cold Call", "Event", "Pemda", "Media Sosial"}
+// BL-82: Sumber Lead kini enum terkunci di form ({Referral, Event, Website,
+// Cold Call, Tender, Dinas PMD, Lainnya}). Seed pakai subset himpunan itu agar
+// data demo tampil terpilih di dropdown (nilai lama "Pemda"/"Media Sosial" di
+// luar himpunan). "Lainnya" sengaja tak diseed (itu fallback, bukan sumber spesifik).
+var leadSources = []string{"Website", "Referral", "Cold Call", "Event", "Tender", "Dinas PMD"}
 var unqualifiedReasons = []string{"Anggaran tidak cukup", "Sudah pakai kompetitor", "Tidak responsif", "Bukan target segmen"}
 
 // leadResult = ringkasan hasil seedLeads: total baris + account BARU yang

@@ -15,6 +15,8 @@ func wsErrMsgCRM(code string) string {
 		return "Status lead tidak valid."
 	case "lead_rating":
 		return "Rating lead tidak valid."
+	case "lead_source":
+		return "Sumber lead tidak valid (pilih dari daftar)."
 	case "estimated":
 		return "Nilai estimasi harus berupa angka."
 	case "mobile_phone":
