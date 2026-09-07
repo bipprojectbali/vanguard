@@ -60,11 +60,7 @@ func (h *Handler) dealAccountOptions(ctx context.Context) ([]panel.AccountMember
 	}
 	opts := make([]panel.AccountMemberOption, 0, len(rows))
 	for _, a := range rows {
-		label := a.VillageName
-		if a.EntityCode != nil && *a.EntityCode != "" {
-			label = *a.EntityCode + " — " + a.VillageName
-		}
-		opts = append(opts, panel.AccountMemberOption{ID: a.ID, Label: label})
+		opts = append(opts, panel.AccountMemberOption{ID: a.ID, Label: accountPickerLabel(a.VillageCode, a.VillageName)})
 	}
 	return opts, nil
 }

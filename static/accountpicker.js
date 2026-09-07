@@ -1,7 +1,8 @@
 // Pemilih desa induk yang bisa diketik/dicari (BL-5). File terpisah (bukan
 // inline) agar lolos CSP script-src 'self' — pola sama regions.js. Native
 // <datalist> menyediakan autocomplete browser; skrip ini memetakan nama desa
-// yang diketik → id numerik ke input hidden name="account_id" yang ter-submit.
+// yang diketik → nilai opaque (id akun numerik ATAU "type:id" target) ke input
+// hidden ter-submit. Nilai opsi diambil dari atribut data-account-id.
 //
 // Kontrak markup (dirender contactAccountPickerField, contacts_form.go):
 //   [data-account-picker]           wadah satu pemilih
@@ -31,6 +32,11 @@
     var list = listId ? document.getElementById(listId) : null;
     if (!list) return;
 
+    // Pesan validity kustom (mis. "Pilih target dari daftar." untuk picker
+    // target aktivitas). Default: teks desa, agar picker lama tanpa atribut
+    // berperilaku sama seperti sebelumnya.
+    var invalidMsg = root.getAttribute("data-invalid-msg") || "Pilih desa dari daftar.";
+
     // sync: cari opsi yang namanya cocok persis dgn ketikan, set id ke hidden.
     function sync() {
       var typed = search.value.trim().toLowerCase();
@@ -48,7 +54,7 @@
       // Ada ketikan tapi tak ada opsi cocok → tandai invalid agar form tak
       // ter-submit dgn desa yang bukan pilihan sah. Kosong dibiarkan ke
       // required bawaan (pesan "wajib diisi" browser).
-      search.setCustomValidity(typed && !id ? "Pilih desa dari daftar." : "");
+      search.setCustomValidity(typed && !id ? invalidMsg : "");
     }
 
     search.addEventListener("input", sync);

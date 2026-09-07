@@ -131,6 +131,7 @@ func ActivityForm(v ActivityFormView) g.Node {
 	)
 	body = append(body, h.FormEl(form...))
 
+	body = append(body, h.Script(h.Src("/static/accountpicker.js"), h.Defer()))
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
@@ -187,30 +188,21 @@ func activityTargetField(v ActivityFormView) g.Node {
 				g.Text("Target tak dapat diubah setelah aktivitas dibuat.")),
 		)
 	}
-	return activityTargetSelect("Target", "target", v.TargetValue, v.Targets)
-}
-
-// activityTargetSelect = dropdown target polimorfik. Nilai opsi = "type:id"
-// (bukan numerik) → tak bisa pakai memberSelect. Wajib (opsi kosong penuntun,
-// backend menolak bila tak sah).
-func activityTargetSelect(label, name, current string, opts []ActivityTargetOption) g.Node {
-	nodes := []g.Node{h.Option(h.Value(""), g.Text("— Pilih target —"))}
-	for _, o := range opts {
-		attrs := []g.Node{h.Value(o.Value)}
-		if o.Value == current {
-			attrs = append(attrs, h.Selected())
-		}
-		nodes = append(nodes, h.Option(append(attrs, g.Text(o.Label))...))
+	opts := make([]TypeaheadOption, 0, len(v.Targets))
+	for _, t := range v.Targets {
+		opts = append(opts, TypeaheadOption{Value: t.Value, Label: t.Label})
 	}
-	sel := []g.Node{
-		h.ID("f-" + name), h.Name(name), h.Required(),
-		h.Class("select text-base w-full"),
-	}
-	return h.Div(
-		h.Class("grid gap-1 min-w-0"),
-		labelFor(label, "f-"+name, true),
-		h.Select(append(sel, g.Group(nodes))...),
-	)
+	return typeaheadPickerField(typeaheadPickerConfig{
+		Name:        "target",
+		Label:       "Target",
+		ListID:      "target-options",
+		Options:     opts,
+		Current:     v.TargetValue,
+		Required:    true,
+		Placeholder: "Ketik untuk mencari deal, desa, atau kontak…",
+		Help:        "Ketik untuk mencari, lalu pilih target dari daftar yang muncul.",
+		InvalidMsg:  "Pilih target dari daftar.",
+	})
 }
 
 // activityKindFields merender kartu field spesifik-kind. Edit: satu kartu (kind

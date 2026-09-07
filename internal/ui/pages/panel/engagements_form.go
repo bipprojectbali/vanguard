@@ -62,28 +62,21 @@ func EngagementForm(v EngagementFormView) g.Node {
 			h.A(h.Href(v.Base+"/engagements"), h.Class("btn btn-ghost min-h-11"), g.Text("Batal")),
 		),
 	))
+	body = append(body, h.Script(h.Src("/static/accountpicker.js"), h.Defer()))
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
 // engagementAccountSelect = dropdown pilih desa (wajib). Scope sudah difilter
 // handler (CSM melihat desanya; Admin/Manager melihat semua).
 func engagementAccountSelect(accounts []EngagementAccountOption) g.Node {
-	opts := make([]g.Node, 0, len(accounts)+1)
-	opts = append(opts, h.Option(h.Value(""), g.Text("— Pilih desa —")))
+	opts := make([]TypeaheadOption, 0, len(accounts))
 	for _, a := range accounts {
-		opts = append(opts,
-			h.Option(h.Value(strconv.FormatInt(a.ID, 10)), g.Text(a.Name)),
-		)
+		opts = append(opts, TypeaheadOption{
+			Value: strconv.FormatInt(a.ID, 10),
+			Label: a.Name,
+		})
 	}
-	return h.Div(
-		h.Class("grid gap-2 min-w-0"),
-		ui.Label("Desa", h.For("account_id")),
-		h.Select(
-			h.ID("account_id"), h.Name("account_id"), h.Required(),
-			h.Class("select text-base w-full"),
-			g.Group(opts),
-		),
-	)
+	return accountTypeaheadField("account_id", "Desa", opts, true, false)
 }
 
 // engagementTypeSelect = dropdown tipe engagement (wajib). Label UI dihasilkan

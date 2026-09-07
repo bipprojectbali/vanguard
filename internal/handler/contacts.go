@@ -52,7 +52,7 @@ func (h *Handler) ContactNew(w http.ResponseWriter, r *http.Request) {
 	accountBase := base + "/accounts/" + strconv.FormatInt(accountID, 10)
 	h.renderWorkspaceShell(w, r, "Tambah Kontak", "/accounts", panel.ContactForm(panel.ContactFormView{
 		AccountBase: accountBase,
-		AccountName: account.VillageName,
+		AccountName: accountPickerLabel(account.VillageCode, account.VillageName),
 		Action:      accountBase + "/contacts",
 		IsEdit:      false,
 		Err:         wsErrMsg(r.URL.Query().Get("err")),

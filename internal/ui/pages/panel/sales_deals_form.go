@@ -126,51 +126,21 @@ func DealForm(v DealFormView) g.Node {
 // belum ada (bisa di luar batas dealAccountPickerLimit) agar sync klien tak
 // mengosongkan id yang sah.
 func dealAccountPickerField(current, currentLabel string, accounts []AccountMemberOption) g.Node {
-	opts := make([]g.Node, 0, len(accounts)+1)
-	inList := false
+	opts := make([]TypeaheadOption, 0, len(accounts))
 	for _, a := range accounts {
-		id := strconv.FormatInt(a.ID, 10)
-		if id == current {
-			inList = true
-		}
-		opts = append(opts, h.Option(
-			h.Value(a.Label),
-			g.Attr("data-account-id", id),
-		))
+		opts = append(opts, TypeaheadOption{
+			Value: strconv.FormatInt(a.ID, 10),
+			Label: a.Label,
+		})
 	}
-	// Desa terpilih di luar batas picker → sisipkan agar preselect tetap cocok.
-	if current != "" && currentLabel != "" && !inList {
-		opts = append(opts, h.Option(
-			h.Value(currentLabel),
-			g.Attr("data-account-id", current),
-		))
-	}
-
-	search := []g.Node{
-		h.ID("f-account_id_search"), h.Type("text"),
-		h.List("account-options"), h.Placeholder("Ketik nama desa…"),
-		g.Attr("autocomplete", "off"), g.Attr("data-account-search", ""),
-		h.Class("input text-base w-full min-h-11"), h.Required(),
-	}
-	hidden := []g.Node{
-		h.Type("hidden"), h.ID("f-account_id"), h.Name("account_id"),
-		g.Attr("data-account-value", ""),
-	}
-	if current != "" {
-		hidden = append(hidden, h.Value(current))
-	}
-	if currentLabel != "" {
-		search = append(search, h.Value(currentLabel))
-	}
-
-	return h.Div(
-		h.Class("grid gap-1 min-w-0"),
-		g.Attr("data-account-picker", ""),
-		labelFor("Desa", "f-account_id_search", true),
-		ui.Input(search...),
-		h.Input(hidden...),
-		h.DataList(append([]g.Node{h.ID("account-options")}, opts...)...),
-		h.P(h.Class("text-xs text-base-content/60"),
-			g.Text("Ketik untuk mencari, lalu pilih desa dari daftar yang muncul.")),
-	)
+	return typeaheadPickerField(typeaheadPickerConfig{
+		Name:         "account_id",
+		Label:        "Desa",
+		ListID:       "account-options",
+		Options:      opts,
+		Current:      current,
+		CurrentLabel: currentLabel,
+		Required:     true,
+		Placeholder:  "Ketik kode Kemendagri atau nama desa…",
+	})
 }

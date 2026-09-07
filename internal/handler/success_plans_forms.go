@@ -45,7 +45,7 @@ func (h *Handler) SuccessPlanNew(w http.ResponseWriter, r *http.Request) {
 	}
 	accountOpts := make([]panel.SuccessPlanAccountOption, 0, len(accts))
 	for _, a := range accts {
-		accountOpts = append(accountOpts, panel.SuccessPlanAccountOption{ID: a.ID, Name: a.VillageName})
+		accountOpts = append(accountOpts, panel.SuccessPlanAccountOption{ID: a.ID, Name: accountPickerLabel(a.VillageCode, a.VillageName)})
 	}
 
 	// Members dropdown: owner_csm (opsional).
@@ -103,7 +103,7 @@ func (h *Handler) SuccessPlanEdit(w http.ResponseWriter, r *http.Request) {
 		Statuses: successPlanStatusValues,
 
 		// Data akun (read-only di form edit — tampilkan saja, tanpa dropdown desa).
-		AccountName: acct.VillageName,
+		AccountName: accountPickerLabel(acct.VillageCode, acct.VillageName),
 
 		// Nilai saat ini.
 		CurrentPlanName:      sp.PlanName,

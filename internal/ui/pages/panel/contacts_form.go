@@ -187,31 +187,14 @@ func ContactForm(v ContactFormView) g.Node {
 //     setCustomValidity → submit ditahan (backend tetap penjaga: loadOwnedAccount
 //     → 404 di luar cakupan, jadi memalsu id tak menembus F3).
 func contactAccountPickerField(accounts []AccountOption) g.Node {
-	opts := make([]g.Node, 0, len(accounts))
+	opts := make([]TypeaheadOption, 0, len(accounts))
 	for _, a := range accounts {
-		opts = append(opts, h.Option(
-			h.Value(a.Name),
-			g.Attr("data-account-id", strconv.FormatInt(a.ID, 10)),
-		))
+		opts = append(opts, TypeaheadOption{
+			Value: strconv.FormatInt(a.ID, 10),
+			Label: a.Name,
+		})
 	}
-	return h.Div(
-		h.Class("grid gap-1 min-w-0 sm:col-span-2"),
-		g.Attr("data-account-picker", ""),
-		labelFor("Desa", "f-account_id_search", true),
-		ui.Input(
-			h.ID("f-account_id_search"), h.Type("text"),
-			h.List("account-options"), h.Placeholder("Ketik nama desa…"),
-			g.Attr("autocomplete", "off"), g.Attr("data-account-search", ""),
-			h.Class("input text-base w-full min-h-11"), h.Required(),
-		),
-		h.Input(
-			h.Type("hidden"), h.ID("f-account_id"), h.Name("account_id"),
-			g.Attr("data-account-value", ""),
-		),
-		h.DataList(append([]g.Node{h.ID("account-options")}, opts...)...),
-		h.P(h.Class("text-xs text-base-content/60"),
-			g.Text("Ketik untuk mencari, lalu pilih desa dari daftar yang muncul.")),
-	)
+	return accountTypeaheadField("account_id", "Desa", opts, true, true)
 }
 
 // contactPhoneField = nomor pribadi (HP/WhatsApp). Bila tak boleh disunting (bukan

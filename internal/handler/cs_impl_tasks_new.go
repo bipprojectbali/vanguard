@@ -45,7 +45,7 @@ func (h *Handler) CSImplTaskNew(w http.ResponseWriter, r *http.Request) {
 	}
 	accountOpts := make([]panel.CSImplTaskAccountOption, 0, len(accts))
 	for _, a := range accts {
-		accountOpts = append(accountOpts, panel.CSImplTaskAccountOption{ID: a.ID, Name: a.VillageName})
+		accountOpts = append(accountOpts, panel.CSImplTaskAccountOption{ID: a.ID, Name: accountPickerLabel(a.VillageCode, a.VillageName)})
 	}
 
 	// Members dropdown: untuk owner_id (opsional, penanggung jawab task).

@@ -196,10 +196,10 @@ SELECT EXISTS(
 -- Desa yang boleh DITULIS aktor (F3), untuk dropdown pemilih desa di form "Tambah
 -- Kontak" global. Predikat ownership IDENTIK ListAccounts (scope_all/is_sales/
 -- is_csm → fail-closed: ketiganya false = NOL baris), tapi TANPA keyset dan hanya
--- kolom untuk <option> (id + nama), urut nama agar dropdown terbaca. Tak
+-- kolom untuk <option> (id + nama + village_code Kemendagri BL-76), urut nama agar dropdown terbaca. Tak
 -- dipaginasi: dipakai untuk MEMILIH satu desa, bukan menelusuri — RLS sudah
 -- mengurung ke satu workspace.
-SELECT id, village_name FROM accounts
+SELECT id, village_name, village_code FROM accounts
 WHERE deleted_at IS NULL
   AND (
       sqlc.arg(scope_all)::boolean
