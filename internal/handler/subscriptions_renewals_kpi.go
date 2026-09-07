@@ -38,7 +38,7 @@ func renewalKPIView(k db.RenewalKPIsRow) panel.RenewalKPIs {
 	return panel.RenewalKPIs{
 		Due30:       strconv.FormatInt(k.Due30, 10),
 		Grace:       strconv.FormatInt(k.Grace, 10),
-		AutoRenew:   strconv.FormatInt(k.AutoActive, 10),
+		Renewed:     strconv.FormatInt(k.RenewedCount, 10),
 		RenewalRate: ratePct(k.RenewedPast12m, k.DuePast12m),
 	}
 }

@@ -1178,7 +1178,7 @@ type Querier interface {
 	// MENGIKUTI jendela ListRenewals agar KPI konsisten dgn tab:
 	//   * due_30      : Active/PendingApproval, end_date in [today, today+30] (= window 'due').
 	//   * grace       : Active, end_date < today (= window 'grace').
-	//   * auto_active : Active dgn auto_renew=true (aman, diperpanjang otomatis).
+	//   * renewed     : renewal_status = 'Renewed' (= window 'renewed', sudah diperpanjang).
 	//   * Renewal Rate 12 bln (BL-94, definisi SAMA dgn ReportRenewalSummary): renewed_past
 	//     / due_past atas kohort jatuh tempo (end_date < today) DALAM 12 bln terakhir;
 	//     "diperpanjang" = ada baris renewal anak (previous_subscription_id menunjuk balik).

@@ -77,11 +77,11 @@ func TestRenewalKPIView(t *testing.T) {
 	got := renewalKPIView(db.RenewalKPIsRow{
 		Due30:          7,
 		Grace:          3,
-		AutoActive:     12,
+		RenewedCount:   12,
 		DuePast12m:     4,
 		RenewedPast12m: 3,
 	})
-	if got.Due30 != "7" || got.Grace != "3" || got.AutoRenew != "12" {
+	if got.Due30 != "7" || got.Grace != "3" || got.Renewed != "12" {
 		t.Errorf("count format salah: %+v", got)
 	}
 	if got.RenewalRate != "75,0%" { // 3/4 = 75%

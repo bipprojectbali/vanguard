@@ -22,7 +22,7 @@ import (
 type RenewalKPIs struct {
 	Due30       string // jatuh tempo ≤30 hari (Active/PendingApproval)
 	Grace       string // lewat tempo, masih Active (masa tenggang)
-	AutoRenew   string // langganan Active auto-renew
+	Renewed     string // langganan sudah diperpanjang (renewal_status=Renewed)
 	RenewalRate string // % diperpanjang / due, jendela 12 bln, "%"
 }
 
@@ -60,7 +60,7 @@ type RenewalsView struct {
 	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
-// RenewalsList merender halaman: header + ekspor + banner + KPI + tab + tabel + pager.
+// RenewalsList merender halaman: header + ekspor + KPI + tab + tabel + pager.
 func RenewalsList(v RenewalsView) g.Node {
 	body := []g.Node{
 		h.Div(
@@ -72,7 +72,6 @@ func RenewalsList(v RenewalsView) g.Node {
 			),
 			renewalExportBtn(v),
 		),
-		renewalInfoBanner(),
 		renewalKPICards(v.KPIs),
 		renewalWindowTabs(v),
 	}
@@ -85,15 +84,6 @@ func RenewalsList(v RenewalsView) g.Node {
 		body = append(body, renewalsTable(v), renewalsPager(v))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
-}
-
-// renewalInfoBanner = banner info netral (token default, bukan warning) yang
-// mengarahkan aksi perpanjangan ke Customer Success → Renewal Management. Dasbor
-// ini read-only; banner mencegah user mencari tombol renew di sini.
-func renewalInfoBanner() g.Node {
-	return ui.Alert(ui.VariantDefault, "renewals-info",
-		h.Span(g.Text("Dasbor pantau read-only. Aksi perpanjangan dikerjakan di Customer Success → Renewal Management.")),
-	)
 }
 
 // renewalExportBtn = tombol ekspor CSV read-only (route /subscriptions/renewals/
@@ -113,7 +103,7 @@ func renewalKPICards(k RenewalKPIs) g.Node {
 		h.Class("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 min-w-0"),
 		renewalKPICard("Jatuh Tempo 30 Hari", k.Due30, "perlu ditindak", "text-warning"),
 		renewalKPICard("Masa Tenggang", k.Grace, "lewat tempo", "text-error"),
-		renewalKPICard("Auto-Renew", k.AutoRenew, "aktif otomatis", "text-success"),
+		renewalKPICard("Diperpanjang", k.Renewed, "periode diperbarui", "text-success"),
 		renewalKPICard("Renewal Rate", k.RenewalRate, "12 bln terakhir", "text-primary"),
 	)
 }

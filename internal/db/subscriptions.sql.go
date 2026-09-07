@@ -1425,8 +1425,8 @@ SELECT
         WHERE s.status = 'Active' AND s.end_date < $1::date
     )::bigint AS grace,
     COUNT(*) FILTER (
-        WHERE s.status = 'Active' AND s.auto_renew = true
-    )::bigint AS auto_active,
+        WHERE s.renewal_status = 'Renewed'
+    )::bigint AS renewed_count,
     COUNT(*) FILTER (
         WHERE s.end_date < $1::date
           AND s.end_date >= ($1::date - INTERVAL '12 months')::date
@@ -1458,7 +1458,7 @@ type RenewalKPIsParams struct {
 type RenewalKPIsRow struct {
 	Due30          int64 `json:"due_30"`
 	Grace          int64 `json:"grace"`
-	AutoActive     int64 `json:"auto_active"`
+	RenewedCount   int64 `json:"renewed_count"`
 	DuePast12m     int64 `json:"due_past_12m"`
 	RenewedPast12m int64 `json:"renewed_past_12m"`
 }
@@ -1469,7 +1469,7 @@ type RenewalKPIsRow struct {
 // MENGIKUTI jendela ListRenewals agar KPI konsisten dgn tab:
 //   - due_30      : Active/PendingApproval, end_date in [today, today+30] (= window 'due').
 //   - grace       : Active, end_date < today (= window 'grace').
-//   - auto_active : Active dgn auto_renew=true (aman, diperpanjang otomatis).
+//   - renewed     : renewal_status = 'Renewed' (= window 'renewed', sudah diperpanjang).
 //   - Renewal Rate 12 bln (BL-94, definisi SAMA dgn ReportRenewalSummary): renewed_past
 //     / due_past atas kohort jatuh tempo (end_date < today) DALAM 12 bln terakhir;
 //     "diperpanjang" = ada baris renewal anak (previous_subscription_id menunjuk balik).
@@ -1487,7 +1487,7 @@ func (q *Queries) RenewalKPIs(ctx context.Context, arg RenewalKPIsParams) (Renew
 	err := row.Scan(
 		&i.Due30,
 		&i.Grace,
-		&i.AutoActive,
+		&i.RenewedCount,
 		&i.DuePast12m,
 		&i.RenewedPast12m,
 	)

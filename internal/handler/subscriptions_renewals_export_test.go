@@ -92,12 +92,11 @@ func TestSubscriptionRenewals_DashboardHeader(t *testing.T) {
 	body := rec.Body.String()
 	wants := []string{
 		"Langganan mendekati / melewati tanggal perpanjangan", // subtitle
-		"Customer Success", // banner arah aksi
-		"Ekspor CSV",       // tombol ekspor
+		"Ekspor CSV", // tombol ekspor
 		"/subscriptions/renewals/export?window=due", // href ekspor ikut jendela
 		"Jatuh Tempo 30 Hari",                       // KPI 1
 		"Masa Tenggang",                             // KPI 2
-		"Auto-Renew",                                // KPI 3
+		"Diperpanjang",                              // KPI 3
 		"Renewal Rate",                              // KPI 4
 		"badge badge-warning",                       // badge derivasi due
 	}
