@@ -41,14 +41,15 @@ func (h *Handler) DealEdit(w http.ResponseWriter, r *http.Request) {
 	// menjamin opsi desa ini hadir di <datalist> walau di luar batas picker.
 	fields.SelectedAccountLabel = h.accountLabel(ctx, d.AccountID)
 	v := panel.DealFormView{
-		Base:     base,
-		Action:   base + "/deals/" + idStr,
-		IsEdit:   true,
-		Err:      wsErrMsg(r.URL.Query().Get("err")),
-		Fields:   fields,
-		Types:    dealTypeOptions,
-		Terms:    subscriptionTermOptions,
-		Accounts: accounts,
+		Base:       base,
+		Action:     base + "/deals/" + idStr,
+		IsEdit:     true,
+		Err:        wsErrMsg(r.URL.Query().Get("err")),
+		Fields:     fields,
+		Types:      dealTypeOptions,
+		Terms:      subscriptionTermOptions,
+		TermMonths: dealTermMonths(),
+		Accounts:   accounts,
 	}
 	h.renderWorkspaceShell(w, r, "Sunting Deal", "/deals", panel.DealForm(v))
 }

@@ -27,8 +27,23 @@ var _ = func() struct{} {
 	if len(dealTypeOptions) != len(validDealTypes) ||
 		len(dealStageOptions) != len(validDealStages) ||
 		len(subscriptionTermOptions) != len(validSubscriptionTerms) ||
+		len(subscriptionTermOptions) != len(termContractMonths) ||
 		len(lossReasonCodeOptions) != len(validLossReasonCodes) {
 		panic("deals: opsi enum tak sinkron dengan map validasi")
 	}
 	return struct{}{}
 }()
+
+// dealTermMonths menyalin termContractMonths (Termin → bulan-kontrak, sumber
+// tunggal di sales_deals_won_subscription.go) ke map[string]int untuk dioper ke
+// view form Deal. Preview MRR/ARR (BL-87 opsi c) memakainya agar rumus di
+// klien (static/dealpreview.js) = rumus Won→Langganan (MRR = nilai ÷ bulan,
+// ARR = MRR × 12); map ditanam sebagai <script type="application/json"> (CSP-safe),
+// BUKAN dihardcode di JS — satu perubahan termContractMonths merambat ke preview.
+func dealTermMonths() map[string]int {
+	m := make(map[string]int, len(termContractMonths))
+	for k, v := range termContractMonths {
+		m[k] = int(v)
+	}
+	return m
+}
