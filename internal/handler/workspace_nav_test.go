@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"reflect"
 	"testing"
 
 	"go_starter/internal/ui"
@@ -189,6 +190,17 @@ func TestWorkspaceNav_SubscriptionsGroup(t *testing.T) {
 		if ch.Disabled || ch.Href != href {
 			t.Errorf("anak %q harus enabled→%q, got disabled=%v href=%q", label, href, ch.Disabled, ch.Href)
 		}
+	}
+
+	// BL-91: URUTAN anak grup = Subscription Lists → Renewals → Churn /
+	// Cancellations → Plans & Pricing (Churn sengaja di atas Plans & Pricing).
+	wantOrder := []string{"Subscription Lists", "Renewals", "Churn / Cancellations", "Plans & Pricing"}
+	gotOrder := make([]string, len(grp.Children))
+	for i, ch := range grp.Children {
+		gotOrder[i] = ch.Label
+	}
+	if !reflect.DeepEqual(gotOrder, wantOrder) {
+		t.Errorf("urutan anak grup Subscriptions salah\n want %v\n got  %v", wantOrder, gotOrder)
 	}
 
 	// Tanpa izin → grup tetap tampil, tapi semua anak berbackend disabled tanpa href
