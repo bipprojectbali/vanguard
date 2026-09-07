@@ -140,3 +140,13 @@ func TestActivityForm_TargetPrefillOnCreate(t *testing.T) {
 		t.Errorf("input teks target harus preselect label desa:\n%s", out)
 	}
 }
+
+// TestActivityForm_ExplicitHelpKept: BL-85 membuang fallback bantuan default
+// GLOBAL, tapi picker yang MENYETEL Help eksplisit (mis. target aktivitas) tetap
+// menampilkannya — opt-in tak ikut terhapus.
+func TestActivityForm_ExplicitHelpKept(t *testing.T) {
+	out := renderLeads(t, ActivityForm(activityCreateFixture()))
+	if !strings.Contains(out, "Ketik untuk mencari, lalu pilih target dari daftar yang muncul.") {
+		t.Errorf("Help eksplisit picker target harus tetap dirender (BL-85):\n%s", out)
+	}
+}

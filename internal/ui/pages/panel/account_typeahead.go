@@ -37,7 +37,7 @@ type typeaheadPickerConfig struct {
 	Required     bool
 	FullWidth    bool   // tambah sm:col-span-2
 	Placeholder  string // placeholder input
-	Help         string // teks bantuan di bawah field
+	Help         string // teks bantuan di bawah field (kosong = baris bantuan tak dirender; BL-85)
 	InvalidMsg   string // pesan validity kustom (kosong = default JS)
 }
 
@@ -108,17 +108,18 @@ func typeaheadPickerField(cfg typeaheadPickerConfig) g.Node {
 	if cfg.InvalidMsg != "" {
 		wrap = append(wrap, g.Attr("data-invalid-msg", cfg.InvalidMsg))
 	}
-	help := cfg.Help
-	if help == "" {
-		help = "Ketik untuk mencari, lalu pilih desa dari daftar yang muncul."
-	}
 	wrap = append(wrap,
 		labelFor(cfg.Label, searchID, cfg.Required),
 		ui.Input(search...),
 		h.Input(hidden...),
 		h.DataList(append([]g.Node{h.ID(cfg.ListID)}, opts...)...),
-		h.P(h.Class("text-xs text-base-content/60"), g.Text(help)),
 	)
+	// BL-85: baris bantuan hanya dirender bila picker MENYETEL Help eksplisit;
+	// tak ada lagi fallback default global "Ketik untuk mencari…" — dulu tampil
+	// di semua picker (Deals/Contacts/Success Plan/BL-76) meski tak diminta.
+	if cfg.Help != "" {
+		wrap = append(wrap, h.P(h.Class("text-xs text-base-content/60"), g.Text(cfg.Help)))
+	}
 	return h.Div(wrap...)
 }
 
