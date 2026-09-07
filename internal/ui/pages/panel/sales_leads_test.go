@@ -59,10 +59,11 @@ func TestLeadsList_TabSaya_SembunyiSaatScopeOwn(t *testing.T) {
 // & form memuat numgroup.js. Atribut ini jaring klien; backend tetap penjaga.
 func TestLeadForm_FieldNumerik(t *testing.T) {
 	out := renderLeads(t, LeadForm(LeadFormView{
-		Base:        "/w/desa",
-		Action:      "/w/desa/leads/new",
-		Ratings:     []string{"Hot"},
-		RegionsJSON: "[]",
+		Base:          "/w/desa",
+		Action:        "/w/desa/leads/new",
+		Ratings:       []string{"Hot"},
+		RegionsJSON:   "[]",
+		PhoneEditable: true,
 	}))
 
 	for _, want := range []string{
@@ -155,10 +156,11 @@ func TestLeadForm_TanpaStatus(t *testing.T) {
 // telepon punya kait & skrip termuat. Backend optPhone tetap penolak saat submit.
 func TestLeadForm_PhoneLiveFilter(t *testing.T) {
 	out := renderLeads(t, LeadForm(LeadFormView{
-		Base:        "/w/desa",
-		Action:      "/w/desa/leads/new",
-		Ratings:     []string{"Hot"},
-		RegionsJSON: "[]",
+		Base:          "/w/desa",
+		Action:        "/w/desa/leads/new",
+		Ratings:       []string{"Hot"},
+		RegionsJSON:   "[]",
+		PhoneEditable: true,
 	}))
 
 	if !strings.Contains(out, "/static/phonenum.js") {
@@ -200,5 +202,32 @@ func TestLeadForm_SumberLeadDropdown(t *testing.T) {
 		if !strings.Contains(out, `<option value="`+s+`"`) {
 			t.Errorf("opsi Sumber Lead %q harus ter-render:\n%s", s, out)
 		}
+	}
+}
+
+// TestLeadForm_PhoneLocked — BL-84: bila PhoneEditable=false (role tak berhak
+// sunting nomor, mis. Manager), field HP/WhatsApp DIKUNCI: input disabled TANPA
+// atribut name (mask "•••" tak ikut ter-submit) & tanpa kait data-phonenum.
+// Mencegah bug submit mask gagal validasi (parseLeadForm menolak "•••"). Nilai
+// mask tetap tampil (terbaca), keterangan menjelaskan pembatasan.
+func TestLeadForm_PhoneLocked(t *testing.T) {
+	out := renderLeads(t, LeadForm(LeadFormView{
+		Base:          "/w/desa",
+		Action:        "/w/desa/leads/1",
+		IsEdit:        true,
+		Ratings:       []string{"Hot"},
+		RegionsJSON:   "[]",
+		PhoneEditable: false,
+		Fields:        LeadFormFields{MobilePhone: "•••", Whatsapp: "•••"},
+	}))
+
+	if strings.Contains(out, `name="mobile_phone"`) || strings.Contains(out, `name="whatsapp"`) {
+		t.Errorf("HP/WA terkunci TAK boleh ber-name (mask akan ter-submit → BL-84):\n%s", out)
+	}
+	if strings.Contains(out, "data-phonenum") {
+		t.Errorf("HP/WA terkunci tak perlu kait data-phonenum (tak dapat diketik):\n%s", out)
+	}
+	if n := strings.Count(out, "disabled"); n < 2 {
+		t.Errorf("kedua field telepon terkunci harus disabled (≥2), dapat %d:\n%s", n, out)
 	}
 }

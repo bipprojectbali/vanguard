@@ -31,14 +31,15 @@ func (h *Handler) LeadEdit(w http.ResponseWriter, r *http.Request) {
 	base := wsPath(slugFromRequest(r), "")
 	idStr := strconv.FormatInt(l.ID, 10)
 	v := panel.LeadFormView{
-		Base:        base,
-		Action:      base + "/leads/" + idStr,
-		IsEdit:      true,
-		Err:         wsErrMsg(r.URL.Query().Get("err")),
-		RegionsJSON: h.regionsJSON(ctx),
-		Fields:      leadFormFields(l, canEditPhone(ctx)),
-		Ratings:     leadRatingOptions,
-		Sources:     leadSourceOptions,
+		Base:          base,
+		Action:        base + "/leads/" + idStr,
+		IsEdit:        true,
+		Err:           wsErrMsg(r.URL.Query().Get("err")),
+		RegionsJSON:   h.regionsJSON(ctx),
+		Fields:        leadFormFields(l, canEditPhone(ctx)),
+		Ratings:       leadRatingOptions,
+		Sources:       leadSourceOptions,
+		PhoneEditable: canEditPhone(ctx), // BL-84: kunci field HP/WA bila tak berhak sunting
 	}
 	h.renderWorkspaceShell(w, r, "Sunting Lead", "/leads", panel.LeadForm(v))
 }

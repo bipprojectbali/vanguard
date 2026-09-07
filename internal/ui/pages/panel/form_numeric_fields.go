@@ -76,7 +76,27 @@ func moneyFieldRp(label, name, val string) g.Node {
 // karakter tak-diizinkan SAAT DIKETIK (bukan hanya saat submit), sehingga field
 // tak pernah berisi huruf/simbol mustahil. pattern hanya jaring pasif; backend
 // (optPhone) tetap penolak sesungguhnya saat submit. Tanpa JS pun aman.
-func phoneNumField(label, name, val string) g.Node {
+//
+// BL-84: editable=false → field DIKUNCI (disabled, TANPA name) menampilkan nilai
+// tersamar ("•••") + keterangan, persis phoneField (accounts_form_fields.go).
+// Bug yang diperbaiki: dulu field bermask "•••" tetap punya name & aktif, jadi
+// role tak-berhak-lihat (mis. Manager) mengirim "•••" saat submit → optPhone
+// menolaknya (bukan [0-9+ -]) → seluruh sunting GAGAL validasi, role itu mustahil
+// menyimpan perubahan apa pun. Dengan disabled+tanpa-name, mask tak ikut ter-submit;
+// guard di LeadUpdate mempertahankan nomor asli.
+func phoneNumField(label, name, val string, editable bool) g.Node {
+	if !editable {
+		return h.Div(
+			h.Class("grid gap-1 min-w-0"),
+			labelFor(label, "f-"+name+"_ro", false),
+			ui.Input(
+				h.ID("f-"+name+"_ro"), h.Type("tel"), h.Value(val),
+				h.Disabled(), h.Class("input text-base w-full"),
+			),
+			h.P(h.Class("text-xs text-base-content/60"),
+				g.Text("Nomor disamarkan & hanya bisa disunting oleh Sales.")),
+		)
+	}
 	return h.Div(
 		h.Class("grid gap-1 min-w-0"),
 		labelFor(label, "f-"+name, false),
