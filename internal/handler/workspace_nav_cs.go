@@ -20,10 +20,13 @@ import (
 // objek crm:health read). canSuccessPlans = canViewSuccessPlans (crm:success_plans read).
 // canEngagements = canViewEngagements (izin SAMA dengan gerbang EngagementsList,
 // objek crm:engagements read). canRenewals = canViewCSRenewals (crm:renewal_mgmt read).
-// canImplTasks = canViewImplTasks, canTrainings = canViewTrainings (keduanya
-// REUSE crm:journey read — sub-item Onboarding 6.2.1.1/6.2.1.2). canJourney =
 // canReadCSJourney (Customer Journey / Lifecycle 6.2, REUSE crm:journey read).
-func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canImplTasks, canTrainings, canJourney bool) ui.NavItem {
+//
+// Implementation Tracker (6.2.1.1) & Training Schedule (6.2.1.2) SENGAJA tak
+// lagi punya item nav (BL-78, level A — hanya disembunyikan dari menu). Route,
+// handler, tabel & gate crm:journey (canViewImplTasks/canViewTrainings) tetap
+// hidup; item mudah dikembalikan dengan menambah kembali NavItem-nya.
+func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canJourney bool) ui.NavItem {
 	children := make([]ui.NavItem, 0, 12)
 	// Health Score → /health-scores (canViewHealthScore, objek crm:health read).
 	// Berbackend sejak slice C1; disabled bila tak berhak, tetap tampil agar
@@ -45,26 +48,6 @@ func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canH
 		journey.Disabled = true
 	}
 	children = append(children, journey)
-	// Implementation Tracker → /impl-tasks (canViewImplTasks, crm:journey read).
-	// Berbackend sejak slice 6.2.1.1 (Onboarding); disabled bila tak berhak,
-	// tetap tampil agar posisi modul di peta jalan terlihat.
-	implTasks := ui.NavItem{Label: "Implementation Tracker", Icon: lucide.ListChecks(html.Class("size-4"))}
-	if canImplTasks {
-		implTasks.Href = wsPath(slug, "/impl-tasks")
-	} else {
-		implTasks.Disabled = true
-	}
-	children = append(children, implTasks)
-	// Training Schedule → /trainings (canViewTrainings, crm:journey read).
-	// Berbackend sejak slice 6.2.1.2 (Onboarding); disabled bila tak berhak,
-	// tetap tampil agar posisi modul di peta jalan terlihat.
-	trainings := ui.NavItem{Label: "Training Schedule", Icon: lucide.GraduationCap(html.Class("size-4"))}
-	if canTrainings {
-		trainings.Href = wsPath(slug, "/trainings")
-	} else {
-		trainings.Disabled = true
-	}
-	children = append(children, trainings)
 	// Success Plans → /success-plans (canViewSuccessPlans, objek crm:success_plans read).
 	// Berbackend sejak slice 6.3; disabled bila tak berhak, tetap tampil agar
 	// posisi modul di peta jalan terlihat.
