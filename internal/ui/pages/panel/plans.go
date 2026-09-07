@@ -243,5 +243,11 @@ func PlanForm(v PlanFormView) g.Node {
 			h.A(h.Href(v.Base+"/plans"), h.Class("btn btn-ghost min-h-11"), g.Text("Batal")),
 		),
 	))
+	// BL-89: Harga Dasar & Biaya Setup (moneyField, data-numgroup) memuat
+	// numgroup.js — reformat() membuang non-digit pada TIAP input (bukan sekadar
+	// format saat submit), jadi huruf tak pernah mengendap di desktop. Same-origin
+	// CSP-safe (gotcha #16). Backend cleanThousands/optNumeric tetap penjaga tanpa
+	// JS. Sebelumnya form ini alpa memuat skrip → field terasa menerima non-angka.
+	body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
