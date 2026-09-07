@@ -15,8 +15,12 @@ import (
 // Sales, SELALU tampil (peta jalan). Subscription Lists → /subscriptions &
 // Plans & Pricing → /plans enabled per izin (sumber izin SAMA dengan
 // canViewSubscriptions/canViewPlans — nol menu hantu). Renewals & Churn = dasbor
-// read-only Menu 5.2 (M5-4), enabled mengikuti crm:subscriptions read. Urutan
-// mengikuti nomor menu §4 (crmModules).
+// read-only Menu 5.2 (M5-4), enabled mengikuti crm:subscriptions read.
+//
+// Urutan tampil: Subscription Lists → Renewals → Churn / Cancellations →
+// Plans & Pricing (BL-91, permintaan user 7 Sep). Churn sengaja DI ATAS
+// Plans & Pricing di sidebar — reorder ini murni sidebar, TAK menyentuh
+// dokumentasi/urutan §4 (crmModules).
 func workspaceSubscriptionsGroup(slug string, canPlans, canSubs bool) ui.NavItem {
 	children := make([]ui.NavItem, 0, 4)
 	// Subscription Lists → /subscriptions (canViewSubscriptions, objek
@@ -55,7 +59,8 @@ func workspaceSubscriptionsGroup(slug string, canPlans, canSubs bool) ui.NavItem
 	} else {
 		churn.Disabled = true
 	}
-	children = append(children, plans, churn)
+	// BL-91: Churn / Cancellations SEBELUM Plans & Pricing (churn, plans).
+	children = append(children, churn, plans)
 	return ui.NavItem{
 		Label: "Subscriptions", Icon: lucide.RefreshCw(html.Class("size-4")), Children: children,
 	}
