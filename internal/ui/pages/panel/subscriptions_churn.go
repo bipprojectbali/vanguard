@@ -57,7 +57,7 @@ type ChurnView struct {
 	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
-// ChurnList merender halaman: header + ekspor + banner + KPI + tab tipe + tabel + pager.
+// ChurnList merender halaman: header + ekspor + KPI + tab tipe + tabel + pager.
 func ChurnList(v ChurnView) g.Node {
 	body := []g.Node{
 		h.Div(
@@ -69,7 +69,6 @@ func ChurnList(v ChurnView) g.Node {
 			),
 			churnExportBtn(v),
 		),
-		churnBanner(),
 		churnKPICards(v.KPIs),
 		churnTypeTabsView(v),
 	}
@@ -82,13 +81,6 @@ func ChurnList(v ChurnView) g.Node {
 		body = append(body, churnTable(v), churnPager(v))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
-}
-
-// churnBanner = banner info bertoken warning (peringatan, BUKAN error/absolut):
-// churn = kehilangan, analisis di sini, winback ditangani di Customer Success.
-func churnBanner() g.Node {
-	return ui.Alert(ui.VariantWarning, "churn-info",
-		g.Text("Churn = kehilangan. Desa+ berhenti berlangganan. Analisis di sini · winback ditangani di Customer Success."))
 }
 
 // churnExportBtn = tombol ekspor CSV read-only (route baru /subscriptions/churn/

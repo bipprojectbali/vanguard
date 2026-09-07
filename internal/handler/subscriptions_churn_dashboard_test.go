@@ -58,16 +58,16 @@ func (e *testEnv) seedChurnedSubDated(
 	return s
 }
 
-// TestSubscriptionChurnList_BannerAndKPIs: banner peringatan bertoken warning tampil,
-// 4 kartu KPI ter-render dengan nilai benar (Churn Rate 50%, Desa Churn 1 dari 1 aktif,
-// Avg Tenure 3 bln). Dasbor read-only (tak ada route tulis / form churn).
-func TestSubscriptionChurnList_BannerAndKPIs(t *testing.T) {
+// TestSubscriptionChurnList_KPIs: 4 kartu KPI ter-render dengan nilai benar (Churn
+// Rate 50%, Desa Churn 1 dari 1 aktif, Avg Tenure 3 bln, Churned MRR Rp 500.000).
+// Dasbor read-only (tak ada route tulis / form churn).
+func TestSubscriptionChurnList_KPIs(t *testing.T) {
 	env, uid := setupAccounts(t)
 	gone := env.seedAccount(t, "Desa Gone", &uid, nil, nil)
 	live := env.seedAccount(t, "Desa Live", &uid, nil, nil)
 	pGone := env.seedPlan(t, "Plan Gone", "PL-GONE", "1000000")
 	pLive := env.seedPlan(t, "Plan Live", "PL-LIVE", "1000000")
-	now := time.Now()
+	now := time.Now().In(appTZ)
 	// 90 hari ≈ 3 bln (90/30.44 ≈ 2.96 → 3), cancel hari ini (masuk 30 hari & bulan ini).
 	env.seedChurnedSubDated(t, gone.ID, pGone, &uid, "Voluntary", "500000", now.AddDate(0, 0, -90), now)
 	env.seedSubscription(t, live.ID, pLive, &uid, "Active", "700000", "8400000")
@@ -78,12 +78,6 @@ func TestSubscriptionChurnList_BannerAndKPIs(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	if !strings.Contains(body, "alert-warning") {
-		t.Error("banner peringatan harus pakai token warning (alert-warning)")
-	}
-	if !strings.Contains(body, "winback ditangani di Customer Success") {
-		t.Error("teks banner churn hilang")
-	}
 	for _, label := range []string{"Churn Rate", "Churned MRR", "Desa Churn", "Avg Tenure"} {
 		if !strings.Contains(body, label) {
 			t.Errorf("kartu KPI %q harus tampil", label)
@@ -112,7 +106,7 @@ func TestSubscriptionChurnList_KPIGlobalNotFilteredByType(t *testing.T) {
 	invol := env.seedAccount(t, "Desa Invol", &uid, nil, nil)
 	pVol := env.seedPlan(t, "Plan Vol", "PL-VOL", "1000000")
 	pInvol := env.seedPlan(t, "Plan Invol", "PL-INV", "1000000")
-	now := time.Now()
+	now := time.Now().In(appTZ)
 	env.seedChurnedSubDated(t, vol.ID, pVol, &uid, "Voluntary", "500000", now.AddDate(0, 0, -60), now)
 	env.seedChurnedSubDated(t, invol.ID, pInvol, &uid, "Involuntary", "600000", now.AddDate(0, 0, -60), now)
 
@@ -144,7 +138,7 @@ func TestSubscriptionChurnList_TenureColumn(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Tenure", &uid, nil, nil)
 	plan := env.seedPlan(t, "Plan Tenure", "PL-TEN", "1000000")
-	now := time.Now()
+	now := time.Now().In(appTZ)
 	env.seedChurnedSubDated(t, acc.ID, plan, &uid, "Voluntary", "500000", now.AddDate(0, 0, -180), now)
 
 	rec := env.runAccount(uid, "owner", "manager", churnListReq(""), env.h.SubscriptionChurnList)
@@ -170,7 +164,7 @@ func TestSubscriptionChurnExport_CSV(t *testing.T) {
 	theirs := env.seedAccount(t, "Desa Theirs", &other, nil, nil)
 	pM := env.seedPlan(t, "Plan Mine", "PL-MINE", "1000000")
 	pT := env.seedPlan(t, "Plan Theirs", "PL-THR", "1000000")
-	now := time.Now()
+	now := time.Now().In(appTZ)
 	env.seedChurnedSubDated(t, mine.ID, pM, &uid, "Voluntary", "500000", now.AddDate(0, 0, -30), now)
 	env.seedChurnedSubDated(t, theirs.ID, pT, &other, "Voluntary", "500000", now.AddDate(0, 0, -30), now)
 
@@ -202,7 +196,7 @@ func TestSubscriptionChurnExport_GateAndType(t *testing.T) {
 	invol := env.seedAccount(t, "Desa Invol", &uid, nil, nil)
 	pVol := env.seedPlan(t, "Plan Vol", "PL-VOL", "1000000")
 	pInvol := env.seedPlan(t, "Plan Invol", "PL-INV", "1000000")
-	now := time.Now()
+	now := time.Now().In(appTZ)
 	env.seedChurnedSubDated(t, vol.ID, pVol, &uid, "Voluntary", "500000", now.AddDate(0, 0, -30), now)
 	env.seedChurnedSubDated(t, invol.ID, pInvol, &uid, "Involuntary", "600000", now.AddDate(0, 0, -30), now)
 
