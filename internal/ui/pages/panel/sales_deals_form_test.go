@@ -90,3 +90,13 @@ func TestDealForm_EditPreselectBeyondList(t *testing.T) {
 		}
 	}
 }
+
+// TestDealForm_NoDefaultHelp: BL-85 — baris bantuan default "Ketik untuk
+// mencari, lalu pilih desa…" tak lagi dirender di bawah pemilih Desa (picker
+// tak menyetel Help eksplisit → tak ada fallback global).
+func TestDealForm_NoDefaultHelp(t *testing.T) {
+	out := renderLeads(t, DealForm(dealFormFixture(false)))
+	if strings.Contains(out, "Ketik untuk mencari, lalu pilih desa dari daftar yang muncul.") {
+		t.Errorf("baris bantuan default tak boleh dirender lagi (BL-85):\n%s", out)
+	}
+}
