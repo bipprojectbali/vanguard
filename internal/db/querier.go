@@ -1172,6 +1172,19 @@ type Querier interface {
 	// Filter status='PendingApproval' = penjaga transisi (idem ApproveRenewal).
 	RejectRenewal(ctx context.Context, arg RejectRenewalParams) (Subscription, error)
 	RemovePlatformStaff(ctx context.Context, email string) error
+	// KPI dasbor Renewals (BL-94) dalam SATU round-trip, di-scope ownership (flag
+	// SAMA dgn ListRenewals/ListSubscriptions: scope_all → semua; is_own →
+	// subscription_owner = uid; keduanya false → NOL, fail-closed). Predikat cacah
+	// MENGIKUTI jendela ListRenewals agar KPI konsisten dgn tab:
+	//   * due_30      : Active/PendingApproval, end_date in [today, today+30] (= window 'due').
+	//   * grace       : Active, end_date < today (= window 'grace').
+	//   * auto_active : Active dgn auto_renew=true (aman, diperpanjang otomatis).
+	//   * Renewal Rate 12 bln (BL-94, definisi SAMA dgn ReportRenewalSummary): renewed_past
+	//     / due_past atas kohort jatuh tempo (end_date < today) DALAM 12 bln terakhir;
+	//     "diperpanjang" = ada baris renewal anak (previous_subscription_id menunjuk balik).
+	// today dioper handler (zona waktu app, deterministik utk test). Nilai Rp tak di sini
+	// (KPI ini murni cacah + rasio); scope RLS menegakkan tenant (tanpa filter manual).
+	RenewalKPIs(ctx context.Context, arg RenewalKPIsParams) (RenewalKPIsRow, error)
 	// Panel 5. Per agen (t.assigned_to, join users utk nama/email). handled = tiket
 	// ditangani, resolved = selesai, avg_resolution_hours (selesai), met/with_sla =
 	// Kepatuhan SLA agen. Badge Status diturunkan handler (const threshold). Agen

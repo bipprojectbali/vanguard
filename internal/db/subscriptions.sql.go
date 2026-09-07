@@ -1414,6 +1414,86 @@ func (q *Queries) RejectRenewal(ctx context.Context, arg RejectRenewalParams) (S
 	return i, err
 }
 
+const renewalKPIs = `-- name: RenewalKPIs :one
+SELECT
+    COUNT(*) FILTER (
+        WHERE s.status IN ('Active','PendingApproval')
+          AND s.end_date >= $1::date
+          AND s.end_date <= ($1::date + 30)
+    )::bigint AS due_30,
+    COUNT(*) FILTER (
+        WHERE s.status = 'Active' AND s.end_date < $1::date
+    )::bigint AS grace,
+    COUNT(*) FILTER (
+        WHERE s.status = 'Active' AND s.auto_renew = true
+    )::bigint AS auto_active,
+    COUNT(*) FILTER (
+        WHERE s.end_date < $1::date
+          AND s.end_date >= ($1::date - INTERVAL '12 months')::date
+    )::bigint AS due_past_12m,
+    COUNT(*) FILTER (
+        WHERE s.end_date < $1::date
+          AND s.end_date >= ($1::date - INTERVAL '12 months')::date
+          AND EXISTS (
+              SELECT 1 FROM subscriptions r
+              WHERE r.previous_subscription_id = s.id AND r.deleted_at IS NULL
+          )
+    )::bigint AS renewed_past_12m
+FROM subscriptions s
+WHERE s.deleted_at IS NULL
+  AND s.end_date IS NOT NULL
+  AND (
+      $2::boolean
+      OR ($3::boolean AND s.subscription_owner = $4)
+  )
+`
+
+type RenewalKPIsParams struct {
+	Today    pgtype.Date `json:"today"`
+	ScopeAll bool        `json:"scope_all"`
+	IsOwn    bool        `json:"is_own"`
+	Uid      *int64      `json:"uid"`
+}
+
+type RenewalKPIsRow struct {
+	Due30          int64 `json:"due_30"`
+	Grace          int64 `json:"grace"`
+	AutoActive     int64 `json:"auto_active"`
+	DuePast12m     int64 `json:"due_past_12m"`
+	RenewedPast12m int64 `json:"renewed_past_12m"`
+}
+
+// KPI dasbor Renewals (BL-94) dalam SATU round-trip, di-scope ownership (flag
+// SAMA dgn ListRenewals/ListSubscriptions: scope_all → semua; is_own →
+// subscription_owner = uid; keduanya false → NOL, fail-closed). Predikat cacah
+// MENGIKUTI jendela ListRenewals agar KPI konsisten dgn tab:
+//   - due_30      : Active/PendingApproval, end_date in [today, today+30] (= window 'due').
+//   - grace       : Active, end_date < today (= window 'grace').
+//   - auto_active : Active dgn auto_renew=true (aman, diperpanjang otomatis).
+//   - Renewal Rate 12 bln (BL-94, definisi SAMA dgn ReportRenewalSummary): renewed_past
+//     / due_past atas kohort jatuh tempo (end_date < today) DALAM 12 bln terakhir;
+//     "diperpanjang" = ada baris renewal anak (previous_subscription_id menunjuk balik).
+//
+// today dioper handler (zona waktu app, deterministik utk test). Nilai Rp tak di sini
+// (KPI ini murni cacah + rasio); scope RLS menegakkan tenant (tanpa filter manual).
+func (q *Queries) RenewalKPIs(ctx context.Context, arg RenewalKPIsParams) (RenewalKPIsRow, error) {
+	row := q.db.QueryRow(ctx, renewalKPIs,
+		arg.Today,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+	)
+	var i RenewalKPIsRow
+	err := row.Scan(
+		&i.Due30,
+		&i.Grace,
+		&i.AutoActive,
+		&i.DuePast12m,
+		&i.RenewedPast12m,
+	)
+	return i, err
+}
+
 const softDeleteSubscription = `-- name: SoftDeleteSubscription :exec
 UPDATE subscriptions SET deleted_at = now(), updated_by = $1
 WHERE id = $2 AND deleted_at IS NULL
