@@ -106,8 +106,8 @@ func quoteIdentityCard(v QuoteDetailView) g.Node {
 }
 
 // QuoteDetail merender builder: header (nama+kode+status+aksi), kartu identitas,
-// tabel line items + total, lalu (bila boleh tulis) kelola item, tambah item, &
-// kontrol status.
+// tabel line items + total (Tambah Item & Pajak = modal di dalam kartu itu,
+// BL-70), lalu (bila boleh tulis) kontrol status.
 func QuoteDetail(v QuoteDetailView) g.Node {
 	dealBase := v.Base + "/deals/" + strconv.FormatInt(v.DealID, 10)
 	quoteBase := dealBase + "/quotes/" + strconv.FormatInt(v.ID, 10)
@@ -153,27 +153,21 @@ func QuoteDetail(v QuoteDetailView) g.Node {
 		quoteLineItems(v, quoteBase),
 	)
 	if v.CanMutate() {
-		body = append(body,
-			quoteAddItemForm(v, quoteBase),
-			quoteTaxControl(v, quoteBase),
-			quoteStatusControl(v, quoteBase),
-		)
+		// Tambah Item & Pajak (BL-70) kini modal di dalam quoteLineItems. Ubah Status
+		// tetap kartu (di luar cakupan BL-70).
+		body = append(body, quoteStatusControl(v, quoteBase))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
-// quoteAddItemForm = form tambah item: picker plan (harga di-SNAPSHOT saat submit)
-// + qty + diskon. Native POST. Kosong bila katalog plan aktif kosong (tak ada yang
-// bisa dijual) → keterangan jujur, bukan form mati.
-func quoteAddItemForm(v QuoteDetailView, quoteBase string) g.Node {
+// quoteAddItemBody = isi modal Tambah Item (BL-70): form picker plan (harga
+// di-SNAPSHOT saat submit) + qty + diskon. Native POST → 303 (gotcha #16); modal
+// hanya WADAH. Katalog plan aktif kosong → keterangan jujur (tak ada yang bisa
+// dijual), bukan form mati. Wadah kartu digantikan modal-box (modalDialog).
+func quoteAddItemBody(v QuoteDetailView, quoteBase string) g.Node {
 	if len(v.Plans) == 0 {
-		return h.Div(
-			h.Class("card bg-base-100 border border-dashed border-base-300 min-w-0"),
-			h.Div(h.Class("card-body min-w-0"),
-				h.H2(h.Class("font-semibold mb-1"), g.Text("Tambah Item")),
-				h.P(h.Class("text-sm text-base-content/60"),
-					g.Text("Belum ada plan aktif di katalog untuk ditambahkan."))),
-		)
+		return h.P(h.Class("text-sm text-base-content/60"),
+			g.Text("Belum ada plan aktif di katalog untuk ditambahkan."))
 	}
 	placeholder := []g.Node{h.Value(""), h.Disabled(), h.Selected(), g.Text("— Pilih plan —")}
 	opts := []g.Node{h.Option(placeholder...)}
@@ -181,32 +175,28 @@ func quoteAddItemForm(v QuoteDetailView, quoteBase string) g.Node {
 		opts = append(opts, h.Option(h.Value(strconv.FormatInt(p.ID, 10)), g.Text(p.Label)))
 	}
 	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body min-w-0 gap-3"),
-			h.H2(h.Class("font-semibold"), g.Text("Tambah Item")),
-			h.P(h.Class("text-sm text-base-content/60"),
-				g.Text("Harga satuan dibekukan dari plan saat item ditambahkan.")),
-			h.FormEl(
-				h.Method("post"), h.Action(quoteBase+"/items"),
-				h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
-				h.Div(
-					h.Class("grid gap-1 min-w-0 sm:col-span-2"),
-					labelFor("Plan", "f-plan_id", true),
-					h.Select(
-						append([]g.Node{
-							h.ID("f-plan_id"), h.Name("plan_id"), h.Required(),
-							h.Class("select text-base w-full"),
-						}, g.Group(opts))...,
-					),
+		h.Class("grid gap-3 min-w-0"),
+		h.P(h.Class("text-sm text-base-content/60"),
+			g.Text("Harga satuan dibekukan dari plan saat item ditambahkan.")),
+		h.FormEl(
+			h.Method("post"), h.Action(quoteBase+"/items"),
+			h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
+			h.Div(
+				h.Class("grid gap-1 min-w-0 sm:col-span-2"),
+				labelFor("Plan", "f-plan_id", true),
+				h.Select(
+					append([]g.Node{
+						h.ID("f-plan_id"), h.Name("plan_id"), h.Required(),
+						h.Class("select text-base w-full"),
+					}, g.Group(opts))...,
 				),
-				field("Kuantitas", "quantity", "1", true, "number"),
-				field("Diskon (%)", "discount_pct", "", false, "number"),
-				h.Div(
-					h.Class("sm:col-span-2"),
-					h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
-						g.Text("Tambah Item")),
-				),
+			),
+			field("Kuantitas", "quantity", "1", true, "number"),
+			field("Diskon (%)", "discount_pct", "", false, "number"),
+			h.Div(
+				h.Class("sm:col-span-2"),
+				h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
+					g.Text("Tambah Item")),
 			),
 		),
 	)
