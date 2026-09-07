@@ -14,7 +14,7 @@ func TestSuccessPlansList_SearchBoxAndThreading(t *testing.T) {
 		Tab:        "Active",
 		Tabs:       []SuccessPlanTab{{Key: "", Label: "Semua"}, {Key: "Active", Label: "Aktif"}},
 		Query:      "kali muara",
-		Items:      []SuccessPlanRow{{ID: 1, AccountName: "Desa Cocok", PlanName: "Adopsi"}},
+		Items:      []SuccessPlanRow{{ID: 1, AccountName: "Desa Cocok", Objective: "Adopsi"}},
 		NextCursor: "99_9",
 	}))
 
@@ -51,7 +51,7 @@ func TestSuccessPlansList_TabSearchRow(t *testing.T) {
 		Tab:   "Active",
 		Tabs:  []SuccessPlanTab{{Key: "", Label: "Semua"}, {Key: "Active", Label: "Aktif"}},
 		Query: "kali muara",
-		Items: []SuccessPlanRow{{ID: 1, AccountName: "Desa Cocok", PlanName: "Adopsi"}},
+		Items: []SuccessPlanRow{{ID: 1, AccountName: "Desa Cocok", Objective: "Adopsi"}},
 	}))
 	assertTabSearchRow(t, out, "/w/desa/success-plans")
 }

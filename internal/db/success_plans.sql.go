@@ -11,6 +11,83 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countSuccessPlanKPIs = `-- name: CountSuccessPlanKPIs :one
+SELECT
+    COUNT(*) FILTER (
+        WHERE sp.plan_status IN ('Active', 'At-Risk')
+    )                                                                    AS active_count,
+    COUNT(DISTINCT sp.account_id) FILTER (
+        WHERE sp.plan_status IN ('Active', 'At-Risk')
+    )                                                                    AS active_villages,
+    COUNT(*) FILTER (
+        WHERE sp.plan_status IN ('Active', 'At-Risk')
+          AND sp.target_date IS NOT NULL
+          AND sp.target_date < $1::date
+    )                                                                    AS overdue,
+    COUNT(*) FILTER (
+        WHERE sp.plan_status IN ('Active', 'At-Risk')
+          AND sp.target_date IS NOT NULL
+          AND sp.target_date >= $1::date
+          AND sp.target_date <= $1::date + 14
+    )                                                                    AS due_soon,
+    COALESCE(
+        AVG(sp.progress) FILTER (WHERE sp.plan_status IN ('Active', 'At-Risk')),
+        0
+    )::float8                                                            AS avg_progress
+FROM success_plans sp
+JOIN accounts a ON sp.account_id = a.id AND a.deleted_at IS NULL
+WHERE sp.deleted_at IS NULL
+  AND (
+      $2::boolean
+      OR ($3::boolean AND (
+          a.account_owner  = $4
+          OR a.assigned_csm = $4
+          OR a.backup_csm   = $4
+          OR sp.owner_csm   = $4
+      ))
+  )
+`
+
+type CountSuccessPlanKPIsParams struct {
+	Today    pgtype.Date `json:"today"`
+	ScopeAll bool        `json:"scope_all"`
+	IsOwn    bool        `json:"is_own"`
+	Uid      *int64      `json:"uid"`
+}
+
+type CountSuccessPlanKPIsRow struct {
+	ActiveCount    int64   `json:"active_count"`
+	ActiveVillages int64   `json:"active_villages"`
+	Overdue        int64   `json:"overdue"`
+	DueSoon        int64   `json:"due_soon"`
+	AvgProgress    float64 `json:"avg_progress"`
+}
+
+// KPI agregat header dasbor (BL-97). Filter ownership/RLS SAMA dengan
+// ListSuccessPlans (scope_all/is_own/uid) → angka konsisten dengan daftar.
+// Tanpa cursor/search/status: menghitung seluruh plan dalam cakupan.
+//
+// "Aktif" = plan_status IN ('Active','At-Risk'): rencana yang sedang dieksekusi
+// (Draft belum mulai; Achieved/Cancelled sudah tutup) — satu definisi dipakai
+// keempat KPI agar konsisten. `today` dioper dari handler (zona waktu app).
+func (q *Queries) CountSuccessPlanKPIs(ctx context.Context, arg CountSuccessPlanKPIsParams) (CountSuccessPlanKPIsRow, error) {
+	row := q.db.QueryRow(ctx, countSuccessPlanKPIs,
+		arg.Today,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+	)
+	var i CountSuccessPlanKPIsRow
+	err := row.Scan(
+		&i.ActiveCount,
+		&i.ActiveVillages,
+		&i.Overdue,
+		&i.DueSoon,
+		&i.AvgProgress,
+	)
+	return i, err
+}
+
 const createSuccessPlan = `-- name: CreateSuccessPlan :one
 
 INSERT INTO success_plans (
@@ -146,10 +223,16 @@ SELECT
     sp.target_date, sp.plan_status, sp.progress,
     sp.owner_csm, sp.created_at,
     a.village_name AS account_name,
-    u.name AS owner_name
+    u.name AS owner_name,
+    -- BL-97: kolom "Health" tabel = skor & status kesehatan akun (reuse BL-24).
+    -- customer_success 1:1 dengan accounts (UNIQUE tenant_id, account_id) → LEFT
+    -- JOIN aman tanpa duplikasi baris; NULL bila desa belum dinilai.
+    cs.overall_health_score AS health_score,
+    cs.health_status        AS health_status
 FROM success_plans sp
 JOIN accounts a ON sp.account_id = a.id AND a.deleted_at IS NULL
 LEFT JOIN users u ON sp.owner_csm = u.id
+LEFT JOIN customer_success cs ON cs.account_id = sp.account_id AND cs.tenant_id = sp.tenant_id
 WHERE (sp.created_at, sp.id) < ($1::timestamptz, $2::bigint)
   AND sp.deleted_at IS NULL
   AND (
@@ -193,6 +276,8 @@ type ListSuccessPlansRow struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	AccountName   string             `json:"account_name"`
 	OwnerName     *string            `json:"owner_name"`
+	HealthScore   *int16             `json:"health_score"`
+	HealthStatus  *string            `json:"health_status"`
 }
 
 // Daftar success plan, keyset (created_at DESC, id DESC) + F3 ownership + filter tab.
@@ -238,6 +323,8 @@ func (q *Queries) ListSuccessPlans(ctx context.Context, arg ListSuccessPlansPara
 			&i.CreatedAt,
 			&i.AccountName,
 			&i.OwnerName,
+			&i.HealthScore,
+			&i.HealthStatus,
 		); err != nil {
 			return nil, err
 		}

@@ -20,38 +20,44 @@ type SuccessPlanTab struct {
 }
 
 // SuccessPlanRow — satu baris tabel Success Plans.
+// BL-97: kolom diselaraskan mockup — Nama Plan & Owner CS dibuang; Tujuan =
+// objective (fallback plan_name bila kosong); Health ter-JOIN dari akun (BL-24).
+// Kolom "Langkah" mockup DITUNDA (model langkah belum ada — keputusan user).
 type SuccessPlanRow struct {
 	ID          int64
 	AccountName string
-	PlanName    string
-	Objective   string
+	Objective   string // "Tujuan Rencana" (objective, fallback plan_name)
 	StatusLabel string
 	StatusBadge string // badge-* daisyUI
-	Progress    int    // 0–100
-	OwnerName   string
-	TargetDate  string // YYYY-MM-DD, bisa kosong
-	HrefEdit    string // "/w/{slug}/success-plans/{id}/edit"
+	Progress    int    // 0–100 ("Capaian")
+	TargetDate  string // "Tenggat" YYYY-MM-DD, bisa kosong
+	HealthLabel string // "Health" — Sehat/Berisiko/Kritis/—
+	HealthBadge string // badge-* daisyUI dari status kesehatan akun
+	HrefEdit    string // "/w/{slug}/success-plans/{id}/edit" (Aksi "Buka")
 }
 
 // SuccessPlansListView — data lengkap halaman daftar Success Plans.
 type SuccessPlansListView struct {
-	Base       string           // "/w/{slug}"
-	Tab        string           // nilai tab aktif
-	Query      string           // ?q= pencarian bebas (BL-6); "" = tak mencari
-	Tabs       []SuccessPlanTab // daftar tab dari handler
-	Msg        string           // pesan sukses ?ok=
-	Err        string           // pesan galat ?err=
-	Items      []SuccessPlanRow
-	CanWrite   bool
-	NextCursor string
-	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
-	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
+	Base          string           // "/w/{slug}"
+	Tab           string           // nilai tab aktif
+	Query         string           // ?q= pencarian bebas (BL-6); "" = tak mencari
+	Tabs          []SuccessPlanTab // daftar tab dari handler
+	Msg           string           // pesan sukses ?ok=
+	Err           string           // pesan galat ?err=
+	KPIs          SuccessPlanKPIs  // BL-97: 4 kartu KPI header
+	TableSubtitle string           // BL-97: mis. "12 rencana aktif · target terukur & penanggung jawab"
+	Items         []SuccessPlanRow
+	CanWrite      bool
+	NextCursor    string
+	After         string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail         string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
 // SuccessPlansList merender halaman daftar Success Plans.
 func SuccessPlansList(v SuccessPlansListView) g.Node {
 	return h.Div(h.Class("space-y-4"),
 		successPlansListHeader(v),
+		successPlanKPICards(v.KPIs),
 		successPlansListAlert(v.Msg, v.Err),
 		// BL-68: tab + kotak cari sebaris (search terdorong ke pojok kanan), varian
 		// INLINE agar input+tombol sebaris. tab aktif dijaga lintas submit search.
@@ -70,11 +76,13 @@ func successPlansListHeader(v SuccessPlansListView) g.Node {
 		createBtn = h.A(
 			h.Href(v.Base+"/success-plans/new"),
 			h.Class("btn btn-primary btn-sm min-h-11"),
-			g.Text("+ Buat Plan"),
+			g.Text("+ Rencana Baru"),
 		)
 	}
 	return h.Div(h.Class("flex flex-wrap items-center justify-between gap-2"),
 		h.Div(
+			h.P(h.Class("text-xs text-base-content/50"),
+				g.Text("Customer Success › Success Plans (6.3)")),
 			h.H1(h.Class("text-xl font-bold"), g.Text("Success Plans")),
 			h.P(h.Class("text-sm text-base-content/70"),
 				g.Text("Rencana sukses per-desa — tujuan, metrik, dan progres pencapaian.")),
@@ -124,14 +132,16 @@ func successPlansTable(v SuccessPlansListView) g.Node {
 			),
 		)
 	}
+	// BL-97: kolom diselaraskan mockup — Desa · Tujuan Rencana · Capaian ·
+	// Tenggat · Health · Status · Aksi. Nama Plan & Owner CS dibuang; kolom
+	// "Langkah" ditunda (model langkah belum ada).
 	headers := []g.Node{
 		h.Th(g.Text("Desa")),
-		h.Th(g.Text("Nama Plan")),
-		h.Th(g.Text("Objektif")),
+		h.Th(g.Text("Tujuan Rencana")),
+		h.Th(g.Text("Capaian")),
+		h.Th(g.Text("Tenggat")),
+		h.Th(g.Text("Health")),
 		h.Th(g.Text("Status")),
-		h.Th(g.Text("Progres")),
-		h.Th(g.Text("Owner CS")),
-		h.Th(g.Text("Target")),
 	}
 	if v.CanWrite {
 		headers = append(headers, h.Th(g.Text("")))
@@ -141,33 +151,36 @@ func successPlansTable(v SuccessPlansListView) g.Node {
 		rows = append(rows, successPlanTableRow(row, v.CanWrite))
 	}
 	return h.Div(h.Class("card bg-base-100 shadow-sm"),
-		ui.TableScroll(h.Table(h.Class("table table-sm"),
-			h.THead(h.Tr(g.Group(headers))),
-			h.TBody(g.Group(rows)),
-		)),
+		h.Div(h.Class("card-body p-0"),
+			g.If(v.TableSubtitle != "",
+				h.P(h.Class("text-xs text-base-content/50 px-4 pt-3"), g.Text(v.TableSubtitle))),
+			ui.TableScroll(h.Table(h.Class("table table-sm"),
+				h.THead(h.Tr(g.Group(headers))),
+				h.TBody(g.Group(rows)),
+			)),
+		),
 	)
 }
 
 func successPlanTableRow(r SuccessPlanRow, canWrite bool) g.Node {
 	cells := []g.Node{
 		h.Td(h.Class("py-2 pr-4 max-w-[150px]"),
-			h.Span(h.Class("block truncate"), g.Text(r.AccountName))),
-		h.Td(h.Class("py-2 pr-4 max-w-[180px]"),
-			h.Span(h.Class("block truncate font-medium"), g.Text(r.PlanName))),
-		h.Td(h.Class("py-2 pr-4 max-w-[200px] text-sm text-base-content/70"),
+			h.Span(h.Class("block truncate font-medium"), g.Text(r.AccountName))),
+		h.Td(h.Class("py-2 pr-4 max-w-[220px] text-sm text-base-content/70"),
 			h.Span(h.Class("block truncate"), g.Text(orDash(r.Objective)))),
-		h.Td(h.Class("py-2 pr-4"),
-			h.Span(h.Class("badge badge-sm "+r.StatusBadge), g.Text(r.StatusLabel))),
 		h.Td(h.Class("py-2 pr-4 whitespace-nowrap"),
 			successPlanProgressBar(r.Progress)),
-		h.Td(h.Class("py-2 pr-4 text-sm"), g.Text(orDash(r.OwnerName))),
 		h.Td(h.Class("py-2 pr-4 whitespace-nowrap text-sm text-base-content/70"),
 			g.Text(orDash(r.TargetDate))),
+		h.Td(h.Class("py-2 pr-4"),
+			h.Span(h.Class("badge badge-sm "+r.HealthBadge), g.Text(r.HealthLabel))),
+		h.Td(h.Class("py-2 pr-4"),
+			h.Span(h.Class("badge badge-sm "+r.StatusBadge), g.Text(r.StatusLabel))),
 	}
 	if canWrite {
 		cells = append(cells, h.Td(h.Class("py-2"),
 			h.A(h.Href(r.HrefEdit), h.Class("btn btn-xs btn-ghost min-h-11"),
-				g.Text("Edit")),
+				g.Text("Buka")),
 		))
 	}
 	return h.Tr(h.Class("border-b border-base-300/50 hover:bg-base-200/50"), g.Group(cells))

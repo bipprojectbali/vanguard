@@ -66,10 +66,16 @@ SELECT
     sp.target_date, sp.plan_status, sp.progress,
     sp.owner_csm, sp.created_at,
     a.village_name AS account_name,
-    u.name AS owner_name
+    u.name AS owner_name,
+    -- BL-97: kolom "Health" tabel = skor & status kesehatan akun (reuse BL-24).
+    -- customer_success 1:1 dengan accounts (UNIQUE tenant_id, account_id) → LEFT
+    -- JOIN aman tanpa duplikasi baris; NULL bila desa belum dinilai.
+    cs.overall_health_score AS health_score,
+    cs.health_status        AS health_status
 FROM success_plans sp
 JOIN accounts a ON sp.account_id = a.id AND a.deleted_at IS NULL
 LEFT JOIN users u ON sp.owner_csm = u.id
+LEFT JOIN customer_success cs ON cs.account_id = sp.account_id AND cs.tenant_id = sp.tenant_id
 WHERE (sp.created_at, sp.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
   AND sp.deleted_at IS NULL
   AND (
@@ -87,6 +93,49 @@ WHERE (sp.created_at, sp.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.a
        OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
 ORDER BY sp.created_at DESC, sp.id DESC
 LIMIT sqlc.arg(page_size);
+
+-- name: CountSuccessPlanKPIs :one
+-- KPI agregat header dasbor (BL-97). Filter ownership/RLS SAMA dengan
+-- ListSuccessPlans (scope_all/is_own/uid) → angka konsisten dengan daftar.
+-- Tanpa cursor/search/status: menghitung seluruh plan dalam cakupan.
+--
+-- "Aktif" = plan_status IN ('Active','At-Risk'): rencana yang sedang dieksekusi
+-- (Draft belum mulai; Achieved/Cancelled sudah tutup) — satu definisi dipakai
+-- keempat KPI agar konsisten. `today` dioper dari handler (zona waktu app).
+SELECT
+    COUNT(*) FILTER (
+        WHERE sp.plan_status IN ('Active', 'At-Risk')
+    )                                                                    AS active_count,
+    COUNT(DISTINCT sp.account_id) FILTER (
+        WHERE sp.plan_status IN ('Active', 'At-Risk')
+    )                                                                    AS active_villages,
+    COUNT(*) FILTER (
+        WHERE sp.plan_status IN ('Active', 'At-Risk')
+          AND sp.target_date IS NOT NULL
+          AND sp.target_date < sqlc.arg(today)::date
+    )                                                                    AS overdue,
+    COUNT(*) FILTER (
+        WHERE sp.plan_status IN ('Active', 'At-Risk')
+          AND sp.target_date IS NOT NULL
+          AND sp.target_date >= sqlc.arg(today)::date
+          AND sp.target_date <= sqlc.arg(today)::date + 14
+    )                                                                    AS due_soon,
+    COALESCE(
+        AVG(sp.progress) FILTER (WHERE sp.plan_status IN ('Active', 'At-Risk')),
+        0
+    )::float8                                                            AS avg_progress
+FROM success_plans sp
+JOIN accounts a ON sp.account_id = a.id AND a.deleted_at IS NULL
+WHERE sp.deleted_at IS NULL
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner  = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm   = sqlc.arg(uid)
+          OR sp.owner_csm   = sqlc.arg(uid)
+      ))
+  );
 
 -- name: SoftDeleteSuccessPlan :exec
 -- Hapus lunak success plan (tandai deleted_at). Fail jika sudah dihapus.

@@ -126,6 +126,14 @@ type Querier interface {
 	// mereka SENGAJA tak ikut berubah, dan tanpa angka ini operator mengira
 	// pengaturannya tak bekerja.
 	CountQuotaOverrides(ctx context.Context) (int64, error)
+	// KPI agregat header dasbor (BL-97). Filter ownership/RLS SAMA dengan
+	// ListSuccessPlans (scope_all/is_own/uid) → angka konsisten dengan daftar.
+	// Tanpa cursor/search/status: menghitung seluruh plan dalam cakupan.
+	//
+	// "Aktif" = plan_status IN ('Active','At-Risk'): rencana yang sedang dieksekusi
+	// (Draft belum mulai; Achieved/Cancelled sudah tutup) — satu definisi dipakai
+	// keempat KPI agar konsisten. `today` dioper dari handler (zona waktu app).
+	CountSuccessPlanKPIs(ctx context.Context, arg CountSuccessPlanKPIsParams) (CountSuccessPlanKPIsRow, error)
 	// Jumlah owner di satu workspace — cegah menghapus/menurunkan owner terakhir
 	// (workspace tanpa owner = yatim).
 	CountTenantOwners(ctx context.Context, tenantID int64) (int64, error)
