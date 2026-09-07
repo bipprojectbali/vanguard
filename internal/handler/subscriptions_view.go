@@ -46,6 +46,15 @@ func canChurnSubscriptions(ctx context.Context) bool {
 	return authz.CanBusiness(ctx, "crm:churn", "write")
 }
 
+// canActivateSubscriptions = gerbang aktivasi langganan Trial → Active (BL-73).
+// Aktivasi sekelas renewal ("bikin langganan hidup") → pakai kapabilitas
+// crm:renewals write (admin/manager), konsisten dgn canRenewSubscriptions. Sengaja
+// gate TERPISAH bernama agar bila kelak aktivasi perlu izin berbeda, cukup ubah di
+// sini tanpa menyentuh renewal.
+func canActivateSubscriptions(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:renewals", "write")
+}
+
 // canViewRenewals = gerbang READ ringkasan renewal (rate, jatuh tempo) untuk
 // Beranda (BL-59b). Berbeda dari canRenewSubscriptions (WRITE) — melihat metrik
 // renewal tak sama dengan berhak memperpanjang. Default: admin (glob), manager,
@@ -79,6 +88,8 @@ func subscriptionsMsg(code string) string {
 		return "Renewal disetujui — langganan periode baru aktif."
 	case "renew_rejected":
 		return "Renewal ditolak — langganan lama tetap berjalan."
+	case "activated":
+		return "Langganan diaktifkan — status kini Active."
 	case "churned":
 		return "Langganan ditandai churn."
 	default:

@@ -107,6 +107,10 @@ func wsErrMsgCRM(code string) string {
 	// ── Subscriptions: Renewal & Churn (Modul 5) ────────────────────────────
 	case "sub_not_active":
 		return "Langganan harus berstatus Active untuk diperpanjang."
+	case "sub_not_trial":
+		return "Hanya langganan berstatus Trial yang bisa diaktifkan."
+	case "sub_dup_active":
+		return "Sudah ada langganan Active untuk desa & paket ini — Trial ini tak bisa diaktifkan."
 	case "new_mrr":
 		return "MRR baru harus berupa angka ≥ 0."
 	case "not_pending":

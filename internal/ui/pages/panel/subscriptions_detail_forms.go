@@ -23,6 +23,9 @@ func subActionCard(v SubDetailView) g.Node {
 	if v.CanRenew && v.Status == "Active" {
 		forms = append(forms, subRenewForm(v))
 	}
+	if v.CanActivate && v.Status == "Trial" {
+		forms = append(forms, subActivateForm(v))
+	}
 	if v.CanChurn && (v.Status == "Active" || v.Status == "Trial") {
 		forms = append(forms, subChurnForm(v))
 	}
@@ -74,6 +77,23 @@ func subRenewForm(v SubDetailView) g.Node {
 		h.Div(h.Class("flex flex-wrap gap-2"),
 			h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
 				g.Text("Perpanjang"))),
+	)
+}
+
+// subActivateForm = tombol Aktifkan Langganan (Trial → Active, BL-73). Hanya tampil
+// saat status Trial & gate lolos; menutup jalan buntu Trial (tak diakui pendapatan,
+// tak bisa di-renew). Satu tombol POST — tak ada input (transisi status murni).
+func subActivateForm(v SubDetailView) g.Node {
+	base := v.Base + "/subscriptions/" + strconv.FormatInt(v.ID, 10)
+	return h.FormEl(
+		h.Method("post"), h.Action(base+"/activate"),
+		h.Class("grid gap-2"),
+		h.H3(h.Class("font-medium text-sm"), g.Text("Aktifkan Langganan")),
+		h.P(h.Class("text-sm text-base-content/70"),
+			g.Text("Naikkan langganan Trial ini ke Active agar pendapatan diakui dan langganan bisa diperpanjang.")),
+		h.Div(h.Class("flex flex-wrap gap-2"),
+			h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
+				g.Text("Aktifkan Langganan"))),
 	)
 }
 
