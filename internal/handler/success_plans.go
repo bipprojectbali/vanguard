@@ -64,6 +64,14 @@ func (h *Handler) SuccessPlansList(w http.ResponseWriter, r *http.Request) {
 
 	cursorAt, cursorID := pageCursor(r)
 
+	// BL-97: KPI agregat header (filter ownership identik dengan daftar).
+	kpiRow, err := h.q(ctx).CountSuccessPlanKPIs(ctx, successPlanKPIParams(filter, uid))
+	if err != nil {
+		h.Log.Error("success_plans: count kpis", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	rows, err := h.q(ctx).ListSuccessPlans(ctx, db.ListSuccessPlansParams{
 		CursorCreatedAt: cursorAt,
 		CursorID:        cursorID,
@@ -92,16 +100,18 @@ func (h *Handler) SuccessPlansList(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slug, "")
 	h.renderWorkspaceShell(w, r, "Success Plans", "/success-plans", panel.SuccessPlansList(panel.SuccessPlansListView{
-		Base:       base,
-		Tab:        tab,
-		Query:      query,
-		Tabs:       successPlansTabs,
-		Items:      items,
-		CanWrite:   canWrite,
-		NextCursor: nextCursor,
-		After:      r.URL.Query().Get("after"),
-		Trail:      pageTrail(r),
-		Err:        successPlansErrMsg(r.URL.Query().Get("err")),
-		Msg:        successPlansMsg(r.URL.Query().Get("ok")),
+		Base:          base,
+		Tab:           tab,
+		Query:         query,
+		Tabs:          successPlansTabs,
+		KPIs:          successPlanKPIsToView(kpiRow),
+		TableSubtitle: successPlanTableSubtitle(kpiRow.ActiveCount),
+		Items:         items,
+		CanWrite:      canWrite,
+		NextCursor:    nextCursor,
+		After:         r.URL.Query().Get("after"),
+		Trail:         pageTrail(r),
+		Err:           successPlansErrMsg(r.URL.Query().Get("err")),
+		Msg:           successPlansMsg(r.URL.Query().Get("ok")),
 	}))
 }
