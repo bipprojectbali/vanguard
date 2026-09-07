@@ -78,11 +78,19 @@ func (h *Handler) SubscriptionRenewals(w http.ResponseWriter, r *http.Request) {
 		items = append(items, renewalRowView(s, now, br))
 	}
 
+	// KPI header (BL-94): satu query agregat di-scope ownership sama. Gagal →
+	// tetap render tabel (fail-soft; KPI bukan data kritis untuk baca status renewal).
+	kpi, kpiErr := h.renewalKPI(ctx, filter, uid, today)
+	if kpiErr != nil {
+		h.Log.Error("subscriptions: renewals kpi", "err", kpiErr)
+	}
+
 	base := wsPath(slugFromRequest(r), "")
 	h.renderWorkspaceShell(w, r, "Renewals", "/subscriptions/renewals",
 		panel.RenewalsList(panel.RenewalsView{
 			Base:       base,
 			Window:     window,
+			KPIs:       kpi,
 			Windows:    renewalWindowOptions(),
 			Err:        wsErrMsg(r.URL.Query().Get("err")),
 			Items:      items,

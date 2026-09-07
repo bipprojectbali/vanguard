@@ -135,6 +135,52 @@ WHERE s.deleted_at IS NULL
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: RenewalKPIs :one
+-- KPI dasbor Renewals (BL-94) dalam SATU round-trip, di-scope ownership (flag
+-- SAMA dgn ListRenewals/ListSubscriptions: scope_all → semua; is_own →
+-- subscription_owner = uid; keduanya false → NOL, fail-closed). Predikat cacah
+-- MENGIKUTI jendela ListRenewals agar KPI konsisten dgn tab:
+--   * due_30      : Active/PendingApproval, end_date in [today, today+30] (= window 'due').
+--   * grace       : Active, end_date < today (= window 'grace').
+--   * renewed     : renewal_status = 'Renewed' (= window 'renewed', sudah diperpanjang).
+--   * Renewal Rate 12 bln (BL-94, definisi SAMA dgn ReportRenewalSummary): renewed_past
+--     / due_past atas kohort jatuh tempo (end_date < today) DALAM 12 bln terakhir;
+--     "diperpanjang" = ada baris renewal anak (previous_subscription_id menunjuk balik).
+-- today dioper handler (zona waktu app, deterministik utk test). Nilai Rp tak di sini
+-- (KPI ini murni cacah + rasio); scope RLS menegakkan tenant (tanpa filter manual).
+SELECT
+    COUNT(*) FILTER (
+        WHERE s.status IN ('Active','PendingApproval')
+          AND s.end_date >= sqlc.arg(today)::date
+          AND s.end_date <= (sqlc.arg(today)::date + 30)
+    )::bigint AS due_30,
+    COUNT(*) FILTER (
+        WHERE s.status = 'Active' AND s.end_date < sqlc.arg(today)::date
+    )::bigint AS grace,
+    COUNT(*) FILTER (
+        WHERE s.renewal_status = 'Renewed'
+    )::bigint AS renewed_count,
+    COUNT(*) FILTER (
+        WHERE s.end_date < sqlc.arg(today)::date
+          AND s.end_date >= (sqlc.arg(today)::date - INTERVAL '12 months')::date
+    )::bigint AS due_past_12m,
+    COUNT(*) FILTER (
+        WHERE s.end_date < sqlc.arg(today)::date
+          AND s.end_date >= (sqlc.arg(today)::date - INTERVAL '12 months')::date
+          AND EXISTS (
+              SELECT 1 FROM subscriptions r
+              WHERE r.previous_subscription_id = s.id AND r.deleted_at IS NULL
+          )
+    )::bigint AS renewed_past_12m
+FROM subscriptions s
+WHERE s.deleted_at IS NULL
+  AND s.end_date IS NOT NULL
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  );
+
+
 -- name: ListChurned :many
 -- Dasbor Churn (Menu 5.2/5.4, READ-ONLY). Langganan yang telah berhenti
 -- (status Cancelled/Churned), di-scope ownership (F3) dengan flag yang SAMA dgn
