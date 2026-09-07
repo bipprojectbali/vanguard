@@ -28,6 +28,14 @@ var (
 	validLeadRatings = map[string]struct{}{
 		"Hot": {}, "Warm": {}, "Cold": {},
 	}
+	// validLeadSources = sumber lead yang boleh di-set lewat form (BL-82). Enum
+	// dikunci di UI (dropdown) & ditegakkan di sini — TANPA CHECK constraint DB
+	// (keputusan user: nilai teks-bebas lama tetap di DB apa adanya, hanya
+	// disaring saat form disubmit). Nilai disimpan verbatim seperti opsi.
+	validLeadSources = map[string]struct{}{
+		"Referral": {}, "Event": {}, "Website": {}, "Cold Call": {},
+		"Tender": {}, "Dinas PMD": {}, "Lainnya": {},
+	}
 )
 
 // leadForm = nilai form Lead yang SUDAH divalidasi & siap dipetakan ke
@@ -94,7 +102,15 @@ func parseLeadForm(fv func(string) string) (leadForm, string) {
 	// Teks bebas opsional: trim, kosong → NULL.
 	f.ContactPerson = optTrim(fv("contact_person"))
 	f.JobTitle = optTrim(fv("job_title"))
-	f.LeadSource = optTrim(fv("lead_source"))
+	// Sumber Lead (BL-82): enum terkunci di UI (dropdown), ditegakkan di sini.
+	// Kosong = NULL; terisi wajib ∈ himpunan. TANPA CHECK DB — nilai teks-bebas
+	// lama dibiarkan tersimpan; penegakan hanya saat form disubmit.
+	if s := strings.TrimSpace(fv("lead_source")); s != "" {
+		if _, ok := validLeadSources[s]; !ok {
+			return leadForm{}, "lead_source"
+		}
+		f.LeadSource = &s
+	}
 	f.UnqualifiedReason = optTrim(fv("unqualified_reason"))
 	// BL-80: "Alasan Unqualified" hanya bermakna saat status Unqualified. Field
 	// yang disembunyikan klien (data-show) untuk status lain TETAP terkirim
@@ -127,13 +143,17 @@ func parseLeadForm(fv func(string) string) (leadForm, string) {
 var (
 	leadStatusOptions = []string{"New", "Contacted", "Qualified", "Unqualified"}
 	leadRatingOptions = []string{"Hot", "Warm", "Cold"}
+	// leadSourceOptions = urutan tampilan dropdown "Sumber Lead" (BL-82). HARUS
+	// himpunan yang sama dengan validLeadSources; urutan sesuai permintaan user.
+	leadSourceOptions = []string{"Referral", "Event", "Website", "Cold Call", "Tender", "Dinas PMD", "Lainnya"}
 )
 
 // compile-time: opsi & map validasi sepakat (panjang sama). Berbeda = dropdown
 // menawarkan nilai yang ditolak backend, atau sebaliknya.
 var _ = func() struct{} {
 	if len(leadStatusOptions) != len(validLeadStatuses) ||
-		len(leadRatingOptions) != len(validLeadRatings) {
+		len(leadRatingOptions) != len(validLeadRatings) ||
+		len(leadSourceOptions) != len(validLeadSources) {
 		panic("leads: opsi enum tak sinkron dengan map validasi")
 	}
 	return struct{}{}

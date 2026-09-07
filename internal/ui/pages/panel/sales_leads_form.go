@@ -50,6 +50,9 @@ type LeadFormView struct {
 	Fields   LeadFormFields
 	Statuses []string
 	Ratings  []string
+	// Sources = opsi dropdown "Sumber Lead" (BL-82, dari handler). Enum terkunci
+	// menggantikan input teks bebas.
+	Sources []string
 
 	// RegionsJSON = dataset penuh master wilayah (h.regionsJSON), diembed sekali
 	// utk cascading dropdown Provinsi/Kabupaten-Kota/Kecamatan (ADR 0009).
@@ -89,7 +92,10 @@ func LeadForm(v LeadFormView) g.Node {
 			field("Nama Lead", "lead_name", v.Fields.LeadName, true, "text"),
 			field("Kontak (nama orang)", "contact_person", v.Fields.ContactPerson, false, "text"),
 			field("Jabatan", "job_title", v.Fields.JobTitle, false, "text"),
-			field("Sumber Lead", "lead_source", v.Fields.LeadSource, false, "text"),
+			// BL-82: Sumber Lead = dropdown enum terkunci (bukan teks bebas).
+			// Opsional (required=false → ada opsi kosong "—"); nilai lama di luar
+			// himpunan tampil tak-terpilih. Backend (parseLeadForm) menegakkan.
+			selectField("Sumber Lead", "lead_source", v.Fields.LeadSource, v.Sources, false),
 		),
 		formCard("Kualifikasi",
 			// BL-69: legenda makna Status/Rating pindah ke balik ikon ⓘ tap-friendly

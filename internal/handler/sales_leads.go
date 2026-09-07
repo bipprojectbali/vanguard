@@ -48,6 +48,7 @@ func (h *Handler) LeadNew(w http.ResponseWriter, r *http.Request) {
 		RegionsJSON: h.regionsJSON(ctx),
 		Statuses:    leadStatusOptions,
 		Ratings:     leadRatingOptions,
+		Sources:     leadSourceOptions,
 	}
 	h.renderWorkspaceShell(w, r, "Tambah Lead", "/leads", panel.LeadForm(v))
 }

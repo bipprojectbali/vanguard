@@ -162,3 +162,39 @@ func TestParseLeadForm_AlasanUnqualifiedDibuangSaatStatusBukanUnqualified(t *tes
 		t.Errorf("status Unqualified: alasan harus dipertahankan, dapat %v", f2.UnqualifiedReason)
 	}
 }
+
+// TestParseLeadForm_SumberLeadEnum — BL-82: "Sumber Lead" kini enum terkunci.
+// Nilai sah (∈ himpunan) diterima verbatim; nilai di luar himpunan ditolak
+// (code "lead_source"); kosong = NULL. Tanpa CHECK DB → penegakan di parseLeadForm.
+func TestParseLeadForm_SumberLeadEnum(t *testing.T) {
+	base := map[string]string{"lead_name": "Desa Contoh", "lead_status": "New"}
+
+	// (a) nilai sah diterima apa adanya.
+	for _, ok := range []string{"Referral", "Event", "Website", "Cold Call", "Tender", "Dinas PMD", "Lainnya"} {
+		m := map[string]string{"lead_name": base["lead_name"], "lead_status": base["lead_status"], "lead_source": ok}
+		f, code := parseLeadForm(fvFromMap(m))
+		if code != "" {
+			t.Fatalf("sumber %q ditolak (code=%q), harusnya diterima", ok, code)
+		}
+		if f.LeadSource == nil || *f.LeadSource != ok {
+			t.Errorf("sumber %q → LeadSource=%v, mau pointer ke %q", ok, f.LeadSource, ok)
+		}
+	}
+
+	// (b) nilai di luar himpunan (mis. nilai teks-bebas lama) ditolak.
+	for _, bad := range []string{"Pemda", "Media Sosial", "referral", "Random"} {
+		m := map[string]string{"lead_name": base["lead_name"], "lead_status": base["lead_status"], "lead_source": bad}
+		if _, code := parseLeadForm(fvFromMap(m)); code != "lead_source" {
+			t.Errorf("sumber %q harus ditolak code=lead_source, dapat %q", bad, code)
+		}
+	}
+
+	// (c) kosong = NULL (opsional).
+	f, code := parseLeadForm(fvFromMap(base))
+	if code != "" {
+		t.Fatalf("sumber kosong ditolak (code=%q), harusnya NULL", code)
+	}
+	if f.LeadSource != nil {
+		t.Errorf("sumber kosong → LeadSource=%v, mau nil (NULL)", f.LeadSource)
+	}
+}

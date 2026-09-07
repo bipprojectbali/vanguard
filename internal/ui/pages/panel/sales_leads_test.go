@@ -206,3 +206,33 @@ func TestLeadForm_PhoneLiveFilter(t *testing.T) {
 		t.Errorf("form lead TAK boleh pakai type=\"number\":\n%s", out)
 	}
 }
+
+// TestLeadForm_SumberLeadDropdown — BL-82: "Sumber Lead" jadi dropdown enum
+// terkunci (bukan input teks bebas). Render harus memuat <select
+// name="lead_source"> berisi 7 opsi + opsi kosong (opsional). Backend
+// (parseLeadForm) tetap penegak himpunan.
+func TestLeadForm_SumberLeadDropdown(t *testing.T) {
+	sources := []string{"Referral", "Event", "Website", "Cold Call", "Tender", "Dinas PMD", "Lainnya"}
+	out := renderLeads(t, LeadForm(LeadFormView{
+		Base:        "/w/desa",
+		Action:      "/w/desa/leads/new",
+		Statuses:    []string{"New"},
+		Ratings:     []string{"Hot"},
+		Sources:     sources,
+		RegionsJSON: "[]",
+	}))
+
+	// Harus <select> utk lead_source, BUKAN <input type=text name="lead_source">.
+	if !strings.Contains(out, `name="lead_source"`) {
+		t.Fatalf("field lead_source harus ada:\n%s", out)
+	}
+	if strings.Contains(out, `<input`) && strings.Contains(out, `name="lead_source" type="text"`) {
+		t.Errorf("lead_source TAK boleh lagi input teks bebas:\n%s", out)
+	}
+	// Ketujuh opsi ter-render.
+	for _, s := range sources {
+		if !strings.Contains(out, `<option value="`+s+`"`) {
+			t.Errorf("opsi Sumber Lead %q harus ter-render:\n%s", s, out)
+		}
+	}
+}
