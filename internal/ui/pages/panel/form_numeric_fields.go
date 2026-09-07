@@ -71,6 +71,11 @@ func moneyFieldRp(label, name, val string) g.Node {
 // mengizinkan digit, '+' (prefix negara), spasi & tanda hubung sebagai pemisah.
 // TIDAK memakai type="number": itu akan membuang leading zero & '+'. Nilai asli
 // pengguna (termasuk "0812…"/"+62…") dipertahankan apa adanya oleh backend.
+//
+// BL-81: data-phonenum = kait yang dibaca static/phonenum.js — menyaring
+// karakter tak-diizinkan SAAT DIKETIK (bukan hanya saat submit), sehingga field
+// tak pernah berisi huruf/simbol mustahil. pattern hanya jaring pasif; backend
+// (optPhone) tetap penolak sesungguhnya saat submit. Tanpa JS pun aman.
 func phoneNumField(label, name, val string) g.Node {
 	return h.Div(
 		h.Class("grid gap-1 min-w-0"),
@@ -78,6 +83,7 @@ func phoneNumField(label, name, val string) g.Node {
 		ui.Input(
 			h.ID("f-"+name), h.Name(name), h.Type("tel"),
 			g.Attr("inputmode", "numeric"), g.Attr("pattern", "[0-9+ -]*"),
+			g.Attr("data-phonenum", ""),
 			h.Value(val), h.Placeholder("mis. 0812… / +62812…"),
 			h.Class("input text-base w-full"),
 		),

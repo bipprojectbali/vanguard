@@ -130,6 +130,9 @@ func LeadForm(v LeadFormView) g.Node {
 	// Pengelompokan ribuan utk input uang (data-numgroup): memformat tampilan &
 	// menormalkan jadi digit polos saat submit. Same-origin CSP-safe (gotcha #16).
 	body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
+	// BL-81: penyaring live nomor telepon (data-phonenum, HP/WhatsApp) — buang
+	// karakter tak-diizinkan saat diketik. Same-origin CSP-safe (gotcha #16).
+	body = append(body, h.Script(h.Src("/static/phonenum.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }

@@ -179,3 +179,30 @@ func TestLeadForm_AlasanUnqualifiedKondisional(t *testing.T) {
 			"(iShow=%d, iTextarea=%d):\n%s", iShow, iTextarea, out)
 	}
 }
+
+// TestLeadForm_PhoneLiveFilter — BL-81: HP & WhatsApp membawa kait
+// data-phonenum (dibaca static/phonenum.js) yang menyaring karakter tak-diizinkan
+// SAAT DIKETIK, dan form memuat skripnya. Perilaku ketik (menyaring input event)
+// tak bisa di-unit-test tanpa DOM; di sini kita jaga kontraknya: kedua field
+// telepon punya kait & skrip termuat. Backend optPhone tetap penolak saat submit.
+func TestLeadForm_PhoneLiveFilter(t *testing.T) {
+	out := renderLeads(t, LeadForm(LeadFormView{
+		Base:        "/w/desa",
+		Action:      "/w/desa/leads/new",
+		Statuses:    []string{"New"},
+		Ratings:     []string{"Hot"},
+		RegionsJSON: "[]",
+	}))
+
+	if !strings.Contains(out, "/static/phonenum.js") {
+		t.Errorf("form lead harus memuat skrip penyaring telepon /static/phonenum.js:\n%s", out)
+	}
+	// Kait data-phonenum WAJIB ada di KEDUA field telepon (HP + WhatsApp) → 2×.
+	if n := strings.Count(out, "data-phonenum"); n != 2 {
+		t.Errorf("kait data-phonenum harus muncul 2× (HP + WhatsApp), dapat %d:\n%s", n, out)
+	}
+	// BL-2 dipertahankan: tetap tanpa type="number".
+	if strings.Contains(out, `type="number"`) {
+		t.Errorf("form lead TAK boleh pakai type=\"number\":\n%s", out)
+	}
+}
