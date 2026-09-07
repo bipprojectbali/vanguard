@@ -51,8 +51,10 @@ func (h *Handler) LeadDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := wsPath(slugFromRequest(r), "")
-	h.renderWorkspaceShell(w, r, l.LeadName, "/leads",
-		panel.LeadDetail(h.leadDetailView(ctx, base, l, names)))
+	dv := h.leadDetailView(ctx, base, l, names)
+	// BL-83: galat PRG kontrol status (?err=CODE) → pesan; kosong bila tak ada.
+	dv.Err = wsErrMsg(r.URL.Query().Get("err"))
+	h.renderWorkspaceShell(w, r, l.LeadName, "/leads", panel.LeadDetail(dv))
 }
 
 // leadDetailView merakit detail lengkap + F4 (estimated_value & telepon tersamar).
@@ -79,6 +81,7 @@ func (h *Handler) leadDetailView(ctx context.Context, base string, l db.Lead, na
 		JobTitle:          deref(l.JobTitle),
 		LeadSource:        deref(l.LeadSource),
 		Status:            l.LeadStatus,
+		Statuses:          leadStatusOptions, // BL-83: opsi kontrol "Ubah Status"
 		Rating:            deref(l.Rating),
 		UnqualifiedReason: deref(l.UnqualifiedReason),
 		EstValue:          maskARR(formatRupiah(l.EstimatedValue), br),

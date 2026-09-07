@@ -417,3 +417,35 @@ func (q *Queries) UpdateLead(ctx context.Context, arg UpdateLeadParams) (Lead, e
 	)
 	return i, err
 }
+
+const updateLeadStatus = `-- name: UpdateLeadStatus :exec
+UPDATE leads SET
+    lead_status        = $1,
+    unqualified_reason = $2,
+    updated_by         = $3,
+    updated_at         = now()
+WHERE id = $4 AND deleted_at IS NULL AND NOT converted
+`
+
+type UpdateLeadStatusParams struct {
+	LeadStatus        string  `json:"lead_status"`
+	UnqualifiedReason *string `json:"unqualified_reason"`
+	UpdatedBy         *int64  `json:"updated_by"`
+	ID                int64   `json:"id"`
+}
+
+// BL-83: transisi STATUS lead sebagai aksi tersendiri (bukan efek edit profil),
+// cermin UpdateDealStage. Hanya lead_status + unqualified_reason (terkopel status
+// Unqualified, BL-80) yang disentuh — profil lead tak diubah di sini. Transisi
+// BEBAS antar-status manual (keputusan BL-83); 'Converted' TAK dapat dicapai lewat
+// jalur ini: guard `AND NOT converted` menolak baris hasil konversi agar invariant
+// "converted = terminal" tak bisa dipalsukan (handler juga menyembunyikan kontrol).
+func (q *Queries) UpdateLeadStatus(ctx context.Context, arg UpdateLeadStatusParams) error {
+	_, err := q.db.Exec(ctx, updateLeadStatus,
+		arg.LeadStatus,
+		arg.UnqualifiedReason,
+		arg.UpdatedBy,
+		arg.ID,
+	)
+	return err
+}

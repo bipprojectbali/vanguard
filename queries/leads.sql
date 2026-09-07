@@ -91,6 +91,20 @@ UPDATE leads SET
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL
 RETURNING *;
 
+-- name: UpdateLeadStatus :exec
+-- BL-83: transisi STATUS lead sebagai aksi tersendiri (bukan efek edit profil),
+-- cermin UpdateDealStage. Hanya lead_status + unqualified_reason (terkopel status
+-- Unqualified, BL-80) yang disentuh — profil lead tak diubah di sini. Transisi
+-- BEBAS antar-status manual (keputusan BL-83); 'Converted' TAK dapat dicapai lewat
+-- jalur ini: guard `AND NOT converted` menolak baris hasil konversi agar invariant
+-- "converted = terminal" tak bisa dipalsukan (handler juga menyembunyikan kontrol).
+UPDATE leads SET
+    lead_status        = sqlc.arg(lead_status),
+    unqualified_reason = sqlc.narg(unqualified_reason),
+    updated_by         = sqlc.narg(updated_by),
+    updated_at         = now()
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL AND NOT converted;
+
 -- name: MarkLeadConverted :exec
 -- Tautkan hasil konversi ke lead + kunci statusnya. Dipanggil DALAM tx konversi
 -- (bersama INSERT account/contact/deal) → gagal-sebagian rollback penuh. Guard

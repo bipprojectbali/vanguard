@@ -4,52 +4,46 @@ import (
 	"go_starter/internal/ui"
 
 	g "maragu.dev/gomponents"
-	data "maragu.dev/gomponents-datastar"
 	h "maragu.dev/gomponents/html"
 )
 
-// leadUnqualified = nilai status yang mengaktifkan field "Alasan Unqualified"
-// (BL-80). Cermin salah satu validLeadStatuses (handler); dipakai merakit
-// ekspresi data-show agar satu perubahan nilai enum tak menyisakan ekspresi basi.
-const leadUnqualified = "Unqualified"
-
-// unqualifiedReasonShowExpr = ekspresi data-show field "Alasan Unqualified":
-// tampil hanya saat $leadstatus == "Unqualified". Dirakit dari const (bukan
-// literal terpisah) — sejajar pola onboardingProgressShowExpr (CS form).
-const unqualifiedReasonShowExpr = "$leadstatus == '" + leadUnqualified + "'"
-
-// sales_leads_form.go — form buat/sunting lead. Form NATIVE POST → 303 (gotcha
-// #16). Validasi sesungguhnya di backend (parseLeadForm); atribut di sini hanya
-// jaring klien. Enum (status/rating) dioper handler. Reuse helper formCard/
-// field/selectField/textareaField dari accounts_form.go (satu paket panel).
+// sales_leads_form.go — form buat/sunting PROFIL lead. Form NATIVE POST → 303
+// (gotcha #16). Validasi sesungguhnya di backend (parseLeadForm); atribut di sini
+// hanya jaring klien. Enum (rating) dioper handler. Reuse helper formCard/field/
+// selectField/textareaField dari accounts_form.go (satu paket panel).
+//
+// BL-83: STATUS lead TAK lagi di form ini — transisi status = aksi tersendiri
+// (kartu "Ubah Status" di detail lead, sales_leads_status_control.go). Form profil
+// fokus ke identitas/kualifikasi non-transisi (nama/kontak/sumber/rating/nilai/
+// lokasi). "Alasan Unqualified" (BL-80) ikut pindah ke kontrol status, karena
+// terkopel ke pilihan status.
 
 // LeadFormFields = nilai prefill form (edit) atau kosong (buat). Semua string
-// agar view netral terhadap tipe DB.
+// agar view netral terhadap tipe DB. Status & alasan Unqualified TIDAK di sini
+// (BL-83: dikelola kontrol status di detail, bukan form profil).
 type LeadFormFields struct {
-	LeadName          string
-	ContactPerson     string
-	JobTitle          string
-	LeadSource        string
-	LeadStatus        string
-	Rating            string
-	UnqualifiedReason string
-	EstimatedValue    string
-	DistrictID        string
-	MobilePhone       string
-	Whatsapp          string
-	Email             string
+	LeadName       string
+	ContactPerson  string
+	JobTitle       string
+	LeadSource     string
+	Rating         string
+	EstimatedValue string
+	DistrictID     string
+	MobilePhone    string
+	Whatsapp       string
+	Email          string
 }
 
-// LeadFormView = data halaman form. Action = URL POST tujuan. IsEdit mengubah
-// judul/label. Statuses/Ratings = opsi enum dropdown (dari handler).
+// LeadFormView = data halaman form profil. Action = URL POST tujuan. IsEdit
+// mengubah judul/label. Ratings = opsi enum rating; Sources = opsi "Sumber Lead"
+// (BL-82). Statuses TAK di sini (BL-83: status dikelola kontrol terpisah).
 type LeadFormView struct {
-	Base     string
-	Action   string
-	IsEdit   bool
-	Err      string
-	Fields   LeadFormFields
-	Statuses []string
-	Ratings  []string
+	Base    string
+	Action  string
+	IsEdit  bool
+	Err     string
+	Fields  LeadFormFields
+	Ratings []string
 	// Sources = opsi dropdown "Sumber Lead" (BL-82, dari handler). Enum terkunci
 	// menggantikan input teks bebas.
 	Sources []string
@@ -59,7 +53,7 @@ type LeadFormView struct {
 	RegionsJSON string
 }
 
-// LeadForm merender halaman form lengkap.
+// LeadForm merender halaman form profil lengkap.
 func LeadForm(v LeadFormView) g.Node {
 	title := "Tambah Lead"
 	submit := "Simpan Lead"
@@ -82,11 +76,6 @@ func LeadForm(v LeadFormView) g.Node {
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),
 		h.Class("grid gap-4 min-w-0"),
-		// BL-80: signal $leadstatus menggerakkan tampil/sembunyi "Alasan
-		// Unqualified" (data-show). Diinisialisasi dari nilai TERSIMPAN agar
-		// no-FOUC saat prefill (edit lead Unqualified → field langsung tampak).
-		// Efemeral (state form), bukan data dikirim ke server.
-		data.Signals(map[string]any{"leadstatus": v.Fields.LeadStatus}),
 
 		formCard("Identitas Lead",
 			field("Nama Lead", "lead_name", v.Fields.LeadName, true, "text"),
@@ -98,24 +87,11 @@ func LeadForm(v LeadFormView) g.Node {
 			selectField("Sumber Lead", "lead_source", v.Fields.LeadSource, v.Sources, false),
 		),
 		formCard("Kualifikasi",
-			// BL-69: legenda makna Status/Rating pindah ke balik ikon ⓘ tap-friendly
-			// di label (enumFieldHinted, pola BL-65) — bukan baris statis di bawah
-			// select yang memaksa field melebar. Form Tambah Lead kini seragam dgn
-			// form Tambah Desa.
-			//
-			// BL-80: Status pakai leadStatusSelect (varian enumFieldHinted yang
-			// di-bind ke signal $leadstatus) agar field "Alasan Unqualified" bisa
-			// muncul/lenyap mengikuti pilihan status tanpa round-trip.
-			leadStatusSelect(v.Fields.LeadStatus, v.Statuses),
+			// BL-69: legenda makna Rating di balik ikon ⓘ tap-friendly (enumFieldHinted).
+			// BL-83: "Status" & "Alasan Unqualified" dipindah ke kontrol status di detail
+			// lead — kualifikasi non-transisi (rating minat + nilai estimasi) tetap di sini.
 			enumFieldHinted("Rating", "rating", v.Fields.Rating, v.Ratings, false, leadRatingLegend),
 			moneyField("Nilai Estimasi (Rp)", "estimated_value", v.Fields.EstimatedValue),
-			// BL-80: alasan unqualified HANYA bermakna saat Status = Unqualified —
-			// disembunyikan (data-show) untuk status lain agar tak menyesatkan.
-			// data-show = jaring UX klien (display:none, field TETAP terkirim);
-			// backend (parseLeadForm) tetap penegak: nilai basi dibuang saat status
-			// ≠ Unqualified.
-			showWhen(unqualifiedReasonShowExpr, "sm:col-span-2 min-w-0",
-				textareaField("Alasan Unqualified", "unqualified_reason", v.Fields.UnqualifiedReason)),
 		),
 		formCard("Lokasi & Kontak",
 			regionSelect("lead", v.RegionsJSON, v.Fields.DistrictID, false),
@@ -141,38 +117,6 @@ func LeadForm(v LeadFormView) g.Node {
 	body = append(body, h.Script(h.Src("/static/phonenum.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
-}
-
-// leadStatusSelect — dropdown "Status" lead yang di-bind ke signal $leadstatus
-// (data.Bind) sehingga memilih nilai men-toggle field "Alasan Unqualified" tanpa
-// round-trip (BL-80). Selain binding, identik enumFieldHinted("Status", …,
-// required=true, leadStatusLegend): label + legenda makna di balik ikon ⓘ (BL-69),
-// opsi dari enumOptions (satu sumber, tanpa blank karena wajib). Dibuat manual
-// karena enumFieldHinted tak menyuntikkan atribut Datastar — cermin
-// onboardingStatusSelect (customer_success_form.go).
-func leadStatusSelect(current string, opts []string) g.Node {
-	sel := []g.Node{
-		h.ID("f-lead_status"), h.Name("lead_status"),
-		data.Bind("leadstatus"),
-		h.Class("select text-base w-full"),
-		h.Required(),
-	}
-	return h.Div(
-		h.Class("grid gap-1 min-w-0"),
-		labelWithLegend("Status", "f-lead_status", true, leadStatusLegend),
-		h.Select(append(sel, g.Group(enumOptions(current, opts, false)))...),
-	)
-}
-
-// leadStatusLegend = makna tiap status lead (BL-3). Urut = alur kualifikasi
-// (New → Contacted → Qualified, atau bercabang ke Unqualified). 'Converted' tak
-// di sini: itu status sistem hasil konversi, tak bisa dipilih manual (lihat
-// parseLeadForm). HARUS himpunan yang sama dengan leadStatusOptions.
-var leadStatusLegend = [][2]string{
-	{"New", "Baru masuk, belum dihubungi."},
-	{"Contacted", "Sudah dihubungi, belum dikualifikasi."},
-	{"Qualified", "Cocok dan siap dikonversi jadi Deal."},
-	{"Unqualified", "Tak cocok atau tak berminat (isi alasannya)."},
 }
 
 // leadRatingLegend = makna tiap rating minat (BL-3). Urut dari paling panas.
