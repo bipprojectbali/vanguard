@@ -10,12 +10,23 @@ import (
 )
 
 // subscriptions_churn.go — view dasbor Churn (Modul 5, Menu 5.2/5.4, READ-ONLY).
-// Murni-data: MRR Hilang/Tgl Churn/CSM SUDAH diformat di handler. Tab tipe churn =
-// LINK <a> (navigasi bookmarkable, lolos gotcha #16), bukan Datastar. TANPA aksi
-// (dasbor baca) — churn ditandai dari detail langganan. Meniru subscriptions_renewals.go.
+// Murni-data: MRR Hilang/Tgl Churn/Tenure/CSM & nilai KPI SUDAH diformat di handler.
+// Tab tipe churn = LINK <a> (navigasi bookmarkable, lolos gotcha #16), bukan Datastar.
+// TANPA aksi (dasbor baca) — churn ditandai dari detail langganan. BL-92: banner
+// peringatan (token warning), 4 kartu KPI, kolom Tenure, tombol Ekspor CSV.
+
+// ChurnKPIs = 4 KPI dasbor Churn, SUDAH diformat di handler. VillagesActive dipakai
+// sub-label kartu Desa Churn ("dari M aktif"), bukan kartu tersendiri.
+type ChurnKPIs struct {
+	ChurnRate       string // Churn Rate 30 hari, "%"
+	ChurnedMRR      string // Rp, hilang bulan berjalan (ter-mask F4)
+	VillagesChurned string // N desa churn 30 hari
+	VillagesActive  string // M desa aktif (snapshot) — sub "dari M aktif"
+	AvgTenure       string // rata masa langganan sebelum berhenti, "N bln"
+}
 
 // ChurnRow = satu langganan yang berhenti untuk baris tabel Churn. Semua nilai
-// SUDAH diformat di handler (LostMRR, ChurnDate = string; CSM = nama anggota).
+// SUDAH diformat di handler (LostMRR, ChurnDate, Tenure = string; CSM = nama anggota).
 type ChurnRow struct {
 	ID        int64
 	Village   string
@@ -24,6 +35,7 @@ type ChurnRow struct {
 	Reason    string
 	Type      string
 	ChurnDate string
+	Tenure    string
 	CSM       string
 }
 
@@ -37,6 +49,7 @@ type ChurnView struct {
 	Base       string
 	Type       string
 	Types      []ChurnType
+	KPIs       ChurnKPIs
 	Err        string
 	Items      []ChurnRow
 	NextCursor string
@@ -44,7 +57,7 @@ type ChurnView struct {
 	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 }
 
-// ChurnList merender halaman: header + tab tipe + alert + tabel + pager.
+// ChurnList merender halaman: header + ekspor + KPI + tab tipe + tabel + pager.
 func ChurnList(v ChurnView) g.Node {
 	body := []g.Node{
 		h.Div(
@@ -52,9 +65,11 @@ func ChurnList(v ChurnView) g.Node {
 			h.Div(
 				h.H1(h.Class("text-xl font-semibold"), g.Text("Churn / Cancellations")),
 				h.P(h.Class("text-base-content/70"),
-					g.Text("Langganan yang telah berhenti & nilai MRR yang hilang. Aksi churn dikerjakan di detail langganan.")),
+					g.Text("Langganan Desa+ berhenti · alasan · tren · winback")),
 			),
+			churnExportBtn(v),
 		),
+		churnKPICards(v.KPIs),
 		churnTypeTabsView(v),
 	}
 	if v.Err != "" {
@@ -66,6 +81,43 @@ func ChurnList(v ChurnView) g.Node {
 		body = append(body, churnTable(v), churnPager(v))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// churnExportBtn = tombol ekspor CSV read-only (route baru /subscriptions/churn/
+// export). LINK <a> (navigasi, lolos gotcha #16); tipe aktif ikut menyaring ekspor.
+func churnExportBtn(v ChurnView) g.Node {
+	return h.A(
+		h.Href(v.Base+"/subscriptions/churn/export?type="+v.Type),
+		g.Attr("download", ""),
+		h.Class("btn btn-sm btn-outline min-h-11"),
+		g.Text("Ekspor CSV"),
+	)
+}
+
+// churnKPICards = 4 kartu KPI. Grid mobile-first grid-cols-1 → md:2 → lg:4 (BL-92).
+func churnKPICards(k ChurnKPIs) g.Node {
+	return h.Div(
+		h.Class("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 min-w-0"),
+		churnKPICard("Churn Rate", k.ChurnRate, "30 hari terakhir", "text-error"),
+		churnKPICard("Churned MRR", k.ChurnedMRR, "hilang bulan ini", "text-error"),
+		churnKPICard("Desa Churn", k.VillagesChurned, "dari "+k.VillagesActive+" aktif", ""),
+		churnKPICard("Avg Tenure", k.AvgTenure, "sebelum berhenti", ""),
+	)
+}
+
+func churnKPICard(label, value, sub, colorCls string) g.Node {
+	numCls := "text-2xl font-bold"
+	if colorCls != "" {
+		numCls += " " + colorCls
+	}
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+		h.Div(h.Class("card-body p-3"),
+			h.P(h.Class("text-xs text-base-content/60 truncate"), g.Text(label)),
+			h.P(h.Class(numCls), g.Text(value)),
+			h.P(h.Class("text-xs text-base-content/50 truncate"), g.Text(sub)),
+		),
+	)
 }
 
 // churnTypeTabsView = baris tab LINK tipe churn. Navigasi bookmarkable (gotcha #16);
@@ -94,7 +146,7 @@ func emptyChurn() g.Node {
 }
 
 // churnTable = tabel churn, dibungkus ui.TableScroll (scroll terkurung, tak
-// meluberkan viewport 375px). Kolom mengikuti wireframe 5.2/5.4.
+// meluberkan viewport 375px). Kolom mengikuti wireframe 5.2/5.4 + Tenure (BL-92).
 func churnTable(v ChurnView) g.Node {
 	rows := make([]g.Node, 0, len(v.Items))
 	for _, s := range v.Items {
@@ -114,6 +166,7 @@ func churnTable(v ChurnView) g.Node {
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Alasan")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Tipe")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Tgl Churn")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Tenure")),
 					h.Th(h.Class("py-2 font-medium"), g.Text("CS")),
 				)),
 				h.TBody(g.Group(rows)),
@@ -136,6 +189,7 @@ func churnTableRow(base string, s ChurnRow) g.Node {
 		link(orDash(s.Reason), "py-2 pr-4"),
 		link(orDash(s.Type), "py-2 pr-4"),
 		link(orDash(s.ChurnDate), "py-2 pr-4"),
+		link(orDash(s.Tenure), "py-2 pr-4"),
 		link(orDash(s.CSM), "py-2"),
 	)
 }
