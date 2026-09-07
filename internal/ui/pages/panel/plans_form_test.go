@@ -58,6 +58,22 @@ func TestPlanForm_PriceFieldsAreMoneyFields(t *testing.T) {
 	}
 }
 
+// TestPlanForm_NoCurrencyField: mata uang selalu IDR (BL-90) → form TAK boleh
+// lagi merender input "Mata Uang" (label maupun name="currency"). Ditetapkan
+// handler, bukan disunting user. Diuji utk Tambah & Sunting.
+func TestPlanForm_NoCurrencyField(t *testing.T) {
+	for _, edit := range []bool{false, true} {
+		v := basePlanFormView()
+		v.IsEdit = edit
+		out := renderPlanForm(t, v)
+		for _, unwanted := range []string{"Mata Uang", `name="currency"`} {
+			if strings.Contains(out, unwanted) {
+				t.Errorf("form Plan (IsEdit=%v) tak boleh memuat %q (BL-90):\n%s", edit, unwanted, out)
+			}
+		}
+	}
+}
+
 // TestPlanForm_LoadsNumgroupScript: form WAJIB memuat /static/numgroup.js — inti
 // perbaikan BL-89. Skrip inilah yang membuang non-digit saat diketik.
 func TestPlanForm_LoadsNumgroupScript(t *testing.T) {
