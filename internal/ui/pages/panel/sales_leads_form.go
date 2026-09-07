@@ -4,8 +4,19 @@ import (
 	"go_starter/internal/ui"
 
 	g "maragu.dev/gomponents"
+	data "maragu.dev/gomponents-datastar"
 	h "maragu.dev/gomponents/html"
 )
+
+// leadUnqualified = nilai status yang mengaktifkan field "Alasan Unqualified"
+// (BL-80). Cermin salah satu validLeadStatuses (handler); dipakai merakit
+// ekspresi data-show agar satu perubahan nilai enum tak menyisakan ekspresi basi.
+const leadUnqualified = "Unqualified"
+
+// unqualifiedReasonShowExpr = ekspresi data-show field "Alasan Unqualified":
+// tampil hanya saat $leadstatus == "Unqualified". Dirakit dari const (bukan
+// literal terpisah) — sejajar pola onboardingProgressShowExpr (CS form).
+const unqualifiedReasonShowExpr = "$leadstatus == '" + leadUnqualified + "'"
 
 // sales_leads_form.go — form buat/sunting lead. Form NATIVE POST → 303 (gotcha
 // #16). Validasi sesungguhnya di backend (parseLeadForm); atribut di sini hanya
@@ -68,6 +79,11 @@ func LeadForm(v LeadFormView) g.Node {
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),
 		h.Class("grid gap-4 min-w-0"),
+		// BL-80: signal $leadstatus menggerakkan tampil/sembunyi "Alasan
+		// Unqualified" (data-show). Diinisialisasi dari nilai TERSIMPAN agar
+		// no-FOUC saat prefill (edit lead Unqualified → field langsung tampak).
+		// Efemeral (state form), bukan data dikirim ke server.
+		data.Signals(map[string]any{"leadstatus": v.Fields.LeadStatus}),
 
 		formCard("Identitas Lead",
 			field("Nama Lead", "lead_name", v.Fields.LeadName, true, "text"),
@@ -80,10 +96,20 @@ func LeadForm(v LeadFormView) g.Node {
 			// di label (enumFieldHinted, pola BL-65) — bukan baris statis di bawah
 			// select yang memaksa field melebar. Form Tambah Lead kini seragam dgn
 			// form Tambah Desa.
-			enumFieldHinted("Status", "lead_status", v.Fields.LeadStatus, v.Statuses, true, leadStatusLegend),
+			//
+			// BL-80: Status pakai leadStatusSelect (varian enumFieldHinted yang
+			// di-bind ke signal $leadstatus) agar field "Alasan Unqualified" bisa
+			// muncul/lenyap mengikuti pilihan status tanpa round-trip.
+			leadStatusSelect(v.Fields.LeadStatus, v.Statuses),
 			enumFieldHinted("Rating", "rating", v.Fields.Rating, v.Ratings, false, leadRatingLegend),
 			moneyField("Nilai Estimasi (Rp)", "estimated_value", v.Fields.EstimatedValue),
-			textareaField("Alasan Unqualified", "unqualified_reason", v.Fields.UnqualifiedReason),
+			// BL-80: alasan unqualified HANYA bermakna saat Status = Unqualified —
+			// disembunyikan (data-show) untuk status lain agar tak menyesatkan.
+			// data-show = jaring UX klien (display:none, field TETAP terkirim);
+			// backend (parseLeadForm) tetap penegak: nilai basi dibuang saat status
+			// ≠ Unqualified.
+			showWhen(unqualifiedReasonShowExpr, "sm:col-span-2 min-w-0",
+				textareaField("Alasan Unqualified", "unqualified_reason", v.Fields.UnqualifiedReason)),
 		),
 		formCard("Lokasi & Kontak",
 			regionSelect("lead", v.RegionsJSON, v.Fields.DistrictID, false),
@@ -106,6 +132,27 @@ func LeadForm(v LeadFormView) g.Node {
 	body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// leadStatusSelect — dropdown "Status" lead yang di-bind ke signal $leadstatus
+// (data.Bind) sehingga memilih nilai men-toggle field "Alasan Unqualified" tanpa
+// round-trip (BL-80). Selain binding, identik enumFieldHinted("Status", …,
+// required=true, leadStatusLegend): label + legenda makna di balik ikon ⓘ (BL-69),
+// opsi dari enumOptions (satu sumber, tanpa blank karena wajib). Dibuat manual
+// karena enumFieldHinted tak menyuntikkan atribut Datastar — cermin
+// onboardingStatusSelect (customer_success_form.go).
+func leadStatusSelect(current string, opts []string) g.Node {
+	sel := []g.Node{
+		h.ID("f-lead_status"), h.Name("lead_status"),
+		data.Bind("leadstatus"),
+		h.Class("select text-base w-full"),
+		h.Required(),
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelWithLegend("Status", "f-lead_status", true, leadStatusLegend),
+		h.Select(append(sel, g.Group(enumOptions(current, opts, false)))...),
+	)
 }
 
 // leadStatusLegend = makna tiap status lead (BL-3). Urut = alur kualifikasi
