@@ -22,19 +22,32 @@ import (
 // bertabrakan dengan enum status langganan.
 const SubStatusAll = "all"
 
-// SubRow = satu langganan untuk baris tabel. MRR/ARR SUDAH diformat & disamarkan
-// F4 di handler. Owner = nama orang.
+// SubRow = satu langganan untuk baris tabel RAMPING (BL-95, 6 kolom: Desa · Paket ·
+// MRR · Status · Renewal Date · CSM). MRR SUDAH diformat & disamarkan F4 di handler.
+// Status = label DERIVASI (Aman/Jatuh Tempo/Masa Tenggang untuk Active; lifecycle
+// apa adanya untuk non-Active), StatusClass = class badge daisyUI dari handler.
+// Renewal = end_date terformat, CSM = nama pemilik. ARR/Mulai/EntityCode dibuang.
 type SubRow struct {
-	ID         int64
-	EntityCode string
-	Village    string
-	Plan       string
-	Status     string
-	MRR        string
+	ID          int64
+	Village     string
+	Plan        string
+	Status      string
+	StatusClass string
+	MRR         string
+	Renewal     string
+	CSM         string
+}
+
+// SubKPIs = 4 kartu KPI header halaman (BL-95). SUDAH diformat di handler (Rp,
+// angka, %). TotalMRR + NewMRR (delta "MRR baru bln ini"), ARR, ActiveSubs +
+// Accounts (denominator "dari N desa"), ChurnRate (churn 30 hari).
+type SubKPIs struct {
+	TotalMRR   string
+	NewMRR     string
 	ARR        string
-	Start      string
-	End        string
-	Owner      string
+	ActiveSubs string
+	Accounts   string
+	ChurnRate  string
 }
 
 // SubListView = data halaman /subscriptions. StatusFilter = penanda pilihan tab
@@ -47,6 +60,7 @@ type SubListView struct {
 	StatusFilter string
 	Statuses     []string
 	Query        string // ?q= pencarian bebas (BL-6); "" = tak mencari
+	KPIs         SubKPIs
 	Err          string
 	Items        []SubRow
 	NextCursor   string
@@ -65,6 +79,7 @@ func SubList(v SubListView) g.Node {
 					g.Text("Langganan berjalan — paket, nilai berulang, dan masa berlaku.")),
 			),
 		),
+		subKPICards(v.KPIs),
 		tabSearchRow(subStatusFilter(v),
 			searchBoxInline(v.Base+"/subscriptions", v.Query,
 				"Cari langganan — desa, paket, atau kode…", "Cari langganan",
@@ -79,6 +94,34 @@ func SubList(v SubListView) g.Node {
 		body = append(body, subsTable(v), subsPager(v))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// subKPICards = 4 kartu KPI header (BL-95). Grid mobile-first grid-cols-1 → md:2 →
+// lg:4 (pola BL-94). Total MRR bersubtitel delta "+… bln ini" (MRR baru bln ini);
+// Langganan Aktif bersubtitel "dari N desa" (total akun desa) — keputusan user.
+func subKPICards(k SubKPIs) g.Node {
+	return h.Div(
+		h.Class("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 min-w-0"),
+		subKPICard("Total MRR", k.TotalMRR, "+"+k.NewMRR+" bln ini", "text-primary"),
+		subKPICard("ARR", k.ARR, "proyeksi tahunan", "text-secondary"),
+		subKPICard("Langganan Aktif", k.ActiveSubs, "dari "+k.Accounts+" desa", "text-success"),
+		subKPICard("Churn Rate", k.ChurnRate, "30 hari terakhir", "text-error"),
+	)
+}
+
+func subKPICard(label, value, sub, colorCls string) g.Node {
+	numCls := "text-2xl font-bold"
+	if colorCls != "" {
+		numCls += " " + colorCls
+	}
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+		h.Div(h.Class("card-body p-3"),
+			h.P(h.Class("text-xs text-base-content/60 truncate"), g.Text(label)),
+			h.P(h.Class(numCls), g.Text(value)),
+			h.P(h.Class("text-xs text-base-content/50 truncate"), g.Text(sub)),
+		),
+	)
 }
 
 // subStatusFilter = baris tab LINK filter status (Semua + tiap status). Navigasi
@@ -143,12 +186,10 @@ func subsTable(v SubListView) g.Node {
 					h.Class("border-b border-base-300 text-left text-base-content/70"),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Paket")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Status")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("MRR")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("ARR")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Mulai")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Berakhir")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("Pemilik")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Status")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Renewal Date")),
+					h.Th(h.Class("py-2 font-medium"), g.Text("CSM")),
 				)),
 				h.TBody(g.Group(rows)),
 			)),
@@ -161,22 +202,28 @@ func subTableRow(base string, s SubRow) g.Node {
 	link := func(text, cls string) g.Node {
 		return h.Td(h.Class(cls), h.A(h.Href(href), h.Class("block truncate"), g.Text(text)))
 	}
+	// StatusClass di-derivasi handler (Aman/Jatuh Tempo/Masa Tenggang utk Active,
+	// lifecycle utk non-Active); view hanya merender.
+	badgeCls := s.StatusClass
+	if badgeCls == "" {
+		badgeCls = "badge badge-ghost"
+	}
 	return h.Tr(
 		h.Class("border-b border-base-300/50 hover:bg-base-200/50"),
 		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), h.Class("block truncate font-medium"),
 			g.Text(orDash(s.Village)))),
 		link(orDash(s.Plan), "py-2 pr-4"),
-		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), subStatusBadge(s.Status))),
 		link(orDash(s.MRR), "py-2 pr-4"),
-		link(orDash(s.ARR), "py-2 pr-4"),
-		link(orDash(s.Start), "py-2 pr-4"),
-		link(orDash(s.End), "py-2 pr-4"),
-		link(orDash(s.Owner), "py-2"),
+		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href),
+			h.Span(h.Class(badgeCls), g.Text(orDash(s.Status))))),
+		link(orDash(s.Renewal), "py-2 pr-4"),
+		link(orDash(s.CSM), "py-2"),
 	)
 }
 
 // subStatusBadge = badge status langganan berwarna semantik daisyUI (token, bukan
 // absolut). Active hijau, risiko/akhir (Expired/Cancelled/Churned) merah/peringatan.
+// Dipakai halaman detail & rollup akun (daftar BL-95 kini pakai StatusClass derivasi).
 func subStatusBadge(status string) g.Node {
 	cls := "badge badge-ghost"
 	switch status {

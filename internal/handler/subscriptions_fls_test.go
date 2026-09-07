@@ -35,14 +35,15 @@ func TestSubRowView_MRRMasked(t *testing.T) {
 		Arr:         numFrom(t, "60000000"),
 	}
 	const wantMRR = "Rp 5.000.000"
+	now := time.Now() // uji sumbu role (MRR), bukan derivasi status → now bebas
 
-	v := subRowView(row, nil, "support", false) // canARR tak relevan: uji MRR (sumbu role)
+	v := subRowView(row, nil, "support", now)
 	if v.MRR != flsHidden {
 		t.Errorf("support: MRR harus tersamar (%s), got %q", flsHidden, v.MRR)
 	}
 
 	for _, role := range []string{"admin", "manager", "sales", "csm"} {
-		v := subRowView(row, nil, role, false)
+		v := subRowView(row, nil, role, now)
 		if v.MRR != wantMRR {
 			t.Errorf("role %q: MRR harus %q, got %q", role, wantMRR, v.MRR)
 		}
