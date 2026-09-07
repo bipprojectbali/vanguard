@@ -94,11 +94,11 @@ func parsePlanForm(fv func(string) string) (planForm, string) {
 	}
 	f.SetupFee = setup
 
-	// currency default IDR bila kosong (kolom NOT NULL DEFAULT 'IDR').
-	f.Currency = strings.TrimSpace(fv("currency"))
-	if f.Currency == "" {
-		f.Currency = defaultPlanCurrency
-	}
+	// currency SELALU IDR (BL-90): input form dihapus; nilai apa pun dari
+	// payload (mis. USD dikirim manual) SENGAJA diabaikan — tak dibaca dari
+	// fv("currency"). Kolom plans.currency dipertahankan (NOT NULL DEFAULT
+	// 'IDR') untuk kesiapan multi-currency kelak.
+	f.Currency = defaultPlanCurrency
 
 	// Teks bebas opsional: trim, kosong → NULL.
 	f.Description = optTrim(fv("description"))
@@ -135,7 +135,7 @@ func planFormFields(p db.Plan) panel.PlanFormFields {
 		BasePrice:        moneyRupiahStr(p.BasePrice),
 		BillingFrequency: deref(p.BillingFrequency),
 		SetupFee:         moneyRupiahStr(p.SetupFee),
-		Currency:         p.Currency,
+		// Currency TAK di-prefill (BL-90): bukan lagi field form.
 		IncludedFeatures: deref(p.IncludedFeatures),
 	}
 }

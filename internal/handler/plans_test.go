@@ -251,6 +251,60 @@ func TestPlans_UpdateSuccess(t *testing.T) {
 	env.assertAudited(t, "plan.update")
 }
 
+// --- currency: selalu IDR, input diabaikan (BL-90) --------------------------
+
+// TestPlans_CurrencyAlwaysIDR: mata uang tak lagi dapat disunting user. Kirim
+// tanpa currency → tersimpan IDR; kirim currency="USD" (payload manual, mis.
+// form dipalsukan) → payload SENGAJA diabaikan, tetap IDR. Berlaku di create &
+// update agar keduanya tak boleh menyimpan mata uang berbeda.
+func TestPlans_CurrencyAlwaysIDR(t *testing.T) {
+	t.Run("create tanpa currency → IDR", func(t *testing.T) {
+		env, uid := setupAccounts(t)
+		form := planFormValues("Paket Rupiah", "PLAN-IDR", "Core")
+		req := accountsReq(http.MethodPost, "/w/test/plans", form, "")
+		if rec := env.runAccount(uid, "owner", "admin", req, env.h.PlanCreate); rec.Code != http.StatusSeeOther {
+			t.Fatalf("create gagal, status %d; body:\n%s", rec.Code, rec.Body.String())
+		}
+		rows := env.allPlans(t)
+		if len(rows) != 1 {
+			t.Fatalf("harus 1 baris, ada %d", len(rows))
+		}
+		if rows[0].Currency != defaultPlanCurrency {
+			t.Errorf("currency harus %q, got %q", defaultPlanCurrency, rows[0].Currency)
+		}
+	})
+
+	t.Run("create currency=USD diabaikan → IDR", func(t *testing.T) {
+		env, uid := setupAccounts(t)
+		form := withField(planFormValues("Paket Dolar", "PLAN-USD", "Core"), "currency", "USD")
+		req := accountsReq(http.MethodPost, "/w/test/plans", form, "")
+		if rec := env.runAccount(uid, "owner", "admin", req, env.h.PlanCreate); rec.Code != http.StatusSeeOther {
+			t.Fatalf("create gagal, status %d; body:\n%s", rec.Code, rec.Body.String())
+		}
+		rows := env.allPlans(t)
+		if len(rows) != 1 {
+			t.Fatalf("harus 1 baris, ada %d", len(rows))
+		}
+		if rows[0].Currency != defaultPlanCurrency {
+			t.Errorf("currency=USD harus diabaikan → %q, got %q", defaultPlanCurrency, rows[0].Currency)
+		}
+	})
+
+	t.Run("update currency=USD diabaikan → IDR", func(t *testing.T) {
+		env, uid := setupAccounts(t)
+		p := env.seedPlanRow(t, "Paket Sunting", "PLAN-UPD", "Core")
+		form := withField(planFormValues("Paket Sunting", "PLAN-UPD", "Module"), "currency", "USD")
+		req := accountsReq(http.MethodPost, "/w/test/plans/"+itoa(p.ID), form, itoa(p.ID))
+		if rec := env.runAccount(uid, "owner", "admin", req, env.h.PlanUpdate); rec.Code != http.StatusSeeOther {
+			t.Fatalf("update gagal, status %d; body:\n%s", rec.Code, rec.Body.String())
+		}
+		got, _ := env.q.GetPlan(t.Context(), p.ID)
+		if got.Currency != defaultPlanCurrency {
+			t.Errorf("update currency=USD harus diabaikan → %q, got %q", defaultPlanCurrency, got.Currency)
+		}
+	})
+}
+
 // --- status: retire / activate ---------------------------------------------
 
 // TestPlans_RetireThenActivate: pensiun mengeset is_active=false (ok=retired);

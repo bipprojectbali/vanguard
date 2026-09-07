@@ -187,7 +187,9 @@ type PlanFormFields struct {
 	BasePrice        string
 	BillingFrequency string
 	SetupFee         string
-	Currency         string
+	// Currency TAK di sini (BL-90): tak lagi field form; handler menetapkan
+	// IDR konstan. Kolom DB plans.currency tetap ada (lihat PlanRow.Currency
+	// untuk tampilan katalog).
 	IncludedFeatures string
 }
 
@@ -232,7 +234,9 @@ func PlanForm(v PlanFormView) g.Node {
 			moneyField("Harga Dasar", "base_price", v.Fields.BasePrice),
 			moneyField("Biaya Setup", "setup_fee", v.Fields.SetupFee),
 			selectField("Siklus Tagih", "billing_frequency", v.Fields.BillingFrequency, v.BillingOptions, false),
-			field("Mata Uang", "currency", v.Fields.Currency, false, "text"),
+			// Mata Uang TAK dirender (BL-90): selalu IDR, ditetapkan handler
+			// (defaultPlanCurrency). Kolom plans.currency dipertahankan untuk
+			// kesiapan multi-currency, hanya tak lagi bisa disunting user.
 		),
 		formCard("Fitur",
 			textareaField("Fitur Termasuk", "included_features", v.Fields.IncludedFeatures),

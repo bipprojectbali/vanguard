@@ -40,7 +40,7 @@ func (h *Handler) PlanNew(w http.ResponseWriter, r *http.Request) {
 		Action:         base + "/plans",
 		IsEdit:         false,
 		Err:            plansErrMsg(r.URL.Query().Get("err")),
-		Fields:         panel.PlanFormFields{Currency: defaultPlanCurrency},
+		Fields:         panel.PlanFormFields{}, // currency tak lagi field form (BL-90)
 		Categories:     planCategoryOptions,
 		BillingOptions: billingFrequencyOptions,
 	}
