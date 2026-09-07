@@ -121,7 +121,11 @@ func (h *Handler) dealDetailView(ctx context.Context, base string, d db.Deal, na
 		LossNotes:        deref(d.LossNotes),
 		Owner:            ownerName(d.DealOwner, names),
 		CanWrite:         canWriteDeals(ctx),
-		Quotes:           h.dealQuotesPreview(ctx, d.ID),
+		// BL-86: tombol "Buat Quote" hanya saat boleh tulis DAN stage quotable
+		// (reuse quotableStage/stageLockMsg BL-13, jangan literal stage di view).
+		CanCreateQuote:    canWriteDeals(ctx) && quotableStage(d.Stage),
+		QuoteStageLockMsg: stageLockMsg(d.Stage),
+		Quotes:            h.dealQuotesPreview(ctx, d.ID),
 		QuotesSummary:    h.quotesSummaryForDeal(ctx, d.ID),
 		Activities:       h.activitiesTimelineFor(ctx, base, "deal", d.ID, canWriteDeals(ctx)),
 	}
