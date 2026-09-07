@@ -46,9 +46,10 @@ type SubDetailView struct {
 	// Flag aksi (M5-3c) — SUDAH dihitung handler (view murni-data, tak panggil
 	// authz). Menentukan form mana yang tampil; status dicek ulang di sini agar
 	// tak menampilkan aksi yang pasti ditolak backend.
-	CanRenew   bool
-	CanChurn   bool
-	CanApprove bool
+	CanRenew    bool
+	CanChurn    bool
+	CanApprove  bool
+	CanActivate bool
 
 	// Domain dropdown churn (dari handler; satu sumber dgn validasi backend).
 	ChurnReasons []string

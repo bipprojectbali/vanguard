@@ -93,6 +93,7 @@ func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscript
 		CanRenew:     canRenewSubscriptions(ctx),
 		CanChurn:     canChurnSubscriptions(ctx),
 		CanApprove:   canApproveRenewal(ctx),
+		CanActivate:  canActivateSubscriptions(ctx),
 		ChurnReasons: churnReasonOptions,
 		ChurnTypes:   churnTypeOptions,
 	}
