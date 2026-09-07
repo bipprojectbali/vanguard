@@ -21,9 +21,10 @@ import (
 // canEngagements = canViewEngagements (izin SAMA dengan gerbang EngagementsList,
 // objek crm:engagements read). canRenewals = canViewCSRenewals (crm:renewal_mgmt read).
 // canImplTasks = canViewImplTasks, canTrainings = canViewTrainings (keduanya
-// REUSE crm:journey read — sub-item Onboarding 6.2.1.1/6.2.1.2).
-func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canImplTasks, canTrainings bool) ui.NavItem {
-	children := make([]ui.NavItem, 0, 11)
+// REUSE crm:journey read — sub-item Onboarding 6.2.1.1/6.2.1.2). canJourney =
+// canReadCSJourney (Customer Journey / Lifecycle 6.2, REUSE crm:journey read).
+func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canImplTasks, canTrainings, canJourney bool) ui.NavItem {
+	children := make([]ui.NavItem, 0, 12)
 	// Health Score → /health-scores (canViewHealthScore, objek crm:health read).
 	// Berbackend sejak slice C1; disabled bila tak berhak, tetap tampil agar
 	// posisi modul di peta jalan terlihat.
@@ -34,6 +35,16 @@ func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canH
 		healthScore.Disabled = true
 	}
 	children = append(children, healthScore)
+	// Customer Journey → /journey (canReadCSJourney, crm:journey read — objek
+	// SAMA dgn Implementation Tracker/Training). Dashboard portofolio fase
+	// lifecycle desa (6.2, BL-77); disabled bila tak berhak, tetap tampil.
+	journey := ui.NavItem{Label: "Customer Journey", Icon: lucide.Route(html.Class("size-4"))}
+	if canJourney {
+		journey.Href = wsPath(slug, "/journey")
+	} else {
+		journey.Disabled = true
+	}
+	children = append(children, journey)
 	// Implementation Tracker → /impl-tasks (canViewImplTasks, crm:journey read).
 	// Berbackend sejak slice 6.2.1.1 (Onboarding); disabled bila tak berhak,
 	// tetap tampil agar posisi modul di peta jalan terlihat.

@@ -540,6 +540,13 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/trainings", h.CSTrainingCreate)
 		r.Post("/trainings/{id}/status", h.CSTrainingUpdateStatus)
 
+		// Customer Journey / Lifecycle (Customer Success, CRM Modul 6, 6.2 —
+		// BL-77). Dashboard portofolio posisi tiap desa di sepanjang fase
+		// lifecycle. F2 REUSE "crm:journey" read (canReadCSJourney) — objek yang
+		// SAMA dengan Implementation Tracker/Training. Read-only (tanpa aksi tulis).
+		r.Get("/journey", h.CSJourneyList)
+		r.Get("/journey/export", h.CSJourneyExport)
+
 		// Renewal Management — AKSI CS pada langganan (Modul 6 slice 6.6).
 		// "Renewal Dua-Rumah": DATA renewal tetap di subscriptions (Modul 5.2);
 		// halaman ini MENAMPILKAN data tersebut dan MENULIS field aksi CS

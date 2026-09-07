@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -39,6 +40,30 @@ func pageCursor(r *http.Request) (pgtype.Timestamptz, int64) {
 		return firstPageCursor()
 	}
 	return at, id
+}
+
+// pageCursorAsc = varian ASC dari pageCursor untuk daftar yang diurut MENAIK
+// (mis. Customer Journey: lama-di-fase terpanjang lebih dulu = stage_entry_date
+// ASC). Halaman pertama memakai cursor MINIMUM (-Infinity, MinInt64) sehingga
+// semua baris lolos syarat > cursor. Sisanya (parse ?after=, toleran rusak)
+// identik pageCursor — cursor yang tersimpan sudah berupa nilai finit.
+func pageCursorAsc(r *http.Request) (pgtype.Timestamptz, int64) {
+	raw := r.URL.Query().Get("after")
+	if raw == "" {
+		return firstPageCursorAsc()
+	}
+	at, id, ok := parseCursor(raw)
+	if !ok {
+		return firstPageCursorAsc()
+	}
+	return at, id
+}
+
+// firstPageCursorAsc mengembalikan cursor keyset halaman pertama untuk urutan
+// MENAIK: (stage_entry_date, id) = minimum, sehingga semua baris lolos syarat
+// > cursor. Cermin firstPageCursor (dev_users.go) untuk arah sebaliknya.
+func firstPageCursorAsc() (pgtype.Timestamptz, int64) {
+	return pgtype.Timestamptz{Valid: true, InfinityModifier: pgtype.NegativeInfinity}, math.MinInt64
 }
 
 // pageTrail membaca ?trail= mentah dari request — jejak cursor halaman-halaman
