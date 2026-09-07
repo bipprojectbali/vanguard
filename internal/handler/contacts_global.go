@@ -57,7 +57,7 @@ func (h *Handler) writableAccountOptions(ctx context.Context) ([]panel.AccountOp
 	}
 	opts := make([]panel.AccountOption, 0, len(rows))
 	for _, r := range rows {
-		opts = append(opts, panel.AccountOption{ID: r.ID, Name: r.VillageName})
+		opts = append(opts, panel.AccountOption{ID: r.ID, Name: accountPickerLabel(r.VillageCode, r.VillageName)})
 	}
 	return opts, nil
 }

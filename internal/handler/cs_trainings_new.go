@@ -45,7 +45,7 @@ func (h *Handler) CSTrainingNew(w http.ResponseWriter, r *http.Request) {
 	}
 	accountOpts := make([]panel.CSTrainingAccountOption, 0, len(accts))
 	for _, a := range accts {
-		accountOpts = append(accountOpts, panel.CSTrainingAccountOption{ID: a.ID, Name: a.VillageName})
+		accountOpts = append(accountOpts, panel.CSTrainingAccountOption{ID: a.ID, Name: accountPickerLabel(a.VillageCode, a.VillageName)})
 	}
 
 	// Members dropdown: untuk trainer_id (opsional, pengajar training).

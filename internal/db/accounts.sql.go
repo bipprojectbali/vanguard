@@ -484,7 +484,7 @@ func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]A
 }
 
 const listAccountsForSelect = `-- name: ListAccountsForSelect :many
-SELECT id, village_name FROM accounts
+SELECT id, village_name, village_code FROM accounts
 WHERE deleted_at IS NULL
   AND (
       $1::boolean
@@ -502,14 +502,15 @@ type ListAccountsForSelectParams struct {
 }
 
 type ListAccountsForSelectRow struct {
-	ID          int64  `json:"id"`
-	VillageName string `json:"village_name"`
+	ID          int64   `json:"id"`
+	VillageName string  `json:"village_name"`
+	VillageCode *string `json:"village_code"`
 }
 
 // Desa yang boleh DITULIS aktor (F3), untuk dropdown pemilih desa di form "Tambah
 // Kontak" global. Predikat ownership IDENTIK ListAccounts (scope_all/is_sales/
 // is_csm → fail-closed: ketiganya false = NOL baris), tapi TANPA keyset dan hanya
-// kolom untuk <option> (id + nama), urut nama agar dropdown terbaca. Tak
+// kolom untuk <option> (id + nama + village_code Kemendagri BL-76), urut nama agar dropdown terbaca. Tak
 // dipaginasi: dipakai untuk MEMILIH satu desa, bukan menelusuri — RLS sudah
 // mengurung ke satu workspace.
 func (q *Queries) ListAccountsForSelect(ctx context.Context, arg ListAccountsForSelectParams) ([]ListAccountsForSelectRow, error) {
@@ -526,7 +527,7 @@ func (q *Queries) ListAccountsForSelect(ctx context.Context, arg ListAccountsFor
 	items := []ListAccountsForSelectRow{}
 	for rows.Next() {
 		var i ListAccountsForSelectRow
-		if err := rows.Scan(&i.ID, &i.VillageName); err != nil {
+		if err := rows.Scan(&i.ID, &i.VillageName, &i.VillageCode); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -16,10 +16,7 @@ func (h *Handler) accountLabel(ctx context.Context, id int64) string {
 	if err != nil {
 		return "Desa #" + strconv.FormatInt(id, 10)
 	}
-	if a.EntityCode != nil && *a.EntityCode != "" {
-		return *a.EntityCode + " — " + a.VillageName
-	}
-	return a.VillageName
+	return accountPickerLabel(a.VillageCode, a.VillageName)
 }
 
 // contactLabel meresolusi nama kontak utama. Gagal → "Kontak #<id>" cadangan.

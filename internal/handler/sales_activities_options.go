@@ -55,7 +55,7 @@ func (h *Handler) activityTargetOptions(ctx context.Context) ([]panel.ActivityTa
 	for _, a := range accounts {
 		opts = append(opts, panel.ActivityTargetOption{
 			Value: "account:" + strconv.FormatInt(a.ID, 10),
-			Label: "Desa · " + a.VillageName,
+			Label: "Desa · " + accountPickerLabel(a.VillageCode, a.VillageName),
 		})
 	}
 

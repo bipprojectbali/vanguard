@@ -37,7 +37,7 @@ func (h *Handler) TicketNew(w http.ResponseWriter, r *http.Request) {
 	}
 	accountOpts := make([]panel.TicketAccountOption, 0, len(accts))
 	for _, a := range accts {
-		accountOpts = append(accountOpts, panel.TicketAccountOption{ID: a.ID, Name: a.VillageName})
+		accountOpts = append(accountOpts, panel.TicketAccountOption{ID: a.ID, Name: accountPickerLabel(a.VillageCode, a.VillageName)})
 	}
 
 	// Members dropdown: semua anggota workspace (untuk dropdown agen).
