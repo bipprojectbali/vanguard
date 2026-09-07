@@ -66,6 +66,26 @@ type Querier interface {
 	// Agregat KPI header halaman /impl-tasks. Cakupan scope sama persis ListCSImplTasks.
 	// uid dioper walau scope_all=true (diabaikan dalam kasus itu).
 	CountCSImplTaskKPIs(ctx context.Context, arg CountCSImplTaskKPIsParams) (CountCSImplTaskKPIsRow, error)
+	// cs_journey.sql — Query Customer Journey / Lifecycle (CRM Modul 6, 6.2 —
+	// BL-77). Dashboard portofolio: posisi tiap desa di sepanjang fase
+	// Onboarding → Adoption → Retention → Renewal → Advocacy. TANPA schema baru —
+	// semua kolom sudah ada di customer_success (migrasi 00019); assigned_csm
+	// di-JOIN dari accounts (bukan diduplikasi).
+	//
+	// RLS mengisolasi workspace; F3 ownership ditegakkan lewat flag boolean
+	// (scope_all, is_own) — SATU sumber kebenaran dengan CSJourneyListFilterFor
+	// (ownership_cs_journey.go), pola sama cs_impl_tasks.sql.
+	//
+	// days_in_stage per baris SENGAJA TIDAK dihitung di SQL: gotcha #14 (ekspresi
+	// tanggal di SELECT list bikin sqlc emit interface{}). ListCSJourneyAccounts
+	// memilih stage_entry_date MENTAH; handler menghitung lama-di-fase di Go.
+	// Ekspresi tanggal dalam agregat (AVG/MAX/FILTER) & ORDER BY/WHERE tetap boleh.
+	// 4 KPI header: Onboarding (jumlah + rata hari di fase), Adoption (jumlah +
+	// fase terlama = MAX hari), Retention (jumlah), Menuju Renewal (jumlah
+	// lifecycle_stage='Renewal'). "Menuju Renewal" SENGAJA didefinisikan MURNI
+	// dari lifecycle_stage — tidak menyentuh subscriptions.end_date / cs_renewals
+	// agar tak ada definisi ganda (BL-77). Cakupan scope identik ListCSJourneyAccounts.
+	CountCSJourneyKPIs(ctx context.Context, arg CountCSJourneyKPIsParams) (CountCSJourneyKPIsRow, error)
 	// Agregat KPI header halaman /trainings. Cakupan scope sama persis ListCSTrainings.
 	// uid dioper walau scope_all=true (diabaikan dalam kasus itu).
 	CountCSTrainingKPIs(ctx context.Context, arg CountCSTrainingKPIsParams) (CountCSTrainingKPIsRow, error)
@@ -665,6 +685,25 @@ type Querier interface {
 	//
 	// filter_status '' → semua status; non-'' → cocokkan persis.
 	ListCSImplTasks(ctx context.Context, arg ListCSImplTasksParams) ([]ListCSImplTasksRow, error)
+	// Tabel utama "Desa Binaan — Posisi Lifecycle": satu baris per desa,
+	// diurut LAMA-DI-FASE terpanjang lebih dulu (stage_entry_date ASC — masuk
+	// fase paling lama = paling perlu perhatian). Keyset ASC lewat kunci koalesi
+	// COALESCE(stage_entry_date, created_at) yang SELALU finit (tak pernah NULL,
+	// selalu dalam rentang int64-nanos formatCursor) + account_id sebagai
+	// pemecah-seri (UNIQUE per baris di customer_success).
+	//
+	// filter_stage '' → semua fase; non-'' → cocokkan lifecycle_stage persis.
+	ListCSJourneyAccounts(ctx context.Context, arg ListCSJourneyAccountsParams) ([]ListCSJourneyAccountsRow, error)
+	// Panel "Onboarding Aktif": desa dengan onboarding_status='In Progress'.
+	// Diurut target go-live terdekat lebih dulu (NULL di belakang). Peringatan
+	// target lampau dihitung di Go (target_go_live_date < CURRENT_DATE). Dibatasi
+	// lim (guardrail no full-scan).
+	ListCSJourneyOnboarding(ctx context.Context, arg ListCSJourneyOnboardingParams) ([]ListCSJourneyOnboardingRow, error)
+	// Agregat per fase untuk funnel "Fase Perjalanan Desa": jumlah desa, rata hari
+	// di fase, dan jumlah MACET (stage_entry_date lebih tua dari ambang stalled_days).
+	// Hanya mengembalikan fase yang punya baris; handler melengkapi ke 5 fase
+	// kanonik (urutan lifecycleStageOptions) dengan nol untuk fase kosong.
+	ListCSJourneyPhases(ctx context.Context, arg ListCSJourneyPhasesParams) ([]ListCSJourneyPhasesRow, error)
 	// Daftar Renewal Management CS (Menu 6.6). Menampilkan langganan yang punya
 	// dimensi renewal (end_date terisi), berikut field AKSI CS (renewal_stage,
 	// renewal_risk, renewal_action_plan, renewal_next_action_date, renewal_owner).

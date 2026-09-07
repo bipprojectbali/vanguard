@@ -36,7 +36,7 @@ import (
 // (crm:sales_activity) — untuk "Sales Activities" dalam grup Sales.
 // canAllActivities = gate halaman lintas-context (/activity-log) — LEBIH LUAS:
 // CRM role ATAU platform role (super_admin/staff butuh visibilitas sistem).
-func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canAllActivities, canPlans, canSubs, canSLA, canPlaybooks, canKB, canRoles, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canReports, canImplTasks, canTrainings bool) []ui.NavItem {
+func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canAllActivities, canPlans, canSubs, canSLA, canPlaybooks, canKB, canRoles, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canReports, canImplTasks, canTrainings, canJourney bool) []ui.NavItem {
 	items := []ui.NavItem{
 		{Label: "Dashboard", Href: wsPath(slug, ""), Icon: lucide.House(html.Class("size-4"))},
 	}
@@ -67,7 +67,7 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 	// (slice A1), Playbooks (slice A2), Knowledge Base (slice A3) & Tickets/Cases
 	// (slice B2) berbackend (enabled per izin), sisanya placeholder. Selalu tampil
 	// agar peta jalan terlihat.
-	items = append(items, workspaceCSGroup(slug, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canImplTasks, canTrainings))
+	items = append(items, workspaceCSGroup(slug, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canImplTasks, canTrainings, canJourney))
 	// Activities top-level = daftar lintas-context (sales+cs+general), M7.
 	// Gate crm:activities read (canViewActivities) ATAU platform role — BEDA objek
 	// dari Sales Activities (crm:sales_activity): csm/support memegang crm:activities

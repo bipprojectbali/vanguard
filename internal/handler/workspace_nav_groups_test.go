@@ -19,7 +19,7 @@ func TestWorkspaceNav_CSGroup(t *testing.T) {
 	// canSLA=true & canPlaybooks=true & canKB=true & canTickets=true &
 	// canHealthScore=true & canSuccessPlans=true & canEngagements=true &
 	// canRenewals=true → grup tampil, semua berbackend enabled dengan href benar.
-	nav := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, false, true, true)
+	nav := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, false, true, true, true)
 	grp, ok := findItem(nav, "Customer Success")
 	if !ok {
 		t.Fatal("grup Customer Success harus selalu tampil (peta jalan)")
@@ -97,6 +97,13 @@ func TestWorkspaceNav_CSGroup(t *testing.T) {
 	if trainings.Disabled || trainings.Href != "/w/acme/trainings" {
 		t.Errorf("Training Schedule harus enabled→/w/acme/trainings, got disabled=%v href=%q", trainings.Disabled, trainings.Href)
 	}
+	journey, ok := findItem(grp.Children, "Customer Journey")
+	if !ok {
+		t.Fatal("grup Customer Success kurang anak Customer Journey")
+	}
+	if journey.Disabled || journey.Href != "/w/acme/journey" {
+		t.Errorf("Customer Journey harus enabled→/w/acme/journey, got disabled=%v href=%q", journey.Disabled, journey.Href)
+	}
 	for _, label := range placeholders {
 		ch, ok := findItem(grp.Children, label)
 		if !ok {
@@ -111,7 +118,7 @@ func TestWorkspaceNav_CSGroup(t *testing.T) {
 	// canSLA=false & canPlaybooks=false & canKB=false & canTickets=false → grup
 	// tetap tampil, semuanya disabled tanpa href (menu tak menawarkan pintu
 	// yang lalu ditolak 403).
-	navNone := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false)
+	navNone := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false)
 	grpNone, ok := findItem(navNone, "Customer Success")
 	if !ok {
 		t.Fatal("grup Customer Success tetap tampil walau tanpa izin")
@@ -186,6 +193,13 @@ func TestWorkspaceNav_CSGroup(t *testing.T) {
 	if !trainingsNone.Disabled || trainingsNone.Href != "" {
 		t.Errorf("tanpa izin, Training Schedule harus disabled tanpa href, got disabled=%v href=%q", trainingsNone.Disabled, trainingsNone.Href)
 	}
+	journeyNone, ok := findItem(grpNone.Children, "Customer Journey")
+	if !ok {
+		t.Fatal("anak Customer Journey harus tetap tampil (disabled)")
+	}
+	if !journeyNone.Disabled || journeyNone.Href != "" {
+		t.Errorf("tanpa izin, Customer Journey harus disabled tanpa href, got disabled=%v href=%q", journeyNone.Disabled, journeyNone.Href)
+	}
 }
 
 // TestWorkspaceNav_ReportsGroup: Reports = grup bersarang yang SELALU tampil
@@ -195,7 +209,7 @@ func TestWorkspaceNav_CSGroup(t *testing.T) {
 // Reports (8.5, Report Builder) ditunda v1.1 (skema.md §10) — item nav-nya
 // TIDAK ADA sama sekali, bukan disabled.
 func TestWorkspaceNav_ReportsGroup(t *testing.T) {
-	nav := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false)
+	nav := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false)
 	grp, ok := findItem(nav, "Reports")
 	if !ok {
 		t.Fatal("grup Reports harus selalu tampil (peta jalan)")
@@ -225,7 +239,7 @@ func TestWorkspaceNav_ReportsGroup(t *testing.T) {
 
 	// canReports=false → grup tetap tampil, semua anak disabled tanpa href
 	// (menu tak menawarkan pintu yang lalu ditolak 403).
-	navNone := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false)
+	navNone := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false)
 	grpNone, ok := findItem(navNone, "Reports")
 	if !ok {
 		t.Fatal("grup Reports tetap tampil walau tanpa izin")
@@ -252,7 +266,7 @@ func TestWorkspaceNav_ReportsGroup(t *testing.T) {
 // mati. "Workspace Settings" (/settings) SENGAJA tak lagi di sini — identitas &
 // siklus hidup workspace pindah ke /dev sebagai wewenang platform (BL-53).
 func TestWorkspaceNav_SettingsGroupChildren(t *testing.T) {
-	nav := workspaceNav("acme", true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true)
+	nav := workspaceNav("acme", true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true)
 	grp, ok := findItem(nav, "Settings")
 	if !ok {
 		t.Fatal("grup Settings harus ada saat user punya izin pengaturan")
@@ -292,7 +306,7 @@ func TestWorkspaceNav_SettingsGroupChildren(t *testing.T) {
 // izinnya diberikan — menu tak menawarkan pintu yang lalu ditolak 403.
 func TestWorkspaceNav_SettingsGatingPerIzin(t *testing.T) {
 	// Hanya canRoles → grup ada, tapi cuma Roles yang enabled.
-	nav := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false)
+	nav := workspaceNav("acme", false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false)
 	grp, ok := findItem(nav, "Settings")
 	if !ok {
 		t.Fatal("canRoles saja tetap memunculkan grup Settings")
@@ -310,7 +324,7 @@ func TestWorkspaceNav_SettingsGatingPerIzin(t *testing.T) {
 // TestWorkspaceNav_NoSettingsGroupWithoutPerms: member tanpa izin pengaturan tak
 // melihat grup Settings sama sekali (grup kosong = tak menawarkan apa pun).
 func TestWorkspaceNav_NoSettingsGroupWithoutPerms(t *testing.T) {
-	nav := workspaceNav("acme", false, false, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false)
+	nav := workspaceNav("acme", false, false, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false)
 	if _, ok := findItem(nav, "Settings"); ok {
 		t.Error("tanpa izin pengaturan, grup Settings harus disembunyikan")
 	}
@@ -323,7 +337,7 @@ func TestWorkspaceNav_NoSettingsGroupWithoutPerms(t *testing.T) {
 // TestWorkspaceNav_HrefSlugBenar: semua anchor enabled menunjuk slug yang benar
 // (regresi wsPath — menu bergantung slug sejak 0004).
 func TestWorkspaceNav_HrefSlugBenar(t *testing.T) {
-	nav := workspaceNav("beta", true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true)
+	nav := workspaceNav("beta", true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true)
 	var check func(items []ui.NavItem)
 	check = func(items []ui.NavItem) {
 		for _, it := range items {
