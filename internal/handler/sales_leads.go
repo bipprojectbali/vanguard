@@ -41,13 +41,14 @@ func (h *Handler) LeadNew(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	base := wsPath(slugFromRequest(r), "")
 	v := panel.LeadFormView{
-		Base:        base,
-		Action:      base + "/leads",
-		IsEdit:      false,
-		Err:         wsErrMsg(r.URL.Query().Get("err")),
-		RegionsJSON: h.regionsJSON(ctx),
-		Ratings:     leadRatingOptions,
-		Sources:     leadSourceOptions,
+		Base:          base,
+		Action:        base + "/leads",
+		IsEdit:        false,
+		Err:           wsErrMsg(r.URL.Query().Get("err")),
+		RegionsJSON:   h.regionsJSON(ctx),
+		Ratings:       leadRatingOptions,
+		Sources:       leadSourceOptions,
+		PhoneEditable: canEditPhone(ctx), // BL-84: simetris AccountNew — kunci HP/WA bila tak berhak
 	}
 	h.renderWorkspaceShell(w, r, "Tambah Lead", "/leads", panel.LeadForm(v))
 }

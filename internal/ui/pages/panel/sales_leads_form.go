@@ -48,6 +48,11 @@ type LeadFormView struct {
 	// menggantikan input teks bebas.
 	Sources []string
 
+	// PhoneEditable (BL-84): role boleh MENYUNTING nomor HP/WhatsApp (canEditPhone,
+	// Sales saja). false → field HP/WA dikunci (disabled, tak ter-submit) menampilkan
+	// mask; mencegah bug submit mask "•••" gagal validasi. Simetris AccountFormView.
+	PhoneEditable bool
+
 	// RegionsJSON = dataset penuh master wilayah (h.regionsJSON), diembed sekali
 	// utk cascading dropdown Provinsi/Kabupaten-Kota/Kecamatan (ADR 0009).
 	RegionsJSON string
@@ -95,8 +100,8 @@ func LeadForm(v LeadFormView) g.Node {
 		),
 		formCard("Lokasi & Kontak",
 			regionSelect("lead", v.RegionsJSON, v.Fields.DistrictID, false),
-			phoneNumField("HP", "mobile_phone", v.Fields.MobilePhone),
-			phoneNumField("WhatsApp", "whatsapp", v.Fields.Whatsapp),
+			phoneNumField("HP", "mobile_phone", v.Fields.MobilePhone, v.PhoneEditable),
+			phoneNumField("WhatsApp", "whatsapp", v.Fields.Whatsapp, v.PhoneEditable),
 			field("Email", "email", v.Fields.Email, false, "email"),
 		),
 
