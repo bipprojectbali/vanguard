@@ -104,3 +104,29 @@ func withTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) erro
 	}
 	return tx.Commit(ctx)
 }
+
+// WithSavepoint menjalankan fn dalam SAVEPOINT bersarang di ATAS transaksi ber-scope
+// yang sedang berjalan (q berasal dari h.q(ctx) — WithTenant/WithSuper). Gunanya:
+// aksi SEKUNDER yang boleh GAGAL tanpa menyeret transaksi utama. Di arsitektur satu-tx
+// (Scope selalu commit), sebuah query yang gagal MERACUNI tx → commit berakhir rollback
+// → SELURUH request batal. Savepoint mengurung kegagalan: fn error → ROLLBACK TO
+// SAVEPOINT (tx luar tetap sehat, pemanggil boleh lanjut fail-soft); fn nil → RELEASE.
+// GUC & SET LOCAL ROLE tetap berlaku (koneksi & tx sama) → RLS tetap mengikat.
+//
+// q.db bukan pgx.Tx (mis. dipanggil di luar jalur ber-tx) → jalankan fn apa adanya
+// tanpa savepoint (tak ada tx untuk diurung).
+func WithSavepoint(ctx context.Context, q *Queries, fn func(*Queries) error) error {
+	tx, ok := q.db.(pgx.Tx)
+	if !ok {
+		return fn(q)
+	}
+	sp, err := tx.Begin(ctx) // pgx: nested tx = SAVEPOINT
+	if err != nil {
+		return err
+	}
+	if err := fn(New(sp)); err != nil {
+		_ = sp.Rollback(ctx) // ROLLBACK TO SAVEPOINT — tx luar selamat
+		return err
+	}
+	return sp.Commit(ctx) // RELEASE SAVEPOINT
+}

@@ -115,6 +115,14 @@ func (h *Handler) DealStage(w http.ResponseWriter, r *http.Request) {
 		h.notifyWonSubscription(ctx, tenantID, *newSub)
 	}
 
+	// BL-74: Closed Won → handover Sales→CS (auto-create baris customer_success desa,
+	// onboarding mulai "Not Started"). Apa pun status subscription awal (Trial/Active)
+	// & independen BL-21 (jalan walau langganan di-skip idempoten). FAIL-SOFT: kegagalan
+	// tak menyeret deal Won — dikurung savepoint di dalam helper.
+	if stage == "Closed Won" {
+		h.handoverCSFromWonDeal(ctx, deal, tenantID, uid)
+	}
+
 	h.auditWorkspace(ctx, uid, "deal.stage", tenantID, map[string]string{
 		"deal_id": idStr, "stage": stage,
 	})
