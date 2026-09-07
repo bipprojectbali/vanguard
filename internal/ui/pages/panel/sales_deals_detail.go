@@ -54,6 +54,14 @@ type DealDetailView struct {
 	Owner    string
 	CanWrite bool
 
+	// CanCreateQuote (BL-86) = boleh MEMBUAT quote baru: CanWrite DAN stage dalam
+	// jendela quotable (Qualification–Negotiation). Digate terpisah dari CanWrite
+	// agar tombol "Buat Quote" tak tampil saat aksinya pasti ditolak backend
+	// (BL-13). QuoteStageLockMsg = alasan singkat saat di luar jendela (kosong bila
+	// boleh), dari handler via stageLockMsg — jangan hitung logika stage di view.
+	CanCreateQuote    bool
+	QuoteStageLockMsg string
+
 	// Quotes = pratinjau quote deal ini (Modul 4). Diisi handler via
 	// ListQuotesForDeal (dibatasi); daftar penuh di /deals/{id}/quotes.
 	Quotes []QuoteRow
@@ -141,9 +149,14 @@ func dealQuotesCard(v DealDetailView) g.Node {
 			h.H2(h.Class("font-semibold"), g.Text("Quote")),
 			ui.When(v.QuotesSummary.Total > 0, quotesSummaryBadge(v.QuotesSummary)),
 		),
-		ui.When(v.CanWrite, h.A(
+		ui.When(v.CanCreateQuote, h.A(
 			h.Href(quotesBase+"/new"), h.Class("btn btn-sm btn-primary min-h-11"),
 			g.Text("Buat Quote"))),
+		// BL-86: saat boleh tulis tapi stage di luar jendela quotable, tombol
+		// disembunyikan; tampilkan hint singkat agar user paham kapan bisa.
+		ui.When(v.CanWrite && !v.CanCreateQuote && v.QuoteStageLockMsg != "",
+			h.Span(h.Class("text-xs text-base-content/60"),
+				g.Text(v.QuoteStageLockMsg))),
 	)
 
 	var content g.Node

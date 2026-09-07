@@ -148,3 +148,46 @@ func TestDealStageControl_NoWonSubStatuses_NoPanic(t *testing.T) {
 		t.Errorf("tanpa WonSubStatuses, field subscription_status tak boleh dirender:\n%s", out)
 	}
 }
+
+// TestDealQuotesCard_ButtonGatedByStage: BL-86 — tombol "Buat Quote" hanya tampil
+// saat CanCreateQuote (boleh tulis DAN stage quotable). Simetris dengan gerbang
+// backend BL-13: di luar jendela quotable tombol ABSEN meski boleh tulis, dan hint
+// alasan ditampilkan agar UX tak menyesatkan.
+func TestDealQuotesCard_ButtonGatedByStage(t *testing.T) {
+	base := DealDetailView{Base: "/w/acme", ID: 42}
+
+	// Stage quotable + boleh tulis → tombol ADA, tanpa hint.
+	quotable := base
+	quotable.CanWrite = true
+	quotable.CanCreateQuote = true
+	out := renderLeads(t, dealQuotesCard(quotable))
+	if !strings.Contains(out, "Buat Quote") {
+		t.Errorf("stage quotable + CanWrite: tombol 'Buat Quote' harus ADA:\n%s", out)
+	}
+
+	// Prospecting: boleh tulis tapi stage di luar jendela → tombol ABSEN + hint.
+	locked := base
+	locked.CanWrite = true
+	locked.CanCreateQuote = false
+	locked.QuoteStageLockMsg = "Deal masih di tahap Prospecting — quote baru dapat dibuat atau diubah mulai tahap Qualification."
+	out = renderLeads(t, dealQuotesCard(locked))
+	if strings.Contains(out, "Buat Quote") {
+		t.Errorf("stage di luar jendela: tombol 'Buat Quote' harus ABSEN:\n%s", out)
+	}
+	if !strings.Contains(out, "tahap Qualification") {
+		t.Errorf("stage terkunci: hint alasan harus tampil:\n%s", out)
+	}
+
+	// Tak boleh tulis → tombol ABSEN dan hint TIDAK ditampilkan (bukan urusan pembaca).
+	readonly := base
+	readonly.CanWrite = false
+	readonly.CanCreateQuote = false
+	readonly.QuoteStageLockMsg = "apa pun"
+	out = renderLeads(t, dealQuotesCard(readonly))
+	if strings.Contains(out, "Buat Quote") {
+		t.Errorf("tak boleh tulis: tombol 'Buat Quote' harus ABSEN:\n%s", out)
+	}
+	if strings.Contains(out, "apa pun") {
+		t.Errorf("tak boleh tulis: hint stage tak perlu ditampilkan:\n%s", out)
+	}
+}
