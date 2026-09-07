@@ -1574,6 +1574,13 @@ type Querier interface {
 	// dikutip). converted_* TAK disentuh di sini — itu efek konversi (ConvertLead),
 	// bukan edit biasa.
 	UpdateLead(ctx context.Context, arg UpdateLeadParams) (Lead, error)
+	// BL-83: transisi STATUS lead sebagai aksi tersendiri (bukan efek edit profil),
+	// cermin UpdateDealStage. Hanya lead_status + unqualified_reason (terkopel status
+	// Unqualified, BL-80) yang disentuh — profil lead tak diubah di sini. Transisi
+	// BEBAS antar-status manual (keputusan BL-83); 'Converted' TAK dapat dicapai lewat
+	// jalur ini: guard `AND NOT converted` menolak baris hasil konversi agar invariant
+	// "converted = terminal" tak bisa dipalsukan (handler juga menyembunyikan kontrol).
+	UpdateLeadStatus(ctx context.Context, arg UpdateLeadStatusParams) error
 	// Set/ganti business_role (sumbu CRM F2) satu anggota. Nilai divalidasi tenant-
 	// aware di handler (ada di business_roles workspace ini) SEBELUM query — kolom
 	// tak lagi punya CHECK sejak 00007. NULL = cabut peran CRM (mis. saat perannya

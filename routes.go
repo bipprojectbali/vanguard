@@ -342,6 +342,7 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/leads/{id}", h.LeadDetail)
 		r.Get("/leads/{id}/edit", h.LeadEdit)
 		r.Post("/leads/{id}", h.LeadUpdate)
+		r.Post("/leads/{id}/status", h.LeadStatus) // BL-83: ubah status = aksi tersendiri
 		r.Post("/leads/{id}/delete", h.LeadDelete)
 		r.Get("/leads/{id}/convert", h.LeadConvertPage)
 		r.Post("/leads/{id}/convert", h.LeadConvert)

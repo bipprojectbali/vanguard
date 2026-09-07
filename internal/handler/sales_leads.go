@@ -46,7 +46,6 @@ func (h *Handler) LeadNew(w http.ResponseWriter, r *http.Request) {
 		IsEdit:      false,
 		Err:         wsErrMsg(r.URL.Query().Get("err")),
 		RegionsJSON: h.regionsJSON(ctx),
-		Statuses:    leadStatusOptions,
 		Ratings:     leadRatingOptions,
 		Sources:     leadSourceOptions,
 	}

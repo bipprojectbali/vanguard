@@ -61,7 +61,6 @@ func TestLeadForm_FieldNumerik(t *testing.T) {
 	out := renderLeads(t, LeadForm(LeadFormView{
 		Base:        "/w/desa",
 		Action:      "/w/desa/leads/new",
-		Statuses:    []string{"New"},
 		Ratings:     []string{"Hot"},
 		RegionsJSON: "[]",
 	}))
@@ -87,39 +86,32 @@ func TestLeadForm_FieldNumerik(t *testing.T) {
 	}
 }
 
-// TestLeadForm_LegendaEnum — regresi BL-3 + BL-69: dropdown Status & Rating tetap
-// disertai legenda makna tiap opsi (pengguna baru tak tahu beda Contacted vs
-// Qualified, Hot vs Cold), TAPI sejak BL-69 legenda pindah ke balik ikon ⓘ
-// tap-friendly di label (enumFieldHinted, pola BL-65) — bukan lagi baris statis di
-// bawah select. Legenda tetap statis (bukan input user) → CSP-safe. Kita jaga
-// bahwa (a) makna kunci tiap enum tetap ter-render (terjangkau lewat reveal) &
-// (b) ia berada di dalam reveal label, di ATAS select-nya.
-func TestLeadForm_LegendaEnum(t *testing.T) {
+// TestLeadForm_LegendaRating — regresi BL-3 + BL-69: dropdown Rating disertai
+// legenda makna tiap opsi (pengguna baru tak tahu beda Hot vs Cold) di balik ikon
+// ⓘ tap-friendly di label (enumFieldHinted, pola BL-65). Legenda tetap statis
+// (bukan input user) → CSP-safe. Sejak BL-83 legenda STATUS pindah ke kontrol
+// "Ubah Status" di detail lead (uji terpisah), jadi form profil hanya berisi Rating.
+func TestLeadForm_LegendaRating(t *testing.T) {
 	out := renderLeads(t, LeadForm(LeadFormView{
 		Base:        "/w/desa",
 		Action:      "/w/desa/leads/new",
-		Statuses:    []string{"New", "Contacted", "Qualified", "Unqualified"},
 		Ratings:     []string{"Hot", "Warm", "Cold"},
 		RegionsJSON: "[]",
 	}))
 
-	// (a) Istilah + potongan makna tetap ada (terjangkau; tanpa '&' agar tak
-	// terpengaruh escape g.Text).
+	// (a) Istilah + potongan makna Rating tetap ada (terjangkau lewat reveal;
+	// tanpa '&' agar tak terpengaruh escape g.Text).
 	for _, want := range []string{
-		"Contacted:", "Sudah dihubungi",
-		"Qualified:", "siap dikonversi",
-		"Unqualified:", "Tak cocok",
 		"Hot:", "siap closing",
 		"Warm:", "perlu tindak lanjut",
 		"Cold:", "Belum tertarik",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("legenda enum lead harus memuat %q:\n%s", want, out)
+			t.Errorf("legenda Rating lead harus memuat %q:\n%s", want, out)
 		}
 	}
 
-	// (b) BL-69: legenda kini di balik reveal ⓘ (details.hint-reveal + summary +
-	// ikon), bukan baris statis di bawah select.
+	// (b) BL-69: legenda di balik reveal ⓘ (details.hint-reveal + summary + ikon).
 	for _, want := range []string{
 		`class="hint-reveal`,  // pembungkus reveal
 		`class="hint-summary`, // baris label yg bisa di-tap
@@ -130,53 +122,29 @@ func TestLeadForm_LegendaEnum(t *testing.T) {
 			t.Errorf("BL-69: reveal ikon ⓘ harus memuat %q:\n%s", want, out)
 		}
 	}
-
-	// (b') Struktur: makna Status berada SEBELUM select lead_status (di dalam
-	// reveal label, bukan baris statis SESUDAH select seperti enumField lama).
-	iMakna := strings.Index(out, "Sudah dihubungi")
-	iSelect := strings.Index(out, `name="lead_status"`)
-	if iMakna < 0 || iSelect < 0 || iMakna > iSelect {
-		t.Errorf("BL-69: legenda Status harus di dalam reveal label (sebelum select), "+
-			"bukan baris statis di bawahnya (iMakna=%d, iSelect=%d):\n%s",
-			iMakna, iSelect, out)
-	}
 }
 
-// TestLeadForm_AlasanUnqualifiedKondisional — regresi BL-80: field "Alasan
-// Unqualified" hanya tampil saat Status = Unqualified. Diwujudkan Datastar:
-// <select> Status di-bind ke signal $leadstatus (data.Bind), textarea alasan
-// dibungkus data-show="$leadstatus == 'Unqualified'", dan signal diinisialisasi
-// dari nilai tersimpan (no-FOUC). data-show = jaring UX klien; backend tetap
-// penegak (uji terpisah di handler). Kita jaga markup reaktifnya ter-render.
-func TestLeadForm_AlasanUnqualifiedKondisional(t *testing.T) {
+// TestLeadForm_TanpaStatus — BL-83: STATUS lead dipindah dari form profil ke
+// kontrol "Ubah Status" tersendiri di detail lead. Form profil (Tambah/Sunting)
+// TAK boleh lagi memuat select lead_status, textarea alasan Unqualified, maupun
+// signal $leadstatus — agar sunting profil tak diam-diam menyentuh status.
+func TestLeadForm_TanpaStatus(t *testing.T) {
 	out := renderLeads(t, LeadForm(LeadFormView{
 		Base:        "/w/desa",
 		Action:      "/w/desa/leads/new",
-		Statuses:    []string{"New", "Contacted", "Qualified", "Unqualified"},
 		Ratings:     []string{"Hot", "Warm", "Cold"},
 		RegionsJSON: "[]",
 	}))
 
-	for _, want := range []string{
-		`data-bind="leadstatus"`, // select Status menyetir $leadstatus
-		`data-signals=`,          // signal $leadstatus diinisialisasi di form
-		// textarea alasan dibungkus data-show pada ekspresi status Unqualified
-		// (kutip di-escape g.Text jadi &#39;).
-		`data-show="$leadstatus == &#39;Unqualified&#39;"`,
-		`name="unqualified_reason"`,
+	for _, forbidden := range []string{
+		`name="lead_status"`,        // select status
+		`name="unqualified_reason"`, // textarea alasan
+		`data-bind="leadstatus"`,    // binding signal status
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("BL-80: form lead harus memuat %q:\n%s", want, out)
+		if strings.Contains(out, forbidden) {
+			t.Errorf("BL-83: form profil lead TAK boleh lagi memuat %q (pindah ke kontrol status):\n%s",
+				forbidden, out)
 		}
-	}
-
-	// Struktur: pembungkus data-show berada SEBELUM textarea unqualified_reason
-	// (textarea ada DI DALAM region kondisional, bukan di luarnya).
-	iShow := strings.Index(out, `data-show="$leadstatus == &#39;Unqualified&#39;"`)
-	iTextarea := strings.Index(out, `name="unqualified_reason"`)
-	if iShow < 0 || iTextarea < 0 || iShow > iTextarea {
-		t.Errorf("BL-80: textarea alasan harus di dalam pembungkus data-show "+
-			"(iShow=%d, iTextarea=%d):\n%s", iShow, iTextarea, out)
 	}
 }
 
@@ -189,7 +157,6 @@ func TestLeadForm_PhoneLiveFilter(t *testing.T) {
 	out := renderLeads(t, LeadForm(LeadFormView{
 		Base:        "/w/desa",
 		Action:      "/w/desa/leads/new",
-		Statuses:    []string{"New"},
 		Ratings:     []string{"Hot"},
 		RegionsJSON: "[]",
 	}))
@@ -216,7 +183,6 @@ func TestLeadForm_SumberLeadDropdown(t *testing.T) {
 	out := renderLeads(t, LeadForm(LeadFormView{
 		Base:        "/w/desa",
 		Action:      "/w/desa/leads/new",
-		Statuses:    []string{"New"},
 		Ratings:     []string{"Hot"},
 		Sources:     sources,
 		RegionsJSON: "[]",

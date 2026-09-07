@@ -141,8 +141,8 @@ func TestCSJourney_KeysetRoundTrip(t *testing.T) {
 	}
 }
 
-// TestCSJourney_FilterStage: filter_stage non-'' hanya mengembalikan fase yang
-// cocok; '' → semua.
+// TestCSJourney_FilterStage: filter_stage tak-kosong hanya mengembalikan fase
+// yang cocok; kosong -> semua.
 func TestCSJourney_FilterStage(t *testing.T) {
 	env, uid := setupAccounts(t)
 

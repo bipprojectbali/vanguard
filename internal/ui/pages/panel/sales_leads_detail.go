@@ -31,6 +31,12 @@ type LeadDetailView struct {
 	UnqualifiedReason string
 	EstValue          string
 
+	// Statuses = opsi dropdown kontrol "Ubah Status" (BL-83, dari handler).
+	// Enum status manual (Converted dikecualikan — status sistem).
+	Statuses []string
+	// Err = pesan galat PRG (?err=CODE) utk kontrol status; kosong = tak ada.
+	Err string
+
 	Province    string
 	Regency     string
 	District    string
@@ -78,7 +84,13 @@ func LeadDetail(v LeadDetailView) g.Node {
 		header,
 		h.A(h.Href(v.Base+"/leads"), h.Class("text-sm text-base-content/60"),
 			g.Text("« Kembali ke daftar lead")),
+		// BL-83: galat PRG kontrol status (?err=CODE) disurfacing di sini — beda
+		// dari detail Deal yang tak menampilkannya. Kosong → tak dirender.
+		ui.When(v.Err != "", ui.Alert(ui.VariantDestructive, "lead-status-err", g.Text(v.Err))),
 		leadConvertBanner(v, base),
+		// BL-83: kontrol "Ubah Status" hanya untuk aktor boleh-tulis atas lead yang
+		// BELUM dikonversi (converted = status terminal, tak boleh diputar balik).
+		ui.When(v.CanWrite && !v.Converted, leadStatusControl(v, base)),
 		detailCard("Identitas Lead", []detailField{
 			{"Nama Lead", v.LeadName},
 			{"Kontak", v.ContactPerson},

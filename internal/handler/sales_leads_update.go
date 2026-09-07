@@ -37,16 +37,20 @@ func (h *Handler) LeadEdit(w http.ResponseWriter, r *http.Request) {
 		Err:         wsErrMsg(r.URL.Query().Get("err")),
 		RegionsJSON: h.regionsJSON(ctx),
 		Fields:      leadFormFields(l, canEditPhone(ctx)),
-		Statuses:    leadStatusOptions,
 		Ratings:     leadRatingOptions,
 		Sources:     leadSourceOptions,
 	}
 	h.renderWorkspaceShell(w, r, "Sunting Lead", "/leads", panel.LeadForm(v))
 }
 
-// LeadUpdate — POST /w/{workspace}/leads/{id}. Menyimpan sunting. entity_code &
-// lead_owner & converted_* TAK disentuh (kode identitas & efek konversi terpisah);
+// LeadUpdate — POST /w/{workspace}/leads/{id}. Menyimpan sunting PROFIL. entity_code
+// & lead_owner & converted_* TAK disentuh (kode identitas & efek konversi terpisah);
 // owner dipertahankan apa adanya agar edit tak diam-diam memindah kepemilikan.
+// BL-83: lead_status & unqualified_reason JUGA dipertahankan apa adanya — transisi
+// status kini aksi tersendiri (LeadStatus, sales_leads_status.go), tak lagi bagian
+// form profil. Form profil tak menyertakan field status; parseLeadForm memulangkan
+// default "New", maka di sini nilai lama (l.LeadStatus/UnqualifiedReason) yang dipakai
+// agar sunting profil tak diam-diam mereset status.
 func (h *Handler) LeadUpdate(w http.ResponseWriter, r *http.Request) {
 	if !h.requireLeadWrite(w, r) {
 		return
@@ -85,9 +89,9 @@ func (h *Handler) LeadUpdate(w http.ResponseWriter, r *http.Request) {
 		ContactPerson:     form.ContactPerson,
 		JobTitle:          form.JobTitle,
 		LeadSource:        form.LeadSource,
-		LeadStatus:        form.LeadStatus,
+		LeadStatus:        l.LeadStatus, // BL-83: status via LeadStatus, bukan form profil
 		Rating:            form.Rating,
-		UnqualifiedReason: form.UnqualifiedReason,
+		UnqualifiedReason: l.UnqualifiedReason, // BL-83: terkopel status, dipertahankan di sini
 		EstimatedValue:    form.EstimatedValue,
 		DistrictID:        form.DistrictID,
 		MobilePhone:       mobile,

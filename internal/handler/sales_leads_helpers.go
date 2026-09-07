@@ -86,17 +86,15 @@ func leadFormFields(l db.Lead, phoneEditable bool) panel.LeadFormFields {
 		}
 	}
 	return panel.LeadFormFields{
-		LeadName:          l.LeadName,
-		ContactPerson:     deref(l.ContactPerson),
-		JobTitle:          deref(l.JobTitle),
-		LeadSource:        deref(l.LeadSource),
-		LeadStatus:        l.LeadStatus,
-		Rating:            deref(l.Rating),
-		UnqualifiedReason: deref(l.UnqualifiedReason),
-		EstimatedValue:    moneyRupiahStr(l.EstimatedValue),
-		DistrictID:        int64PtrStr(l.DistrictID),
-		MobilePhone:       mobile,
-		Whatsapp:          whatsapp,
-		Email:             deref(l.Email),
+		LeadName:       l.LeadName,
+		ContactPerson:  deref(l.ContactPerson),
+		JobTitle:       deref(l.JobTitle),
+		LeadSource:     deref(l.LeadSource),
+		Rating:         deref(l.Rating),
+		EstimatedValue: moneyRupiahStr(l.EstimatedValue),
+		DistrictID:     int64PtrStr(l.DistrictID),
+		MobilePhone:    mobile,
+		Whatsapp:       whatsapp,
+		Email:          deref(l.Email),
 	}
 }
