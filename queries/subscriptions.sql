@@ -180,6 +180,49 @@ WHERE s.deleted_at IS NULL
       OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
   );
 
+-- name: SubscriptionListKPIs :one
+-- KPI header halaman Subscription Lists (BL-95) dalam SATU round-trip, di-scope
+-- ownership SAMA dgn ListSubscriptions (scope_all → semua; is_own →
+-- subscription_owner = uid; keduanya false → NOL, fail-closed). RLS mengurung tenant.
+--   • total_mrr    : SUM(mrr) langganan Active (nilai berulang berjalan).
+--   • total_arr    : total_mrr × 12 (proyeksi 12 bln, keputusan user — bukan kolom
+--                    arr yg bisa diskon tahunan; label kartu "proyeksi 12 bln" persis).
+--   • new_mrr      : SUM(mrr) langganan BARU (tanpa previous_subscription_id — logo
+--                    baru, bukan perpanjangan) yang mulai BULAN berjalan. Definisi
+--                    "MRR baru bln ini" (keputusan user) selaras ReportSubMRR.new_mrr
+--                    (renewal punya previous_subscription_id → sengaja tak dihitung
+--                    agar delta = pertumbuhan bersih, bukan sekadar start_date baru).
+--   • active_count : COUNT langganan Active (kartu "Active Subs").
+--   • churned_30   : COUNT Cancelled/Churned dgn cancellation_date dalam 30 hari
+--                    terakhir → pembilang Churn Rate (definisi churn% app: churned /
+--                    (active + churned), jendela 30 hari untuk churned).
+--   • total_accounts : COUNT semua akun (desa) hidup di tenant — denominator "dari
+--                    N desa" (keputusan user: total akun, bukan hanya yg berlangganan).
+--                    Subquery SENGAJA di luar filter ownership: denominator = basis
+--                    desa penuh, bukan yg dimiliki pemanggil.
+-- today dioper handler (zona waktu app, deterministik utk test).
+SELECT
+    COALESCE(SUM(s.mrr) FILTER (WHERE s.status = 'Active'), 0)::numeric AS total_mrr,
+    (COALESCE(SUM(s.mrr) FILTER (WHERE s.status = 'Active'), 0) * 12)::numeric AS total_arr,
+    COALESCE(SUM(s.mrr) FILTER (
+        WHERE s.status = 'Active'
+          AND s.previous_subscription_id IS NULL
+          AND s.start_date >= date_trunc('month', sqlc.arg(today)::date)::date
+          AND s.start_date <  (date_trunc('month', sqlc.arg(today)::date) + INTERVAL '1 month')::date
+    ), 0)::numeric AS new_mrr,
+    COUNT(*) FILTER (WHERE s.status = 'Active')::bigint AS active_count,
+    COUNT(*) FILTER (
+        WHERE s.status IN ('Cancelled', 'Churned')
+          AND s.cancellation_date >= (sqlc.arg(today)::date - 30)
+          AND s.cancellation_date <= sqlc.arg(today)::date
+    )::bigint AS churned_30,
+    (SELECT COUNT(*) FROM accounts a WHERE a.deleted_at IS NULL)::bigint AS total_accounts
+FROM subscriptions s
+WHERE s.deleted_at IS NULL
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  );
 
 -- name: ListChurned :many
 -- Dasbor Churn (Menu 5.2/5.4, READ-ONLY). Langganan yang telah berhenti

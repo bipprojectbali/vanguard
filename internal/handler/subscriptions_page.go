@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -29,7 +30,15 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
 	br := session.BusinessRole(ctx)
-	canARR := canSeeSubscriptionARR(ctx) // BL-58: kapabilitas ter-matriks, bukan nama role
+
+	// now/today di zona waktu app: now menurunkan Status DERIVASI per-baris
+	// (BL-95, ambang SAMA dgn Renewals BL-94); today (tanggal sipil UTC) menyaring
+	// KPI (MRR baru bln ini, churn 30 hari) secara deterministik utk test.
+	now := time.Now().In(appTZ)
+	today := pgtype.Date{
+		Time:  time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC),
+		Valid: true,
+	}
 
 	cursorAt, cursorID := pageCursor(r)
 	// Default tab = Active (BL-20): menu bernama "Subscription Lists" tetap
@@ -73,7 +82,14 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]panel.SubRow, 0, len(shown))
 	for _, s := range shown {
-		items = append(items, subRowView(s, names, br, canARR))
+		items = append(items, subRowView(s, names, br, now))
+	}
+
+	// KPI header (BL-95): satu query agregat di-scope ownership sama. Gagal →
+	// tetap render tabel (fail-soft; KPI bukan data kritis untuk baca daftar).
+	kpi, kpiErr := h.subscriptionListKPI(ctx, filter, uid, today)
+	if kpiErr != nil {
+		h.Log.Error("subscriptions: list kpi", "err", kpiErr)
 	}
 
 	base := wsPath(slugFromRequest(r), "")
@@ -83,6 +99,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 			StatusFilter: statusSel, // penanda pilihan (Active/…/all) utk tab & tautan
 			Statuses:     subscriptionStatuses,
 			Query:        query,
+			KPIs:         kpi,
 			Err:          wsErrMsg(r.URL.Query().Get("err")),
 			Items:        items,
 			NextCursor:   nextCursor,
@@ -98,23 +115,68 @@ func (h *Handler) renderSubscriptionsForbidden(w http.ResponseWriter, r *http.Re
 		panel.SalesForbidden("Subscription Lists"))
 }
 
-// subRowView memetakan satu baris daftar → baris tabel + F4. ARR: kapabilitas
-// ter-matriks crm:subscriptions/arr (canARR, BL-58 — bukan nama role). MRR: kebijakan umum
-// canSeeARR/maskARR (skema.md §9, "MRR/ARR/amount disembunyikan dari Support")
-// — SEMUA role kecuali Support, beda dari ARR yang juga mengecualikan
-// sales/csm. Diperbaiki audit FLS M9-1 (sebelumnya MRR sengaja tanpa masking,
-// kontra skema.md §9). Owner diresolusi dari peta anggota.
-func subRowView(s db.ListSubscriptionsRow, names map[int64]string, businessRole string, canARR bool) panel.SubRow {
+// subRowView memetakan satu baris daftar → baris tabel ramping (BL-95: 6 kolom
+// Desa · Paket · MRR · Status · Renewal Date · CSM; ARR & Mulai dibuang). MRR:
+// kebijakan umum maskARR (skema.md §9 — SEMUA role kecuali Support; diperbaiki
+// audit FLS M9-1). Status = DERIVASI renewal (subDerivedStatus) HANYA untuk
+// langganan Active; status daur hidup lain (Trial/Cancelled/…) tampil apa adanya
+// (badge lifecycle) — derivasi berbasis end_date tak bermakna untuk status
+// terminal. CSM (owner) diresolusi dari peta anggota.
+func subRowView(s db.ListSubscriptionsRow, names map[int64]string, businessRole string, now time.Time) panel.SubRow {
+	label, cls := subDerivedStatus(s.Status, s.EndDate, now)
 	return panel.SubRow{
-		ID:         s.ID,
-		EntityCode: deref(s.EntityCode),
-		Village:    s.VillageName,
-		Plan:       s.PlanName,
-		Status:     s.Status,
-		MRR:        maskARR(formatRupiah(s.Mrr), businessRole),
-		ARR:        maskSubscriptionARR(formatRupiah(s.Arr), canARR),
-		Start:      dateStr(s.StartDate),
-		End:        dateStr(s.EndDate),
-		Owner:      ownerName(s.SubscriptionOwner, names),
+		ID:          s.ID,
+		Village:     s.VillageName,
+		Plan:        s.PlanName,
+		Status:      label,
+		StatusClass: cls,
+		MRR:         maskARR(formatRupiah(s.Mrr), businessRole),
+		Renewal:     dateStr(s.EndDate),
+		CSM:         ownerName(s.SubscriptionOwner, names),
+	}
+}
+
+// subDerivedStatus = Status kolom daftar langganan (BL-95). Untuk langganan
+// Active, DERIVASI dari end_date (reuse logika BL-94 agar konsisten): lewat tempo
+// → "Masa Tenggang" (error), ≤ dueSoonDays (30) → "Jatuh Tempo" (warning), selain
+// itu → "Aman" (success). Status daur hidup NON-Active (Trial/PendingApproval/
+// Expired/Cancelled/Churned) dikembalikan apa adanya dgn badge lifecycle
+// (subStatusLabelClass) — derivasi timing renewal tak bermakna untuk status
+// terminal (mis. Cancelled ber-end_date lampau ≠ "Masa Tenggang"). Mengembalikan
+// label + class badge daisyUI (token semantik).
+func subDerivedStatus(status string, end pgtype.Date, now time.Time) (label, badgeClass string) {
+	if status != "Active" {
+		return status, subStatusLifecycleClass(status)
+	}
+	if !end.Valid {
+		return "Aman", "badge badge-success"
+	}
+	a := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	b := time.Date(end.Time.Year(), end.Time.Month(), end.Time.Day(), 0, 0, 0, 0, time.UTC)
+	d := int(b.Sub(a).Hours() / 24)
+	switch {
+	case d < 0:
+		return "Masa Tenggang", "badge badge-error"
+	case d <= dueSoonDays:
+		return "Jatuh Tempo", "badge badge-warning"
+	default:
+		return "Aman", "badge badge-success"
+	}
+}
+
+// subStatusLifecycleClass = badge daisyUI (token semantik) untuk status daur hidup
+// langganan NON-Active pada kolom Status daftar (BL-95). Dipindah dari
+// panel.subStatusBadge saat Status jadi derivasi: view kini menerima class jadi
+// dari handler. Active tak lewat sini (di-derivasi subDerivedStatus).
+func subStatusLifecycleClass(status string) string {
+	switch status {
+	case "Trial":
+		return "badge badge-info"
+	case "Suspended", "PendingApproval":
+		return "badge badge-warning"
+	case "Expired", "Cancelled", "Churned":
+		return "badge badge-error"
+	default:
+		return "badge badge-ghost"
 	}
 }

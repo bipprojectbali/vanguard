@@ -1514,6 +1514,27 @@ type Querier interface {
 	// salah satu dari beberapa".
 	SoftDeleteTenant(ctx context.Context, id int64) error
 	SoftDeleteUser(ctx context.Context, id int64) error
+	// KPI header halaman Subscription Lists (BL-95) dalam SATU round-trip, di-scope
+	// ownership SAMA dgn ListSubscriptions (scope_all → semua; is_own →
+	// subscription_owner = uid; keduanya false → NOL, fail-closed). RLS mengurung tenant.
+	//   • total_mrr    : SUM(mrr) langganan Active (nilai berulang berjalan).
+	//   • total_arr    : total_mrr × 12 (proyeksi 12 bln, keputusan user — bukan kolom
+	//                    arr yg bisa diskon tahunan; label kartu "proyeksi 12 bln" persis).
+	//   • new_mrr      : SUM(mrr) langganan BARU (tanpa previous_subscription_id — logo
+	//                    baru, bukan perpanjangan) yang mulai BULAN berjalan. Definisi
+	//                    "MRR baru bln ini" (keputusan user) selaras ReportSubMRR.new_mrr
+	//                    (renewal punya previous_subscription_id → sengaja tak dihitung
+	//                    agar delta = pertumbuhan bersih, bukan sekadar start_date baru).
+	//   • active_count : COUNT langganan Active (kartu "Active Subs").
+	//   • churned_30   : COUNT Cancelled/Churned dgn cancellation_date dalam 30 hari
+	//                    terakhir → pembilang Churn Rate (definisi churn% app: churned /
+	//                    (active + churned), jendela 30 hari untuk churned).
+	//   • total_accounts : COUNT semua akun (desa) hidup di tenant — denominator "dari
+	//                    N desa" (keputusan user: total akun, bukan hanya yg berlangganan).
+	//                    Subquery SENGAJA di luar filter ownership: denominator = basis
+	//                    desa penuh, bukan yg dimiliki pemanggil.
+	// today dioper handler (zona waktu app, deterministik utk test).
+	SubscriptionListKPIs(ctx context.Context, arg SubscriptionListKPIsParams) (SubscriptionListKPIsRow, error)
 	// PLATFORM-ONLY (super_admin/staff). Owner tak bisa membatalkannya sendiri —
 	// kalau bisa, gunanya hilang (0005 §1). Alasan disimpan agar pertanyaan support
 	// pertama ("kenapa workspace saya mati") terjawab tanpa menggali audit log.
