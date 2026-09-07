@@ -98,9 +98,11 @@ type Querier interface {
 	// Agregat KPI header halaman /engagements. Cakupan scope sama persis ListEngagements.
 	// uid dioper walau scope_all=true (diabaikan dalam kasus itu).
 	CountEngagementKPIs(ctx context.Context, arg CountEngagementKPIsParams) (CountEngagementKPIsRow, error)
-	// KPI agregat untuk header: total desa (dalam scope), sehat/berisiko/kritis,
-	// dan rata-rata skor (NULL bila semua skor belum diisi).
-	// Ownership clause SAMA PERSIS dengan ListHealthScores agar konsisten.
+	// KPI agregat untuk header + panel dasbor (BL-96): total desa (dalam scope),
+	// sehat/berisiko/kritis, rata-rata skor (NULL bila semua skor belum diisi),
+	// rata-rata per-komponen (panel Komposisi Skor), dan cacah arah tren (panel
+	// Arah Pergerakan). AVG di-cast ::float8 agar sqlc emit *float64 (nullable),
+	// bukan pgtype.Numeric. Ownership clause SAMA PERSIS dengan ListHealthScores.
 	CountHealthScoreKPIs(ctx context.Context, arg CountHealthScoreKPIsParams) (CountHealthScoreKPIsRow, error)
 	// Berapa workspace yang DIMILIKI user (role owner) — untuk cek kuota sebelum
 	// membuat workspace baru. Diundang jadi member/admin TIDAK memakan kuota.
@@ -825,6 +827,10 @@ type Querier interface {
 	// Workspace-level listing akun + data health score.
 	// Keyset (created_at DESC, id DESC), filter_status '' = semua.
 	// uid dioper walau scope_all (diabaikan di klausa).
+	// BL-96: kolom "Jatuh Tempo" = jatuh tempo perpanjangan LANGGANAN aktif (bukan
+	// days_in_stage). Satu akun bisa punya banyak langganan → ambil end_date PALING
+	// DEKAT (ASC) dari langganan Active belum-terhapus. LATERAL LIMIT 1 memakai
+	// idx_subs_one_active-adjacent (tenant_id, end_date) WHERE status='Active'.
 	ListHealthScores(ctx context.Context, arg ListHealthScoresParams) ([]ListHealthScoresRow, error)
 	// Undangan PENDING satu workspace (panel anggota) — yang sudah diterima disaring.
 	ListInvitesByTenant(ctx context.Context, tenantID int64) ([]Invite, error)

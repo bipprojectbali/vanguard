@@ -17,7 +17,18 @@ SELECT
     COUNT(*) FILTER (WHERE cs.health_status = 'Healthy')           AS healthy,
     COUNT(*) FILTER (WHERE cs.health_status = 'At-Risk')           AS at_risk,
     COUNT(*) FILTER (WHERE cs.health_status = 'Critical')          AS critical,
-    COUNT(*) FILTER (WHERE cs.overall_health_score IS NOT NULL)     AS scored
+    COUNT(*) FILTER (WHERE cs.overall_health_score IS NOT NULL)     AS scored,
+    -- AVG native NULL bila tak ada baris terskor → COALESCE 0 agar sqlc emit
+    -- float64 non-nullable & scan tak gagal (mis. Support scope=none → 0 baris).
+    -- Handler menampilkan "—"/placeholder saat scored=0, jadi 0 tak menyesatkan.
+    COALESCE(AVG(cs.overall_health_score), 0)::float8               AS avg_score,
+    COALESCE(AVG(cs.adoption_score), 0)::float8                     AS avg_adoption,
+    COALESCE(AVG(cs.engagement_score), 0)::float8                   AS avg_engagement,
+    COALESCE(AVG(cs.support_score), 0)::float8                      AS avg_support,
+    COALESCE(AVG(cs.sentiment_score), 0)::float8                    AS avg_sentiment,
+    COUNT(*) FILTER (WHERE cs.score_trend = 'Improving')           AS trend_improving,
+    COUNT(*) FILTER (WHERE cs.score_trend = 'Stable')              AS trend_stable,
+    COUNT(*) FILTER (WHERE cs.score_trend = 'Declining')           AS trend_declining
 FROM accounts a
 LEFT JOIN customer_success cs
        ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
@@ -39,16 +50,26 @@ type CountHealthScoreKPIsParams struct {
 }
 
 type CountHealthScoreKPIsRow struct {
-	Total    int64 `json:"total"`
-	Healthy  int64 `json:"healthy"`
-	AtRisk   int64 `json:"at_risk"`
-	Critical int64 `json:"critical"`
-	Scored   int64 `json:"scored"`
+	Total          int64   `json:"total"`
+	Healthy        int64   `json:"healthy"`
+	AtRisk         int64   `json:"at_risk"`
+	Critical       int64   `json:"critical"`
+	Scored         int64   `json:"scored"`
+	AvgScore       float64 `json:"avg_score"`
+	AvgAdoption    float64 `json:"avg_adoption"`
+	AvgEngagement  float64 `json:"avg_engagement"`
+	AvgSupport     float64 `json:"avg_support"`
+	AvgSentiment   float64 `json:"avg_sentiment"`
+	TrendImproving int64   `json:"trend_improving"`
+	TrendStable    int64   `json:"trend_stable"`
+	TrendDeclining int64   `json:"trend_declining"`
 }
 
-// KPI agregat untuk header: total desa (dalam scope), sehat/berisiko/kritis,
-// dan rata-rata skor (NULL bila semua skor belum diisi).
-// Ownership clause SAMA PERSIS dengan ListHealthScores agar konsisten.
+// KPI agregat untuk header + panel dasbor (BL-96): total desa (dalam scope),
+// sehat/berisiko/kritis, rata-rata skor (NULL bila semua skor belum diisi),
+// rata-rata per-komponen (panel Komposisi Skor), dan cacah arah tren (panel
+// Arah Pergerakan). AVG di-cast ::float8 agar sqlc emit *float64 (nullable),
+// bukan pgtype.Numeric. Ownership clause SAMA PERSIS dengan ListHealthScores.
 func (q *Queries) CountHealthScoreKPIs(ctx context.Context, arg CountHealthScoreKPIsParams) (CountHealthScoreKPIsRow, error) {
 	row := q.db.QueryRow(ctx, countHealthScoreKPIs,
 		arg.ScopeAll,
@@ -63,6 +84,14 @@ func (q *Queries) CountHealthScoreKPIs(ctx context.Context, arg CountHealthScore
 		&i.AtRisk,
 		&i.Critical,
 		&i.Scored,
+		&i.AvgScore,
+		&i.AvgAdoption,
+		&i.AvgEngagement,
+		&i.AvgSupport,
+		&i.AvgSentiment,
+		&i.TrendImproving,
+		&i.TrendStable,
+		&i.TrendDeclining,
 	)
 	return i, err
 }
@@ -81,10 +110,20 @@ SELECT
     cs.score_trend,
     cs.lifecycle_stage,
     cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
     a.created_at
 FROM accounts a
 LEFT JOIN customer_success cs
        ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
 WHERE a.deleted_at IS NULL
   AND (
       $1::boolean
@@ -127,6 +166,7 @@ type ListHealthScoresRow struct {
 	ScoreTrend         *string            `json:"score_trend"`
 	LifecycleStage     *string            `json:"lifecycle_stage"`
 	StageEntryDate     pgtype.Date        `json:"stage_entry_date"`
+	RenewalEndDate     pgtype.Date        `json:"renewal_end_date"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -138,6 +178,10 @@ type ListHealthScoresRow struct {
 // Workspace-level listing akun + data health score.
 // Keyset (created_at DESC, id DESC), filter_status ” = semua.
 // uid dioper walau scope_all (diabaikan di klausa).
+// BL-96: kolom "Jatuh Tempo" = jatuh tempo perpanjangan LANGGANAN aktif (bukan
+// days_in_stage). Satu akun bisa punya banyak langganan → ambil end_date PALING
+// DEKAT (ASC) dari langganan Active belum-terhapus. LATERAL LIMIT 1 memakai
+// idx_subs_one_active-adjacent (tenant_id, end_date) WHERE status='Active'.
 func (q *Queries) ListHealthScores(ctx context.Context, arg ListHealthScoresParams) ([]ListHealthScoresRow, error) {
 	rows, err := q.db.Query(ctx, listHealthScores,
 		arg.ScopeAll,
@@ -169,6 +213,7 @@ func (q *Queries) ListHealthScores(ctx context.Context, arg ListHealthScoresPara
 			&i.ScoreTrend,
 			&i.LifecycleStage,
 			&i.StageEntryDate,
+			&i.RenewalEndDate,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

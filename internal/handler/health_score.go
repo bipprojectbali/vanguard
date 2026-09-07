@@ -61,20 +61,19 @@ func (h *Handler) HealthScoreList(w http.ResponseWriter, r *http.Request) {
 		items = append(items, healthRowToView(row, slug, appTZ, uid))
 	}
 
+	kpiView, panels := healthKPIsToView(kpis)
+
 	h.renderWorkspaceShell(w, r, "Customer Health Score", "/health-scores", panel.HealthScoreList(panel.HealthScoreListView{
-		Base:       wsPath(slug, ""),
-		ActiveTab:  tab,
-		Query:      query,
-		NextCursor: nextCursor,
-		After:      r.URL.Query().Get("after"),
-		Trail:      pageTrail(r),
-		KPIs: panel.HealthScoreKPIs{
-			Total:    kpis.Total,
-			Healthy:  kpis.Healthy,
-			AtRisk:   kpis.AtRisk,
-			Critical: kpis.Critical,
-		},
-		Rows: items,
+		Base:          wsPath(slug, ""),
+		ActiveTab:     tab,
+		Query:         query,
+		NextCursor:    nextCursor,
+		After:         r.URL.Query().Get("after"),
+		Trail:         pageTrail(r),
+		KPIs:          kpiView,
+		Panels:        panels,
+		TableSubtitle: healthTableSubtitle(kpis.Total),
+		Rows:          items,
 	}))
 }
 
