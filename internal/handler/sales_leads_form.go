@@ -96,6 +96,13 @@ func parseLeadForm(fv func(string) string) (leadForm, string) {
 	f.JobTitle = optTrim(fv("job_title"))
 	f.LeadSource = optTrim(fv("lead_source"))
 	f.UnqualifiedReason = optTrim(fv("unqualified_reason"))
+	// BL-80: "Alasan Unqualified" hanya bermakna saat status Unqualified. Field
+	// yang disembunyikan klien (data-show) untuk status lain TETAP terkirim
+	// (data-show = display:none, bukan lepas-DOM) — backend penegak: buang nilai
+	// basi agar tak ada "alasan yatim" tersimpan pada lead non-Unqualified.
+	if f.LeadStatus != "Unqualified" {
+		f.UnqualifiedReason = nil
+	}
 	f.Email = optTrim(fv("email"))
 
 	// HP/WhatsApp opsional (BL-2): kosong = NULL; terisi wajib "berupa nomor"

@@ -141,3 +141,41 @@ func TestLeadForm_LegendaEnum(t *testing.T) {
 			iMakna, iSelect, out)
 	}
 }
+
+// TestLeadForm_AlasanUnqualifiedKondisional — regresi BL-80: field "Alasan
+// Unqualified" hanya tampil saat Status = Unqualified. Diwujudkan Datastar:
+// <select> Status di-bind ke signal $leadstatus (data.Bind), textarea alasan
+// dibungkus data-show="$leadstatus == 'Unqualified'", dan signal diinisialisasi
+// dari nilai tersimpan (no-FOUC). data-show = jaring UX klien; backend tetap
+// penegak (uji terpisah di handler). Kita jaga markup reaktifnya ter-render.
+func TestLeadForm_AlasanUnqualifiedKondisional(t *testing.T) {
+	out := renderLeads(t, LeadForm(LeadFormView{
+		Base:        "/w/desa",
+		Action:      "/w/desa/leads/new",
+		Statuses:    []string{"New", "Contacted", "Qualified", "Unqualified"},
+		Ratings:     []string{"Hot", "Warm", "Cold"},
+		RegionsJSON: "[]",
+	}))
+
+	for _, want := range []string{
+		`data-bind="leadstatus"`, // select Status menyetir $leadstatus
+		`data-signals=`,          // signal $leadstatus diinisialisasi di form
+		// textarea alasan dibungkus data-show pada ekspresi status Unqualified
+		// (kutip di-escape g.Text jadi &#39;).
+		`data-show="$leadstatus == &#39;Unqualified&#39;"`,
+		`name="unqualified_reason"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("BL-80: form lead harus memuat %q:\n%s", want, out)
+		}
+	}
+
+	// Struktur: pembungkus data-show berada SEBELUM textarea unqualified_reason
+	// (textarea ada DI DALAM region kondisional, bukan di luarnya).
+	iShow := strings.Index(out, `data-show="$leadstatus == &#39;Unqualified&#39;"`)
+	iTextarea := strings.Index(out, `name="unqualified_reason"`)
+	if iShow < 0 || iTextarea < 0 || iShow > iTextarea {
+		t.Errorf("BL-80: textarea alasan harus di dalam pembungkus data-show "+
+			"(iShow=%d, iTextarea=%d):\n%s", iShow, iTextarea, out)
+	}
+}

@@ -129,3 +129,36 @@ func TestParseLeadForm_TeleponBukanNomorDitolak(t *testing.T) {
 		t.Errorf("'+' di tengah: code=%q, mau %q", code, "mobile_phone")
 	}
 }
+
+// TestParseLeadForm_AlasanUnqualifiedDibuangSaatStatusBukanUnqualified —
+// regresi BL-80 (penegak backend): field "Alasan Unqualified" disembunyikan
+// klien via data-show, tapi display:none tetap MENGIRIM nilainya. parseLeadForm
+// wajib membuang alasan basi saat status ≠ Unqualified (tak ada "alasan yatim"),
+// dan mempertahankannya saat status = Unqualified.
+func TestParseLeadForm_AlasanUnqualifiedDibuangSaatStatusBukanUnqualified(t *testing.T) {
+	// Status New + alasan terisi (nilai basi dari field tersembunyi) → dibuang.
+	f, code := parseLeadForm(fvFromMap(map[string]string{
+		"lead_name":          "Desa Contoh",
+		"lead_status":        "New",
+		"unqualified_reason": "tak jadi dipakai",
+	}))
+	if code != "" {
+		t.Fatalf("form status New ditolak (code=%q)", code)
+	}
+	if f.UnqualifiedReason != nil {
+		t.Errorf("status New: alasan unqualified harus dibuang (nil), dapat %q", *f.UnqualifiedReason)
+	}
+
+	// Status Unqualified + alasan terisi → dipertahankan.
+	f2, code := parseLeadForm(fvFromMap(map[string]string{
+		"lead_name":          "Desa Contoh",
+		"lead_status":        "Unqualified",
+		"unqualified_reason": "anggaran tak tersedia",
+	}))
+	if code != "" {
+		t.Fatalf("form status Unqualified ditolak (code=%q)", code)
+	}
+	if f2.UnqualifiedReason == nil || *f2.UnqualifiedReason != "anggaran tak tersedia" {
+		t.Errorf("status Unqualified: alasan harus dipertahankan, dapat %v", f2.UnqualifiedReason)
+	}
+}
