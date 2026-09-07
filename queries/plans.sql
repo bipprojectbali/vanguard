@@ -80,3 +80,15 @@ UPDATE plans SET
     updated_by = sqlc.narg(updated_by),
     updated_at = now()
 WHERE id = sqlc.arg(id);
+
+
+-- name: PlanCatalogStats :one
+-- KPI katalog Plans & Pricing (BL-93): jumlah paket AKTIF & NONAKTIF dalam satu
+-- round-trip. COUNT bersyarat (FILTER) menghindari dua query terpisah. Scope
+-- workspace ditegakkan RLS (tak ada filter tenant_id manual, sama seperti query
+-- plans lain). Min/Max harga TAK di sini: dihitung di handler dari ListPlans
+-- (annualisasi Monthly x12) agar nama plan pemenang ikut tampil tanpa window SQL.
+SELECT
+    COUNT(*) FILTER (WHERE is_active = true)  AS active_count,
+    COUNT(*) FILTER (WHERE is_active = false) AS inactive_count
+FROM plans;

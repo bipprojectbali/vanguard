@@ -39,6 +39,13 @@ func (h *Handler) PlansList(w http.ResponseWriter, r *http.Request) {
 	shown, nextCursor := splitPage(rows, func(p db.Plan) (pgtype.Timestamptz, int64) {
 		return p.CreatedAt, p.ID
 	})
+
+	// KPI header (BL-93): agregat count + daftar plan aktif untuk min/max harga
+	// ternormalisasi tahunan. Dua query bounded (bukan N+1): scope tenant lewat
+	// RLS (h.q). Gagal → tetap render katalog, KPI nol (fail-soft, KPI bukan
+	// data kritis untuk kelola plan).
+	kpi := h.planKPI(ctx)
+
 	items := make([]panel.PlanRow, 0, len(shown))
 	for _, p := range shown {
 		items = append(items, planRowView(p))
@@ -48,6 +55,7 @@ func (h *Handler) PlansList(w http.ResponseWriter, r *http.Request) {
 	h.renderWorkspaceShell(w, r, "Plans & Pricing", "/plans", panel.PlanList(panel.PlanListView{
 		Base:       base,
 		CanWrite:   canWritePlans(ctx),
+		KPI:        kpi,
 		Err:        plansErrMsg(r.URL.Query().Get("err")),
 		Msg:        plansMsg(r.URL.Query().Get("ok")),
 		Items:      items,

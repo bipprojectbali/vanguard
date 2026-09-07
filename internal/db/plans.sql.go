@@ -225,6 +225,30 @@ func (q *Queries) ListPlansAll(ctx context.Context, arg ListPlansAllParams) ([]P
 	return items, nil
 }
 
+const planCatalogStats = `-- name: PlanCatalogStats :one
+SELECT
+    COUNT(*) FILTER (WHERE is_active = true)  AS active_count,
+    COUNT(*) FILTER (WHERE is_active = false) AS inactive_count
+FROM plans
+`
+
+type PlanCatalogStatsRow struct {
+	ActiveCount   int64 `json:"active_count"`
+	InactiveCount int64 `json:"inactive_count"`
+}
+
+// KPI katalog Plans & Pricing (BL-93): jumlah paket AKTIF & NONAKTIF dalam satu
+// round-trip. COUNT bersyarat (FILTER) menghindari dua query terpisah. Scope
+// workspace ditegakkan RLS (tak ada filter tenant_id manual, sama seperti query
+// plans lain). Min/Max harga TAK di sini: dihitung di handler dari ListPlans
+// (annualisasi Monthly x12) agar nama plan pemenang ikut tampil tanpa window SQL.
+func (q *Queries) PlanCatalogStats(ctx context.Context) (PlanCatalogStatsRow, error) {
+	row := q.db.QueryRow(ctx, planCatalogStats)
+	var i PlanCatalogStatsRow
+	err := row.Scan(&i.ActiveCount, &i.InactiveCount)
+	return i, err
+}
+
 const setPlanActive = `-- name: SetPlanActive :exec
 UPDATE plans SET
     is_active  = $1,
