@@ -100,3 +100,42 @@ func TestDealForm_NoDefaultHelp(t *testing.T) {
 		t.Errorf("baris bantuan default tak boleh dirender lagi (BL-85):\n%s", out)
 	}
 }
+
+// TestDealForm_ValuePreview: BL-87 opsi c — form Deal merender kotak preview
+// MRR/ARR (kontrak markup dibaca static/dealpreview.js) + peta Termin→bulan
+// sebagai JSON tertanam, dan label field nilai menegaskan makna per-termin.
+func TestDealForm_ValuePreview(t *testing.T) {
+	v := dealFormFixture(false)
+	v.TermMonths = map[string]int{"Monthly": 1, "Annual": 12, "Multi-year": 36}
+	out := renderLeads(t, DealForm(v))
+
+	for _, want := range []string{
+		"Nilai per periode termin (Rp)",        // label menegaskan makna per-termin
+		`data-deal-preview`,                    // wadah preview
+		`data-amount-sel="#f-amount"`,          // selector input nilai (tak hardcode di JS)
+		`data-term-sel="#f-subscription_term"`, // selector select termin
+		`data-deal-mrr`,                        // slot MRR
+		`data-deal-arr`,                        // slot ARR
+		`data-deal-note`,                       // baris keterangan
+		`<script type="application/json" id="deal-term-months">`, // peta ditanam CSP-safe
+		`"Monthly":1`, `"Annual":12`, `"Multi-year":36`, // isi peta = bulan-kontrak
+		`/static/dealpreview.js`, // skrip preview same-origin dimuat
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("preview nilai deal harus memuat %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestDealForm_PreviewInertWithoutMap: tanpa TermMonths (nil), wadah preview &
+// skrip tetap dirender (fallback aman), tapi JSON tertanam = "null" → klien
+// mematikan preview tanpa error (slot diam "—").
+func TestDealForm_PreviewInertWithoutMap(t *testing.T) {
+	out := renderLeads(t, DealForm(dealFormFixture(false)))
+	if !strings.Contains(out, `data-deal-preview`) {
+		t.Errorf("wadah preview harus tetap dirender tanpa peta:\n%s", out)
+	}
+	if !strings.Contains(out, `<script type="application/json" id="deal-term-months">null</script>`) {
+		t.Errorf("peta nil harus jadi JSON null (preview dimatikan klien):\n%s", out)
+	}
+}

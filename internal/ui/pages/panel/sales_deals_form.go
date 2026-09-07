@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"encoding/json"
 	"strconv"
 
 	"go_starter/internal/ui"
@@ -45,6 +46,11 @@ type DealFormView struct {
 	Types    []string
 	Terms    []string
 	Accounts []AccountMemberOption
+	// TermMonths = Termin Langganan → jumlah bulan-kontrak (sumber:
+	// handler.dealTermMonths, cermin termContractMonths). Ditanam sebagai JSON
+	// untuk preview MRR/ARR di klien (BL-87 opsi c). Kosong/nil = preview mati
+	// (fallback aman: form tetap berfungsi tanpa preview).
+	TermMonths map[string]int
 }
 
 // DealForm merender halaman form lengkap.
@@ -78,10 +84,11 @@ func DealForm(v DealFormView) g.Node {
 			selectField("Termin Langganan", "subscription_term", v.Fields.SubscriptionTerm, v.Terms, false),
 		),
 		formCard("Nilai & Peluang",
-			moneyField("Nilai (Rp)", "amount", v.Fields.Amount),
+			moneyField("Nilai per periode termin (Rp)", "amount", v.Fields.Amount),
 			field("Probabilitas (%)", "probability", v.Fields.Probability, false, "number"),
 			field("Perkiraan Tutup", "expected_close_date", v.Fields.ExpectedCloseDate, false, "date"),
 			field("Kategori Forecast", "forecast_category", v.Fields.ForecastCategory, false, "text"),
+			dealValuePreview(),
 		),
 		formCard("Catatan",
 			field("Kompetitor", "competitor", v.Fields.Competitor, false, "text"),
@@ -94,6 +101,16 @@ func DealForm(v DealFormView) g.Node {
 			h.A(h.Href(v.Base+"/deals"), h.Class("btn btn-ghost min-h-11"), g.Text("Batal")),
 		),
 	))
+	// Preview MRR/ARR (BL-87 opsi c): peta Termin→bulan-kontrak ditanam sebagai
+	// JSON (CSP-safe, gotcha #15 — nilai internal, bukan input user; json.Marshal
+	// meng-escape <>&). dealpreview.js membacanya lalu menghitung MRR = nilai ÷
+	// bulan, ARR = MRR × 12 (cermin sales_deals_won_subscription). Enhancement
+	// murni: tanpa JS / tanpa TermMonths, form tetap jalan (preview diam "—").
+	termJSON, _ := json.Marshal(v.TermMonths)
+	body = append(body,
+		h.Script(h.Type("application/json"), h.ID("deal-term-months"), g.Raw(string(termJSON))),
+		h.Script(h.Src("/static/dealpreview.js"), h.Defer()),
+	)
 	// Pengelompokan ribuan utk Nilai (Rp) (data-numgroup di moneyField): memformat
 	// tampilan & menormalkan jadi digit polos saat submit. Same-origin CSP-safe
 	// (gotcha #16). Sejajar sales_leads_form (BL-2/BL-8).
@@ -104,6 +121,49 @@ func DealForm(v DealFormView) g.Node {
 	body = append(body, h.Script(h.Src("/static/accountpicker.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// dealValuePreview = kotak preview MRR/ARR terhitung (BL-87 opsi c) untuk
+// menutup ketaksinkronan makna field Nilai: nilai deal diperlakukan PER-TERMIN
+// saat Won→Langganan (MRR = nilai ÷ bulan-kontrak, ARR = MRR × 12), sehingga
+// tanpa preview user mudah salah input (mis. niat ARR + Termin Monthly → ARR
+// 12× lipat). Span penuh-lebar di dalam formCard (sm:col-span-2). Kontrak markup
+// dibaca static/dealpreview.js: [data-deal-preview] wadah, [data-deal-mrr]/
+// [data-deal-arr] slot nilai, [data-deal-note] baris keterangan. data-amount-sel/
+// data-term-sel = selector input sumber (hindari hardcode id di JS). Fallback
+// no-JS aman: nilai diam "—" + note instruksi (preview = enhancement, bukan
+// syarat submit).
+func dealValuePreview() g.Node {
+	valueSlot := func(label, hook string) g.Node {
+		return h.Div(
+			h.Class("min-w-0"),
+			h.Div(h.Class("text-xs text-base-content/60"), g.Text(label)),
+			h.Div(h.Class("font-semibold break-words"), g.Attr(hook, ""), g.Text("—")),
+		)
+	}
+	return h.Div(
+		h.Class("sm:col-span-2 min-w-0"),
+		g.Attr("data-deal-preview", ""),
+		g.Attr("data-amount-sel", "#f-amount"),
+		g.Attr("data-term-sel", "#f-subscription_term"),
+		h.Div(
+			h.Class("rounded-box bg-base-200 border border-base-300 p-3 min-w-0"),
+			h.Div(
+				h.Class("text-xs font-medium text-base-content/70 mb-2"),
+				g.Text("Perkiraan langganan saat Closed Won"),
+			),
+			h.Div(
+				h.Class("flex flex-wrap gap-6"),
+				valueSlot("MRR", "data-deal-mrr"),
+				valueSlot("ARR", "data-deal-arr"),
+			),
+			h.P(
+				h.Class("mt-2 text-xs text-base-content/60 break-words"),
+				g.Attr("data-deal-note", ""),
+				g.Text("Isi Nilai & pilih Termin Langganan untuk melihat perkiraan MRR/ARR."),
+			),
+		),
+	)
 }
 
 // dealAccountPickerField = pemilih desa WAJIB yang BISA DIKETIK/DICARI (BL-9),
