@@ -48,6 +48,7 @@ func (e *testEnv) allHealthScoreRows(t *testing.T) []db.ListHealthScoresRow {
 		CursorCreatedAt: at,
 		CursorID:        id,
 		ScopeAll:        true,
+		FilterStatus:    "", // interface{} nil → SQL NULL → NULL='' saring semua baris
 		PageSize:        100,
 	})
 	if err != nil {

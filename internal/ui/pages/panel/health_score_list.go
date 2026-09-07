@@ -10,14 +10,21 @@ import (
 )
 
 // HealthScoreKPIs — hasil CountHealthScoreKPIs untuk kartu KPI header.
+// Sub-teks (BL-96) diturunkan di handler (view murni-data): AvgScoreSub &
+// HealthySub bergantung data; sub Berisiko/Kritis statis dirender di view.
 type HealthScoreKPIs struct {
-	Total    int64
-	Healthy  int64
-	AtRisk   int64
-	Critical int64
+	Total       int64
+	Healthy     int64
+	AtRisk      int64
+	Critical    int64
+	AvgScoreSub string // "rata skor 78" / "belum ada skor"
+	HealthySub  string // "40% dari binaan"
 }
 
 // HealthScoreRowView — satu baris tabel desa + data health score.
+// BL-96: kolom Sentimen dibuang; "Di Stage" → RenewalDue (jatuh tempo langganan);
+// ActionLabel = aksi kontekstual per-status (Kritis→Playbook, Berisiko→Tinjau,
+// selain itu→Lihat).
 type HealthScoreRowView struct {
 	ID          int64
 	AccountName string
@@ -27,22 +34,24 @@ type HealthScoreRowView struct {
 	Adoption    string
 	Engagement  string
 	Support     string
-	Sentiment   string
 	Trend       string
-	DaysInStage string
+	RenewalDue  string
+	ActionLabel string
 	HrefDetail  string
 }
 
 // HealthScoreListView — data halaman /health-scores.
 type HealthScoreListView struct {
-	Base       string
-	ActiveTab  string
-	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
-	NextCursor string
-	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
-	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
-	KPIs       HealthScoreKPIs
-	Rows       []HealthScoreRowView
+	Base          string
+	ActiveTab     string
+	Query         string // ?q= pencarian bebas (BL-6); "" = tak mencari
+	NextCursor    string
+	After         string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail         string // BL-7: jejak cursor halaman sebelumnya (?trail=)
+	KPIs          HealthScoreKPIs
+	Panels        HealthDashPanels // BL-96: panel Sebaran + Komposisi/Arah
+	TableSubtitle string           // BL-96: mis. "Diurutkan dari terbaru · 42 desa binaan"
+	Rows          []HealthScoreRowView
 }
 
 // HealthScoreList merender body konten halaman workspace-level Health Score (6.1).
@@ -50,6 +59,7 @@ type HealthScoreListView struct {
 func HealthScoreList(v HealthScoreListView) g.Node {
 	return h.Div(h.Class("space-y-4"),
 		healthScoreKPICards(v.KPIs),
+		healthDashPanels(v.Panels),
 		tabSearchRow(healthScoreTabs(v.Base, v.ActiveTab, v.Query),
 			searchBoxInline(v.Base+"/health-scores", v.Query,
 				"Cari desa…", "Cari health score",
@@ -64,18 +74,21 @@ func HealthScoreList(v HealthScoreListView) g.Node {
 // satu tanpa yang lain = UI menjanjikan pemetaan skor→status yang tak ditegakkan.
 func healthScoreKPICards(k HealthScoreKPIs) g.Node {
 	return h.Div(h.Class("grid grid-cols-2 md:grid-cols-4 gap-3"),
-		healthKPICard("Desa Total", strconv.FormatInt(k.Total, 10), "text-base-content"),
-		healthKPICard("Sehat (≥80)", strconv.FormatInt(k.Healthy, 10), "text-success"),
-		healthKPICard("Berisiko (40–79)", strconv.FormatInt(k.AtRisk, 10), "text-warning"),
-		healthKPICard("Kritis (<40)", strconv.FormatInt(k.Critical, 10), "text-error"),
+		healthKPICard("Desa Binaan", strconv.FormatInt(k.Total, 10), "text-base-content", k.AvgScoreSub),
+		healthKPICard("Sehat (≥80)", strconv.FormatInt(k.Healthy, 10), "text-success", k.HealthySub),
+		healthKPICard("Berisiko (40–79)", strconv.FormatInt(k.AtRisk, 10), "text-warning", "perlu ditindaklanjuti"),
+		healthKPICard("Kritis (<40)", strconv.FormatInt(k.Critical, 10), "text-error", "perlu playbook aktif"),
 	)
 }
 
-func healthKPICard(label, value, valueClass string) g.Node {
+// healthKPICard — kartu KPI dengan sub-teks (BL-96). sub kosong → baris sub
+// tetap dirender kosong agar tinggi kartu seragam antar-kolom (grid stretch).
+func healthKPICard(label, value, valueClass, sub string) g.Node {
 	return h.Div(h.Class("card bg-base-100 shadow-sm"),
 		h.Div(h.Class("card-body p-4"),
 			h.P(h.Class("text-sm text-base-content/60"), g.Text(label)),
 			h.P(h.Class("text-2xl font-bold "+valueClass), g.Text(value)),
+			h.P(h.Class("text-xs text-base-content/50"), g.Text(sub)),
 		),
 	)
 }
@@ -104,6 +117,8 @@ func healthScoreTabs(base, active, query string) g.Node {
 func healthScoreTable(v HealthScoreListView) g.Node {
 	return h.Div(h.Class("card bg-base-100 shadow-sm"),
 		h.Div(h.Class("card-body p-0"),
+			g.If(v.TableSubtitle != "",
+				h.P(h.Class("text-xs text-base-content/50 px-4 pt-3"), g.Text(v.TableSubtitle))),
 			ui.TableScroll(h.Table(h.Class("table table-sm"),
 				h.THead(h.Tr(
 					h.Th(g.Text("Desa")),
@@ -112,9 +127,8 @@ func healthScoreTable(v HealthScoreListView) g.Node {
 					h.Th(h.Class("text-center"), g.Text("Adopsi")),
 					h.Th(h.Class("text-center"), g.Text("Engagement")),
 					h.Th(h.Class("text-center"), g.Text("Support")),
-					h.Th(h.Class("text-center"), g.Text("Sentimen")),
 					h.Th(g.Text("Tren")),
-					h.Th(g.Text("Di Stage")),
+					h.Th(g.Text("Jatuh Tempo")),
 					h.Th(g.Text("")),
 				)),
 				h.TBody(healthScoreRows(v.Rows, v.Base, v.ActiveTab, v.Query)),
@@ -128,7 +142,7 @@ func healthScoreRows(rows []HealthScoreRowView, base, tab, query string) g.Node 
 	if len(rows) == 0 {
 		msg := "Belum ada data health score di ruang kerja ini."
 		cell := []g.Node{
-			h.ColSpan("10"), h.Class("text-center text-base-content/50 py-8"),
+			h.ColSpan("9"), h.Class("text-center text-base-content/50 py-8"),
 		}
 		if query != "" {
 			msg = "Belum ada desa yang cocok pencarian."
@@ -151,10 +165,9 @@ func healthScoreRows(rows []HealthScoreRowView, base, tab, query string) g.Node 
 			h.Td(h.Class("text-center text-sm"), g.Text(row.Adoption)),
 			h.Td(h.Class("text-center text-sm"), g.Text(row.Engagement)),
 			h.Td(h.Class("text-center text-sm"), g.Text(row.Support)),
-			h.Td(h.Class("text-center text-sm"), g.Text(row.Sentiment)),
 			h.Td(h.Class("text-sm"), g.Text(row.Trend)),
-			h.Td(h.Class("text-sm text-base-content/60"), g.Text(row.DaysInStage)),
-			h.Td(h.A(h.Href(row.HrefDetail), h.Class("btn btn-xs btn-ghost"), g.Text("Lihat"))),
+			h.Td(h.Class("text-sm text-base-content/60"), g.Text(row.RenewalDue)),
+			h.Td(h.A(h.Href(row.HrefDetail), h.Class("btn btn-xs btn-ghost"), g.Text(row.ActionLabel))),
 		))
 	}
 	return g.Group(nodes)
