@@ -1121,6 +1121,12 @@ type Querier interface {
 	// RETURNING kolom mentah (BIGINT NOT NULL) supaya sqlc mengetiknya int64, bukan
 	// pointer nullable (ekspresi aritmetika di RETURNING akan ditebak nullable).
 	NextEntityCodeSeq(ctx context.Context, arg NextEntityCodeSeqParams) (int64, error)
+	// KPI katalog Plans & Pricing (BL-93): jumlah paket AKTIF & NONAKTIF dalam satu
+	// round-trip. COUNT bersyarat (FILTER) menghindari dua query terpisah. Scope
+	// workspace ditegakkan RLS (tak ada filter tenant_id manual, sama seperti query
+	// plans lain). Min/Max harga TAK di sini: dihitung di handler dari ListPlans
+	// (annualisasi Monthly x12) agar nama plan pemenang ikut tampil tanpa window SQL.
+	PlanCatalogStats(ctx context.Context) (PlanCatalogStatsRow, error)
 	// Tren per HARI-LOKAL untuk rentang mingguan/bulanan (line chart).
 	PresenceByDay(ctx context.Context, arg PresenceByDayParams) ([]PresenceByDayRow, error)
 	// Distribusi aktivitas per JAM-LOKAL untuk satu rentang (bar "aktivitas per jam").

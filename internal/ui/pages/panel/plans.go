@@ -27,11 +27,25 @@ type PlanRow struct {
 	Active   bool
 }
 
+// PlanKPIView = 4 KPI header katalog (BL-93). Count aktif/nonaktif dari agregat;
+// harga min/max SUDAH dinormalisasi tahunan & diformat di handler (planKPI).
+// HasPrice=false → katalog tanpa harga dikenali, view menampilkan "—".
+type PlanKPIView struct {
+	ActiveCount   int64
+	InactiveCount int64
+	HasPrice      bool
+	LowestPrice   string
+	LowestSub     string
+	HighestPrice  string
+	HighestSub    string
+}
+
 // PlanListView = data halaman /plans. CanWrite (admin) memunculkan tombol tulis
 // & aksi baris. Keyset lewat NextCursor (BL-6): "" = ujung daftar.
 type PlanListView struct {
 	Base       string
 	CanWrite   bool
+	KPI        PlanKPIView
 	Err        string
 	Msg        string
 	Items      []PlanRow
@@ -48,13 +62,14 @@ func PlanList(v PlanListView) g.Node {
 			h.Div(
 				h.H1(h.Class("text-xl font-semibold"), g.Text("Plans & Pricing")),
 				h.P(h.Class("text-base-content/70"),
-					g.Text("Katalog paket langganan — harga dasar, siklus tagih, dan status.")),
+					g.Text("Katalog paket Desa+ · master data harga (dikelola Admin)")),
 			),
 			ui.When(v.CanWrite, h.A(
 				h.Href(v.Base+"/plans/new"), h.Class("btn btn-primary min-h-11"),
-				g.Text("Plan Baru"),
+				g.Text("+ Paket Baru"),
 			)),
 		),
+		planKPICards(v.KPI),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "plans-err", g.Text(v.Err)))
@@ -68,6 +83,44 @@ func PlanList(v PlanListView) g.Node {
 		body = append(body, plansTable(v), plansPager(v))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// planKPICards = 4 KPI header katalog (BL-93): Paket Aktif · Paket Nonaktif ·
+// Harga Terendah · Harga Tertinggi. Mobile-first: 1 kolom → md 2 → lg 4 (kelas
+// literal penuh agar tak ter-tree-shake, gotcha #4). Katalog tanpa harga
+// dikenali (HasPrice=false) → kartu harga "—".
+func planKPICards(k PlanKPIView) g.Node {
+	lo, loSub := k.LowestPrice, k.LowestSub
+	hi, hiSub := k.HighestPrice, k.HighestSub
+	if !k.HasPrice {
+		lo, loSub = "—", "belum ada harga"
+		hi, hiSub = "—", "belum ada harga"
+	}
+	return h.Div(
+		h.Class("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 min-w-0"),
+		planKPICard("Paket Aktif", strconv.FormatInt(k.ActiveCount, 10), "siap dijual", "text-success"),
+		planKPICard("Paket Nonaktif", strconv.FormatInt(k.InactiveCount, 10), "tidak dijual", "text-base-content/60"),
+		planKPICard("Harga Terendah", lo, loSub, "text-primary"),
+		planKPICard("Harga Tertinggi", hi, hiSub, "text-primary"),
+	)
+}
+
+// planKPICard = satu kartu metrik (label · nilai · sub). Meniru csJourneyKPICard.
+// Nilai harga bisa panjang ("Rp 1.800.000") → tak di-truncate; label & sub truncate.
+func planKPICard(label, value, sub, colorCls string) g.Node {
+	numCls := "text-2xl font-bold break-words"
+	if colorCls != "" {
+		numCls += " " + colorCls
+	}
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+		h.Div(
+			h.Class("card-body p-3"),
+			h.P(h.Class("text-xs text-base-content/60 truncate"), g.Text(label)),
+			h.P(h.Class(numCls), g.Text(value)),
+			h.P(h.Class("text-xs text-base-content/50 truncate"), g.Text(sub)),
+		),
+	)
 }
 
 // plansPager = tautan keyset "Berikutnya »" (native <a>, lolos gotcha #16).
@@ -139,7 +192,7 @@ func planStatusBadge(active bool) g.Node {
 	if active {
 		return h.Span(h.Class("badge badge-success"), g.Text("Aktif"))
 	}
-	return h.Span(h.Class("badge badge-ghost"), g.Text("Pensiun"))
+	return h.Span(h.Class("badge badge-ghost"), g.Text("Nonaktif"))
 }
 
 // planRowActions = Sunting + Pensiunkan/Aktifkan. Pensiun/aktifkan = FORM native
