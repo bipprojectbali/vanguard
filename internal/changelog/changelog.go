@@ -28,6 +28,19 @@ type Release struct {
 // Nomor versi teratas menjadi acuan badge "ada pembaruan".
 var Releases = []Release{
 	{
+		Version: "1.1.0",
+		Date:    "2026-09-08",
+		Summary: "Perbaikan pengalaman onboarding: anggota baru tahu harus menunggu peran dari admin, bukan menyangka aplikasi rusak.",
+		Sections: []Section{
+			{
+				Title: "Diperbaiki",
+				Items: []string{
+					"Anggota baru yang belum diberi peran CRM kini melihat halaman \"menunggu approval admin\" yang jelas, bukan Beranda dengan semua menu mati tanpa penjelasan.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.0.0",
 		Date:    "2026-09-08",
 		Summary: "Rilis pertama CRM Desa+ — sembilan modul inti untuk mengelola desa dari prospek hingga langganan aktif.",
