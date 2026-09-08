@@ -25,6 +25,11 @@ type Querier interface {
 	// SNAPSHOT: unit_price disalin dari plans.base_price saat dibuat, subtotal dihitung
 	// app (unit_price * quantity * (1 - discount_pct/100)); keduanya beku sesudahnya.
 	AddQuoteItem(ctx context.Context, arg AddQuoteItemParams) (QuoteItem, error)
+	// ── subscription_items — baris langganan (BL-88 PR2a; hard-delete, mirror quote_items) ──
+	// Tambah baris item langganan. tenant_id eksplisit (RLS WITH CHECK). unit_price &
+	// subtotal = SNAPSHOT komersial disalin dari quote_items saat Closed Won; mrr/arr
+	// per-item diturunkan app (subtotal/bulan-termin). Beku sesudahnya.
+	AddSubscriptionItem(ctx context.Context, arg AddSubscriptionItemParams) (SubscriptionItem, error)
 	// Setujui renewal Upsell yang menunggu (M5-3c): baris 'PendingApproval' → 'Active'.
 	// Handler WAJIB meng-Expired baris lama (previous_subscription_id) SEBELUM query ini
 	// dalam tx yang sama — invarian idx_subs_one_active (1 Active per account+plan).
@@ -1054,6 +1059,9 @@ type Querier interface {
 	// Semua pengaturan sekaligus — dipakai halaman /dev/settings dan pemuatan cache
 	// saat boot. Jumlahnya sedikit, jadi tak dipaginasi (beda dari daftar user).
 	ListSettings(ctx context.Context) ([]PlatformSetting, error)
+	// Baris item satu langganan, urut tampil (line_no lalu id). Menopang tabel item di
+	// detail langganan & agregasi per-produk. Bounded per-langganan → tanpa keyset.
+	ListSubscriptionItems(ctx context.Context, subscriptionID int64) ([]SubscriptionItem, error)
 	// Daftar langganan (menu /subscriptions), keyset (created_at DESC, id DESC) + filter
 	// ownership F3 + filter status opsional. Dua flag ownership (sumber SATU dgn
 	// SubscriptionsListFilter): scope_all → semua; is_own → subscription_owner = uid;

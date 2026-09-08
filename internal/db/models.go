@@ -535,6 +535,20 @@ type Subscription struct {
 	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
 }
 
+type SubscriptionItem struct {
+	ID             int64          `json:"id"`
+	SubscriptionID int64          `json:"subscription_id"`
+	TenantID       int64          `json:"tenant_id"`
+	PlanID         *int64         `json:"plan_id"`
+	Quantity       int32          `json:"quantity"`
+	UnitPrice      pgtype.Numeric `json:"unit_price"`
+	DiscountPct    pgtype.Numeric `json:"discount_pct"`
+	Subtotal       pgtype.Numeric `json:"subtotal"`
+	Mrr            pgtype.Numeric `json:"mrr"`
+	Arr            pgtype.Numeric `json:"arr"`
+	LineNo         *int16         `json:"line_no"`
+}
+
 type SuccessPlan struct {
 	ID            int64              `json:"id"`
 	TenantID      int64              `json:"tenant_id"`
