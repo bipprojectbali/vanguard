@@ -19,7 +19,7 @@ type masterData struct {
 	kbArticleCount int
 }
 
-// seedMasters membuat 4 plans, 3 sla_policies, 3 playbooks, 6 kb_articles.
+// seedMasters membuat 4 plans, 3 sla_policies, 4 playbooks, 6 kb_articles.
 //
 // plan_category HANYA boleh 'Core'/'Add-on'/'Module' (plans_category_chk,
 // migrasi 00011) — 'Enterprise' BUKAN nilai sah, jadi dua plan di sini
@@ -28,15 +28,20 @@ type masterData struct {
 func seedMasters(ctx context.Context, q *db.Queries, tenantID int64, tag string, owner *int64) (masterData, error) {
 	var out masterData
 
+	// plan_code POLA SERAGAM (BL-79 keputusan iii): plans BUKAN entity lookup
+	// ber-generator (tak ada codes.EntityPlan), jadi kode boleh literal — tapi
+	// SATU pola `SEED-PLAN-NN-<tag>` untuk keempatnya, bukan singkatan ad-hoc
+	// per-paket (SEED-CORE-START/-ENT/-ADD-RPT/…) yang dulu tak konsisten. Tag
+	// menjaga unik antar-rerun (idx plan_code), NN menjaga unik dalam satu run.
 	planSpecs := []struct {
-		name, code, category, price, billing, features string
+		name, category, price, billing, features string
 	}{
-		{"Paket Inti Starter " + tag, "SEED-CORE-START-" + tag, "Core", "1500000", "Monthly", "Presensi warga, Surat elektronik, Dasbor APBDes"},
-		{"Paket Inti Enterprise " + tag, "SEED-CORE-ENT-" + tag, "Core", "4500000", "Monthly", "Semua fitur Starter + multi-user, laporan lanjutan"},
-		{"Paket Tambahan Pelaporan " + tag, "SEED-ADD-RPT-" + tag, "Add-on", "500000", "Monthly", "Ekspor laporan PDF/Excel terjadwal"},
-		{"Modul SIA Desa " + tag, "SEED-MOD-SIA-" + tag, "Module", "2000000", "Annually", "Sistem Informasi Aset Desa terintegrasi"},
+		{"Paket Inti Starter " + tag, "Core", "1500000", "Monthly", "Presensi warga, Surat elektronik, Dasbor APBDes"},
+		{"Paket Inti Enterprise " + tag, "Core", "4500000", "Monthly", "Semua fitur Starter + multi-user, laporan lanjutan"},
+		{"Paket Tambahan Pelaporan " + tag, "Add-on", "500000", "Monthly", "Ekspor laporan PDF/Excel terjadwal"},
+		{"Modul SIA Desa " + tag, "Module", "2000000", "Annually", "Sistem Informasi Aset Desa terintegrasi"},
 	}
-	for _, s := range planSpecs {
+	for i, s := range planSpecs {
 		price, err := num(s.price)
 		if err != nil {
 			return out, err
@@ -44,7 +49,7 @@ func seedMasters(ctx context.Context, q *db.Queries, tenantID int64, tag string,
 		p, err := q.CreatePlan(ctx, db.CreatePlanParams{
 			TenantID:         tenantID,
 			PlanName:         s.name,
-			PlanCode:         s.code,
+			PlanCode:         fmt.Sprintf("SEED-PLAN-%02d-%s", i+1, tag),
 			PlanCategory:     s.category,
 			IsActive:         true,
 			BasePrice:        price,
@@ -55,7 +60,7 @@ func seedMasters(ctx context.Context, q *db.Queries, tenantID int64, tag string,
 			CreatedBy:        owner,
 		})
 		if err != nil {
-			return out, fmt.Errorf("plan %s: %w", s.code, err)
+			return out, fmt.Errorf("plan %s: %w", s.name, err)
 		}
 		out.plans = append(out.plans, p.ID)
 	}

@@ -1169,6 +1169,35 @@ type Querier interface {
 	// sebenarnya terjadi: pekerjaan pembersihan yang diam tak bisa dibedakan dari
 	// pekerjaan yang tak pernah jalan.
 	PurgeAuditLogsBefore(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	PurgeSeedAccounts(ctx context.Context, tenantID int64) error
+	// seeddemo_purge.sql — DELETE per-tabel ber-tenant untuk `seeddemo -reset`
+	// (BL-79). Bukan jalur produksi: dipakai HANYA oleh cmd/seeddemo untuk
+	// membersihkan data demo sebelum isi ulang, dijalankan di dalam db.WithTenant
+	// (RLS mengikat, app_rw punya hak DELETE). Preseden pola Purge* di package db:
+	// PurgeTenant (tenants.sql) & PurgeAuditLogsBefore (audit.sql).
+	//
+	// Semua saring `WHERE tenant_id = $1` — jadi tak pernah menyentuh workspace lain
+	// bahkan seandainya RLS dilepas. Pemanggil (cmd/seeddemo/purge.go) mengurutkan
+	// pemanggilan anak→induk sebab beberapa FK ber-ON DELETE RESTRICT (cs_impl_tasks,
+	// cs_trainings, engagements, success_plans, tickets) menolak hapus induk selagi
+	// anak ada; urutan di SATU query tak menjamin itu.
+	PurgeSeedActivities(ctx context.Context, tenantID int64) error
+	PurgeSeedCSImplTasks(ctx context.Context, tenantID int64) error
+	PurgeSeedCSTrainings(ctx context.Context, tenantID int64) error
+	PurgeSeedContacts(ctx context.Context, tenantID int64) error
+	PurgeSeedCustomerSuccess(ctx context.Context, tenantID int64) error
+	PurgeSeedDeals(ctx context.Context, tenantID int64) error
+	PurgeSeedEngagements(ctx context.Context, tenantID int64) error
+	PurgeSeedKBArticles(ctx context.Context, tenantID int64) error
+	PurgeSeedLeads(ctx context.Context, tenantID int64) error
+	PurgeSeedPlans(ctx context.Context, tenantID int64) error
+	PurgeSeedPlaybooks(ctx context.Context, tenantID int64) error
+	PurgeSeedQuoteItems(ctx context.Context, tenantID int64) error
+	PurgeSeedQuotes(ctx context.Context, tenantID int64) error
+	PurgeSeedSLAPolicies(ctx context.Context, tenantID int64) error
+	PurgeSeedSubscriptions(ctx context.Context, tenantID int64) error
+	PurgeSeedSuccessPlans(ctx context.Context, tenantID int64) error
+	PurgeSeedTickets(ctx context.Context, tenantID int64) error
 	// Hapus PERMANEN. memberships/invites/notifications ikut CASCADE (data
 	// operasional); audit_logs TIDAK — FK-nya ON DELETE SET NULL sejak migrasi 00010,
 	// sebab bukti tak boleh lenyap bersama yang dibuktikan (0005 §6).

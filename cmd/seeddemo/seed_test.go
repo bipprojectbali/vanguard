@@ -264,4 +264,129 @@ func TestSeedInto(t *testing.T) {
 	if !seenMeetingStatus {
 		t.Error("tidak ada aktivitas meeting ber-status — partisi status meeting tak terverifikasi")
 	}
+
+	// 8. Tiap deal 'Closed Lost' WAJIB ber-loss_reason_code sah (picklist 00038,
+	// BL-44/BL-79) — kalau kosong, panel Win/Loss-by-code di Sales Report tak
+	// terisi. Sebaliknya deal non-Closed-Lost TAK boleh ber-kode (kode itu
+	// khusus alasan kalah). Menguci fix deals.go (UpdateDealStage pasca-create).
+	validLossCodes := map[string]bool{
+		"Harga": true, "Fitur": true, "Kompetitor": true, "Anggaran": true, "Lainnya": true,
+	}
+	lossRows, err := pkgPool.Query(ctx,
+		`SELECT stage, loss_reason_code FROM deals WHERE tenant_id = $1`, tenantID)
+	if err != nil {
+		t.Fatalf("query deals loss_reason_code: %v", err)
+	}
+	var lostWithCode int
+	for lossRows.Next() {
+		var stage string
+		var code *string
+		if err := lossRows.Scan(&stage, &code); err != nil {
+			t.Fatalf("scan deal loss_reason_code: %v", err)
+		}
+		if stage == "Closed Lost" {
+			if code == nil {
+				t.Error("deal Closed Lost ber-loss_reason_code NULL — seharusnya terisi picklist")
+				continue
+			}
+			if !validLossCodes[*code] {
+				t.Errorf("loss_reason_code %q di luar picklist 00038", *code)
+			}
+			lostWithCode++
+		} else if code != nil {
+			t.Errorf("deal stage %q ber-loss_reason_code %q — kode khusus Closed Lost", stage, *code)
+		}
+	}
+	lossRows.Close()
+	if lostWithCode == 0 {
+		t.Error("tidak ada deal Closed Lost ber-loss_reason_code — panel Win/Loss kosong")
+	}
+
+	// 9. entity_code tiap entity SESUAI prefix default generator (BL-79: SEMUA
+	// kode via q.GenerateEntityCode, bukan literal). Padding = lebar MINIMUM
+	// (boleh melebar), jadi regex `\d{N,}`. Mengunci tak ada tabel yang lupa
+	// menghasilkan kode / memakai prefix salah.
+	entityCodeChecks := []struct {
+		table string
+		re    *regexp.Regexp
+	}{
+		{"accounts", regexp.MustCompile(`^DESA-[0-9]{3,}$`)},
+		{"leads", regexp.MustCompile(`^LEAD-[0-9]{3,}$`)},
+		{"deals", regexp.MustCompile(`^DEAL-[0-9]{3,}$`)},
+		{"quotes", regexp.MustCompile(`^QUO-[0-9]{3,}$`)},
+		{"subscriptions", regexp.MustCompile(`^SUB-[0-9]{4,}$`)},
+		// tickets SENGAJA absen: tabel tickets tak punya kolom kode (00021) —
+		// tak ada GenerateEntityCode(EntityTicket) di seeder, jadi tak diuji.
+	}
+	for _, ec := range entityCodeChecks {
+		ecRows, err := pkgPool.Query(ctx, fmt.Sprintf(
+			`SELECT entity_code FROM %s WHERE tenant_id = $1 AND entity_code IS NOT NULL`, ec.table), tenantID)
+		if err != nil {
+			t.Fatalf("query %s entity_code: %v", ec.table, err)
+		}
+		var n int
+		for ecRows.Next() {
+			var code string
+			if err := ecRows.Scan(&code); err != nil {
+				t.Fatalf("scan %s entity_code: %v", ec.table, err)
+			}
+			n++
+			if !ec.re.MatchString(code) {
+				t.Errorf("%s.entity_code %q tak cocok pola %s", ec.table, code, ec.re)
+			}
+		}
+		ecRows.Close()
+		if n == 0 {
+			t.Errorf("%s tak punya entity_code terisi — generator tak dipanggil?", ec.table)
+		}
+	}
+
+	// 10. plan_code = pola SERAGAM `SEED-PLAN-NN-<tag>` (BL-79 keputusan iii),
+	// bukan singkatan ad-hoc per-paket. tag test = "0101-000000".
+	planCodeRe := regexp.MustCompile(`^SEED-PLAN-[0-9]{2}-0101-000000$`)
+	pcRows, err := pkgPool.Query(ctx,
+		`SELECT plan_code FROM plans WHERE tenant_id = $1`, tenantID)
+	if err != nil {
+		t.Fatalf("query plan_code: %v", err)
+	}
+	var planCodeCount int
+	for pcRows.Next() {
+		var code string
+		if err := pcRows.Scan(&code); err != nil {
+			t.Fatalf("scan plan_code: %v", err)
+		}
+		planCodeCount++
+		if !planCodeRe.MatchString(code) {
+			t.Errorf("plan_code %q tak cocok pola SEED-PLAN-NN-<tag>", code)
+		}
+	}
+	pcRows.Close()
+	if planCodeCount == 0 {
+		t.Error("tidak ada plan_code — plans tak ter-seed")
+	}
+
+	// 11. `-reset` (purgeSeedData) menghapus HABIS 18 tabel demo tenant ini dan
+	// TAK menyisakan baris (BL-79). Dijalankan di WithTenant terpisah (RLS
+	// mengikat) — membuktikan urutan anak→induk lolos ON DELETE RESTRICT.
+	if err := db.WithTenant(ctx, pkgPool, tenantID, func(q *db.Queries) error {
+		_, err := purgeSeedData(ctx, q, tenantID)
+		return err
+	}); err != nil {
+		t.Fatalf("purgeSeedData: %v", err)
+	}
+	for _, table := range []string{
+		"activities", "quote_items", "quotes", "cs_impl_tasks", "cs_trainings",
+		"engagements", "success_plans", "customer_success", "subscriptions",
+		"tickets", "deals", "contacts", "leads", "accounts", "kb_articles",
+		"playbooks", "sla_policies", "plans",
+	} {
+		var n int
+		if err := pkgPool.QueryRow(ctx,
+			fmt.Sprintf("SELECT count(*) FROM %s WHERE tenant_id = $1", table), tenantID).Scan(&n); err != nil {
+			t.Fatalf("count pasca-purge %s: %v", table, err)
+		}
+		if n != 0 {
+			t.Errorf("pasca-purge %s = %d baris, ingin 0", table, n)
+		}
+	}
 }
