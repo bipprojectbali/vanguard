@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+
+	"github.com/jackc/pgx/v5"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
@@ -40,15 +43,17 @@ func (h *Handler) QuoteUpdate(w http.ResponseWriter, r *http.Request) {
 
 	uid := session.UserID(ctx)
 	if _, err := h.q(ctx).UpdateQuote(ctx, db.UpdateQuoteParams{
-		QuoteName:      form.QuoteName,
-		DealID:         q.DealID,    // pertahankan warisan deal
-		AccountID:      q.AccountID, // pertahankan jangkar account
-		ExpirationDate: form.ExpirationDate,
-		PaymentTerms:   form.PaymentTerms,
-		NotesTerms:     form.NotesTerms,
-		PreparedBy:     form.PreparedBy,
-		UpdatedBy:      &uid,
-		ID:             quoteID,
+		QuoteName:          form.QuoteName,
+		DealID:             q.DealID,    // pertahankan warisan deal
+		AccountID:          q.AccountID, // pertahankan jangkar account
+		ExpirationDate:     form.ExpirationDate,
+		PaymentTerms:       form.PaymentTerms,
+		NotesTerms:         form.NotesTerms,
+		PreparedBy:         form.PreparedBy,
+		SubscriptionTerm:   form.SubscriptionTerm,
+		ContractTermMonths: form.ContractTermMonths,
+		UpdatedBy:          &uid,
+		ID:                 quoteID,
 	}); err != nil {
 		h.Log.Error("quotes: update", "err", err)
 		wsRedirect(w, r, quoteSub(dealID, quoteID)+"/edit", "failed")
@@ -73,7 +78,7 @@ func (h *Handler) QuoteStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, d, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
+	q, d, ok := h.loadOwnedQuote(w, r, dealID, quoteID)
 	if !ok {
 		return
 	}
@@ -85,6 +90,23 @@ func (h *Handler) QuoteStatus(w http.ResponseWriter, r *http.Request) {
 	if _, valid := validQuoteStatuses[status]; !valid {
 		wsRedirect(w, r, quoteSub(dealID, quoteID), "status")
 		return
+	}
+
+	// BL-88: TEPAT 1 quote Accepted per deal (menghapus "accept terakhir menang").
+	// Bila deal sudah punya quote Accepted LAIN → tolak dgn pesan ramah (index parcial
+	// idx_quotes_one_accepted = jaring keras bila balapan). Guard hanya untuk transisi
+	// KE Accepted; re-Accept quote yang sama lolos (id sama).
+	if status == "Accepted" {
+		existing, err := h.q(ctx).GetAcceptedQuoteForDeal(ctx, &dealID)
+		switch {
+		case err == nil && existing.ID != quoteID:
+			wsRedirect(w, r, quoteSub(dealID, quoteID), "quote_already_accepted")
+			return
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			h.Log.Error("quotes: accepted-guard", "err", err)
+			wsRedirect(w, r, quoteSub(dealID, quoteID), "failed")
+			return
+		}
 	}
 
 	uid := session.UserID(ctx)
@@ -100,10 +122,12 @@ func (h *Handler) QuoteStatus(w http.ResponseWriter, r *http.Request) {
 		"quote_id": strconv.FormatInt(quoteID, 10), "status": status,
 	})
 
-	// BL-100 (Fix B): quote di-Accept → salin paket ke deal induk agar Closed Won bisa
-	// membuat langganan (subscriptionFromWonDeal baca deals.plan_requested_id yang tak
-	// pernah diisi jalur UI). Fail-soft: kegagalan di-Log, tak menggagalkan Accept.
+	// BL-88: quote di-Accept → quote jadi SUMBER KEBENARAN komersial. (a) salin
+	// grand_total → deal.amount (nilai DIAKUI, menggantikan perkiraan manual); (b) tetap
+	// backfill plan_requested_id agar jalur Won single-plan PR1 bisa membuat langganan
+	// (di-retire PR2 multi-baris). Keduanya fail-soft: gagal di-Log, tak batalkan Accept.
 	if status == "Accepted" {
+		h.recognizeDealValueFromQuote(ctx, dealID, quoteID, q.GrandTotal, uid)
 		h.backfillDealPlanFromQuote(ctx, dealID, quoteID, uid)
 	}
 	wsRedirectOK(w, r, quoteSub(dealID, quoteID), "status")

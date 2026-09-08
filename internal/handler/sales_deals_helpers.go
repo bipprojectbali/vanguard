@@ -76,7 +76,6 @@ func dealFormFields(d db.Deal) panel.DealFormFields {
 		ExpectedCloseDate: dateStr(d.ExpectedCloseDate),
 		ForecastCategory:  deref(d.ForecastCategory),
 		NextStep:          deref(d.NextStep),
-		SubscriptionTerm:  deref(d.SubscriptionTerm),
 		Competitor:        deref(d.Competitor),
 	}
 }

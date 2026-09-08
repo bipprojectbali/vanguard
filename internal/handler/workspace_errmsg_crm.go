@@ -47,9 +47,13 @@ func wsErrMsgCRM(code string) string {
 		return "Desa (account) wajib dipilih untuk deal ini."
 	case "convert_guard":
 		return "Lead ini tak bisa dikonversi — harus berstatus Qualified dan belum pernah dikonversi."
-	// ── Sales: Deal Closed Won → auto-create Subscription (BL-21) ────────────
+	// ── Sales: Deal Closed Won → auto-create Subscription (BL-21, BL-88) ─────
+	case "quote_required":
+		return "Deal harus punya quote yang di-Accept (dengan termin langganan) sebelum dimenangkan — nilai & termin langganan diturunkan dari quote."
+	case "quote_already_accepted":
+		return "Deal ini sudah punya quote yang di-Accept — batalkan quote itu dulu sebelum meng-Accept quote lain (satu quote diakui per deal)."
 	case "plan_required":
-		return "Deal harus punya Plan sebelum dimenangkan — langganan tak bisa dibuat tanpa paket."
+		return "Quote yang di-Accept harus menunjuk tepat satu paket — quote multi-paket belum didukung untuk membuat langganan."
 	case "term_required":
 		return "Termin Langganan wajib diisi sebelum deal dimenangkan — nilai langganan diturunkan darinya."
 	case "sub_status":

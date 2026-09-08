@@ -50,14 +50,12 @@ func (h *Handler) DealNew(w http.ResponseWriter, r *http.Request) {
 	}
 	base := wsPath(slugFromRequest(r), "")
 	v := panel.DealFormView{
-		Base:       base,
-		Action:     base + "/deals",
-		IsEdit:     false,
-		Err:        wsErrMsg(r.URL.Query().Get("err")),
-		Types:      dealTypeOptions,
-		Terms:      subscriptionTermOptions,
-		TermMonths: dealTermMonths(),
-		Accounts:   accounts,
+		Base:     base,
+		Action:   base + "/deals",
+		IsEdit:   false,
+		Err:      wsErrMsg(r.URL.Query().Get("err")),
+		Types:    dealTypeOptions,
+		Accounts: accounts,
 	}
 	h.renderWorkspaceShell(w, r, "Tambah Deal", "/deals", panel.DealForm(v))
 }
@@ -99,7 +97,7 @@ func (h *Handler) DealCreate(w http.ResponseWriter, r *http.Request) {
 		ExpectedCloseDate: form.ExpectedCloseDate,
 		ForecastCategory:  form.ForecastCategory,
 		NextStep:          form.NextStep,
-		SubscriptionTerm:  form.SubscriptionTerm,
+		SubscriptionTerm:  nil, // BL-88: termin milik quote, bukan deal
 		CreatedBy:         &uid,
 	})
 	if err != nil {

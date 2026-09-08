@@ -54,7 +54,6 @@ type dealForm struct {
 	ExpectedCloseDate pgtype.Date
 	ForecastCategory  *string
 	NextStep          *string
-	SubscriptionTerm  *string
 	Competitor        *string
 }
 
@@ -84,16 +83,12 @@ func parseDealForm(fv func(string) string) (dealForm, string) {
 		}
 		f.DealType = &s
 	}
-	// subscription_term opsional: kosong = NULL; terisi wajib enum.
-	if s := strings.TrimSpace(fv("subscription_term")); s != "" {
-		if _, ok := validSubscriptionTerms[s]; !ok {
-			return dealForm{}, "deal_term"
-		}
-		f.SubscriptionTerm = &s
-	}
+	// BL-88: subscription_term TIDAK lagi milik deal — pindah ke quote (quote otoritatif
+	// atas nilai & termin komersial). Form deal tak lagi menerima/memvalidasinya.
 
-	// Nilai deal (ARR): kosong = NULL; terisi wajib angka sah. Pemisah ribuan
-	// dibuang dulu (cleanThousands) agar input terkelompok "5.000.000" dari
+	// Nilai PERKIRAAN deal (forecast pipeline tahap awal, BL-88): kosong = NULL; terisi
+	// wajib angka sah. Bukan nilai diakui — itu disalin dari grand_total quote saat Accept.
+	// Pemisah ribuan dibuang dulu (cleanThousands) agar input terkelompok "5.000.000" dari
 	// numgroup.js — atau ketikan manual tanpa JS — sama-sama sah (BL-8, sejajar
 	// estimated_value lead di BL-2). Rupiah bulat: titik = pemisah ribuan.
 	amt, code := optNumeric(cleanThousands(fv("amount")), "amount")

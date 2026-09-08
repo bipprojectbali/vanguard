@@ -426,6 +426,11 @@ type Querier interface {
 	// idx_accounts_village_name_ci (00020). Dibatasi 5 kandidat, cukup utk peringatan,
 	// bukan daftar lengkap.
 	FindDuplicateAccountsByNameRegion(ctx context.Context, arg FindDuplicateAccountsByNameRegionParams) ([]FindDuplicateAccountsByNameRegionRow, error)
+	// Quote Accepted HIDUP milik satu deal (BL-88). Dipakai: (1) guard "1 Accepted per
+	// deal" saat meng-Accept quote lain; (2) sumber TERMIN + grand_total di Closed Won
+	// (subscriptionFromWonDeal). Index parcial idx_quotes_one_accepted menjamin ≤1 baris
+	// → :one; pgx.ErrNoRows = deal belum punya quote Accepted (bukan galat).
+	GetAcceptedQuoteForDeal(ctx context.Context, dealID *int64) (Quote, error)
 	// Satu desa hidup. RLS menjamin tenant_id; filter deleted_at menyembunyikan yang
 	// ter-soft-delete. Tak menerapkan ownership — pemanggil (handler) yang memutuskan
 	// apakah aktor boleh membuka baris ini (detail bisa dibuka lewat tautan langsung).
@@ -1507,6 +1512,11 @@ type Querier interface {
 	// FK ditutup di migrasi 00012). Dipanggil dalam tx yang SAMA dgn CreateSubscription
 	// agar deal Closed Won selalu menunjuk langganan yang lahir darinya (atomik).
 	SetDealCreatedSubscription(ctx context.Context, arg SetDealCreatedSubscriptionParams) error
+	// BL-88 (quote otoritatif): salin grand_total quote yang BARU di-Accept ke deal.amount
+	// sebagai NILAI DIAKUI (revenue MRR/ARR laporan). Menggantikan nilai perkiraan manual;
+	// jalur tersendiri (bukan UpdateDeal, itu jalur form) agar terlihat sebagai efek Accept.
+	// Tak menyentuh baris terhapus.
+	SetDealRecognizedValue(ctx context.Context, arg SetDealRecognizedValueParams) error
 	// BL-100 (Fix B): backfill paket deal dari quote yang BARU di-Accept, agar Closed Won
 	// bisa membuat langganan (subscriptionFromWonDeal membaca deals.plan_requested_id yang
 	// tak pernah diisi jalur UI). Timpa nilai lama (accept terakhir menang). Tak menyentuh

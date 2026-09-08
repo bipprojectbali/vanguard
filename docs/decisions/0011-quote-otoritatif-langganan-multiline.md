@@ -1,0 +1,140 @@
+# 0011 — Quote otoritatif: nilai & termin langganan bersumber dari quote Accepted
+
+Status: **Diterima** (2026-09-09) — dikerjakan **dua fase**. PR1 ("quote
+otoritatif") diimplementasikan sesi ini; PR2 ("langganan multi-baris") didesain
+di sini tapi DITUNDA ke sesi terpisah. Men-supersede jalur nilai/termin di
+[0004 §BL-21](0004-workspace-di-path-url.md)? tidak — melengkapi alur Closed Won
+(`sales_deals_won_subscription.go`) yang lahir di BL-21.
+
+## Konteks
+
+Sebelum BL-88, **revenue yang diakui (MRR/ARR di laporan) hanya berasal dari
+`deal.Amount` yang diketik manual.** Total quote (`quotes.grand_total`) &
+`plans.base_price` tak pernah mengalir ke sana. Akibatnya user bisa meng-Accept
+quote senilai X lalu mengisi `deal.Amount` = Y (≠ X) tanpa peringatan — laporan
+mengikuti Y, bukan yang benar-benar ditawarkan & disetujui Desa.
+
+Tiga celah struktural saat itu:
+
+1. **Closed Won** (`subscriptionFromWonDeal`) menurunkan langganan dari
+   `deal.Amount` + `deal.SubscriptionTerm` + `deal.PlanRequestedID` — **tak
+   melihat quote sama sekali**.
+2. **Tak ada penegakan "satu quote Accepted per deal"** — logika lama membiarkan
+   "accept terakhir menang", jadi beberapa quote bisa berstatus Accepted
+   bersamaan pada deal yang sama.
+3. **Langganan hanya single-plan** (`subscriptions.plan_id NOT NULL`) — satu
+   quote dengan banyak paket (`quote_items`) tak bisa jadi satu langganan
+   ber-banyak-baris.
+
+Diskusi 7 Sep (dari pertanyaan *"quote buat apa kalau langganan cuma dari
+deal"*) menegaskan quote & langganan hidup di dua fase — quote = dokumen tawaran
+pra-closing; langganan = pemenuhan pasca-Won — tapi nilai yang **ditawarkan**
+tak mengalir ke yang **ditagih**. Keputusan penuh dikunci 9 Sep (tercatat di
+`docs/crm/tasks.md` baris BL-88).
+
+Ini **pergeseran arsitektur** (revenue manual→quote; langganan single→multi-
+line), jadi dipecah dua PR agar tiap fase bisa direview & di-test terpisah.
+
+## Keputusan (7 poin terkunci)
+
+### 1. Nilai diakui = `quotes.grand_total`, disalin ke `deal.Amount` saat Accept
+
+Saat quote di-Accept, `grand_total` quote disalin OTOMATIS ke `deal.Amount`
+(`SetDealRecognizedValue`, ter-audit `deal.value.recognized`). Ini jalur UTAMA,
+bukan fallback. Sejak Accept, `deal.Amount` = nilai DIAKUI (otoritatif).
+
+### 2. Nilai manual deal dimaknai ulang jadi "nilai perkiraan"
+
+Kolom `deal.Amount` TIDAK dihapus. Sebelum ada quote Accepted, ia = perkiraan
+forecast pipeline pra-quote (diketik manual, pola `sales_convert.go` lead→deal).
+Dua makna beda dalam satu kolom, dibedakan oleh KEBERADAAN quote Accepted:
+detail deal melabeli "Nilai perkiraan" vs "Nilai diakui (dari quote)"
+(precompute flag di handler via `GetAcceptedQuoteForDeal`; view murni-data).
+
+### 3. Termin langganan PINDAH ke quote (kolom baru, bukan reuse `expiration_date`)
+
+`quotes` dapat kolom baru `subscription_term` (Monthly/Annual/Multi-year) +
+`contract_term_months`. **JANGAN pakai ulang `expiration_date`** — itu masa
+berlaku quote, bukan tenor kontrak. `subscriptionFromWonDeal` membaca termin dari
+quote Accepted, bukan `deal.SubscriptionTerm`. CHECK `quotes_term_chk` mirror
+`deals_term_chk`.
+
+### 4. `expected_close_date` TETAP di deal
+
+Perkiraan tutup adalah atribut PIPELINE tahap awal (kapan deal diprediksi
+closing), bukan atribut komersial quote. Tak dipindah — usul pindah ditolak
+eksplisit.
+
+### 5. Form deal: angkat termin, reframe nilai
+
+Input `subscription_term` & preview MRR/ARR dihapus dari form deal (bergantung
+termin yang kini milik quote; `dealpreview.js` dihapus). Money field direlabel
+"Nilai per periode termin (Rp)" → **"Nilai perkiraan (Rp)"** + hint forecast.
+`CreateDeal`/`UpdateDeal` berhenti mengeset `SubscriptionTerm` (kirim `nil`;
+kolom tetap ada). Perkiraan tutup tetap. Termin ditambahkan ke form quote
+(create & edit) → derive `contract_term_months` via peta `termContractMonths`.
+
+### 6. Multi-paket per 1 quote → langganan MULTI-BARIS **(PR2 SAJA)**
+
+Satu quote dengan banyak paket (`quote_items`) → satu langganan ber-banyak-baris
+via tabel baru `subscription_items`; `subscriptions.plan_id` jadi NULLABLE
+(identitas paket sepenuhnya di items). **Tidak dikerjakan di PR1** — lihat "PR2"
+di bawah. PR1 mempertahankan jalur single-plan (`deal.PlanRequestedID` +
+`backfillDealPlanFromQuote` + `singlePlanID`).
+
+### 7. 1 deal = TEPAT 1 quote Accepted
+
+Partial unique index `idx_quotes_one_accepted ON quotes (tenant_id, deal_id)
+WHERE quote_status='Accepted' AND deleted_at IS NULL AND deal_id IS NOT NULL`
+(jaring keras DB) + guard handler `GetAcceptedQuoteForDeal` sebelum set Accepted
+(PRG `?err=quote_already_accepted`). Logika "accept terakhir menang" DIHAPUS.
+
+## Pemisahan PR1 / PR2
+
+**PR1 (sesi ini — quote otoritatif):** poin 1–5 & 7. Skema: migrasi
+`00041_crm_quote_term_and_accept_unique.sql` (kolom termin quote + index
+1-Accepted; idempotent). Alur Won: gerbang lama `plan_required`/`term_required`
+diganti — tanpa quote Accepted → `quote_required`; `months` dari
+`quote.ContractTermMonths` (fallback peta `termContractMonths`); value tetap
+`deal.Amount` (= grand_total hasil Accept); `mrr = deal.Amount / months`. Plan
+MASIH dari `deal.PlanRequestedID` (single-plan) — dipertahankan sengaja.
+
+**PR2 (DITUNDA — langganan multi-baris):** poin 6. Fork desain yang sudah
+diputuskan user:
+
+- **Tabel `subscription_items`** (mirror `quote_items`): `subscription_id`,
+  `tenant_id` (RLS langsung, ENABLE+FORCE pola verbatim 00010/00012), `plan_id`,
+  `quantity`, `unit_price`/`subtotal` snapshot, `mrr`/`arr` per-item, `line_no`.
+- **`subscriptions.plan_id` → NULLABLE**; identitas paket SEPENUHNYA di items
+  (TANPA `primary_plan_id`).
+- **Invarian 1-Active → pindah ke `subscription_items`**: unique partial 1 item
+  Active per (tenant, account, plan) via join status parent — mengganti
+  `idx_subs_one_active` + `HasActiveSubscriptionForPlan`.
+- **Alur Won**: buat parent + items dari `quote_items`; MRR berjenjang (parent
+  `grand_total/bulan`, per-item `subtotal/bulan` → jumlah = parent). Gerbang Won
+  jadi "punya quote Accepted dgn ≥1 item paket" (menutup akar BL-100).
+- **Renewal**: kloning `subscription_items` dari `previous_subscription_id` ke
+  baris baru.
+- **Laporan** (`reports_subscriptions.sql` + ~26 ref query JOIN plans): agregasi
+  per-produk via `subscription_items`; perbaiki INNER JOIN `plans` yang kini
+  bisa NULL.
+- **Retire**: `plan_requested_id` (biarkan kolom, usang),
+  `backfillDealPlanFromQuote`, `singlePlanID`.
+
+## Konsekuensi
+
+- **Satu sumber kebenaran komersial.** Nilai & termin yang diakui = yang
+  di-Accept di quote; tak bisa lagi divergen dari yang diketik di deal.
+- **Perkiraan tetap berguna.** Nilai manual pra-quote masih menopang forecast
+  pipeline — tak dibuang, hanya dilabeli beda.
+- **PR1 belum menutup BL-100** (multi-baris) — itu PR2. Baris BL-88 di tasks.md
+  ditandai progress PR1, BUKAN selesai penuh.
+- **`deal.SubscriptionTerm` & `deal.PlanRequestedID` jadi warisan transisi** —
+  masih dibaca jalur Won single-plan di PR1, di-retire di PR2.
+
+## Di luar cakupan (ditunda / ditolak eksplisit)
+
+- Pindah `expected_close_date` ke quote — **ditolak** (poin 4).
+- Multi-baris `subscription_items` & `plan_id` NULLABLE — **ditunda ke PR2**
+  (poin 6).
+- Reuse `expiration_date` sebagai tenor kontrak — **ditolak** (poin 3).

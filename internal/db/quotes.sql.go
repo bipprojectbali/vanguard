@@ -68,31 +68,34 @@ const createQuote = `-- name: CreateQuote :one
 INSERT INTO quotes (
     tenant_id, entity_code, deal_id, account_id,
     quote_name, quote_status, expiration_date, payment_terms, notes_terms,
-    prepared_by, grand_total, tax_amount, created_by
+    prepared_by, grand_total, tax_amount,
+    subscription_term, contract_term_months, created_by
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7,
     $8, $9,
     $10, $11, $12,
-    $13
+    $13, $14, $15
 )
-RETURNING id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate
+RETURNING id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate, subscription_term, contract_term_months
 `
 
 type CreateQuoteParams struct {
-	TenantID       int64          `json:"tenant_id"`
-	EntityCode     *string        `json:"entity_code"`
-	DealID         *int64         `json:"deal_id"`
-	AccountID      int64          `json:"account_id"`
-	QuoteName      *string        `json:"quote_name"`
-	QuoteStatus    string         `json:"quote_status"`
-	ExpirationDate pgtype.Date    `json:"expiration_date"`
-	PaymentTerms   *string        `json:"payment_terms"`
-	NotesTerms     *string        `json:"notes_terms"`
-	PreparedBy     *int64         `json:"prepared_by"`
-	GrandTotal     pgtype.Numeric `json:"grand_total"`
-	TaxAmount      pgtype.Numeric `json:"tax_amount"`
-	CreatedBy      *int64         `json:"created_by"`
+	TenantID           int64          `json:"tenant_id"`
+	EntityCode         *string        `json:"entity_code"`
+	DealID             *int64         `json:"deal_id"`
+	AccountID          int64          `json:"account_id"`
+	QuoteName          *string        `json:"quote_name"`
+	QuoteStatus        string         `json:"quote_status"`
+	ExpirationDate     pgtype.Date    `json:"expiration_date"`
+	PaymentTerms       *string        `json:"payment_terms"`
+	NotesTerms         *string        `json:"notes_terms"`
+	PreparedBy         *int64         `json:"prepared_by"`
+	GrandTotal         pgtype.Numeric `json:"grand_total"`
+	TaxAmount          pgtype.Numeric `json:"tax_amount"`
+	SubscriptionTerm   *string        `json:"subscription_term"`
+	ContractTermMonths *int32         `json:"contract_term_months"`
+	CreatedBy          *int64         `json:"created_by"`
 }
 
 // quotes.sql — penawaran (Quote) + baris (quote_item), Modul 4 Sales slice 2.
@@ -118,6 +121,8 @@ func (q *Queries) CreateQuote(ctx context.Context, arg CreateQuoteParams) (Quote
 		arg.PreparedBy,
 		arg.GrandTotal,
 		arg.TaxAmount,
+		arg.SubscriptionTerm,
+		arg.ContractTermMonths,
 		arg.CreatedBy,
 	)
 	var i Quote
@@ -142,6 +147,8 @@ func (q *Queries) CreateQuote(ctx context.Context, arg CreateQuoteParams) (Quote
 		&i.UpdatedAt,
 		&i.TaxMode,
 		&i.TaxRate,
+		&i.SubscriptionTerm,
+		&i.ContractTermMonths,
 	)
 	return i, err
 }
@@ -157,8 +164,48 @@ func (q *Queries) DeleteQuoteItem(ctx context.Context, id int64) error {
 	return err
 }
 
+const getAcceptedQuoteForDeal = `-- name: GetAcceptedQuoteForDeal :one
+SELECT id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate, subscription_term, contract_term_months FROM quotes
+WHERE deal_id = $1
+  AND quote_status = 'Accepted' AND deleted_at IS NULL
+`
+
+// Quote Accepted HIDUP milik satu deal (BL-88). Dipakai: (1) guard "1 Accepted per
+// deal" saat meng-Accept quote lain; (2) sumber TERMIN + grand_total di Closed Won
+// (subscriptionFromWonDeal). Index parcial idx_quotes_one_accepted menjamin ≤1 baris
+// → :one; pgx.ErrNoRows = deal belum punya quote Accepted (bukan galat).
+func (q *Queries) GetAcceptedQuoteForDeal(ctx context.Context, dealID *int64) (Quote, error) {
+	row := q.db.QueryRow(ctx, getAcceptedQuoteForDeal, dealID)
+	var i Quote
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.EntityCode,
+		&i.DealID,
+		&i.AccountID,
+		&i.QuoteName,
+		&i.QuoteStatus,
+		&i.ExpirationDate,
+		&i.PaymentTerms,
+		&i.NotesTerms,
+		&i.PreparedBy,
+		&i.GrandTotal,
+		&i.TaxAmount,
+		&i.DeletedAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+		&i.TaxMode,
+		&i.TaxRate,
+		&i.SubscriptionTerm,
+		&i.ContractTermMonths,
+	)
+	return i, err
+}
+
 const getQuote = `-- name: GetQuote :one
-SELECT id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate FROM quotes
+SELECT id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate, subscription_term, contract_term_months FROM quotes
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -188,6 +235,8 @@ func (q *Queries) GetQuote(ctx context.Context, id int64) (Quote, error) {
 		&i.UpdatedAt,
 		&i.TaxMode,
 		&i.TaxRate,
+		&i.SubscriptionTerm,
+		&i.ContractTermMonths,
 	)
 	return i, err
 }
@@ -267,7 +316,7 @@ func (q *Queries) ListQuoteItems(ctx context.Context, quoteID int64) ([]QuoteIte
 }
 
 const listQuotes = `-- name: ListQuotes :many
-SELECT q.id, q.tenant_id, q.entity_code, q.deal_id, q.account_id, q.quote_name, q.quote_status, q.expiration_date, q.payment_terms, q.notes_terms, q.prepared_by, q.grand_total, q.tax_amount, q.deleted_at, q.created_by, q.created_at, q.updated_by, q.updated_at, q.tax_mode, q.tax_rate, d.deal_name
+SELECT q.id, q.tenant_id, q.entity_code, q.deal_id, q.account_id, q.quote_name, q.quote_status, q.expiration_date, q.payment_terms, q.notes_terms, q.prepared_by, q.grand_total, q.tax_amount, q.deleted_at, q.created_by, q.created_at, q.updated_by, q.updated_at, q.tax_mode, q.tax_rate, q.subscription_term, q.contract_term_months, d.deal_name
 FROM quotes q
 JOIN deals d ON d.id = q.deal_id
 WHERE q.deleted_at IS NULL
@@ -298,27 +347,29 @@ type ListQuotesParams struct {
 }
 
 type ListQuotesRow struct {
-	ID             int64              `json:"id"`
-	TenantID       int64              `json:"tenant_id"`
-	EntityCode     *string            `json:"entity_code"`
-	DealID         *int64             `json:"deal_id"`
-	AccountID      int64              `json:"account_id"`
-	QuoteName      *string            `json:"quote_name"`
-	QuoteStatus    string             `json:"quote_status"`
-	ExpirationDate pgtype.Date        `json:"expiration_date"`
-	PaymentTerms   *string            `json:"payment_terms"`
-	NotesTerms     *string            `json:"notes_terms"`
-	PreparedBy     *int64             `json:"prepared_by"`
-	GrandTotal     pgtype.Numeric     `json:"grand_total"`
-	TaxAmount      pgtype.Numeric     `json:"tax_amount"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
-	CreatedBy      *int64             `json:"created_by"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedBy      *int64             `json:"updated_by"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	TaxMode        string             `json:"tax_mode"`
-	TaxRate        pgtype.Numeric     `json:"tax_rate"`
-	DealName       string             `json:"deal_name"`
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	EntityCode         *string            `json:"entity_code"`
+	DealID             *int64             `json:"deal_id"`
+	AccountID          int64              `json:"account_id"`
+	QuoteName          *string            `json:"quote_name"`
+	QuoteStatus        string             `json:"quote_status"`
+	ExpirationDate     pgtype.Date        `json:"expiration_date"`
+	PaymentTerms       *string            `json:"payment_terms"`
+	NotesTerms         *string            `json:"notes_terms"`
+	PreparedBy         *int64             `json:"prepared_by"`
+	GrandTotal         pgtype.Numeric     `json:"grand_total"`
+	TaxAmount          pgtype.Numeric     `json:"tax_amount"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	TaxMode            string             `json:"tax_mode"`
+	TaxRate            pgtype.Numeric     `json:"tax_rate"`
+	SubscriptionTerm   *string            `json:"subscription_term"`
+	ContractTermMonths *int32             `json:"contract_term_months"`
+	DealName           string             `json:"deal_name"`
 }
 
 // Daftar quote LINTAS-deal (menu Quotes global), keyset (created_at DESC, id DESC)
@@ -370,6 +421,8 @@ func (q *Queries) ListQuotes(ctx context.Context, arg ListQuotesParams) ([]ListQ
 			&i.UpdatedAt,
 			&i.TaxMode,
 			&i.TaxRate,
+			&i.SubscriptionTerm,
+			&i.ContractTermMonths,
 			&i.DealName,
 		); err != nil {
 			return nil, err
@@ -383,7 +436,7 @@ func (q *Queries) ListQuotes(ctx context.Context, arg ListQuotesParams) ([]ListQ
 }
 
 const listQuotesForDeal = `-- name: ListQuotesForDeal :many
-SELECT id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate FROM quotes
+SELECT id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate, subscription_term, contract_term_months FROM quotes
 WHERE deleted_at IS NULL
   AND deal_id = $1
   AND (created_at, id) < ($2::timestamptz, $3::bigint)
@@ -436,6 +489,8 @@ func (q *Queries) ListQuotesForDeal(ctx context.Context, arg ListQuotesForDealPa
 			&i.UpdatedAt,
 			&i.TaxMode,
 			&i.TaxRate,
+			&i.SubscriptionTerm,
+			&i.ContractTermMonths,
 		); err != nil {
 			return nil, err
 		}
@@ -483,29 +538,33 @@ func (q *Queries) SoftDeleteQuote(ctx context.Context, arg SoftDeleteQuoteParams
 
 const updateQuote = `-- name: UpdateQuote :one
 UPDATE quotes SET
-    quote_name      = $1,
-    deal_id         = $2,
-    account_id      = $3,
-    expiration_date = $4,
-    payment_terms   = $5,
-    notes_terms     = $6,
-    prepared_by     = $7,
-    updated_by      = $8,
-    updated_at      = now()
-WHERE id = $9 AND deleted_at IS NULL
-RETURNING id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate
+    quote_name           = $1,
+    deal_id              = $2,
+    account_id           = $3,
+    expiration_date      = $4,
+    payment_terms        = $5,
+    notes_terms          = $6,
+    prepared_by          = $7,
+    subscription_term    = $8,
+    contract_term_months = $9,
+    updated_by           = $10,
+    updated_at           = now()
+WHERE id = $11 AND deleted_at IS NULL
+RETURNING id, tenant_id, entity_code, deal_id, account_id, quote_name, quote_status, expiration_date, payment_terms, notes_terms, prepared_by, grand_total, tax_amount, deleted_at, created_by, created_at, updated_by, updated_at, tax_mode, tax_rate, subscription_term, contract_term_months
 `
 
 type UpdateQuoteParams struct {
-	QuoteName      *string     `json:"quote_name"`
-	DealID         *int64      `json:"deal_id"`
-	AccountID      int64       `json:"account_id"`
-	ExpirationDate pgtype.Date `json:"expiration_date"`
-	PaymentTerms   *string     `json:"payment_terms"`
-	NotesTerms     *string     `json:"notes_terms"`
-	PreparedBy     *int64      `json:"prepared_by"`
-	UpdatedBy      *int64      `json:"updated_by"`
-	ID             int64       `json:"id"`
+	QuoteName          *string     `json:"quote_name"`
+	DealID             *int64      `json:"deal_id"`
+	AccountID          int64       `json:"account_id"`
+	ExpirationDate     pgtype.Date `json:"expiration_date"`
+	PaymentTerms       *string     `json:"payment_terms"`
+	NotesTerms         *string     `json:"notes_terms"`
+	PreparedBy         *int64      `json:"prepared_by"`
+	SubscriptionTerm   *string     `json:"subscription_term"`
+	ContractTermMonths *int32      `json:"contract_term_months"`
+	UpdatedBy          *int64      `json:"updated_by"`
+	ID                 int64       `json:"id"`
 }
 
 // Sunting profil quote. quote_status punya jalur khusus (UpdateQuoteStatus) dan
@@ -520,6 +579,8 @@ func (q *Queries) UpdateQuote(ctx context.Context, arg UpdateQuoteParams) (Quote
 		arg.PaymentTerms,
 		arg.NotesTerms,
 		arg.PreparedBy,
+		arg.SubscriptionTerm,
+		arg.ContractTermMonths,
 		arg.UpdatedBy,
 		arg.ID,
 	)
@@ -545,6 +606,8 @@ func (q *Queries) UpdateQuote(ctx context.Context, arg UpdateQuoteParams) (Quote
 		&i.UpdatedAt,
 		&i.TaxMode,
 		&i.TaxRate,
+		&i.SubscriptionTerm,
+		&i.ContractTermMonths,
 	)
 	return i, err
 }

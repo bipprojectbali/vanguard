@@ -187,3 +187,14 @@ UPDATE deals SET
     updated_by        = sqlc.narg(updated_by),
     updated_at        = now()
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
+
+-- name: SetDealRecognizedValue :exec
+-- BL-88 (quote otoritatif): salin grand_total quote yang BARU di-Accept ke deal.amount
+-- sebagai NILAI DIAKUI (revenue MRR/ARR laporan). Menggantikan nilai perkiraan manual;
+-- jalur tersendiri (bukan UpdateDeal, itu jalur form) agar terlihat sebagai efek Accept.
+-- Tak menyentuh baris terhapus.
+UPDATE deals SET
+    amount     = sqlc.narg(amount),
+    updated_by = sqlc.narg(updated_by),
+    updated_at = now()
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL;

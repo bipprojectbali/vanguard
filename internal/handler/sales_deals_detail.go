@@ -101,6 +101,20 @@ func (h *Handler) dealDetailView(ctx context.Context, base string, d db.Deal, na
 	if d.PrimaryContactID != nil {
 		contactLabel = h.contactLabel(ctx, *d.PrimaryContactID)
 	}
+	// BL-88: label nilai deal bergantung sumbernya, dan termin langganan kini
+	// milik quote (bukan deal.SubscriptionTerm yang tak lagi diisi form). Bila deal
+	// sudah punya quote Accepted, deal.Amount = grand_total quote (nilai DIAKUI,
+	// otoritatif) & termin diambil dari quote itu. Tanpa quote Accepted, Amount
+	// masih perkiraan manual & termin kosong (belum ditetapkan di quote).
+	// Best-effort (mirror accountLabel): gagal query → anggap belum diakui.
+	amountLabel := "Nilai perkiraan"
+	subscriptionTerm := ""
+	if aq, err := h.q(ctx).GetAcceptedQuoteForDeal(ctx, &d.ID); err == nil {
+		amountLabel = "Nilai diakui (dari quote)"
+		subscriptionTerm = deref(aq.SubscriptionTerm)
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		h.Log.Error("deals: accepted-quote label", "err", err)
+	}
 	return panel.DealDetailView{
 		Base:             base,
 		ID:               d.ID,
@@ -114,11 +128,12 @@ func (h *Handler) dealDetailView(ctx context.Context, base string, d db.Deal, na
 		WonSubStatuses:   wonSubStatusOptions,
 		DealType:         deref(d.DealType),
 		Amount:           maskARR(formatRupiah(d.Amount), br),
+		AmountLabel:      amountLabel,
 		Probability:      probabilityStr(d.Probability),
 		ExpectedClose:    dateStr(d.ExpectedCloseDate),
 		ForecastCategory: deref(d.ForecastCategory),
 		NextStep:         deref(d.NextStep),
-		SubscriptionTerm: deref(d.SubscriptionTerm),
+		SubscriptionTerm: subscriptionTerm,
 		Competitor:       deref(d.Competitor),
 		WinLossReason:    deref(d.WinLossReason),
 		LossReasonCode:   deref(d.LossReasonCode),

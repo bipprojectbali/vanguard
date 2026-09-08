@@ -482,6 +482,29 @@ func (q *Queries) SetDealCreatedSubscription(ctx context.Context, arg SetDealCre
 	return err
 }
 
+const setDealRecognizedValue = `-- name: SetDealRecognizedValue :exec
+UPDATE deals SET
+    amount     = $1,
+    updated_by = $2,
+    updated_at = now()
+WHERE id = $3 AND deleted_at IS NULL
+`
+
+type SetDealRecognizedValueParams struct {
+	Amount    pgtype.Numeric `json:"amount"`
+	UpdatedBy *int64         `json:"updated_by"`
+	ID        int64          `json:"id"`
+}
+
+// BL-88 (quote otoritatif): salin grand_total quote yang BARU di-Accept ke deal.amount
+// sebagai NILAI DIAKUI (revenue MRR/ARR laporan). Menggantikan nilai perkiraan manual;
+// jalur tersendiri (bukan UpdateDeal, itu jalur form) agar terlihat sebagai efek Accept.
+// Tak menyentuh baris terhapus.
+func (q *Queries) SetDealRecognizedValue(ctx context.Context, arg SetDealRecognizedValueParams) error {
+	_, err := q.db.Exec(ctx, setDealRecognizedValue, arg.Amount, arg.UpdatedBy, arg.ID)
+	return err
+}
+
 const setDealRequestedPlan = `-- name: SetDealRequestedPlan :exec
 UPDATE deals SET
     plan_requested_id = $1,
