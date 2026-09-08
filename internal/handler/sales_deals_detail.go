@@ -58,8 +58,14 @@ func (h *Handler) DealDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := wsPath(slugFromRequest(r), "")
-	h.renderWorkspaceShell(w, r, d.DealName, "/deals",
-		panel.DealDetail(h.dealDetailView(ctx, base, d, names)))
+	view := h.dealDetailView(ctx, base, d, names)
+	// BL-99: surface umpan balik PRG di halaman tempat form aksi berada. Tanpa ini,
+	// gerbang tahap terminal (Closed Won/Lost) yang gagal — win_loss/loss_reason
+	// wajib, atau langganan gagal dibuat — redirect ke sini dgn ?err tapi senyap,
+	// sehingga penolakan tampak seperti "deal tak tersimpan".
+	view.Err = wsErrMsg(r.URL.Query().Get("err"))
+	view.Msg = dealsMsg(r.URL.Query().Get("ok"))
+	h.renderWorkspaceShell(w, r, d.DealName, "/deals", panel.DealDetail(view))
 }
 
 // dealQuotesPreview memuat cuplikan quote deal ini untuk kartu di detail deal.
