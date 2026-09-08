@@ -27,7 +27,14 @@ func sidebarUser(d ShellData) g.Node {
 				Avatar(d.AvatarURL, "", d.UserEmail, 32),
 				h.Span(h.Class("app-navlabel text-sm truncate"), g.Text(d.UserEmail)),
 			),
-			ThemeToggleUp(),
+			// Toolbar ikon footer: Pembaruan (Sparkles) di samping Tema. Pembaruan
+			// tak dirender bila belum ada rilis (version ""); badge "ada pembaruan"
+			// dikelola changelog.js.
+			h.Div(
+				h.Class("app-usertools flex items-center gap-1"),
+				ChangelogButton(d.ChangelogVersion),
+				ThemeToggleUp(),
+			),
 		),
 		h.Button(
 			h.Class("btn btn-outline btn-sm w-full"),

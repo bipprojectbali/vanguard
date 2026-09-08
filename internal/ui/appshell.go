@@ -13,6 +13,8 @@ import (
 	data "maragu.dev/gomponents-datastar"
 	c "maragu.dev/gomponents/components"
 	h "maragu.dev/gomponents/html"
+
+	"go_starter/internal/changelog"
 )
 
 // NavItem = satu entri menu sidebar. Tiga bentuk, saling eksklusif:
@@ -59,6 +61,14 @@ type ShellData struct {
 	Workspaces         []WorkspaceOption
 	ActiveTenantID     int64
 	CanCreateWorkspace bool // kuota belum penuh → tampilkan "Buat workspace baru"
+
+	// Changelog = catatan rilis berfokus CRM (paket internal/changelog).
+	// ChangelogVersion = versi terbaru → acuan badge "ada pembaruan" (dibanding
+	// versi terakhir-dilihat di localStorage oleh static/changelog.js).
+	// ChangelogReleases = seluruh rilis yang ditampilkan modal. Dioper dari
+	// handler (view murni-data), bukan diimpor logika di view.
+	ChangelogVersion  string
+	ChangelogReleases []changelog.Release
 }
 
 // NavBadge = entri menu dengan penghitung. Count 0 → badge disembunyikan (angka
@@ -88,6 +98,8 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 	head := append(headNodes(cssPath),
 		// sidebar.js SINKRON (bukan defer): set data-sidebar sebelum paint → no flicker.
 		h.Script(h.Src("/static/sidebar.js")),
+		// changelog.js DEFER: badge "ada pembaruan" dikelola setelah DOM siap.
+		h.Script(h.Src("/static/changelog.js"), h.Defer()),
 	)
 	return c.HTML5(c.HTML5Props{
 		Title:    d.Title,
@@ -97,7 +109,7 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 			// Latar dasar = base-200; sidebar & card = base-100 (permukaan
 			// menonjol). Hierarki relatif ini benar otomatis di semua tema.
 			h.Class("min-h-screen bg-base-200 text-base-content"),
-			data.Signals(map[string]any{"sidebarOpen": false, "logoutConfirm": false}),
+			data.Signals(map[string]any{"sidebarOpen": false, "logoutConfirm": false, "changelogOpen": false}),
 
 			// Backdrop mobile — inline display:none agar tak FOUC sebelum Datastar aktif.
 			h.Div(
@@ -131,6 +143,9 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 			// Modal konfirmasi logout (dipicu tombol Keluar).
 			ConfirmModal("logoutConfirm", "Keluar?",
 				"Anda akan keluar dari sesi ini.", "Keluar", "/logout"),
+
+			// Modal Pembaruan (dipicu tombol Pembaruan di footer sidebar).
+			ChangelogModal(d.ChangelogReleases),
 		},
 	})
 }
