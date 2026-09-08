@@ -69,10 +69,16 @@ func New(ctx context.Context, clientID, clientSecret, redirectURL string) (*Prov
 //   - state: anti-CSRF (dicek constant-time di callback)
 //   - nonce: anti-replay id_token
 //   - PKCE S256: anti authorization-code injection
+//   - prompt=select_account: SELALU tampilkan pemilih akun Google. Tanpa ini,
+//     bila browser masih punya SATU sesi Google aktif, Google memilih akun itu
+//     diam-diam dan melewati layar pilih akun — sehingga setelah logout dari
+//     aplikasi (yang hanya menghapus sesi app, bukan sesi Google), user tak
+//     bisa memilih/berganti akun. Sesi Google terpisah dari sesi aplikasi.
 func (p *Provider) AuthURL(state, nonce, verifier string) string {
 	return p.oauth.AuthCodeURL(state,
 		oidc.Nonce(nonce),
 		oauth2.S256ChallengeOption(verifier),
+		oauth2.SetAuthURLParam("prompt", "select_account"),
 	)
 }
 
