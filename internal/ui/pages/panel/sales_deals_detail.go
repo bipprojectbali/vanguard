@@ -33,9 +33,13 @@ type DealDetailView struct {
 	// WonSubStatuses (BL-21) = pilihan status langganan awal (Active/Trial) untuk
 	// dropdown yang muncul saat memilih Closed Won; diisi handler dari enum
 	// autoritatif (validInitialSubStatuses). Kosong → dropdown tak dirender.
-	WonSubStatuses   []string
-	DealType         string
-	Amount           string
+	WonSubStatuses []string
+	DealType       string
+	Amount         string
+	// AmountLabel (BL-88) = label baris Nilai, diturunkan handler: "Nilai perkiraan"
+	// (pra-quote, manual) atau "Nilai diakui (dari quote)" bila deal punya quote
+	// Accepted (Amount = grand_total quote, otoritatif). View murni-data.
+	AmountLabel      string
 	Probability      string
 	ExpectedClose    string
 	ForecastCategory string
@@ -112,6 +116,10 @@ func DealDetail(v DealDetailView) g.Node {
 	if prob != "" {
 		prob += "%"
 	}
+	amountLabel := v.AmountLabel
+	if amountLabel == "" {
+		amountLabel = "Nilai"
+	}
 	accountLink := h.A(
 		h.Href(v.Base+"/accounts/"+strconv.FormatInt(v.AccountID, 10)),
 		h.Class("link link-hover"), g.Text(orDash(v.AccountLabel)))
@@ -129,7 +137,7 @@ func DealDetail(v DealDetailView) g.Node {
 		ui.When(v.CanWrite, dealStageControl(v, base)),
 		dealIdentityCard(v, accountLink),
 		detailCard("Nilai & Peluang", []detailField{
-			{"Nilai", v.Amount},
+			{amountLabel, v.Amount},
 			{"Probabilitas", prob},
 			{"Perkiraan Tutup", v.ExpectedClose},
 			{"Kategori Forecast", v.ForecastCategory},

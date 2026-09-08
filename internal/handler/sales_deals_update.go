@@ -41,15 +41,13 @@ func (h *Handler) DealEdit(w http.ResponseWriter, r *http.Request) {
 	// menjamin opsi desa ini hadir di <datalist> walau di luar batas picker.
 	fields.SelectedAccountLabel = h.accountLabel(ctx, d.AccountID)
 	v := panel.DealFormView{
-		Base:       base,
-		Action:     base + "/deals/" + idStr,
-		IsEdit:     true,
-		Err:        wsErrMsg(r.URL.Query().Get("err")),
-		Fields:     fields,
-		Types:      dealTypeOptions,
-		Terms:      subscriptionTermOptions,
-		TermMonths: dealTermMonths(),
-		Accounts:   accounts,
+		Base:     base,
+		Action:   base + "/deals/" + idStr,
+		IsEdit:   true,
+		Err:      wsErrMsg(r.URL.Query().Get("err")),
+		Fields:   fields,
+		Types:    dealTypeOptions,
+		Accounts: accounts,
 	}
 	h.renderWorkspaceShell(w, r, "Sunting Deal", "/deals", panel.DealForm(v))
 }
@@ -91,7 +89,7 @@ func (h *Handler) DealUpdate(w http.ResponseWriter, r *http.Request) {
 		ExpectedCloseDate: form.ExpectedCloseDate,
 		ForecastCategory:  form.ForecastCategory,
 		NextStep:          form.NextStep,
-		SubscriptionTerm:  form.SubscriptionTerm,
+		SubscriptionTerm:  d.SubscriptionTerm, // BL-88: termin milik quote; pertahankan nilai lama, tak diedit di form deal
 		Competitor:        form.Competitor,
 		UpdatedBy:         &uid,
 		ID:                id,

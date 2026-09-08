@@ -19,11 +19,12 @@ import (
 // QuoteFormFields = nilai prefill (edit) atau kosong (buat). Semua string agar
 // view netral terhadap tipe DB. PreparedBy = id anggota terpilih (string).
 type QuoteFormFields struct {
-	QuoteName      string
-	ExpirationDate string
-	PaymentTerms   string
-	NotesTerms     string
-	PreparedBy     string
+	QuoteName        string
+	ExpirationDate   string
+	PaymentTerms     string
+	NotesTerms       string
+	PreparedBy       string
+	SubscriptionTerm string
 }
 
 // QuoteFormView = data halaman form. Action = URL POST tujuan. IsEdit mengubah
@@ -37,8 +38,11 @@ type QuoteFormView struct {
 	// ExpMin (BL-17) = batas bawah `min` input tanggal kedaluwarsa (hari ini,
 	// YYYY-MM-DD, zona aplikasi) — jaring klien agar picker tak menawarkan tanggal
 	// lampau. Backend (parseQuoteForm) tetap penjaga sesungguhnya.
-	ExpMin  string
-	Fields  QuoteFormFields
+	ExpMin string
+	Fields QuoteFormFields
+	// Terms (BL-88) = opsi Termin Langganan (Monthly/Annual/Multi-year). Termin kini
+	// milik quote (quote otoritatif); menentukan bulan-kontrak → MRR saat Closed Won.
+	Terms   []string
 	Members []AccountMemberOption
 }
 
@@ -70,6 +74,7 @@ func QuoteForm(v QuoteFormView) g.Node {
 		formCard("Identitas Quote",
 			field("Nama Quote", "quote_name", v.Fields.QuoteName, false, "text"),
 			dateFieldMin("Tanggal Kedaluwarsa", "expiration_date", v.Fields.ExpirationDate, v.ExpMin),
+			selectField("Termin Langganan", "subscription_term", v.Fields.SubscriptionTerm, v.Terms, false),
 			memberSelect("Disusun oleh", "prepared_by", v.Fields.PreparedBy, v.Members),
 		),
 		formCard("Syarat & Catatan",

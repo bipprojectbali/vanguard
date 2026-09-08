@@ -11,7 +11,6 @@ func dealFormFixture(edit bool) DealFormView {
 		Base:   "/w/acme",
 		Action: "/w/acme/deals",
 		Types:  []string{"New Business", "Renewal"},
-		Terms:  []string{"Bulanan", "Tahunan"},
 		Accounts: []AccountMemberOption{
 			{ID: 7, Label: "DSA-007 — Desa Sukamaju"},
 			{ID: 12, Label: "DSA-012 — Desa Mekarsari"},
@@ -101,41 +100,32 @@ func TestDealForm_NoDefaultHelp(t *testing.T) {
 	}
 }
 
-// TestDealForm_ValuePreview: BL-87 opsi c — form Deal merender kotak preview
-// MRR/ARR (kontrak markup dibaca static/dealpreview.js) + peta Termin→bulan
-// sebagai JSON tertanam, dan label field nilai menegaskan makna per-termin.
-func TestDealForm_ValuePreview(t *testing.T) {
-	v := dealFormFixture(false)
-	v.TermMonths = map[string]int{"Monthly": 1, "Annual": 12, "Multi-year": 36}
-	out := renderLeads(t, DealForm(v))
+// TestDealForm_EstimateReframe: BL-88 — Termin & preview MRR/ARR pindah ke quote
+// (quote otoritatif). Form deal me-relabel nilai jadi "perkiraan" + hint forecast,
+// dan TAK lagi merender select termin, peta bulan, atau skrip preview lama.
+func TestDealForm_EstimateReframe(t *testing.T) {
+	out := renderLeads(t, DealForm(dealFormFixture(false)))
 
 	for _, want := range []string{
-		"Nilai per periode termin (Rp)",        // label menegaskan makna per-termin
-		`data-deal-preview`,                    // wadah preview
-		`data-amount-sel="#f-amount"`,          // selector input nilai (tak hardcode di JS)
-		`data-term-sel="#f-subscription_term"`, // selector select termin
-		`data-deal-mrr`,                        // slot MRR
-		`data-deal-arr`,                        // slot ARR
-		`data-deal-note`,                       // baris keterangan
-		`<script type="application/json" id="deal-term-months">`, // peta ditanam CSP-safe
-		`"Monthly":1`, `"Annual":12`, `"Multi-year":36`, // isi peta = bulan-kontrak
-		`/static/dealpreview.js`, // skrip preview same-origin dimuat
+		"Nilai perkiraan (Rp)", // label direframe jadi perkiraan pra-quote
+		// hint menegaskan nilai diakui diturunkan dari quote saat Accept
+		"diturunkan otomatis dari total quote saat quote di-Accept",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("preview nilai deal harus memuat %q:\n%s", want, out)
+			t.Errorf("form deal BL-88 harus memuat %q:\n%s", want, out)
 		}
 	}
-}
 
-// TestDealForm_PreviewInertWithoutMap: tanpa TermMonths (nil), wadah preview &
-// skrip tetap dirender (fallback aman), tapi JSON tertanam = "null" → klien
-// mematikan preview tanpa error (slot diam "—").
-func TestDealForm_PreviewInertWithoutMap(t *testing.T) {
-	out := renderLeads(t, DealForm(dealFormFixture(false)))
-	if !strings.Contains(out, `data-deal-preview`) {
-		t.Errorf("wadah preview harus tetap dirender tanpa peta:\n%s", out)
-	}
-	if !strings.Contains(out, `<script type="application/json" id="deal-term-months">null</script>`) {
-		t.Errorf("peta nil harus jadi JSON null (preview dimatikan klien):\n%s", out)
+	// Regresi: markup termin & preview lama harus HILANG dari form deal.
+	for _, gone := range []string{
+		"Nilai per periode termin (Rp)",
+		`name="subscription_term"`,
+		`id="deal-term-months"`,
+		`data-deal-preview`,
+		`/static/dealpreview.js`,
+	} {
+		if strings.Contains(out, gone) {
+			t.Errorf("form deal tak boleh lagi memuat %q (termin milik quote):\n%s", gone, out)
+		}
 	}
 }

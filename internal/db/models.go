@@ -430,26 +430,28 @@ type Playbook struct {
 }
 
 type Quote struct {
-	ID             int64              `json:"id"`
-	TenantID       int64              `json:"tenant_id"`
-	EntityCode     *string            `json:"entity_code"`
-	DealID         *int64             `json:"deal_id"`
-	AccountID      int64              `json:"account_id"`
-	QuoteName      *string            `json:"quote_name"`
-	QuoteStatus    string             `json:"quote_status"`
-	ExpirationDate pgtype.Date        `json:"expiration_date"`
-	PaymentTerms   *string            `json:"payment_terms"`
-	NotesTerms     *string            `json:"notes_terms"`
-	PreparedBy     *int64             `json:"prepared_by"`
-	GrandTotal     pgtype.Numeric     `json:"grand_total"`
-	TaxAmount      pgtype.Numeric     `json:"tax_amount"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
-	CreatedBy      *int64             `json:"created_by"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedBy      *int64             `json:"updated_by"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	TaxMode        string             `json:"tax_mode"`
-	TaxRate        pgtype.Numeric     `json:"tax_rate"`
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	EntityCode         *string            `json:"entity_code"`
+	DealID             *int64             `json:"deal_id"`
+	AccountID          int64              `json:"account_id"`
+	QuoteName          *string            `json:"quote_name"`
+	QuoteStatus        string             `json:"quote_status"`
+	ExpirationDate     pgtype.Date        `json:"expiration_date"`
+	PaymentTerms       *string            `json:"payment_terms"`
+	NotesTerms         *string            `json:"notes_terms"`
+	PreparedBy         *int64             `json:"prepared_by"`
+	GrandTotal         pgtype.Numeric     `json:"grand_total"`
+	TaxAmount          pgtype.Numeric     `json:"tax_amount"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	TaxMode            string             `json:"tax_mode"`
+	TaxRate            pgtype.Numeric     `json:"tax_rate"`
+	SubscriptionTerm   *string            `json:"subscription_term"`
+	ContractTermMonths *int32             `json:"contract_term_months"`
 }
 
 type QuoteItem struct {

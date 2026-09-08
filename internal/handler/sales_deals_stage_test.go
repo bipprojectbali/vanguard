@@ -19,9 +19,12 @@ import (
 // (tak ada langganan setengah jadi). Koneksi test = superuser (bypass RLS) → uji LOGIKA
 // handler; peran admin (crm:*, ScopeAll) memisahkan alur BL-21 dari gate F2/F3.
 
-// seedWonReadyDeal menaruh satu deal SIAP-menang: punya plan + amount + termin, di stage
-// Negotiation (dalam pipeline, belum terminal). Field inilah yang diturunkan langganan
-// saat Closed Won; melewatkan salah satunya = jalur validasi (diuji terpisah).
+// seedWonReadyDeal menaruh satu deal SIAP-menang: punya plan + amount + quote Accepted
+// bertermin, di stage Negotiation (dalam pipeline, belum terminal). BL-88: termin kini
+// dari QUOTE (quote otoritatif), bukan field deal → seed sekalian quote Accepted-nya.
+// deal.Amount = nilai diakui (di produksi disalin dari grand_total saat Accept); plan
+// dari deals.plan_requested_id (single-plan PR1). Melewatkan salah satunya = jalur
+// validasi (diuji terpisah).
 func (e *testEnv) seedWonReadyDeal(
 	t *testing.T, accountID int64, owner *int64, planID int64, amount, term string,
 ) db.Deal {
@@ -31,21 +34,48 @@ func (e *testEnv) seedWonReadyDeal(
 		t.Fatalf("generate deal code: %v", err)
 	}
 	d, err := e.q.CreateDeal(t.Context(), db.CreateDealParams{
-		TenantID:         e.tenantID,
-		EntityCode:       &code,
-		DealName:         "Deal Menang",
-		AccountID:        accountID,
-		DealOwner:        owner,
-		PlanRequestedID:  &planID,
-		Stage:            "Negotiation",
-		Amount:           numFrom(t, amount),
-		SubscriptionTerm: &term,
-		CreatedBy:        owner,
+		TenantID:        e.tenantID,
+		EntityCode:      &code,
+		DealName:        "Deal Menang",
+		AccountID:       accountID,
+		DealOwner:       owner,
+		PlanRequestedID: &planID,
+		Stage:           "Negotiation",
+		Amount:          numFrom(t, amount),
+		CreatedBy:       owner,
 	})
 	if err != nil {
 		t.Fatalf("seed won-ready deal: %v", err)
 	}
+	e.seedAcceptedQuote(t, d.ID, accountID, term)
 	return d
+}
+
+// seedAcceptedQuote menaruh satu quote berstatus Accepted untuk deal — BL-88: sumber
+// termin (& di produksi grand_total → deal.Amount) saat Closed Won. contract_term_months
+// diturunkan dari peta termContractMonths (sumber tunggal, dipakai handler Won). Index
+// idx_quotes_one_accepted menjamin ≤1 Accepted per (tenant, deal).
+func (e *testEnv) seedAcceptedQuote(t *testing.T, dealID, accountID int64, term string) db.Quote {
+	t.Helper()
+	code, err := e.q.GenerateEntityCode(t.Context(), e.tenantID, codes.EntityQuote)
+	if err != nil {
+		t.Fatalf("generate quote code: %v", err)
+	}
+	months := termContractMonths[term]
+	q, err := e.q.CreateQuote(t.Context(), db.CreateQuoteParams{
+		TenantID:           e.tenantID,
+		EntityCode:         &code,
+		DealID:             &dealID,
+		AccountID:          accountID,
+		QuoteName:          ptr("Quote Menang"),
+		QuoteStatus:        "Accepted",
+		SubscriptionTerm:   &term,
+		ContractTermMonths: &months,
+	})
+	if err != nil {
+		t.Fatalf("seed accepted quote: %v", err)
+	}
+	return q
 }
 
 // postDealStage menjalankan DealStage (POST .../stage) sbg admin (write, ScopeAll)
@@ -233,18 +263,24 @@ func TestDealWon_ActiveConflictRejected(t *testing.T) {
 }
 
 // TestDealWon_ValidationAtomic: tiap prasyarat yang tak terpenuhi menolak Won lewat PRG
-// (?err=CODE) dan ATOMIK — deal TETAP Negotiation, NOL langganan lahir. Mencakup
-// plan_required (paket wajib), term_required (termin menurunkan nilai), sub_status
-// (status awal wajib Trial/Active), win_loss (alasan wajib saat terminal — perilaku lama).
+// (?err=CODE) dan ATOMIK — deal TETAP Negotiation, NOL langganan lahir. BL-88: termin &
+// nilai kini dari quote → gerbang baru quote_required (tak ada quote Accepted). Mencakup
+// quote_required, plan_required (quote Accepted ada tapi plan_requested_id kosong —
+// quote multi/no-paket, ditutup penuh PR2), sub_status (status awal wajib Trial/Active),
+// win_loss (alasan wajib saat terminal — perilaku lama).
 func TestDealWon_ValidationAtomic(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Validasi", &uid, nil, nil)
 	plan := env.seedPlan(t, "Paket Inti", "PLN-VAL", "100000.00")
 
-	// seedDeal builder per-kasus: sebagian sengaja tak lengkap.
 	fullForm := wonForm("Active")
 	badStatusForm := wonForm("Suspended") // di luar Trial/Active
 	noWinLoss := url.Values{"stage": {"Closed Won"}, "subscription_status": {"Active"}}
+
+	// plan_required: quote Accepted BER-termin ada, tapi deal tak menunjuk plan
+	// (plan_requested_id kosong) → gerbang plan single-plan PR1 menolak.
+	noPlanDeal := env.seedReportDeal(t, acc.ID, &uid, "Negotiation", "12000000")
+	env.seedAcceptedQuote(t, noPlanDeal.ID, acc.ID, "Annual")
 
 	cases := []struct {
 		name    string
@@ -253,16 +289,16 @@ func TestDealWon_ValidationAtomic(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "plan_required",
-			deal:    env.seedReportDeal(t, acc.ID, &uid, "Negotiation", "12000000"), // tanpa plan/termin
+			name:    "quote_required",
+			deal:    env.seedDealWithPlan(t, acc.ID, &uid, plan), // plan ada, TANPA quote Accepted
 			form:    fullForm,
-			wantErr: "err=plan_required",
+			wantErr: "err=quote_required",
 		},
 		{
-			name:    "term_required",
-			deal:    env.seedDealWithPlan(t, acc.ID, &uid, plan), // plan ada, termin kosong
+			name:    "plan_required",
+			deal:    noPlanDeal,
 			form:    fullForm,
-			wantErr: "err=term_required",
+			wantErr: "err=plan_required",
 		},
 		{
 			name:    "sub_status",
@@ -295,7 +331,7 @@ func TestDealWon_ValidationAtomic(t *testing.T) {
 	}
 }
 
-// seedDealWithPlan = deal dgn plan tapi TANPA termin (jalur term_required).
+// seedDealWithPlan = deal dgn plan tapi TANPA quote Accepted (BL-88: jalur quote_required).
 func (e *testEnv) seedDealWithPlan(t *testing.T, accountID int64, owner *int64, planID int64) db.Deal {
 	t.Helper()
 	code, err := e.q.GenerateEntityCode(t.Context(), e.tenantID, codes.EntityDeal)

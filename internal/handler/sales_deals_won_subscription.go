@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 
 	"go_starter/internal/codes"
 	"go_starter/internal/db"
@@ -59,18 +62,39 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 	if deal.CreatedSubscriptionID != nil {
 		return nil, true
 	}
-	// subscriptions.plan_id NOT NULL; deals.plan_requested_id nullable → wajib ada.
-	// Bukan diam-diam (keputusan d): ?err agar user set paket dulu sebelum menang.
+	// BL-88: quote otoritatif → langganan lahir dari quote Accepted, bukan field deal
+	// manual. Tanpa quote Accepted, nilai & termin tak punya sumber sah → tolak (bukan
+	// diam-diam) agar user meng-Accept quote dulu. Index idx_quotes_one_accepted menjamin
+	// ≤1 → :one; ErrNoRows = belum ada quote Accepted.
+	quote, err := h.q(ctx).GetAcceptedQuoteForDeal(ctx, &deal.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			wsRedirect(w, r, "/deals/"+idStr, "quote_required")
+			return nil, false
+		}
+		h.Log.Error("deals: won accepted-quote", "deal_id", deal.ID, "err", err)
+		wsRedirect(w, r, "/deals/"+idStr, "failed")
+		return nil, false
+	}
+	// subscriptions.plan_id NOT NULL; PR1 masih single-plan (identitas paket dari
+	// deals.plan_requested_id yang di-backfill saat Accept). Quote multi-paket → backfill
+	// di-skip → nil di sini; PR2 (subscription_items) menutup kasus itu. Tolak eksplisit.
 	if deal.PlanRequestedID == nil {
 		wsRedirect(w, r, "/deals/"+idStr, "plan_required")
 		return nil, false
 	}
-	// Termin wajib: menentukan bulan-kontrak → MRR. Tanpa itu nilai tak terturunkan.
-	term := deref(deal.SubscriptionTerm)
-	months, ok := termContractMonths[term]
-	if !ok {
-		wsRedirect(w, r, "/deals/"+idStr, "term_required")
+	// Termin dari QUOTE (BL-88), bukan deal. subscription_term = billing cycle (harus
+	// enum valid Monthly/Annual/Multi-year) + fallback bulan-kontrak; contract_term_months
+	// (opsional) MENIMPA durasi numerik (mis. Multi-year = 24). Quote tanpa termin valid →
+	// tolak (quote_required) agar user set termin di quote dulu.
+	term := deref(quote.SubscriptionTerm)
+	months, termOK := termContractMonths[term]
+	if !termOK {
+		wsRedirect(w, r, "/deals/"+idStr, "quote_required")
 		return nil, false
+	}
+	if quote.ContractTermMonths != nil && *quote.ContractTermMonths > 0 {
+		months = *quote.ContractTermMonths
 	}
 	// Status awal dari form (keputusan a). Wajib Trial/Active.
 	status := strings.TrimSpace(r.FormValue("subscription_status"))

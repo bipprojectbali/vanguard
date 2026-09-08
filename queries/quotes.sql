@@ -12,15 +12,25 @@
 INSERT INTO quotes (
     tenant_id, entity_code, deal_id, account_id,
     quote_name, quote_status, expiration_date, payment_terms, notes_terms,
-    prepared_by, grand_total, tax_amount, created_by
+    prepared_by, grand_total, tax_amount,
+    subscription_term, contract_term_months, created_by
 ) VALUES (
     sqlc.arg(tenant_id), sqlc.arg(entity_code), sqlc.narg(deal_id), sqlc.arg(account_id),
     sqlc.narg(quote_name), sqlc.arg(quote_status), sqlc.narg(expiration_date),
     sqlc.narg(payment_terms), sqlc.narg(notes_terms),
     sqlc.narg(prepared_by), sqlc.narg(grand_total), sqlc.narg(tax_amount),
-    sqlc.narg(created_by)
+    sqlc.narg(subscription_term), sqlc.narg(contract_term_months), sqlc.narg(created_by)
 )
 RETURNING *;
+
+-- name: GetAcceptedQuoteForDeal :one
+-- Quote Accepted HIDUP milik satu deal (BL-88). Dipakai: (1) guard "1 Accepted per
+-- deal" saat meng-Accept quote lain; (2) sumber TERMIN + grand_total di Closed Won
+-- (subscriptionFromWonDeal). Index parcial idx_quotes_one_accepted menjamin ≤1 baris
+-- → :one; pgx.ErrNoRows = deal belum punya quote Accepted (bukan galat).
+SELECT * FROM quotes
+WHERE deal_id = sqlc.arg(deal_id)
+  AND quote_status = 'Accepted' AND deleted_at IS NULL;
 
 -- name: GetQuote :one
 -- Satu quote hidup. RLS menjamin tenant_id; kelayakan akses (via deal ber-owner)
@@ -85,15 +95,17 @@ LIMIT sqlc.arg(page_size);
 -- total punya jalur khusus (UpdateQuoteTotals) — keduanya TAK di sini agar
 -- perubahan status & rekalkulasi harga terlihat sebagai aksi tersendiri.
 UPDATE quotes SET
-    quote_name      = sqlc.narg(quote_name),
-    deal_id         = sqlc.narg(deal_id),
-    account_id      = sqlc.arg(account_id),
-    expiration_date = sqlc.narg(expiration_date),
-    payment_terms   = sqlc.narg(payment_terms),
-    notes_terms     = sqlc.narg(notes_terms),
-    prepared_by     = sqlc.narg(prepared_by),
-    updated_by      = sqlc.narg(updated_by),
-    updated_at      = now()
+    quote_name           = sqlc.narg(quote_name),
+    deal_id              = sqlc.narg(deal_id),
+    account_id           = sqlc.arg(account_id),
+    expiration_date      = sqlc.narg(expiration_date),
+    payment_terms        = sqlc.narg(payment_terms),
+    notes_terms          = sqlc.narg(notes_terms),
+    prepared_by          = sqlc.narg(prepared_by),
+    subscription_term    = sqlc.narg(subscription_term),
+    contract_term_months = sqlc.narg(contract_term_months),
+    updated_by           = sqlc.narg(updated_by),
+    updated_at           = now()
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL
 RETURNING *;
 

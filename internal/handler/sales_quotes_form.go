@@ -55,11 +55,13 @@ var _ = func() struct{} {
 // (quote menempel ke deal induk untuk account/deal_id). PreparedBy *int64 (nil = tak
 // ditunjuk). Pajak bukan lagi bagian header (BL-14) → dikelola QuoteTax di builder.
 type quoteForm struct {
-	QuoteName      *string
-	ExpirationDate pgtype.Date
-	PaymentTerms   *string
-	NotesTerms     *string
-	PreparedBy     *int64
+	QuoteName          *string
+	ExpirationDate     pgtype.Date
+	PaymentTerms       *string
+	NotesTerms         *string
+	PreparedBy         *int64
+	SubscriptionTerm   *string // BL-88: termin langganan milik quote (bukan deal lagi)
+	ContractTermMonths *int32  // diturunkan dari SubscriptionTerm (peta termContractMonths)
 }
 
 // parseQuoteForm membaca & memvalidasi form header. (form, "") bila sah, atau
@@ -113,6 +115,21 @@ func parseQuoteForm(fv func(string) string, today time.Time) (quoteForm, string)
 	}
 	f.PreparedBy = pb
 
+	// BL-88: subscription_term opsional (kosong = NULL; termin belum ditetapkan).
+	// Terisi wajib enum (cermin quotes_term_chk 00041 = deals_term_chk). Bulan-kontrak
+	// diturunkan dari peta termContractMonths (sumber tunggal, dipakai juga Won→Langganan)
+	// → tersimpan di contract_term_months agar Won tak menebak lagi.
+	if s := strings.TrimSpace(fv("subscription_term")); s != "" {
+		if _, ok := validSubscriptionTerms[s]; !ok {
+			return quoteForm{}, "deal_term"
+		}
+		f.SubscriptionTerm = &s
+		if m, ok := termContractMonths[s]; ok {
+			months := m
+			f.ContractTermMonths = &months
+		}
+	}
+
 	return f, ""
 }
 
@@ -123,11 +140,12 @@ func quoteFormFields(q db.Quote) panel.QuoteFormFields {
 		preparedBy = strconv.FormatInt(*q.PreparedBy, 10)
 	}
 	return panel.QuoteFormFields{
-		QuoteName:      deref(q.QuoteName),
-		ExpirationDate: dateStr(q.ExpirationDate),
-		PaymentTerms:   deref(q.PaymentTerms),
-		NotesTerms:     deref(q.NotesTerms),
-		PreparedBy:     preparedBy,
+		QuoteName:        deref(q.QuoteName),
+		ExpirationDate:   dateStr(q.ExpirationDate),
+		PaymentTerms:     deref(q.PaymentTerms),
+		NotesTerms:       deref(q.NotesTerms),
+		PreparedBy:       preparedBy,
+		SubscriptionTerm: deref(q.SubscriptionTerm),
 	}
 }
 

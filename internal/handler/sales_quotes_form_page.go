@@ -47,6 +47,7 @@ func (h *Handler) QuoteNew(w http.ResponseWriter, r *http.Request) {
 		// ke user aktif (tetap bisa diganti manual). Edit prefill dari nilai tersimpan.
 		ExpMin:  todayInAppTZ().Format(dateLayout), // BL-17: min klien = hari ini
 		Fields:  panel.QuoteFormFields{PreparedBy: strconv.FormatInt(session.UserID(ctx), 10)},
+		Terms:   subscriptionTermOptions,
 		Members: members,
 	}))
 }
@@ -85,6 +86,7 @@ func (h *Handler) QuoteEdit(w http.ResponseWriter, r *http.Request) {
 		Err:     wsErrMsg(r.URL.Query().Get("err")),
 		ExpMin:  todayInAppTZ().Format(dateLayout), // BL-17: min klien = hari ini
 		Fields:  quoteFormFields(q),
+		Terms:   subscriptionTermOptions,
 		Members: members,
 	}))
 }

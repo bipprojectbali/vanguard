@@ -56,17 +56,19 @@ func (h *Handler) QuoteCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q, err := h.q(ctx).CreateQuote(ctx, db.CreateQuoteParams{
-		TenantID:       tenantID,
-		EntityCode:     &code,
-		DealID:         &dealID,     // warisan: quote menempel ke deal ini
-		AccountID:      d.AccountID, // warisan: jangkar account deal
-		QuoteName:      form.QuoteName,
-		QuoteStatus:    quoteInitialStatus,
-		ExpirationDate: form.ExpirationDate,
-		PaymentTerms:   form.PaymentTerms,
-		NotesTerms:     form.NotesTerms,
-		PreparedBy:     preparedBy,
-		CreatedBy:      &uid,
+		TenantID:           tenantID,
+		EntityCode:         &code,
+		DealID:             &dealID,     // warisan: quote menempel ke deal ini
+		AccountID:          d.AccountID, // warisan: jangkar account deal
+		QuoteName:          form.QuoteName,
+		QuoteStatus:        quoteInitialStatus,
+		ExpirationDate:     form.ExpirationDate,
+		PaymentTerms:       form.PaymentTerms,
+		NotesTerms:         form.NotesTerms,
+		PreparedBy:         preparedBy,
+		SubscriptionTerm:   form.SubscriptionTerm,
+		ContractTermMonths: form.ContractTermMonths,
+		CreatedBy:          &uid,
 		// GrandTotal/TaxAmount sengaja tak diisi (NULL): quote baru tanpa item &
 		// tanpa pajak. tax_mode default DB 'amount'. Pajak diset lewat QuoteTax.
 	})
