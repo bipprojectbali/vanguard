@@ -55,11 +55,12 @@ func themeDropdown(openUp bool) g.Node {
 		h.Class(cls),
 		g.Attr("data-theme-dropdown", "true"), // hook theme.js: tutup setelah pilih
 		h.Summary(
-			h.Class("btn btn-ghost btn-sm gap-1"),
+			// Ikon-saja (btn-square) selaras tombol Pembaruan: baris ikon footer
+			// tanpa teks. Label via aria-label/title. (BL-104 revisi)
+			h.Class("btn btn-ghost btn-sm btn-square"),
 			g.Attr("aria-label", "Ganti tema"),
 			g.Attr("title", "Ganti tema"),
 			lucide.Palette(h.Class("size-4")),
-			h.Span(h.Class("app-navlabel"), g.Text("Tema")),
 		),
 		h.Ul(
 			h.Class(menuCls),

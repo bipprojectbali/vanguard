@@ -131,6 +131,13 @@ html[data-sidebar="collapsed"] .app-shelluser {
   align-items: center;
   justify-content: center;
 }
+/* BL-104: toolbar footer (Pembaruan + Tema) — di rail collapse stack VERTIKAL
+   agar dua ikon tak berdampingan meluber keluar rail 4rem (lebar konten ~40px
+   setelah padding footer). Expanded tetap horizontal (baris ikon). */
+html[data-sidebar="collapsed"] .app-usertools {
+  flex-direction: column;
+  gap: 0.25rem;
+}
 /* Saat collapse, dropdown tema (dropdown-top dropdown-end) menempel rail 64px:
    menu w-40 (160px) yang default membuka ke KIRI jatuh ke luar layar (left ~ -112px)
    → pilihan tema tak terlihat. Arahkan menu membuka ke KANAN rail (ke area konten),

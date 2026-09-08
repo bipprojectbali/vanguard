@@ -8,6 +8,7 @@ import (
 
 	"go_starter/internal/appmode"
 	"go_starter/internal/authz"
+	"go_starter/internal/changelog"
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 	"go_starter/internal/settings"
@@ -52,6 +53,8 @@ func (h *Handler) renderShell(w http.ResponseWriter, r *http.Request, title, bra
 		Workspaces:         workspaces,
 		ActiveTenantID:     session.TenantID(r.Context()),
 		CanCreateWorkspace: canCreate,
+		ChangelogVersion:   changelog.Current(),
+		ChangelogReleases:  changelog.Releases,
 	}
 	if err := ui.AppShell(d, body).Render(w); err != nil {
 		h.Log.Error("render shell", "path", r.URL.Path, "err", err)
