@@ -191,3 +191,31 @@ func TestDealQuotesCard_ButtonGatedByStage(t *testing.T) {
 		t.Errorf("tak boleh tulis: hint stage tak perlu ditampilkan:\n%s", out)
 	}
 }
+
+// TestDealDetail_FeedbackBanner (BL-99): halaman detail merender banner umpan
+// balik PRG. Kritis untuk tahap terminal — gerbang Closed Won/Lost yang gagal
+// redirect ke DETAIL dgn ?err; tanpa banner, penolakan tampak "tak tersimpan".
+// Err → alert-error (deal-err); Msg → alert default (deal-ok); keduanya kosong
+// → tak ada banner sama sekali.
+func TestDealDetail_FeedbackBanner(t *testing.T) {
+	base := DealDetailView{Base: "/w/acme", ID: 42, Stage: "Negotiation", Stages: pipelineStages}
+
+	withErr := base
+	withErr.Err = "Alasan menang/kalah wajib diisi untuk menutup deal."
+	out := renderLeads(t, DealDetail(withErr))
+	if !strings.Contains(out, `id="deal-err"`) || !strings.Contains(out, withErr.Err) {
+		t.Errorf("Err diset → banner error (deal-err) harus tampil dgn pesannya:\n%s", out)
+	}
+
+	withMsg := base
+	withMsg.Msg = "Tahap deal diperbarui."
+	out = renderLeads(t, DealDetail(withMsg))
+	if !strings.Contains(out, `id="deal-ok"`) || !strings.Contains(out, withMsg.Msg) {
+		t.Errorf("Msg diset → banner sukses (deal-ok) harus tampil dgn pesannya:\n%s", out)
+	}
+
+	out = renderLeads(t, DealDetail(base))
+	if strings.Contains(out, `id="deal-err"`) || strings.Contains(out, `id="deal-ok"`) {
+		t.Errorf("Err & Msg kosong → tak ada banner umpan balik:\n%s", out)
+	}
+}

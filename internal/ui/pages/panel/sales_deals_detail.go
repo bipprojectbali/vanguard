@@ -73,6 +73,13 @@ type DealDetailView struct {
 	// Activities = timeline aktivitas deal ini (M7-A). Diisi handler via
 	// activitiesTimelineFor (dibatasi activityTimelineLimit baris terbaru).
 	Activities ActivityTimelineView
+
+	// Err/Msg (BL-99) = umpan balik PRG untuk aksi di halaman ini (ubah tahap,
+	// sunting, hapus). Diisi handler dari ?err/?ok via wsErrMsg/dealsMsg. Kritis
+	// khusus tahap terminal: gerbang Closed Won/Lost yang gagal me-redirect ke
+	// DETAIL ini dgn ?err — tanpa banner, penolakan tampak seperti "tak tersimpan".
+	Err string
+	Msg string
 }
 
 // DealDetail merender hub detail: header (nama + kode + stage + aksi), stepper
@@ -114,6 +121,10 @@ func DealDetail(v DealDetailView) g.Node {
 		header,
 		h.A(h.Href(v.Base+"/deals"), h.Class("text-sm text-base-content/60"),
 			g.Text("« Kembali ke pipeline")),
+		// BL-99: banner umpan balik PRG (pola sama halaman pipeline). Ditaruh dekat
+		// atas agar alasan penolakan tahap terminal langsung terlihat di dekat form.
+		ui.When(v.Err != "", ui.Alert(ui.VariantDestructive, "deal-err", g.Text(v.Err))),
+		ui.When(v.Msg != "", ui.Alert(ui.VariantDefault, "deal-ok", g.Text(v.Msg))),
 		dealStepper(displayStages(v.Stages, v.Stage), v.Stage),
 		ui.When(v.CanWrite, dealStageControl(v, base)),
 		dealIdentityCard(v, accountLink),
