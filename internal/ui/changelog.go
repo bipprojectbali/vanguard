@@ -31,22 +31,22 @@ func ChangelogButton(version string) g.Node {
 	}
 	return h.Button(
 		h.Type("button"),
-		// Ikon di toolbar footer, sejajar tombol Tema (btn-ghost btn-sm gap-1).
-		// relative → jangkar badge absolut; app-navlabel ikut tersembunyi di rail
-		// collapse (konsisten Tema/BL-64), menyisakan ikon Sparkles saja.
-		h.Class("btn btn-ghost btn-sm gap-1 relative"),
+		// Ikon-saja di toolbar footer, sejajar tombol Tema (sesuai mockup user:
+		// Sparkles di baris ikon). relative → jangkar badge absolut. Label teks
+		// sengaja tak ditampilkan (ikon + tooltip/aria-label cukup); btn-square
+		// menyamakan lebar dengan tinggi agar ikon ter-center rapi.
+		h.Class("btn btn-ghost btn-sm btn-square relative"),
 		g.Attr("data-changelog-btn", "true"),
 		g.Attr("data-app-version", version),
 		g.Attr("aria-label", "Pembaruan"),
 		g.Attr("title", "Pembaruan aplikasi"),
 		data.On("click", "$"+changelogSignal+" = true"),
 		lucide.Sparkles(h.Class("size-4")),
-		h.Span(h.Class("app-navlabel"), g.Text("Pembaruan")),
 		// Badge "ada pembaruan" — hidden default; changelog.js buang `hidden`.
 		h.Span(
 			g.Attr("data-changelog-badge", "true"),
 			g.Attr("aria-label", "Ada pembaruan"),
-			h.Class("hidden absolute right-2 top-1 size-2 rounded-full bg-primary"),
+			h.Class("hidden absolute right-1 top-1 size-2 rounded-full bg-primary"),
 		),
 	)
 }
