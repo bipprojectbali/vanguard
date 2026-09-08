@@ -71,6 +71,36 @@ func TestContactForm_KeteranganCheckbox(t *testing.T) {
 	}
 }
 
+// TestContactForm_HintTapIcons — regresi BL-101: legenda enum (Jabatan/Peran/
+// Kanal) dan keterangan "nomor tersamar" HP/WhatsApp harus disajikan lewat ikon
+// ⓘ tap-friendly (pola BL-65/BL-69, <details class="hint-reveal">), BUKAN baris
+// teks statis yang menuhi form. Isinya tetap ada (di balik ikon) — dijaga
+// TestContactForm_LegendaEnum — jadi di sini kita jaga PEMBUNGKUSnya.
+func TestContactForm_HintTapIcons(t *testing.T) {
+	v := contactFormViewFixture()
+	v.PhoneEditable = false // kunci HP/WA → keterangan mask ikut pola ikon ⓘ
+	out := renderLeads(t, ContactForm(v))
+
+	// Pola tap-reveal dipakai (legenda & keterangan di balik ikon ⓘ).
+	for _, want := range []string{
+		`class="hint-reveal`,  // wadah <details> tap-reveal
+		`class="hint-summary`, // baris label+ikon yang di-tap
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("form kontak harus memakai pola ikon ⓘ tap (%s):\n%s", want, out)
+		}
+	}
+
+	// Keterangan nomor tersamar tetap ada (di balik ikon), tapi TAK lagi sebagai
+	// <p> redup statis di bawah input (kelas lama text-base-content/60).
+	if !strings.Contains(out, "Nomor disamarkan") {
+		t.Errorf("keterangan HP/WA tersamar harus tetap ada di balik ikon:\n%s", out)
+	}
+	if strings.Contains(out, `text-base-content/60">Nomor disamarkan`) {
+		t.Errorf("keterangan mask tak boleh lagi <p> statis; harus pola ikon ⓘ:\n%s", out)
+	}
+}
+
 // contactFormGlobalFixture = mode GLOBAL (Accounts terisi) → merender pemilih
 // desa induk yang bisa diketik (BL-5). Beda dgn fixture nested di atas yang
 // AccountBase-nya terisi & tanpa Accounts.

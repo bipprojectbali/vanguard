@@ -127,8 +127,8 @@ func ContactForm(v ContactFormView) g.Node {
 			field("Nama Belakang", "last_name", v.Fields.LastName, false, "text"),
 			field("Sapaan", "salutation", v.Fields.Salutation, false, "text"),
 			field("Jabatan", "job_title", v.Fields.JobTitle, false, "text"),
-			enumField("Jabatan (Kategori)", "position_category", v.Fields.PositionCategory, v.Positions, false, contactPositionLegend),
-			enumField("Peran", "contact_role", v.Fields.ContactRole, v.Roles, false, contactRoleLegend),
+			enumFieldHinted("Jabatan (Kategori)", "position_category", v.Fields.PositionCategory, v.Positions, false, contactPositionLegend),
+			enumFieldHinted("Peran", "contact_role", v.Fields.ContactRole, v.Roles, false, contactRoleLegend),
 			field("Periode Menjabat", "term_period", v.Fields.TermPeriod, false, "text"),
 		),
 		formCard("Kontak",
@@ -136,7 +136,7 @@ func ContactForm(v ContactFormView) g.Node {
 			contactPhoneField(v.PhoneEditable, "WhatsApp", "whatsapp_number", v.Fields.WhatsappNumber),
 			field("Telepon Kantor", "office_phone", v.Fields.OfficePhone, false, "tel"),
 			field("Email", "email", v.Fields.Email, false, "email"),
-			enumField("Kanal Pilihan", "preferred_channel", v.Fields.PreferredChannel, v.Channels, false, contactChannelLegend),
+			enumFieldHinted("Kanal Pilihan", "preferred_channel", v.Fields.PreferredChannel, v.Channels, false, contactChannelLegend),
 		),
 		formCard("Alamat",
 			field("Alamat Surat", "mailing_address", v.Fields.MailingAddress, false, "text"),
@@ -209,17 +209,20 @@ func contactPhoneField(editable bool, label, name, val string) g.Node {
 	roID := "f-" + name + "_ro"
 	return h.Div(
 		h.Class("grid gap-1 min-w-0"),
-		labelFor(label, roID, false),
+		// Keterangan "nomor tersamar" dipindah ke balik ikon ⓘ tap (BL-101, pola
+		// BL-65) agar tak jadi baris teks statis yang menuhi form — konsisten
+		// dgn legenda enum di form ini.
+		labelWithHint(label, roID, false,
+			[]string{"Nomor disamarkan & hanya bisa disunting oleh Sales."}),
 		ui.Input(
 			h.ID(roID), h.Type("tel"), h.Value(val),
 			h.Disabled(), h.Class("input text-base w-full"),
 		),
-		h.P(h.Class("text-xs text-base-content/60"),
-			g.Text("Nomor disamarkan & hanya bisa disunting oleh Sales.")),
 	)
 }
 
-// Legenda makna opsi enum kontak (BL-4) — dioper ke enumField. Tiap pasangan
+// Legenda makna opsi enum kontak (BL-4; disajikan lewat ikon ⓘ tap sejak BL-101
+// via enumFieldHinted). Tiap pasangan
 // {nilai, makna} HARUS himpunan yang sama dengan opsi enum di
 // contacts_helpers.go (contactPositionOptions/RoleOptions/ChannelOptions);
 // dijaga uji render TestContactForm_LegendaEnum.
