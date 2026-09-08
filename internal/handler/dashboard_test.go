@@ -209,18 +209,39 @@ func TestDashboard_ARRMaskedForNonManager(t *testing.T) {
 
 // --- F2: gerbang fail-soft ----------------------------------------------------
 
-// TestDashboard_NoBusinessRoleFallsBackToPlaceholder: anggota tanpa business_role
-// (mis. baru diundang) tetap 200 tapi jatuh ke Placeholder biasa — bukan 403,
-// karena Beranda harus terbuka utk semua anggota workspace.
-func TestDashboard_NoBusinessRoleFallsBackToPlaceholder(t *testing.T) {
+// TestDashboard_NoBusinessRoleShowsPendingApproval: anggota (member) tanpa
+// business_role — mis. baru mendaftar/diundang — diarahkan ke halaman "menunggu
+// approval admin" (Opsi A, BL-105), BUKAN Beranda dengan menu mati. Tetap 200
+// (bukan 403) & tanpa kebocoran KPI. Menggantikan perilaku lama (jatuh ke
+// Placeholder sapaan) yang membiarkan user di Beranda tanpa penjelasan.
+func TestDashboard_NoBusinessRoleShowsPendingApproval(t *testing.T) {
 	env, uid := setupAccounts(t)
 
 	body := env.dashboardBody(t, uid, "member", "")
 	if strings.Contains(body, "ARR Total") {
 		t.Error("tanpa business_role TAK boleh melihat kartu KPI Beranda")
 	}
-	if !strings.Contains(body, "Selamat datang di") {
-		t.Errorf("tanpa business_role harus tetap melihat Placeholder sapaan, body:\n%s", body)
+	if !strings.Contains(body, "Menunggu approval admin") {
+		t.Errorf("member tanpa peran harus melihat halaman menunggu approval, body:\n%s", body)
+	}
+	if strings.Contains(body, "Selamat datang di") {
+		t.Error("member tanpa peran tak lagi melihat Beranda Placeholder (kini halaman tunggu)")
+	}
+}
+
+// TestDashboard_ManagerNoBusinessRoleGetsOnboardNotPending: pengecualian sengaja
+// dari BL-105 — owner/admin tanpa business_role BUKAN "menunggu": mereka bisa
+// menetapkan peran sendiri lewat banner CRMOnboard di Beranda. Jadi mereka TAK
+// boleh kena halaman tunggu.
+func TestDashboard_ManagerNoBusinessRoleGetsOnboardNotPending(t *testing.T) {
+	env, uid := setupAccounts(t)
+
+	body := env.dashboardBody(t, uid, "owner", "")
+	if strings.Contains(body, "Menunggu approval admin") {
+		t.Errorf("pengelola tanpa peran TAK boleh kena halaman tunggu, body:\n%s", body)
+	}
+	if !strings.Contains(body, "Aktifkan CRM untuk Anda") {
+		t.Errorf("pengelola tanpa peran harus melihat banner CRMOnboard, body:\n%s", body)
 	}
 }
 
