@@ -111,69 +111,6 @@ func TestDashboard_ARRTotalSumsActiveOnly(t *testing.T) {
 	}
 }
 
-// TestDashboard_PipelineExcludesClosedStages: chart pipeline memuat stage
-// TERBUKA (Prospecting/Qualification) tapi mengecualikan Closed Won/Lost.
-func TestDashboard_PipelineExcludesClosedStages(t *testing.T) {
-	env, uid := setupAccounts(t)
-	acc := env.seedAccount(t, "Desa Pipeline", &uid, nil, nil)
-	env.seedDeal(t, acc.ID, &uid) // stage awal Prospecting
-
-	won, err := env.q.GenerateEntityCode(t.Context(), env.tenantID, codes.EntityDeal)
-	if err != nil {
-		t.Fatalf("generate entity code: %v", err)
-	}
-	if _, err := env.q.CreateDeal(t.Context(), db.CreateDealParams{
-		TenantID:   env.tenantID,
-		EntityCode: &won,
-		DealName:   "Deal Menang",
-		AccountID:  acc.ID,
-		DealOwner:  &uid,
-		Stage:      "Closed Won",
-		CreatedBy:  &uid,
-	}); err != nil {
-		t.Fatalf("seed closed deal: %v", err)
-	}
-
-	body := env.dashboardBody(t, uid, "owner", "admin")
-	if !strings.Contains(body, `"Prospecting"`) {
-		t.Errorf("chart pipeline harus memuat stage Prospecting, body:\n%s", body)
-	}
-	if strings.Contains(body, "Closed Won") {
-		t.Error("chart pipeline TAK boleh memuat deal Closed Won")
-	}
-}
-
-// TestDashboard_PipelineChartGatedByDeals (BL-11): kartu Pipeline per-Stage
-// hanya untuk role dgn crm:deals read. Role dgn izin (admin) melihat
-// "chart-pipeline"; role tanpa izin (csm pasca-BL-11, support) tidak — tapi
-// TETAP melihat dashboard + chart Health (bukti gate selektif, bukan halaman
-// kosong). Efek samping DISENGAJA: Support pun kehilangan chart deal yang
-// selama ini bocor tanpa crm:deals.
-func TestDashboard_PipelineChartGatedByDeals(t *testing.T) {
-	env, uid := setupAccounts(t)
-	acc := env.seedAccount(t, "Desa Gate", &uid, nil, nil)
-	env.seedDeal(t, acc.ID, &uid) // stage Prospecting → pipeline non-kosong utk yg berhak
-
-	t.Run("admin melihat chart pipeline", func(t *testing.T) {
-		body := env.dashboardBody(t, uid, "owner", "admin")
-		if !strings.Contains(body, "chart-pipeline") {
-			t.Errorf("admin (crm:deals read) harus melihat chart-pipeline, body:\n%s", body)
-		}
-	})
-
-	for _, role := range []string{"csm", "support"} {
-		t.Run(role+" tak melihat chart pipeline", func(t *testing.T) {
-			body := env.dashboardBody(t, uid, "owner", role)
-			if strings.Contains(body, "chart-pipeline") {
-				t.Errorf("role %q (tanpa crm:deals) TAK boleh melihat chart-pipeline, body:\n%s", role, body)
-			}
-			if !strings.Contains(body, "chart-health") {
-				t.Errorf("role %q tetap harus melihat chart-health (dashboard tak kosong), body:\n%s", role, body)
-			}
-		})
-	}
-}
-
 // TestDashboard_RenewalsDueWindow: hanya subscription Active/PendingApproval
 // dengan end_date dalam 30 hari ke depan yang terhitung — di luar jendela atau
 // status lain tak ikut.
@@ -319,14 +256,15 @@ func (e *testEnv) seedClosingDeal(t *testing.T, accountID int64, owner *int64) d
 	return d
 }
 
-// TestDashboardSales_DomainVisibleByCapability: role dgn ≥1 kapabilitas Sales
-// (admin/manager/sales) melihat heading section "Sales" + KPI Win Rate;
-// role tanpanya (csm/support) TAK melihat section Sales sama sekali (heading tak
-// berdiri kosong).
+// TestDashboardSales_DomainVisibleByCapability: role dgn kapabilitas Sales inti
+// (admin/manager/sales punya crm:deals) melihat heading section "Sales" + KPI
+// Win Rate; role tanpanya (csm/support) TAK melihat section Sales sama sekali
+// (heading tak berdiri kosong). BL-98: section domain kini TANPA chart apa pun
+// (chart-pipeline dipindah ke Sales Report) — hanya KPI + tautan Report.
 func TestDashboardSales_DomainVisibleByCapability(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Sales Dom", &uid, nil, nil)
-	env.seedDeal(t, acc.ID, &uid) // pipeline non-kosong utk yg berhak
+	env.seedDeal(t, acc.ID, &uid)
 
 	for _, role := range []string{"admin", "manager", "sales"} {
 		t.Run(role+" melihat section Sales", func(t *testing.T) {
@@ -337,8 +275,9 @@ func TestDashboardSales_DomainVisibleByCapability(t *testing.T) {
 			if !strings.Contains(body, "Win Rate") {
 				t.Errorf("role %q (crm:deals) harus melihat KPI Win Rate di section Sales", role)
 			}
-			if !strings.Contains(body, "chart-pipeline") {
-				t.Errorf("role %q (crm:deals) harus melihat chart-pipeline di section Sales", role)
+			// BL-98: chart domain dibuang seluruhnya.
+			if strings.Contains(body, "chart-pipeline") {
+				t.Errorf("role %q TAK boleh lagi melihat chart-pipeline (dipindah ke Report)", role)
 			}
 		})
 	}
@@ -349,18 +288,17 @@ func TestDashboardSales_DomainVisibleByCapability(t *testing.T) {
 			if strings.Contains(body, ">Sales</h2>") {
 				t.Errorf("role %q (tanpa kapabilitas Sales) TAK boleh melihat section Sales, body:\n%s", role, body)
 			}
-			if strings.Contains(body, "chart-pipeline") {
-				t.Errorf("role %q TAK boleh melihat chart-pipeline", role)
-			}
 		})
 	}
 }
 
-// TestDashboardSales_CustomRoleLeadsOnly: role KUSTOM dgn hanya crm:dashboard +
-// crm:leads (read) melihat section Sales berisi HANYA panel Lead (chart-leads),
-// TANPA butir Deals (chart-pipeline / Win Rate) — bukti komposisi union parsial
-// per-kapabilitas, bukan section utuh-atau-tak-ada.
-func TestDashboardSales_CustomRoleLeadsOnly(t *testing.T) {
+// TestDashboardSales_CustomRoleLeadsOnlyNoSection (BL-98): setelah section
+// dirampingkan, KEDUA KPI Sales (Win Rate, Deal Tutup) bergantung crm:deals.
+// Role KUSTOM dgn hanya crm:dashboard + crm:leads (TANPA crm:deals) karena itu
+// TAK menyumbang KPI apa pun ke section Sales → section tak muncul (heading tak
+// berdiri kosong). Komposisi per-kapabilitas tetap berlaku; hanya set butirnya
+// yang menyusut.
+func TestDashboardSales_CustomRoleLeadsOnlyNoSection(t *testing.T) {
 	env, uid := setupAccounts(t)
 	env.loadBusinessRolesWith(t,
 		authz.BusinessPerm{Role: "leadsonly", Obj: "crm:dashboard", Act: "read"},
@@ -375,17 +313,15 @@ func TestDashboardSales_CustomRoleLeadsOnly(t *testing.T) {
 		t.Fatalf("status = %d, want 200\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, ">Sales</h2>") {
-		t.Errorf("role kustom (crm:leads) harus melihat section Sales, body:\n%s", body)
-	}
-	if !strings.Contains(body, "chart-leads") {
-		t.Error("role kustom (crm:leads) harus melihat chart-leads")
-	}
-	if strings.Contains(body, "chart-pipeline") {
-		t.Error("role kustom tanpa crm:deals TAK boleh melihat chart-pipeline")
+	if strings.Contains(body, ">Sales</h2>") {
+		t.Errorf("role kustom crm:leads (tanpa crm:deals) TAK boleh melihat section Sales, body:\n%s", body)
 	}
 	if strings.Contains(body, "Win Rate") {
 		t.Error("role kustom tanpa crm:deals TAK boleh melihat KPI Win Rate")
+	}
+	// Dashboard tetap terbuka (chart-health global) walau section Sales absen.
+	if !strings.Contains(body, "chart-health") {
+		t.Errorf("dashboard tetap harus render chart-health global, body:\n%s", body)
 	}
 }
 
@@ -409,5 +345,106 @@ func TestDashboardSales_DealsClosingScopedByOwnership(t *testing.T) {
 	all := env.dashboardBody(t, uid, "owner", "manager")
 	if got := dashboardKPIValue(t, all, label); got != "2" {
 		t.Errorf("manager all-scope: %q = %q, want \"2\" (lintas-owner)", label, got)
+	}
+}
+
+// --- BL-98: Beranda ramping untuk role multi-domain -------------------------
+//
+// Keputusan (arah A): tiap section domain maksimum 2 KPI penting (tetap digate
+// per-kapabilitas), TANPA chart domain (satu-satunya chart Beranda = donut health
+// GLOBAL), + tautan "Lihat Laporan →" ke halaman Report domain — dirender HANYA
+// bila role ber-crm:reports (jangan pernah menautkan halaman yang akan 403).
+
+// TestDashboardBL98_AdminSlimSectionsAndLinks: admin (semua kapabilitas) melihat
+// keempat section ramping — tepat 2 KPI terpilih per-domain, tautan Report tiap
+// domain, dan NOL chart domain (hanya chart-health global bertahan).
+func TestDashboardBL98_AdminSlimSectionsAndLinks(t *testing.T) {
+	env, uid := setupAccounts(t)
+	acc := env.seedAccount(t, "Desa BL98", &uid, nil, nil)
+	env.seedDeal(t, acc.ID, &uid) // section punya data (visibilitas tak bergantung data)
+
+	body := env.dashboardBody(t, uid, "owner", "admin")
+
+	// 2 KPI terpilih per-domain HADIR.
+	for _, kpi := range []string{
+		"Win Rate", "Deal Tutup Bulan Ini", // Sales
+		"MRR", "Churn Rate", // Langganan
+		"Desa Berisiko", "Adoption Rate", // Customer Success
+		"Tiket Terbuka", "Kepatuhan SLA", // Support
+	} {
+		if !strings.Contains(body, kpi) {
+			t.Errorf("admin harus melihat KPI ramping %q, body:\n%s", kpi, body)
+		}
+	}
+
+	// KPI/butir yang DIPINDAH ke Report TIDAK boleh muncul di Beranda.
+	for _, dropped := range []string{
+		"Aktivitas Sales", "Langganan Aktif", "Renewal Rate",
+		"Engagement Jatuh Tempo (7 hari)", "Terlambat / Langgar SLA",
+		"Rata Waktu Penyelesaian",
+	} {
+		if strings.Contains(body, dropped) {
+			t.Errorf("KPI %q sudah dipindah ke Report, TAK boleh muncul di Beranda", dropped)
+		}
+	}
+
+	// Tautan "Lihat Laporan →" tiap domain (4 total) dengan href yang benar.
+	if n := strings.Count(body, "Lihat Laporan →"); n != 4 {
+		t.Errorf("harus ada 4 tautan 'Lihat Laporan →' (satu per domain), got %d", n)
+	}
+	for _, href := range []string{
+		`href="/w/test/reports/sales"`,
+		`href="/w/test/reports/subscriptions"`,
+		`href="/w/test/reports/customer-success"`,
+		`href="/w/test/reports/support"`,
+	} {
+		if !strings.Contains(body, href) {
+			t.Errorf("tautan Report harus menuju %s, body:\n%s", href, body)
+		}
+	}
+
+	// NOL chart domain — hanya donut health global bertahan.
+	if !strings.Contains(body, "chart-health") {
+		t.Errorf("donut health global harus tetap ada, body:\n%s", body)
+	}
+	for _, chart := range []string{
+		"chart-pipeline", "chart-leads", "chart-mrr-movement",
+		"chart-revenue-plan", "chart-onboarding", "chart-tickets-priority",
+		"chart-agent-workload",
+	} {
+		if strings.Contains(body, chart) {
+			t.Errorf("chart domain %q sudah dibuang dari Beranda (BL-98)", chart)
+		}
+	}
+}
+
+// TestDashboardBL98_ReportLinkGatedByReportsCap: role KUSTOM dgn kapabilitas
+// domain (crm:deals) TAPI TANPA crm:reports tetap melihat section + 2 KPI-nya,
+// namun TANPA tautan "Lihat Laporan →" — kita tak pernah menautkan halaman
+// Report yang akan menolaknya 403.
+func TestDashboardBL98_ReportLinkGatedByReportsCap(t *testing.T) {
+	env, uid := setupAccounts(t)
+	env.loadBusinessRolesWith(t,
+		authz.BusinessPerm{Role: "dealsnoreports", Obj: "crm:dashboard", Act: "read"},
+		authz.BusinessPerm{Role: "dealsnoreports", Obj: "crm:deals", Act: "read"},
+	)
+	acc := env.seedAccount(t, "Desa NoReports", &uid, nil, nil)
+	env.seedDeal(t, acc.ID, &uid)
+
+	req := accountsReq(http.MethodGet, "/w/test/", nil, "")
+	rec := env.runAccountScope(uid, "member", "dealsnoreports", "all", req, env.h.WorkspaceHome)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, ">Sales</h2>") || !strings.Contains(body, "Win Rate") {
+		t.Errorf("role crm:deals harus tetap melihat section Sales + Win Rate, body:\n%s", body)
+	}
+	if strings.Contains(body, "Lihat Laporan →") {
+		t.Errorf("role tanpa crm:reports TAK boleh melihat tautan 'Lihat Laporan →', body:\n%s", body)
+	}
+	if strings.Contains(body, `href="/w/test/reports/sales"`) {
+		t.Error("role tanpa crm:reports TAK boleh punya tautan ke halaman Report")
 	}
 }
