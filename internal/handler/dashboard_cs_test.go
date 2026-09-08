@@ -8,32 +8,33 @@ import (
 	"go_starter/internal/authz"
 )
 
-// dashboard_cs_test.go — section "Customer Success" Beranda (Modul 1, BL-59c).
-// Dipisah dari dashboard_test.go (ukuran file). Tiga sumbu dijaga:
+// dashboard_cs_test.go — section "Customer Success" Beranda (Modul 1, BL-59c +
+// BL-98). Dipisah dari dashboard_test.go (ukuran file). Tiga sumbu dijaga:
 //
-//   - Visibilitas per-kapabilitas: role dgn kapabilitas CS penuh (admin/manager/
-//     csm) melihat heading "Customer Success" + KPI/panel inti; role KUSTOM tanpa
-//     kapabilitas CS apa pun TAK melihat heading (tak berdiri kosong).
-//   - Komposisi union parsial: role KUSTOM crm:health-only melihat butir Health
-//     saja (Desa Berisiko), tanpa Adoption/Engagement/Onboarding.
+//   - Visibilitas per-kapabilitas: role dgn kapabilitas CS (admin/manager/csm)
+//     melihat heading "Customer Success" + KPI inti; role KUSTOM tanpa kapabilitas
+//     CS apa pun TAK melihat heading (tak berdiri kosong).
+//   - Komposisi union parsial (BL-98): role KUSTOM crm:health-only melihat butir
+//     Health saja (Desa Berisiko), tanpa Adoption Rate (crm:adoption).
 //   - F3 kepemilikan: "Desa Berisiko" menghormati data_scope (own vs all) via
 //     AccountsListFilterFor — sama dgn modul Health.
 //
+// BL-98: section kini MAKS 2 KPI (Desa Berisiko · Adoption Rate) TANPA chart
+// domain; KPI Engagement Jatuh Tempo & panel Onboarding dipindah ke CS Report.
+//
 // Setup/helper reuse dashboard_test.go (dashboardBody, dashboardKPIValue),
 // accounts_test.go (setupAccounts, seedAccount, seedMember), health_score_test.go
-// (seedHealthScore), reports_cs_test.go (seedEngagement).
+// (seedHealthScore).
 
-// TestDashboardCS_DomainVisibleByCapability: role dgn kapabilitas CS penuh melihat
-// heading "Customer Success" + KPI (Desa Berisiko, Adoption Rate, Engagement
-// Jatuh Tempo) + panel Onboarding. Role KUSTOM tanpa kapabilitas CS apa pun TAK
-// melihat heading.
+// TestDashboardCS_DomainVisibleByCapability: role dgn kapabilitas CS melihat
+// heading "Customer Success" + 2 KPI ramping (Desa Berisiko, Adoption Rate).
+// Role KUSTOM tanpa kapabilitas CS apa pun TAK melihat heading.
 func TestDashboardCS_DomainVisibleByCapability(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa CS Dom", &uid, nil, nil)
 	env.seedHealthScore(t, acc.ID, 30, "Critical")
-	env.seedEngagement(t, acc.ID, "touch_point", "planned", &uid)
 
-	kpis := []string{"Desa Berisiko", "Adoption Rate", "Engagement Jatuh Tempo (7 hari)"}
+	kpis := []string{"Desa Berisiko", "Adoption Rate"}
 	for _, role := range []string{"admin", "manager", "csm"} {
 		t.Run(role+" melihat section Customer Success", func(t *testing.T) {
 			body := env.dashboardBody(t, uid, "owner", role)
@@ -45,8 +46,12 @@ func TestDashboardCS_DomainVisibleByCapability(t *testing.T) {
 					t.Errorf("role %q harus melihat KPI %q di section Customer Success", role, kpi)
 				}
 			}
-			if !strings.Contains(body, "chart-onboarding") {
-				t.Errorf("role %q harus melihat panel Progres Onboarding (crm:journey)", role)
+			// BL-98: butir yang dipindah ke Report tak boleh muncul di Beranda.
+			if strings.Contains(body, ">Engagement Jatuh Tempo (7 hari)</p>") {
+				t.Errorf("role %q: KPI Engagement Jatuh Tempo sudah dipindah ke Report", role)
+			}
+			if strings.Contains(body, "chart-onboarding") {
+				t.Errorf("role %q: panel Onboarding sudah dipindah ke Report (BL-98)", role)
 			}
 		})
 	}
@@ -66,10 +71,9 @@ func TestDashboardCS_DomainVisibleByCapability(t *testing.T) {
 	})
 }
 
-// TestDashboardCS_CustomRoleHealthOnly: role KUSTOM dgn hanya crm:dashboard +
-// crm:health (read) melihat section Customer Success berisi HANYA butir Health
-// (Desa Berisiko), TANPA Adoption Rate (crm:adoption), Engagement Jatuh Tempo
-// (crm:engagements), & panel Onboarding (crm:journey) — bukti komposisi union
+// TestDashboardCS_CustomRoleHealthOnly (BL-98): role KUSTOM dgn hanya
+// crm:dashboard + crm:health (read) melihat section Customer Success berisi HANYA
+// Desa Berisiko, TANPA Adoption Rate (crm:adoption) — bukti komposisi union
 // parsial per-kapabilitas.
 func TestDashboardCS_CustomRoleHealthOnly(t *testing.T) {
 	env, uid := setupAccounts(t)
@@ -94,12 +98,6 @@ func TestDashboardCS_CustomRoleHealthOnly(t *testing.T) {
 	}
 	if strings.Contains(body, ">Adoption Rate</p>") {
 		t.Error("role kustom tanpa crm:adoption TAK boleh melihat KPI Adoption Rate")
-	}
-	if strings.Contains(body, ">Engagement Jatuh Tempo (7 hari)</p>") {
-		t.Error("role kustom tanpa crm:engagements TAK boleh melihat KPI Engagement Jatuh Tempo")
-	}
-	if strings.Contains(body, "chart-onboarding") {
-		t.Error("role kustom tanpa crm:journey TAK boleh melihat panel Progres Onboarding")
 	}
 }
 

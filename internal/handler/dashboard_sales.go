@@ -11,43 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// dashboard_sales.go — BL-59a: section domain "Sales" pada Beranda (Modul 1
-// redesain, tasks.md BL-59). Komposisi-per-izin: tiap butir digate kapabilitas
-// modulnya (crm:deals / crm:sales_activity / crm:leads read) — role melihat UNION
-// butir dari modul yang boleh diaksesnya; domain tampil hanya bila ≥1 butir
-// tampil (heading di view). Selaras F2/F3 yang sudah ada → role KUSTOM otomatis
-// dapat section sesuai modulnya tanpa kode baru.
+// dashboard_sales.go — BL-59a + BL-98: section domain "Sales" pada Beranda
+// (Modul 1). Komposisi-per-izin: tiap butir digate kapabilitas modulnya; role
+// melihat UNION butir dari modul yang boleh diaksesnya; domain tampil hanya bila
+// ≥1 KPI tampil (heading di view).
 //
-// REUSE agregasi (JANGAN tulis ulang, tasks.md): DashboardPipelineByStage (chart
-// pipeline, sama dgn dashboard lama) · DealPipelineStats (won/lost → Win Rate,
-// query modul Deals) · ReportSalesActivityByOwner (dijumlah di Go → hitung
-// aktivitas, query Sales Report BL-43). Dua agregasi kecil BARU (tak ada
-// padanannya): DashboardDealsClosingThisMonth & DashboardLeadsBySource.
-//
-// F3: tiap query pakai *ListFilterFor(dataScope) modul ASAL (Deals/Activities/
-// Leads) — sumber SATU, bukan duplikasi logic scope. F4: section ini murni
-// COUNT/persen (tanpa Rp) → tak butuh masking; nilai Rp (pipeline value) sengaja
-// dibiarkan ke Sales Report yang sudah memaskingnya (maskARR).
+// BL-98 (ramping): section Sales kini MAKSIMUM 2 KPI paling penting — Win Rate &
+// Deal Tutup Bulan Ini (keduanya di bawah crm:deals) — TANPA chart domain. Chart
+// pipeline & lead per-sumber, serta KPI "Aktivitas Sales", dipindah ke Sales
+// Report (ditautkan via "Lihat Laporan →"). REUSE agregasi: DealPipelineStats
+// (won/lost → Win Rate) + DashboardDealsClosingThisMonth. F3 via
+// DealsListFilterFor(dataScope). F4: murni COUNT/persen (tanpa Rp) → tak butuh
+// masking.
 
-// dashSalesDomain merakit section Sales. bool kedua = "punya isi" → handler hanya
-// menambahkan domain ke view bila true (heading tak muncul kosong).
+// dashSalesDomain merakit section Sales. bool kedua = "punya isi" (≥1 KPI) →
+// handler hanya menambahkan domain ke view bila true (heading tak muncul kosong).
 func (h *Handler) dashSalesDomain(ctx context.Context, dataScope string, uid int64) (panel.DashDomain, bool, error) {
 	d := panel.DashDomain{Title: "Sales"}
 	q := h.q(ctx)
 
 	if canViewDeals(ctx) {
 		deal := db.DealsListFilterFor(dataScope)
-
-		stages, err := q.DashboardPipelineByStage(ctx, db.DashboardPipelineByStageParams{
-			ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
-		})
-		if err != nil {
-			return panel.DashDomain{}, false, err
-		}
-		d.Panels = append(d.Panels, panel.DashPanel{
-			Title: "Pipeline per-Stage", ChartID: "chart-pipeline",
-			ChartJSON: h.marshalChart(pipelineChartOption(stages)),
-		})
 
 		stats, err := q.DealPipelineStats(ctx, db.DealPipelineStatsParams{
 			ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
@@ -75,39 +59,13 @@ func (h *Handler) dashSalesDomain(ctx context.Context, dataScope string, uid int
 		})
 	}
 
-	if canViewSalesActivity(ctx) {
-		act := db.ActivitiesListFilterFor(dataScope)
-		rows, err := q.ReportSalesActivityByOwner(ctx, db.ReportSalesActivityByOwnerParams{
-			ScopeAll: act.ScopeAll, IsOwn: act.IsOwn, Uid: &uid,
-		})
-		if err != nil {
-			return panel.DashDomain{}, false, err
-		}
-		var total int64
-		for _, r := range rows {
-			total += r.TotalCount
-		}
-		d.KPIs = append(d.KPIs, panel.DashKPI{
-			Label: "Aktivitas Sales", Value: strconv.FormatInt(total, 10),
-			ValueClass: "text-base-content",
-		})
+	// BL-98: tautan Sales Report — HANYA bila role ber-crm:reports (jangan pernah
+	// menautkan halaman yang akan 403; role ber-crm:deals tanpa crm:reports tetap
+	// lihat KPI, tanpa tautan).
+	if canViewReports(ctx) {
+		d.ReportPath = wsPathOf(ctx, "/reports/sales")
 	}
-
-	if canViewLeads(ctx) {
-		lead := db.LeadsListFilterFor(dataScope)
-		src, err := q.DashboardLeadsBySource(ctx, db.DashboardLeadsBySourceParams{
-			ScopeAll: lead.ScopeAll, IsOwn: lead.IsOwn, Uid: &uid,
-		})
-		if err != nil {
-			return panel.DashDomain{}, false, err
-		}
-		d.Panels = append(d.Panels, panel.DashPanel{
-			Title: "Lead per Sumber", ChartID: "chart-leads",
-			ChartJSON: h.marshalChart(leadsBySourceChartOption(src)),
-		})
-	}
-
-	return d, len(d.KPIs) > 0 || len(d.Panels) > 0, nil
+	return d, len(d.KPIs) > 0, nil
 }
 
 // monthRangeDates mengembalikan tanggal awal & akhir bulan kalender dari now

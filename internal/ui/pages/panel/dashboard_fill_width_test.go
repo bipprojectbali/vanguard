@@ -34,29 +34,30 @@ func TestDashPanelCols_LonePanelFullWidth(t *testing.T) {
 	}
 }
 
-// TestDashboardBody_NoDanglingCells: view dgn 1 domain 3-KPI + 1-panel + chart
-// global tunggal TAK boleh menyisakan grid 4/2-kolom yg setengah kosong —
-// md:grid-cols-2 tak muncul (semua baris parsial diisi penuh).
+// TestDashboardBody_NoDanglingCells: view dgn 1 domain 3-KPI + chart global
+// tunggal TAK boleh menyisakan grid 4/2-kolom yg setengah kosong — strip KPI
+// mengisi baris (3 KPI → 3 kolom) & chart global tunggal penuh-lebar
+// (md:grid-cols-2 tak muncul). BL-98: DashDomain kini KPI-only (tanpa Panels).
 func TestDashboardBody_NoDanglingCells(t *testing.T) {
 	out := renderLeads(t, DashboardBody(DashboardView{
 		HealthChart: "{}",
 		Domains: []DashDomain{{
-			Title: "Sales",
+			Title:      "Sales",
+			ReportPath: "/w/test/reports/sales",
 			KPIs: []DashKPI{
 				{Label: "Win Rate", Value: "72%"},
 				{Label: "Deal Tutup", Value: "8"},
 				{Label: "Aktivitas", Value: "45"},
 			},
-			Panels: []DashPanel{{Title: "Pipeline", ChartID: "chart-x", ChartJSON: "{}"}},
 		}},
 	}))
 	// Strip 3-KPI → 3 kolom desktop (mengisi baris penuh).
 	if !strings.Contains(out, "md:grid-cols-3") {
 		t.Errorf("strip 3-KPI harus md:grid-cols-3 (baris penuh):\n%s", out)
 	}
-	// Chart global tunggal + panel domain tunggal → penuh-lebar, tak ada
-	// grid 2-kolom yg separuh kosong.
+	// Chart global tunggal (health) → penuh-lebar; tak ada grid 2-kolom separuh
+	// kosong (domain tak lagi menyumbang panel/chart — BL-98).
 	if strings.Contains(out, "md:grid-cols-2") {
-		t.Errorf("tak boleh ada md:grid-cols-2 saat semua baris chart berisi 1 kartu:\n%s", out)
+		t.Errorf("tak boleh ada md:grid-cols-2 saat satu-satunya chart = health global:\n%s", out)
 	}
 }
