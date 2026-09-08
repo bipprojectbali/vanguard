@@ -30,8 +30,8 @@ func PendingApproval(workspaceName string) g.Node {
 			h.P(h.Class("text-sm text-base-content/70"),
 				g.Text("Akun Anda sedang menunggu persetujuan admin. Anda akan "+
 					"mendapat akses ke "+where+" setelah admin menetapkan peran "+
-					"untuk Anda. Silakan hubungi admin ruang kerja bila belum juga "+
-					"diberi akses.")),
+					"untuk Anda. Silakan hubungi admin bila belum juga diberi "+
+					"akses.")),
 		),
 	)
 }
