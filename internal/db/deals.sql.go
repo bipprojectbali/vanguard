@@ -482,6 +482,29 @@ func (q *Queries) SetDealCreatedSubscription(ctx context.Context, arg SetDealCre
 	return err
 }
 
+const setDealRequestedPlan = `-- name: SetDealRequestedPlan :exec
+UPDATE deals SET
+    plan_requested_id = $1,
+    updated_by        = $2,
+    updated_at        = now()
+WHERE id = $3 AND deleted_at IS NULL
+`
+
+type SetDealRequestedPlanParams struct {
+	PlanRequestedID *int64 `json:"plan_requested_id"`
+	UpdatedBy       *int64 `json:"updated_by"`
+	ID              int64  `json:"id"`
+}
+
+// BL-100 (Fix B): backfill paket deal dari quote yang BARU di-Accept, agar Closed Won
+// bisa membuat langganan (subscriptionFromWonDeal membaca deals.plan_requested_id yang
+// tak pernah diisi jalur UI). Timpa nilai lama (accept terakhir menang). Tak menyentuh
+// baris terhapus.
+func (q *Queries) SetDealRequestedPlan(ctx context.Context, arg SetDealRequestedPlanParams) error {
+	_, err := q.db.Exec(ctx, setDealRequestedPlan, arg.PlanRequestedID, arg.UpdatedBy, arg.ID)
+	return err
+}
+
 const softDeleteDeal = `-- name: SoftDeleteDeal :exec
 UPDATE deals SET deleted_at = now(), updated_by = $1
 WHERE id = $2 AND deleted_at IS NULL

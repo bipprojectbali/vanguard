@@ -176,3 +176,14 @@ LIMIT 1;
 -- CountContactsByAccount.
 SELECT COUNT(*) FROM deals
 WHERE account_id = sqlc.arg(account_id) AND deleted_at IS NULL;
+
+-- name: SetDealRequestedPlan :exec
+-- BL-100 (Fix B): backfill paket deal dari quote yang BARU di-Accept, agar Closed Won
+-- bisa membuat langganan (subscriptionFromWonDeal membaca deals.plan_requested_id yang
+-- tak pernah diisi jalur UI). Timpa nilai lama (accept terakhir menang). Tak menyentuh
+-- baris terhapus.
+UPDATE deals SET
+    plan_requested_id = sqlc.arg(plan_requested_id),
+    updated_by        = sqlc.narg(updated_by),
+    updated_at        = now()
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL;

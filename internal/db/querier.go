@@ -1478,6 +1478,11 @@ type Querier interface {
 	// FK ditutup di migrasi 00012). Dipanggil dalam tx yang SAMA dgn CreateSubscription
 	// agar deal Closed Won selalu menunjuk langganan yang lahir darinya (atomik).
 	SetDealCreatedSubscription(ctx context.Context, arg SetDealCreatedSubscriptionParams) error
+	// BL-100 (Fix B): backfill paket deal dari quote yang BARU di-Accept, agar Closed Won
+	// bisa membuat langganan (subscriptionFromWonDeal membaca deals.plan_requested_id yang
+	// tak pernah diisi jalur UI). Timpa nilai lama (accept terakhir menang). Tak menyentuh
+	// baris terhapus.
+	SetDealRequestedPlan(ctx context.Context, arg SetDealRequestedPlanParams) error
 	// Transisi status (Draft/Published/Archived — CHECK di DB menegakkan domain
 	// nilai, BL-34). Handler yang memutuskan transisi mana yang ditawarkan per
 	// baris (Draft→Published, Published→Draft/Archived, Archived→Draft).

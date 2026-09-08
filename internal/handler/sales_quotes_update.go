@@ -99,6 +99,13 @@ func (h *Handler) QuoteStatus(w http.ResponseWriter, r *http.Request) {
 	h.auditWorkspace(ctx, uid, "quote.status", session.TenantID(ctx), map[string]string{
 		"quote_id": strconv.FormatInt(quoteID, 10), "status": status,
 	})
+
+	// BL-100 (Fix B): quote di-Accept → salin paket ke deal induk agar Closed Won bisa
+	// membuat langganan (subscriptionFromWonDeal baca deals.plan_requested_id yang tak
+	// pernah diisi jalur UI). Fail-soft: kegagalan di-Log, tak menggagalkan Accept.
+	if status == "Accepted" {
+		h.backfillDealPlanFromQuote(ctx, dealID, quoteID, uid)
+	}
 	wsRedirectOK(w, r, quoteSub(dealID, quoteID), "status")
 }
 
