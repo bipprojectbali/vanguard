@@ -11,6 +11,66 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addSubscriptionItem = `-- name: AddSubscriptionItem :one
+
+INSERT INTO subscription_items (
+    subscription_id, tenant_id, plan_id, quantity, unit_price, discount_pct,
+    subtotal, mrr, arr, line_no
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7,
+    $8, $9, $10
+)
+RETURNING id, subscription_id, tenant_id, plan_id, quantity, unit_price, discount_pct, subtotal, mrr, arr, line_no
+`
+
+type AddSubscriptionItemParams struct {
+	SubscriptionID int64          `json:"subscription_id"`
+	TenantID       int64          `json:"tenant_id"`
+	PlanID         *int64         `json:"plan_id"`
+	Quantity       int32          `json:"quantity"`
+	UnitPrice      pgtype.Numeric `json:"unit_price"`
+	DiscountPct    pgtype.Numeric `json:"discount_pct"`
+	Subtotal       pgtype.Numeric `json:"subtotal"`
+	Mrr            pgtype.Numeric `json:"mrr"`
+	Arr            pgtype.Numeric `json:"arr"`
+	LineNo         *int16         `json:"line_no"`
+}
+
+// ── subscription_items — baris langganan (BL-88 PR2a; hard-delete, mirror quote_items) ──
+// Tambah baris item langganan. tenant_id eksplisit (RLS WITH CHECK). unit_price &
+// subtotal = SNAPSHOT komersial disalin dari quote_items saat Closed Won; mrr/arr
+// per-item diturunkan app (subtotal/bulan-termin). Beku sesudahnya.
+func (q *Queries) AddSubscriptionItem(ctx context.Context, arg AddSubscriptionItemParams) (SubscriptionItem, error) {
+	row := q.db.QueryRow(ctx, addSubscriptionItem,
+		arg.SubscriptionID,
+		arg.TenantID,
+		arg.PlanID,
+		arg.Quantity,
+		arg.UnitPrice,
+		arg.DiscountPct,
+		arg.Subtotal,
+		arg.Mrr,
+		arg.Arr,
+		arg.LineNo,
+	)
+	var i SubscriptionItem
+	err := row.Scan(
+		&i.ID,
+		&i.SubscriptionID,
+		&i.TenantID,
+		&i.PlanID,
+		&i.Quantity,
+		&i.UnitPrice,
+		&i.DiscountPct,
+		&i.Subtotal,
+		&i.Mrr,
+		&i.Arr,
+		&i.LineNo,
+	)
+	return i, err
+}
+
 const approveRenewal = `-- name: ApproveRenewal :one
 UPDATE subscriptions SET
     status          = 'Active',
@@ -1030,6 +1090,46 @@ func (q *Queries) ListRenewals(ctx context.Context, arg ListRenewalsParams) ([]L
 			&i.ApprovedAt,
 			&i.VillageName,
 			&i.PlanName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubscriptionItems = `-- name: ListSubscriptionItems :many
+SELECT id, subscription_id, tenant_id, plan_id, quantity, unit_price, discount_pct, subtotal, mrr, arr, line_no FROM subscription_items
+WHERE subscription_id = $1
+ORDER BY line_no ASC NULLS LAST, id ASC
+`
+
+// Baris item satu langganan, urut tampil (line_no lalu id). Menopang tabel item di
+// detail langganan & agregasi per-produk. Bounded per-langganan → tanpa keyset.
+func (q *Queries) ListSubscriptionItems(ctx context.Context, subscriptionID int64) ([]SubscriptionItem, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionItems, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SubscriptionItem{}
+	for rows.Next() {
+		var i SubscriptionItem
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubscriptionID,
+			&i.TenantID,
+			&i.PlanID,
+			&i.Quantity,
+			&i.UnitPrice,
+			&i.DiscountPct,
+			&i.Subtotal,
+			&i.Mrr,
+			&i.Arr,
+			&i.LineNo,
 		); err != nil {
 			return nil, err
 		}

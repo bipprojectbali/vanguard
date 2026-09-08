@@ -1,8 +1,10 @@
 # 0011 — Quote otoritatif: nilai & termin langganan bersumber dari quote Accepted
 
-Status: **Diterima** (2026-09-09) — dikerjakan **dua fase**. PR1 ("quote
-otoritatif") diimplementasikan sesi ini; PR2 ("langganan multi-baris") didesain
-di sini tapi DITUNDA ke sesi terpisah. Men-supersede jalur nilai/termin di
+Status: **Diterima** (2026-09-09) — dikerjakan **bertahap**. PR1 ("quote
+otoritatif") SELESAI; PR2 ("langganan multi-baris") dipecah lagi jadi **PR2a**
+(fondasi `subscription_items` + tulis-ganda, `plan_id` tetap NOT NULL — SELESAI
+9 Sep) dan **PR2b** (`plan_id` nullable + flip laporan + retire single-plan —
+DITUNDA ke sesi terpisah). Men-supersede jalur nilai/termin di
 [0004 §BL-21](0004-workspace-di-path-url.md)? tidak — melengkapi alur Closed Won
 (`sales_deals_won_subscription.go`) yang lahir di BL-21.
 
@@ -99,25 +101,39 @@ diganti — tanpa quote Accepted → `quote_required`; `months` dari
 `deal.Amount` (= grand_total hasil Accept); `mrr = deal.Amount / months`. Plan
 MASIH dari `deal.PlanRequestedID` (single-plan) — dipertahankan sengaja.
 
-**PR2 (DITUNDA — langganan multi-baris):** poin 6. Fork desain yang sudah
-diputuskan user:
+**PR2a (SELESAI 9 Sep — fondasi + tulis-ganda):** poin 6 sebagian. Migrasi
+`00042_crm_subscription_items.sql`:
 
 - **Tabel `subscription_items`** (mirror `quote_items`): `subscription_id`,
   `tenant_id` (RLS langsung, ENABLE+FORCE pola verbatim 00010/00012), `plan_id`,
-  `quantity`, `unit_price`/`subtotal` snapshot, `mrr`/`arr` per-item, `line_no`.
+  `quantity`, `unit_price`/`subtotal` snapshot, `mrr`/`arr` per-item, `line_no`;
+  GRANT `app_rw`, index `(subscription_id, line_no)`.
+- **Backfill idempotent** (`WHERE NOT EXISTS`): 1 item per langganan LAMA →
+  agregasi via item bisa diandalkan penuh di PR2b.
+- **Alur Won**: setelah `CreateSubscription`, salin `quote_items`→
+  `subscription_items` (MRR/ARR per-item `subtotal/bulan`); **fail-soft** (item
+  gagal tak menggagalkan Won — parent sudah lahir).
+- **`subscriptions.plan_id` MASIH `NOT NULL` & terisi (TULIS GANDA)** → laporan
+  & 8 INNER JOIN `plans` tak berubah, `make check` hijau. Gerbang Won `plan_required`
+  (single-plan) DIPERTAHANKAN.
+- Queries `AddSubscriptionItem`/`ListSubscriptionItems`; tes Won-buat-item +
+  backfill idempotent.
+
+**PR2b (DITUNDA — enable multi-plan):** sisa poin 6. Baru di sini multi-plan
+benar-benar aktif:
+
 - **`subscriptions.plan_id` → NULLABLE**; identitas paket SEPENUHNYA di items
   (TANPA `primary_plan_id`).
 - **Invarian 1-Active → pindah ke `subscription_items`**: unique partial 1 item
   Active per (tenant, account, plan) via join status parent — mengganti
   `idx_subs_one_active` + `HasActiveSubscriptionForPlan`.
-- **Alur Won**: buat parent + items dari `quote_items`; MRR berjenjang (parent
-  `grand_total/bulan`, per-item `subtotal/bulan` → jumlah = parent). Gerbang Won
-  jadi "punya quote Accepted dgn ≥1 item paket" (menutup akar BL-100).
+- **Alur Won**: gerbang jadi "punya quote Accepted dgn ≥1 item paket" (menutup
+  akar BL-100); quote multi-plan → parent `plan_id` NULL + N item.
 - **Renewal**: kloning `subscription_items` dari `previous_subscription_id` ke
   baris baru.
 - **Laporan** (`reports_subscriptions.sql` + ~26 ref query JOIN plans): agregasi
-  per-produk via `subscription_items`; perbaiki INNER JOIN `plans` yang kini
-  bisa NULL.
+  per-produk via `subscription_items`; INNER JOIN `plans` → LEFT JOIN (plan bisa
+  NULL).
 - **Retire**: `plan_requested_id` (biarkan kolom, usang),
   `backfillDealPlanFromQuote`, `singlePlanID`.
 

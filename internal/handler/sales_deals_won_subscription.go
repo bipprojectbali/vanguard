@@ -162,5 +162,35 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 		wsRedirect(w, r, "/deals/"+idStr, "failed")
 		return nil, false
 	}
+
+	// BL-88 PR2a: salin baris quote_items → subscription_items (tulis ganda). Snapshot
+	// komersial (unit_price/discount_pct/subtotal) mengikuti item quote; mrr/arr per-item
+	// diturunkan dari subtotal item (bukan grand_total) — Σ item.mrr bisa selisih tipis
+	// dari parent.mrr bila quote punya diskon/pembulatan, item mengikuti subtotalnya.
+	// FAIL-SOFT: parent langganan sudah lahir; gagal buat item TAK menggagalkan Won
+	// (hanya di-log) — backfill/perbaikan menyusul, bukan rollback nilai yang diakui.
+	items, err := h.q(ctx).ListQuoteItems(ctx, quote.ID)
+	if err != nil {
+		h.Log.Error("deals: won sub items list", "sub_id", sub.ID, "quote_id", quote.ID, "err", err)
+		return &sub, true
+	}
+	for _, it := range items {
+		imrr := divNumericInt(it.Subtotal, int64(months))
+		iarr := mulNumericInt(imrr, monthsPerYear)
+		if _, err := h.q(ctx).AddSubscriptionItem(ctx, db.AddSubscriptionItemParams{
+			SubscriptionID: sub.ID,
+			TenantID:       tenantID,
+			PlanID:         it.PlanID,
+			Quantity:       it.Quantity,
+			UnitPrice:      it.UnitPrice,
+			DiscountPct:    it.DiscountPct,
+			Subtotal:       it.Subtotal,
+			Mrr:            imrr,
+			Arr:            iarr,
+			LineNo:         it.LineNo,
+		}); err != nil {
+			h.Log.Error("deals: won sub item add", "sub_id", sub.ID, "err", err)
+		}
+	}
 	return &sub, true
 }

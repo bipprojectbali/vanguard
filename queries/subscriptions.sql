@@ -437,3 +437,27 @@ JOIN plans p ON p.id = s.plan_id
 WHERE s.account_id = sqlc.arg(account_id) AND s.deleted_at IS NULL
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT 1;
+
+
+-- ── subscription_items — baris langganan (BL-88 PR2a; hard-delete, mirror quote_items) ──
+
+-- name: AddSubscriptionItem :one
+-- Tambah baris item langganan. tenant_id eksplisit (RLS WITH CHECK). unit_price &
+-- subtotal = SNAPSHOT komersial disalin dari quote_items saat Closed Won; mrr/arr
+-- per-item diturunkan app (subtotal/bulan-termin). Beku sesudahnya.
+INSERT INTO subscription_items (
+    subscription_id, tenant_id, plan_id, quantity, unit_price, discount_pct,
+    subtotal, mrr, arr, line_no
+) VALUES (
+    sqlc.arg(subscription_id), sqlc.arg(tenant_id), sqlc.narg(plan_id), sqlc.arg(quantity),
+    sqlc.arg(unit_price), sqlc.narg(discount_pct), sqlc.arg(subtotal),
+    sqlc.narg(mrr), sqlc.narg(arr), sqlc.narg(line_no)
+)
+RETURNING *;
+
+-- name: ListSubscriptionItems :many
+-- Baris item satu langganan, urut tampil (line_no lalu id). Menopang tabel item di
+-- detail langganan & agregasi per-produk. Bounded per-langganan → tanpa keyset.
+SELECT * FROM subscription_items
+WHERE subscription_id = sqlc.arg(subscription_id)
+ORDER BY line_no ASC NULLS LAST, id ASC;
