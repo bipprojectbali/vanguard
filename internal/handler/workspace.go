@@ -42,6 +42,16 @@ func canEditWorkspace(ctx context.Context) bool {
 // keduanya membedakan role, bukan resource (0004).
 func (h *Handler) WorkspaceHome(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	// Gerbang onboarding (Opsi A, BL-105): anggota yang masuk ruang kerja TANPA
+	// peran CRM belum boleh memakai apa pun (semua menu fail-closed). Tampilkan
+	// halaman "menunggu approval admin" TANPA sidebar (renderPage, bukan shell) —
+	// tak ada satupun menu CRM yang perlu ditampilkan sampai admin memberi peran.
+	// Pengelola dikecualikan — mereka dapat banner CRMOnboard di bawah untuk
+	// menetapkan peran sendiri.
+	if isPendingMember(ctx) {
+		h.renderPage(w, r, "Menunggu Persetujuan", panel.PendingApproval(session.TenantName(ctx)))
+		return
+	}
 	body := make([]g.Node, 0, 2)
 	// Banner opt-in CRM: pengelola (owner/admin) yang BELUM punya peran CRM
 	// terkunci dari seluruh menu CRM (CanBusiness fail-closed). Tawarkan jalan
