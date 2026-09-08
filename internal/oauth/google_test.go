@@ -1,8 +1,13 @@
 package oauth
 
 import (
+	"net/url"
 	"regexp"
 	"testing"
+
+	"github.com/coreos/go-oidc/v3/oidc"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 func TestNormalizeAvatarURL(t *testing.T) {
@@ -65,5 +70,39 @@ func TestNewVerifier(t *testing.T) {
 	}
 	if v == NewVerifier() {
 		t.Error("dua verifier harus berbeda")
+	}
+}
+
+// TestAuthURL_PromptSelectAccount mengunci perbaikan: URL consent SELALU
+// menyertakan prompt=select_account supaya Google menampilkan pemilih akun
+// alih-alih memilih diam-diam sesi Google tunggal yang masih aktif. Construct
+// Provider langsung dgn oauth2.Config buatan tangan — AuthCodeURL murni, tak
+// butuh discovery jaringan.
+func TestAuthURL_PromptSelectAccount(t *testing.T) {
+	p := &Provider{oauth: &oauth2.Config{
+		ClientID:    "test-client",
+		RedirectURL: "https://app.example/callback",
+		Endpoint:    google.Endpoint,
+		Scopes:      []string{oidc.ScopeOpenID, "email", "profile"},
+	}}
+
+	raw := p.AuthURL("state123", "nonce456", NewVerifier())
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("URL tak valid: %v", err)
+	}
+	if got := u.Query().Get("prompt"); got != "select_account" {
+		t.Fatalf("prompt = %q, mau %q", got, "select_account")
+	}
+	// Proteksi lain harus tetap ada (regresi guard).
+	if u.Query().Get("state") != "state123" {
+		t.Errorf("state hilang: %q", u.Query().Get("state"))
+	}
+	if u.Query().Get("nonce") != "nonce456" {
+		t.Errorf("nonce hilang: %q", u.Query().Get("nonce"))
+	}
+	if u.Query().Get("code_challenge") == "" || u.Query().Get("code_challenge_method") != "S256" {
+		t.Errorf("PKCE S256 hilang: challenge=%q method=%q",
+			u.Query().Get("code_challenge"), u.Query().Get("code_challenge_method"))
 	}
 }
