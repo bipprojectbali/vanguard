@@ -34,14 +34,15 @@ import (
 
 func main() {
 	slug := flag.String("slug", "", "slug workspace tujuan (kosong = workspace primer)")
+	reset := flag.Bool("reset", false, "hapus data demo CRM tenant tujuan SEBELUM isi ulang (aman diulang)")
 	flag.Parse()
 
-	if err := run(*slug); err != nil {
+	if err := run(*slug, *reset); err != nil {
 		log.Fatalf("seeddemo: %v", err)
 	}
 }
 
-func run(slug string) error {
+func run(slug string, reset bool) error {
 	ctx := context.Background()
 	if err := config.LoadDotEnv(".env"); err != nil {
 		return fmt.Errorf("load .env: %w", err)
@@ -65,6 +66,15 @@ func run(slug string) error {
 	tag := time.Now().Format("0102-150405") // pembeda run: MMDD-HHMMSS (test-only)
 	var stats seedStats
 	if err := db.WithTenant(ctx, pool, tenantID, func(q *db.Queries) error {
+		// -reset: hapus data demo lama SATU tx dgn seed baru (atomik — bila seed
+		// gagal, purge ikut rollback, tenant tak tertinggal kosong).
+		if reset {
+			n, err := purgeSeedData(ctx, q, tenantID)
+			if err != nil {
+				return fmt.Errorf("reset: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "seeddemo: -reset membersihkan %d tabel demo lebih dulu\n", n)
+		}
 		s, err := seedInto(ctx, q, tenantID, tag)
 		stats = s
 		return err

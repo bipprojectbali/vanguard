@@ -16,9 +16,11 @@ import (
 // (Trial/Active/Expired/Cancelled/Churned/PendingApproval). "Suspended" SENGAJA
 // TAK di-seed (BL-22): nilai cadangan belum di-wire, tak ada aksi yang
 // menghasilkannya — menyeed-nya cuma memunculkan baris di state mustahil saat QC.
-// Enum DB tetap menerima "Suspended". Fokus dasbor Renewals: ≥10 Active
-// dengan end_date di jendela 30 hari 2026-08-26..2026-09-25, sisanya Active
-// end_date jauh (baseline ARR, sebagian sudah 'Renewed'). idx_subs_one_active
+// Enum DB tetap menerima "Suspended". Fokus dasbor Renewals: ≥10 Active dengan
+// end_date di jendela due RELATIF (0..30 hari sejak hari run — lihat
+// renewalWindowStart/End), sisanya Active end_date jauh (baseline ARR, sebagian
+// sudah 'Renewed'). Jendela relatif (bukan tanggal tetap) supaya seed tetap
+// "due" kapan pun dijalankan. idx_subs_one_active
 // (1 Active per tenant+account+plan) dijaga dgn memberi tiap baris Active
 // account BERBEDA (index desa unik), plan boleh berulang.
 
@@ -37,7 +39,7 @@ func seedSubscriptions(ctx context.Context, q *db.Queries, tenantID int64, tag s
 	seq := 0
 	today := time.Now()
 
-	// ---- Active — jendela due (2026-08-26 s.d. 2026-09-25) ----
+	// ---- Active — jendela due (0..30 hari sejak hari run, relatif) ----
 	for i := 0; i < dueSubsCount; i++ {
 		acc := accounts[seq%len(accounts)]
 		planID := plans[seq%len(plans)]

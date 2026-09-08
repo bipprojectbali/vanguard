@@ -85,9 +85,39 @@ func seedDeals(ctx context.Context, q *db.Queries, tenantID int64, tag string, r
 				return nil, fmt.Errorf("deal #%d: %w", seq, err)
 			}
 			ids = append(ids, deal.ID)
+
+			// Closed Lost WAJIB ber-loss_reason_code (picklist terkunci 00038) —
+			// CreateDealParams tak punya field itu, jadi disetel lewat UpdateDealStage
+			// (stage sama, ia mengisi loss_reason_code + win_loss_reason + closed_date).
+			// Tanpa ini panel Win/Loss-by-code (Sales Report 8.1, BL-44) kosong sebab
+			// GROUP BY loss_reason_code hanya menghitung baris ber-kode.
+			if spec.stage == "Closed Lost" {
+				lr := pick(rng, lossReasonSpecs)
+				if err := q.UpdateDealStage(ctx, db.UpdateDealStageParams{
+					Stage:          spec.stage,
+					WinLossReason:  &lr.reason,
+					LossReasonCode: &lr.code,
+					UpdatedBy:      owner,
+					ID:             deal.ID,
+				}); err != nil {
+					return nil, fmt.Errorf("deal #%d set loss reason: %w", seq, err)
+				}
+			}
 		}
 	}
 	return ids, nil
+}
+
+// lossReasonSpecs = pasangan kode picklist (loss_reason_code, enum 00038) +
+// alasan naratif (win_loss_reason, teks bebas) untuk deal Closed Lost. Kode
+// WAJIB salah satu {Harga,Fitur,Kompetitor,Anggaran,Lainnya}; TestSeedInto
+// mengunci ini.
+var lossReasonSpecs = []struct{ code, reason string }{
+	{"Harga", "Anggaran desa belum mencukupi harga paket."},
+	{"Fitur", "Fitur yang diminta belum tersedia di produk."},
+	{"Kompetitor", "Desa memilih vendor pesaing."},
+	{"Anggaran", "APBDes dialihkan ke prioritas lain tahun ini."},
+	{"Lainnya", "Keputusan ditunda tanpa alasan spesifik."},
 }
 
 // forecastFor mengembalikan kategori forecast yg wajar sesuai stage (kolom
