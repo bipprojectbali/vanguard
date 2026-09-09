@@ -92,6 +92,19 @@ func (h *Handler) CustomerSuccessDetail(w http.ResponseWriter, r *http.Request) 
 	base := wsPath(slugFromRequest(r), "")
 	v := customerSuccessDetailView(ctx, base, account, cs, exists)
 
+	// BL-102: entry point ke daftar onboarding ter-filter desa ini. Gerbang F2
+	// SAMA dgn halaman /impl-tasks & /trainings (objek crm:journey) — tak menambah
+	// sumbu izin; F3 di daftar tujuan menyaring baris.
+	idStr := strconv.FormatInt(accountID, 10)
+	if canViewImplTasks(ctx) {
+		v.CanViewImplTasks = true
+		v.ImplTasksHref = base + "/impl-tasks?account=" + idStr
+	}
+	if canViewTrainings(ctx) {
+		v.CanViewTrainings = true
+		v.TrainingsHref = base + "/trainings?account=" + idStr
+	}
+
 	// BL-108: kartu Penugasan CS dipindah ke halaman ini dari form edit desa.
 	// Gerbang SAMA dengan aksi POST /assign (crm:accounts write & tak read-only)
 	// — bukan sumbu izin baru; keempat role ber-tulis-account juga bisa membuka

@@ -47,6 +47,48 @@ func TestCustomerSuccessDetail_AssignCanAssign(t *testing.T) {
 	}
 }
 
+// TestCustomerSuccessDetail_EntryLinks: BL-102 — tombol entry point ke
+// Implementation Tracker & Training Schedule dirender saat CanViewX=true + Href
+// terisi, mengarah ke daftar ter-filter desa ini (?account={id}). Diuji pada
+// empty-state (Exists=false) untuk menegaskan navigasi tak bergantung baris CS.
+func TestCustomerSuccessDetail_EntryLinks(t *testing.T) {
+	v := CustomerSuccessDetailView{
+		Base: "/w/test", ID: 7, AccountName: "Desa X", Exists: false,
+		CanViewImplTasks: true, ImplTasksHref: "/w/test/impl-tasks?account=7",
+		CanViewTrainings: true, TrainingsHref: "/w/test/trainings?account=7",
+	}
+	body := renderCSDetail(t, v)
+	if !strings.Contains(body, "Implementation Tracker") {
+		t.Error("BL-102: CanViewImplTasks=true harus merender tautan Implementation Tracker")
+	}
+	if !strings.Contains(body, "/w/test/impl-tasks?account=7") {
+		t.Error("BL-102: tautan Implementation Tracker harus ter-filter ?account=7")
+	}
+	if !strings.Contains(body, "Training Schedule") {
+		t.Error("BL-102: CanViewTrainings=true harus merender tautan Training Schedule")
+	}
+	if !strings.Contains(body, "/w/test/trainings?account=7") {
+		t.Error("BL-102: tautan Training Schedule harus ter-filter ?account=7")
+	}
+}
+
+// TestCustomerSuccessDetail_EntryLinksGated: CanViewX=false → tautan onboarding
+// tak dirender (gerbang F2 crm:journey).
+func TestCustomerSuccessDetail_EntryLinksGated(t *testing.T) {
+	v := CustomerSuccessDetailView{
+		Base: "/w/test", ID: 7, AccountName: "Desa X", Exists: true,
+		CanReadHealth:    true,
+		CanViewImplTasks: false, CanViewTrainings: false,
+	}
+	body := renderCSDetail(t, v)
+	if strings.Contains(body, "Implementation Tracker") {
+		t.Error("BL-102: CanViewImplTasks=false harus menyembunyikan tautan Implementation Tracker")
+	}
+	if strings.Contains(body, "Training Schedule") {
+		t.Error("BL-102: CanViewTrainings=false harus menyembunyikan tautan Training Schedule")
+	}
+}
+
 // TestCustomerSuccessDetail_AssignTanpaTulisTersembunyi: CanAssign=false →
 // tombol & modal Penugasan CS TAK dirender (aktor bisa baca CS tapi tak berhak
 // tulis account).

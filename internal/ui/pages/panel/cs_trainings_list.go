@@ -70,17 +70,30 @@ var csTrainingTabs = []csTrainingTabDef{
 
 // CSTrainingsListView = data halaman /trainings.
 type CSTrainingsListView struct {
-	Base       string
-	KPIs       CSTrainingKPIs
-	Items      []CSTrainingRow
-	Tab        string
-	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
-	CanWrite   bool
-	NextCursor string
-	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
-	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
-	Err        string
-	Msg        string
+	Base  string
+	KPIs  CSTrainingKPIs
+	Items []CSTrainingRow
+	Tab   string
+	Query string // ?q= pencarian bebas (BL-6); "" = tak mencari
+	// BL-102: filter per desa dari entry point halaman Customer Success
+	// (?account={id}). Sama semantik dgn CSImplTasksListView (lihat sana).
+	AccountID   int64
+	AccountName string
+	CanWrite    bool
+	NextCursor  string
+	After       string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail       string // BL-7: jejak cursor halaman sebelumnya (?trail=)
+	Err         string
+	Msg         string
+}
+
+// acctParam = nilai ?account= untuk dijahit ulang ke tiap href/field daftar; ""
+// bila tak ada filter.
+func (v CSTrainingsListView) acctParam() string {
+	if v.AccountID <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(v.AccountID, 10)
 }
 
 // CSTrainingsList merender body halaman /trainings. Dipanggil via
@@ -99,11 +112,14 @@ func CSTrainingsList(v CSTrainingsListView) g.Node {
 				g.Text("+ Jadwalkan Training"),
 			)),
 		),
-		csTrainingKPICards(v.KPIs, v.Base),
+		csTrainingKPICards(v.KPIs, v.Base, v.acctParam()),
 		tabSearchRow(csTrainingTabsNav(v),
 			searchBoxInline(v.Base+"/trainings", v.Query,
 				"Cari training — topik atau desa…", "Cari training",
-				hiddenField{"tab", v.Tab})),
+				hiddenField{"tab", v.Tab}, hiddenField{"account", v.acctParam()})),
+	}
+	if v.AccountID > 0 {
+		body = append(body, csTrainingAccountChip(v))
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "cs-trainings-err", g.Text(v.Err)))
@@ -121,14 +137,33 @@ func CSTrainingsList(v CSTrainingsListView) g.Node {
 }
 
 // csTrainingKPICards = 5 kartu metrik atas halaman (mobile: 2 kolom, md: 5 kolom).
-func csTrainingKPICards(k CSTrainingKPIs, base string) g.Node {
+// acct (BL-102) dijahit ke tiap href agar klik KPI mempertahankan filter desa.
+func csTrainingKPICards(k CSTrainingKPIs, base, acct string) g.Node {
+	path := base + "/trainings"
 	return h.Div(
 		h.Class("grid grid-cols-2 md:grid-cols-5 gap-3 min-w-0"),
-		csTrainingKPICard("Total Training", strconv.Itoa(k.Total), base+"/trainings", ""),
-		csTrainingKPICard("Scheduled", strconv.Itoa(k.Scheduled), base+"/trainings?tab=scheduled", "text-info"),
-		csTrainingKPICard("Completed", strconv.Itoa(k.Completed), base+"/trainings?tab=completed", "text-success"),
-		csTrainingKPICard("Rescheduled", strconv.Itoa(k.Rescheduled), base+"/trainings?tab=rescheduled", "text-warning"),
-		csTrainingKPICard("Cancelled", strconv.Itoa(k.Cancelled), base+"/trainings?tab=cancelled", "text-error"),
+		csTrainingKPICard("Total Training", strconv.Itoa(k.Total), panelListHref(path, [2]string{"account", acct}), ""),
+		csTrainingKPICard("Scheduled", strconv.Itoa(k.Scheduled), panelListHref(path, [2]string{"tab", "scheduled"}, [2]string{"account", acct}), "text-info"),
+		csTrainingKPICard("Completed", strconv.Itoa(k.Completed), panelListHref(path, [2]string{"tab", "completed"}, [2]string{"account", acct}), "text-success"),
+		csTrainingKPICard("Rescheduled", strconv.Itoa(k.Rescheduled), panelListHref(path, [2]string{"tab", "rescheduled"}, [2]string{"account", acct}), "text-warning"),
+		csTrainingKPICard("Cancelled", strconv.Itoa(k.Cancelled), panelListHref(path, [2]string{"tab", "cancelled"}, [2]string{"account", acct}), "text-error"),
+	)
+}
+
+// csTrainingAccountChip = chip konteks filter desa + "Lihat semua" (buang
+// ?account=, pertahankan tab & q). Nama kosong (di luar akses F3) → label netral.
+func csTrainingAccountChip(v CSTrainingsListView) g.Node {
+	label := "Difilter per desa"
+	if v.AccountName != "" {
+		label = "Desa: " + v.AccountName
+	}
+	seeAll := withQuery(v.Base+"/trainings", v.Query, hiddenField{"tab", v.Tab})
+	return h.Div(
+		h.Class("flex flex-wrap items-center gap-2 min-w-0"),
+		h.Span(h.Class("badge badge-neutral badge-lg max-w-full"),
+			h.Span(h.Class("truncate"), g.Text(label))),
+		h.A(h.Href(seeAll), h.Class("link link-hover text-sm inline-flex items-center min-h-11"),
+			g.Text("Lihat semua")),
 	)
 }
 
@@ -151,8 +186,9 @@ func csTrainingKPICard(label, value, href, colorCls string) g.Node {
 // csTrainingTabsNav = tab sebagai LINK <a> berparam (navigasi bookmarkable).
 func csTrainingTabsNav(v CSTrainingsListView) g.Node {
 	tabs := make([]g.Node, 0, len(csTrainingTabs))
+	acct := v.acctParam()
 	for _, t := range csTrainingTabs {
-		href := withQuery(v.Base+"/trainings", v.Query, hiddenField{"tab", t.key})
+		href := withQuery(v.Base+"/trainings", v.Query, hiddenField{"tab", t.key}, hiddenField{"account", acct})
 		cls := "tab"
 		if t.key == v.Tab {
 			cls += " tab-active font-medium"
@@ -163,8 +199,9 @@ func csTrainingTabsNav(v CSTrainingsListView) g.Node {
 }
 
 func emptyCSTrainings(v CSTrainingsListView) g.Node {
+	acct := v.acctParam()
 	if v.Query != "" {
-		reset := withQuery(v.Base+"/trainings", "", hiddenField{"tab", v.Tab})
+		reset := withQuery(v.Base+"/trainings", "", hiddenField{"tab", v.Tab}, hiddenField{"account", acct})
 		return h.Div(
 			h.Class("card bg-base-100 border border-base-300"),
 			h.Div(h.Class("card-body items-start"),
@@ -176,12 +213,13 @@ func emptyCSTrainings(v CSTrainingsListView) g.Node {
 		)
 	}
 	if v.NextCursor != "" {
+		back := withQuery(v.Base+"/trainings", v.Query, hiddenField{"tab", v.Tab}, hiddenField{"account", acct})
 		return h.Div(
 			h.Class("card bg-base-100 border border-base-300"),
 			h.Div(h.Class("card-body items-start"),
 				h.P(h.Class("text-base-content/70"),
 					g.Text("Tidak ada training pada tampilan ini.")),
-				h.A(h.Href(v.Base+"/trainings"), h.Class("btn btn-ghost btn-sm min-h-11"),
+				h.A(h.Href(back), h.Class("btn btn-ghost btn-sm min-h-11"),
 					g.Text("« Kembali ke awal")),
 			),
 		)
@@ -263,6 +301,6 @@ func csTrainingTableRow(base string, r CSTrainingRow, canWrite bool) g.Node {
 // tetap submit langsung — hanya kirim status; query COALESCE menjaga field
 
 func csTrainingsPager(v CSTrainingsListView) g.Node {
-	base := panelListHref(v.Base+"/trainings", [2]string{"tab", v.Tab}, [2]string{"q", v.Query})
+	base := panelListHref(v.Base+"/trainings", [2]string{"tab", v.Tab}, [2]string{"q", v.Query}, [2]string{"account", v.acctParam()})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

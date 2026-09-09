@@ -67,16 +67,32 @@ var csImplTaskTabs = []csImplTaskTabDef{
 
 // CSImplTasksListView = data halaman /impl-tasks.
 type CSImplTasksListView struct {
-	Base       string
-	KPIs       CSImplTaskKPIs
-	Items      []CSImplTaskRow
-	Tab        string
-	CanWrite   bool
-	NextCursor string
-	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
-	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
-	Err        string
-	Msg        string
+	Base  string
+	KPIs  CSImplTaskKPIs
+	Items []CSImplTaskRow
+	Tab   string
+	// BL-102: filter per desa dari entry point halaman Customer Success
+	// (?account={id}). AccountID>0 → daftar & KPI disaring ke satu desa; chip
+	// konteks + "Lihat semua" dirender. AccountName kosong walau ID>0 = desa di
+	// luar akses F3 aktor (nama sengaja tak bocor; kueri fail-closed nol baris).
+	AccountID   int64
+	AccountName string
+	CanWrite    bool
+	NextCursor  string
+	After       string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
+	Trail       string // BL-7: jejak cursor halaman sebelumnya (?trail=)
+	Err         string
+	Msg         string
+}
+
+// acctParam = nilai ?account= untuk dijahit ulang ke tiap href daftar (KPI, tab,
+// pager, empty-state) supaya konteks desa bertahan lintas navigasi; "" bila tak
+// ada filter.
+func (v CSImplTasksListView) acctParam() string {
+	if v.AccountID <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(v.AccountID, 10)
 }
 
 // CSImplTasksList merender body halaman /impl-tasks. Dipanggil via
@@ -95,8 +111,11 @@ func CSImplTasksList(v CSImplTasksListView) g.Node {
 				g.Text("+ Task Baru"),
 			)),
 		),
-		csImplTaskKPICards(v.KPIs, v.Base),
+		csImplTaskKPICards(v.KPIs, v.Base, v.acctParam()),
 		csImplTaskTabsNav(v),
+	}
+	if v.AccountID > 0 {
+		body = append(body, csImplTaskAccountChip(v))
 	}
 	if v.Err != "" {
 		body = append(body, ui.Alert(ui.VariantDestructive, "cs-impl-tasks-err", g.Text(v.Err)))
@@ -114,14 +133,34 @@ func CSImplTasksList(v CSImplTasksListView) g.Node {
 }
 
 // csImplTaskKPICards = 5 kartu metrik atas halaman (mobile: 2 kolom, md: 5 kolom).
-func csImplTaskKPICards(k CSImplTaskKPIs, base string) g.Node {
+// acct (BL-102) dijahit ke tiap href agar klik KPI mempertahankan filter desa.
+func csImplTaskKPICards(k CSImplTaskKPIs, base, acct string) g.Node {
+	path := base + "/impl-tasks"
 	return h.Div(
 		h.Class("grid grid-cols-2 md:grid-cols-5 gap-3 min-w-0"),
-		csImplTaskKPICard("Total Task", strconv.Itoa(k.Total), base+"/impl-tasks", ""),
-		csImplTaskKPICard("To Do", strconv.Itoa(k.ToDo), base+"/impl-tasks?tab=to_do", ""),
-		csImplTaskKPICard("In Progress", strconv.Itoa(k.InProgress), base+"/impl-tasks?tab=in_progress", "text-info"),
-		csImplTaskKPICard("Done", strconv.Itoa(k.Done), base+"/impl-tasks?tab=done", "text-success"),
-		csImplTaskKPICard("Blocked", strconv.Itoa(k.Blocked), base+"/impl-tasks?tab=blocked", "text-error"),
+		csImplTaskKPICard("Total Task", strconv.Itoa(k.Total), panelListHref(path, [2]string{"account", acct}), ""),
+		csImplTaskKPICard("To Do", strconv.Itoa(k.ToDo), panelListHref(path, [2]string{"tab", "to_do"}, [2]string{"account", acct}), ""),
+		csImplTaskKPICard("In Progress", strconv.Itoa(k.InProgress), panelListHref(path, [2]string{"tab", "in_progress"}, [2]string{"account", acct}), "text-info"),
+		csImplTaskKPICard("Done", strconv.Itoa(k.Done), panelListHref(path, [2]string{"tab", "done"}, [2]string{"account", acct}), "text-success"),
+		csImplTaskKPICard("Blocked", strconv.Itoa(k.Blocked), panelListHref(path, [2]string{"tab", "blocked"}, [2]string{"account", acct}), "text-error"),
+	)
+}
+
+// csImplTaskAccountChip = chip konteks "sedang menyaring desa X" + "Lihat semua"
+// (buang ?account=, pertahankan tab). AccountName kosong (desa di luar akses F3)
+// → label netral tanpa nama, tak membocorkan identitas desa.
+func csImplTaskAccountChip(v CSImplTasksListView) g.Node {
+	label := "Difilter per desa"
+	if v.AccountName != "" {
+		label = "Desa: " + v.AccountName
+	}
+	seeAll := panelListHref(v.Base+"/impl-tasks", [2]string{"tab", v.Tab})
+	return h.Div(
+		h.Class("flex flex-wrap items-center gap-2 min-w-0"),
+		h.Span(h.Class("badge badge-neutral badge-lg max-w-full"),
+			h.Span(h.Class("truncate"), g.Text(label))),
+		h.A(h.Href(seeAll), h.Class("link link-hover text-sm inline-flex items-center min-h-11"),
+			g.Text("Lihat semua")),
 	)
 }
 
@@ -144,11 +183,9 @@ func csImplTaskKPICard(label, value, href, colorCls string) g.Node {
 // csImplTaskTabsNav = tab sebagai LINK <a> berparam (navigasi bookmarkable).
 func csImplTaskTabsNav(v CSImplTasksListView) g.Node {
 	tabs := make([]g.Node, 0, len(csImplTaskTabs))
+	acct := v.acctParam()
 	for _, t := range csImplTaskTabs {
-		href := v.Base + "/impl-tasks"
-		if t.key != "" {
-			href += "?tab=" + t.key
-		}
+		href := panelListHref(v.Base+"/impl-tasks", [2]string{"tab", t.key}, [2]string{"account", acct})
 		cls := "tab"
 		if t.key == v.Tab {
 			cls += " tab-active font-medium"
@@ -160,12 +197,13 @@ func csImplTaskTabsNav(v CSImplTasksListView) g.Node {
 
 func emptyCSImplTasks(v CSImplTasksListView) g.Node {
 	if v.NextCursor != "" {
+		back := panelListHref(v.Base+"/impl-tasks", [2]string{"tab", v.Tab}, [2]string{"account", v.acctParam()})
 		return h.Div(
 			h.Class("card bg-base-100 border border-base-300"),
 			h.Div(h.Class("card-body items-start"),
 				h.P(h.Class("text-base-content/70"),
 					g.Text("Tidak ada task pada tampilan ini.")),
-				h.A(h.Href(v.Base+"/impl-tasks"), h.Class("btn btn-ghost btn-sm min-h-11"),
+				h.A(h.Href(back), h.Class("btn btn-ghost btn-sm min-h-11"),
 					g.Text("« Kembali ke awal")),
 			),
 		)
@@ -261,6 +299,6 @@ func csImplTaskActionBtn(base, id, targetStatus, label, extraCls string) g.Node 
 }
 
 func csImplTasksPager(v CSImplTasksListView) g.Node {
-	base := panelListHref(v.Base+"/impl-tasks", [2]string{"tab", v.Tab})
+	base := panelListHref(v.Base+"/impl-tasks", [2]string{"tab", v.Tab}, [2]string{"account", v.acctParam()})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

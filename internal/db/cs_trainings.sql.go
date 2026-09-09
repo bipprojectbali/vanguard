@@ -27,13 +27,16 @@ WHERE (
         OR a.assigned_csm = $3
         OR a.backup_csm = $3
     ))
-)
+  )
+  AND (NOT $4::boolean OR tr.account_id = $5::bigint)
 `
 
 type CountCSTrainingKPIsParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll   bool   `json:"scope_all"`
+	IsOwn      bool   `json:"is_own"`
+	Uid        *int64 `json:"uid"`
+	UseAccount bool   `json:"use_account"`
+	AccountID  int64  `json:"account_id"`
 }
 
 type CountCSTrainingKPIsRow struct {
@@ -47,7 +50,13 @@ type CountCSTrainingKPIsRow struct {
 // Agregat KPI header halaman /trainings. Cakupan scope sama persis ListCSTrainings.
 // uid dioper walau scope_all=true (diabaikan dalam kasus itu).
 func (q *Queries) CountCSTrainingKPIs(ctx context.Context, arg CountCSTrainingKPIsParams) (CountCSTrainingKPIsRow, error) {
-	row := q.db.QueryRow(ctx, countCSTrainingKPIs, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	row := q.db.QueryRow(ctx, countCSTrainingKPIs,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.UseAccount,
+		arg.AccountID,
+	)
 	var i CountCSTrainingKPIsRow
 	err := row.Scan(
 		&i.TotalCount,
@@ -204,8 +213,9 @@ WHERE (tr.training_date, tr.id) < ($1::timestamptz, $2::bigint)
   AND ($7::text = ''
        OR tr.training_topic ILIKE '%' || $7 || '%'
        OR a.village_name ILIKE '%' || $7 || '%')
+  AND (NOT $8::boolean OR tr.account_id = $9::bigint)
 ORDER BY tr.training_date DESC, tr.id DESC
-LIMIT $8
+LIMIT $10
 `
 
 type ListCSTrainingsParams struct {
@@ -216,6 +226,8 @@ type ListCSTrainingsParams struct {
 	Uid          *int64             `json:"uid"`
 	FilterStatus interface{}        `json:"filter_status"`
 	Search       string             `json:"search"`
+	UseAccount   bool               `json:"use_account"`
+	AccountID    int64              `json:"account_id"`
 	PageSize     int32              `json:"page_size"`
 }
 
@@ -255,6 +267,8 @@ func (q *Queries) ListCSTrainings(ctx context.Context, arg ListCSTrainingsParams
 		arg.Uid,
 		arg.FilterStatus,
 		arg.Search,
+		arg.UseAccount,
+		arg.AccountID,
 		arg.PageSize,
 	)
 	if err != nil {

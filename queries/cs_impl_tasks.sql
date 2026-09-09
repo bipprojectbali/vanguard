@@ -75,6 +75,7 @@ WHERE (t.created_at, t.id) < (sqlc.arg(cursor_at)::timestamptz, sqlc.arg(cursor_
       ))
   )
   AND (sqlc.arg(filter_status) = '' OR t.task_status = sqlc.arg(filter_status))
+  AND (NOT sqlc.arg(use_account)::boolean OR t.account_id = sqlc.arg(account_id)::bigint)
 ORDER BY t.created_at DESC, t.id DESC
 LIMIT sqlc.arg(page_size);
 
@@ -96,4 +97,5 @@ WHERE (
         OR a.assigned_csm = sqlc.arg(uid)
         OR a.backup_csm = sqlc.arg(uid)
     ))
-);
+  )
+  AND (NOT sqlc.arg(use_account)::boolean OR t.account_id = sqlc.arg(account_id)::bigint);

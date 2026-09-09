@@ -83,6 +83,7 @@ WHERE (tr.training_date, tr.id) < (sqlc.arg(cursor_at)::timestamptz, sqlc.arg(cu
   AND (sqlc.arg(search)::text = ''
        OR tr.training_topic ILIKE '%' || sqlc.arg(search) || '%'
        OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+  AND (NOT sqlc.arg(use_account)::boolean OR tr.account_id = sqlc.arg(account_id)::bigint)
 ORDER BY tr.training_date DESC, tr.id DESC
 LIMIT sqlc.arg(page_size);
 
@@ -104,4 +105,5 @@ WHERE (
         OR a.assigned_csm = sqlc.arg(uid)
         OR a.backup_csm = sqlc.arg(uid)
     ))
-);
+  )
+  AND (NOT sqlc.arg(use_account)::boolean OR tr.account_id = sqlc.arg(account_id)::bigint);
