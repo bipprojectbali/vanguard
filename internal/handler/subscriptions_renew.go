@@ -79,7 +79,7 @@ func (h *Handler) SubscriptionRenew(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) renewUpsell(w http.ResponseWriter, r *http.Request, old db.Subscription, code string, newMRR, newARR pgtype.Numeric, uid, tenantID int64, idStr string) {
 	ctx := r.Context()
 	sub, err := h.q(ctx).CreateSubscription(ctx,
-		renewParams(old, code, uid, newMRR, newARR, "PendingApproval", optTrim("Pending"), "Upsell", "In Progress"))
+		renewParams(old, code, uid, newMRR, newARR, "PendingApproval", optTrim("Pending"), "Upsell", "In Progress", todayInAppTZ()))
 	if err != nil {
 		h.Log.Error("subscriptions: renew upsell", "previous_id", old.ID, "err", err)
 		wsRedirect(w, r, "/subscriptions/"+idStr, "failed")
@@ -109,7 +109,7 @@ func (h *Handler) renewStraight(w http.ResponseWriter, r *http.Request, old db.S
 		return
 	}
 	sub, err := h.q(ctx).CreateSubscription(ctx,
-		renewParams(old, code, uid, newMRR, newARR, "Active", nil, "Manual", "Renewed"))
+		renewParams(old, code, uid, newMRR, newARR, "Active", nil, "Manual", "Renewed", todayInAppTZ()))
 	if err != nil {
 		h.Log.Error("subscriptions: renew create", "previous_id", old.ID, "err", err)
 		wsRedirect(w, r, "/subscriptions/"+idStr, "failed")

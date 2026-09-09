@@ -126,6 +126,13 @@ func SubDetail(v SubDetailView) g.Node {
 		subItemsCard(v),
 		subActionCard(v),
 		subRenewalChainCard(v),
+		// Pengelompokan ribuan + saring non-digit utk input "MRR baru" (data-numgroup
+		// di subRenewForm): reformat() numgroup.js membuang non-digit pada TIAP input
+		// (bukan sekadar saat submit) — huruf mustahil bertahan di field. Dimuat HANYA
+		// saat form perpanjang tampil (kondisi sama subActionCard). Backend
+		// cleanThousands tetap penjaga bila JS mati.
+		ui.When(v.CanRenew && v.Status == "Active",
+			h.Script(h.Src("/static/numgroup.js"), h.Defer())),
 	)
 }
 

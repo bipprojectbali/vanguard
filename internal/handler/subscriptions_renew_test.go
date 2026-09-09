@@ -180,6 +180,64 @@ func TestSubscriptionRenew_Upsell(t *testing.T) {
 	}
 }
 
+// --- renew: pengisian periode (BL-126) -------------------------------------
+
+// TestSubscriptionRenew_FillsDates: renewal (straight & upsell) WAJIB mengisi
+// start_date/end_date — dulu kosong sehingga detail langganan hasil perpanjangan
+// menampilkan Mulai/Berakhir kosong (BL-126). Periode = hari ini + termin lama;
+// seedSubscription tak set contract_term_months → fallback 12 bulan.
+func TestSubscriptionRenew_FillsDates(t *testing.T) {
+	env, uid := setupAccounts(t)
+	planID := env.seedPlan(t, "Paket D", "PLAN-D", "1000000")
+	acc := env.seedAccount(t, "Desa D", &uid, nil, nil)
+
+	assertPeriod := func(t *testing.T, s db.Subscription, months int) {
+		t.Helper()
+		if !s.StartDate.Valid {
+			t.Fatal("start_date renewal kosong (BL-126: wajib terisi)")
+		}
+		if !s.EndDate.Valid {
+			t.Fatal("end_date renewal kosong (BL-126: wajib terisi)")
+		}
+		want := s.StartDate.Time.AddDate(0, months, 0)
+		if !s.EndDate.Time.Equal(want) {
+			t.Errorf("end_date = %s, want start + %d bln = %s",
+				s.EndDate.Time.Format("2006-01-02"), months, want.Format("2006-01-02"))
+		}
+	}
+
+	// Straight: baris Active baru harus punya periode.
+	oldS := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "500000", "6000000")
+	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(oldS.ID)+"/renew",
+		url.Values{"new_mrr": {""}}, itoa(oldS.ID))
+	rec := env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionRenew)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("straight status = %d, want 303\n%s", rec.Code, rec.Body.String())
+	}
+	fresh, err := env.q.GetSubscription(t.Context(), redirectSubID(t, rec.Header().Get("Location")))
+	if err != nil {
+		t.Fatalf("get straight new: %v", err)
+	}
+	assertPeriod(t, fresh, monthsPerYear)
+
+	// Upsell: baris PendingApproval juga harus punya periode (bertahan lewat approve).
+	// Akun terpisah — hindari bentrok idx_subscription_items_one_active dgn baris
+	// Active hasil renewal straight di atas (satu item aktif per akun+paket).
+	accU := env.seedAccount(t, "Desa DU", &uid, nil, nil)
+	oldU := env.seedSubscription(t, accU.ID, planID, &uid, "Active", "500000", "6000000")
+	req = accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(oldU.ID)+"/renew",
+		url.Values{"new_mrr": {"800000"}}, itoa(oldU.ID))
+	rec = env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionRenew)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("upsell status = %d, want 303\n%s", rec.Code, rec.Body.String())
+	}
+	pend, err := env.q.GetSubscription(t.Context(), redirectSubID(t, rec.Header().Get("Location")))
+	if err != nil {
+		t.Fatalf("get upsell new: %v", err)
+	}
+	assertPeriod(t, pend, monthsPerYear)
+}
+
 // --- approve / reject ------------------------------------------------------
 
 // TestSubscriptionRenewApprove_Activates: Manager menyetujui → baris Pending jadi
