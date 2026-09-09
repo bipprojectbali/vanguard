@@ -8,45 +8,74 @@ import (
 )
 
 // subscriptions_detail_forms.go — kartu aksi & form langganan (approve, renew,
-// churn) beserta pemilih generik. Dipisah dari subscriptions_detail.go agar
-// file induk di bawah ambang tipe View/Component (300). Satu paket panel —
+// activate, churn) beserta pemilih generik. Dipisah dari subscriptions_detail.go
+// agar file induk di bawah ambang tipe View/Component (300). Satu paket panel —
 // tampilan identik.
 
-// subActionCard = kartu aksi langganan (M5-3c): approve/reject (saat menunggu
-// persetujuan), perpanjang, dan churn. Tiap form hanya tampil bila handler
-// mengizinkan (flag) DAN status memungkinkan. Kosong → tak dirender sama sekali.
-func subActionCard(v SubDetailView) g.Node {
-	var forms []g.Node
-	if v.CanApprove && v.Status == "PendingApproval" {
-		forms = append(forms, subApproveForms(v))
-	}
-	if v.CanRenew && v.Status == "Active" {
-		forms = append(forms, subRenewForm(v))
-	}
-	if v.CanActivate && v.Status == "Trial" {
-		forms = append(forms, subActivateForm(v))
-	}
-	if v.CanChurn && (v.Status == "Active" || v.Status == "Trial") {
-		forms = append(forms, subChurnForm(v))
-	}
-	if len(forms) == 0 {
-		return g.Text("")
-	}
-	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body min-w-0 grid gap-4"),
-			h.H2(h.Class("font-semibold"), g.Text("Tindakan")),
-			g.Group(forms),
-		),
-	)
+// subAction = satu aksi langganan (BL-125): pemicu (tombol) + isi modal. Daftar
+// dirakit sekali di subActions() agar pemicu (di header) & dialog (di body) tak
+// bisa lepas sinkron.
+type subAction struct {
+	id           string
+	triggerLabel string
+	triggerClass string
+	modalTitle   string
+	body         g.Node
 }
 
-// subApproveForms = tombol Setujui/Tolak renewal Upsell (dua form POST terpisah).
-func subApproveForms(v SubDetailView) g.Node {
+// subActions = daftar aksi yang boleh tampil untuk langganan ini. Tiap aksi hanya
+// masuk bila handler mengizinkan (flag) DAN status memungkinkan (view murni-data;
+// status dicek ulang agar tak menawarkan aksi yang pasti ditolak backend).
+func subActions(v SubDetailView) []subAction {
+	var a []subAction
+	if v.CanApprove && v.Status == "PendingApproval" {
+		a = append(a, subAction{"sub-approve", "Tinjau Persetujuan",
+			"btn btn-primary min-h-11", "Persetujuan Renewal", subApproveBody(v)})
+	}
+	if v.CanRenew && v.Status == "Active" {
+		a = append(a, subAction{"sub-renew", "Perpanjang",
+			"btn btn-primary min-h-11", "Perpanjang Langganan", subRenewBody(v)})
+	}
+	if v.CanActivate && v.Status == "Trial" {
+		a = append(a, subAction{"sub-activate", "Aktifkan Langganan",
+			"btn btn-primary min-h-11", "Aktifkan Langganan", subActivateBody(v)})
+	}
+	if v.CanChurn && (v.Status == "Active" || v.Status == "Trial") {
+		a = append(a, subAction{"sub-churn", "Tandai Churn",
+			"btn btn-error btn-outline min-h-11", "Tandai Churn", subChurnBody(v)})
+	}
+	return a
+}
+
+// subActionTriggers = tombol pemicu tiap aksi, untuk dipasang di HEADER (kanan-atas,
+// BL-125) — bukan lagi kartu "Tindakan" sendiri. Kosong bila tak ada aksi.
+func subActionTriggers(v SubDetailView) []g.Node {
+	acts := subActions(v)
+	nodes := make([]g.Node, 0, len(acts))
+	for _, a := range acts {
+		nodes = append(nodes, modalTrigger(a.id, a.triggerLabel, a.triggerClass))
+	}
+	return nodes
+}
+
+// subActionDialogs = modal (checkbox-toggle CSP-safe, modal.go, gotcha #1/#16) tiap
+// aksi; form di dalamnya tetap NATIVE POST → 303. Disisipkan di body halaman (posisi
+// DOM bebas — visibilitas via checkbox tersembunyi, bukan aliran dokumen).
+func subActionDialogs(v SubDetailView) []g.Node {
+	acts := subActions(v)
+	nodes := make([]g.Node, 0, len(acts))
+	for _, a := range acts {
+		nodes = append(nodes, modalDialog(a.id, a.modalTitle, a.body))
+	}
+	return nodes
+}
+
+// subApproveBody = isi modal persetujuan: keputusan Setujui/Tolak renewal Upsell
+// (dua form POST terpisah).
+func subApproveBody(v SubDetailView) g.Node {
 	base := v.Base + "/subscriptions/" + strconv.FormatInt(v.ID, 10)
 	return h.Div(
-		h.Class("grid gap-2"),
+		h.Class("grid gap-3"),
 		h.P(h.Class("text-sm text-base-content/70"),
 			g.Text("Renewal upsell ini menunggu keputusan Anda.")),
 		h.Div(
@@ -59,15 +88,14 @@ func subApproveForms(v SubDetailView) g.Node {
 	)
 }
 
-// subRenewForm = form perpanjang: MRR baru opsional (kosong = sama). MRR baru lebih
-// besar → jalur Upsell (butuh persetujuan) diputuskan backend.
-func subRenewForm(v SubDetailView) g.Node {
+// subRenewBody = isi modal perpanjang: MRR baru opsional (kosong = sama). MRR baru
+// lebih besar → jalur Upsell (butuh persetujuan) diputuskan backend.
+func subRenewBody(v SubDetailView) g.Node {
 	base := v.Base + "/subscriptions/" + strconv.FormatInt(v.ID, 10)
 	return h.FormEl(
 		h.Method("post"), h.Action(base+"/renew"),
-		h.Class("grid gap-2"),
-		h.H3(h.Class("font-medium text-sm"), g.Text("Perpanjang Langganan")),
-		h.Label(h.Class("form-control w-full max-w-xs"),
+		h.Class("grid gap-3"),
+		h.Label(h.Class("form-control w-full"),
 			h.Span(h.Class("label-text text-sm mb-1"),
 				g.Text("MRR baru (kosongkan bila sama)")),
 			h.Input(h.Type("text"), h.Name("new_mrr"),
@@ -82,15 +110,14 @@ func subRenewForm(v SubDetailView) g.Node {
 	)
 }
 
-// subActivateForm = tombol Aktifkan Langganan (Trial → Active, BL-73). Hanya tampil
-// saat status Trial & gate lolos; menutup jalan buntu Trial (tak diakui pendapatan,
-// tak bisa di-renew). Satu tombol POST — tak ada input (transisi status murni).
-func subActivateForm(v SubDetailView) g.Node {
+// subActivateBody = isi modal aktivasi (Trial → Active, BL-73). Satu tombol POST —
+// tak ada input (transisi status murni); menutup jalan buntu Trial (tak diakui
+// pendapatan, tak bisa di-renew).
+func subActivateBody(v SubDetailView) g.Node {
 	base := v.Base + "/subscriptions/" + strconv.FormatInt(v.ID, 10)
 	return h.FormEl(
 		h.Method("post"), h.Action(base+"/activate"),
-		h.Class("grid gap-2"),
-		h.H3(h.Class("font-medium text-sm"), g.Text("Aktifkan Langganan")),
+		h.Class("grid gap-3"),
 		h.P(h.Class("text-sm text-base-content/70"),
 			g.Text("Naikkan langganan Trial ini ke Active agar pendapatan diakui dan langganan bisa diperpanjang.")),
 		h.Div(h.Class("flex flex-wrap gap-2"),
@@ -99,14 +126,13 @@ func subActivateForm(v SubDetailView) g.Node {
 	)
 }
 
-// subChurnForm = form churn: alasan & tipe (dropdown domain), catatan, layak
+// subChurnBody = isi modal churn: alasan & tipe (dropdown domain), catatan, layak
 // win-back. lost_value_mrr dihitung backend (MRR saat ini), bukan input.
-func subChurnForm(v SubDetailView) g.Node {
+func subChurnBody(v SubDetailView) g.Node {
 	base := v.Base + "/subscriptions/" + strconv.FormatInt(v.ID, 10)
 	return h.FormEl(
 		h.Method("post"), h.Action(base+"/churn"),
-		h.Class("grid gap-2 border-t border-base-300 pt-4"),
-		h.H3(h.Class("font-medium text-sm"), g.Text("Tandai Churn")),
+		h.Class("grid gap-3"),
 		h.Div(
 			h.Class("grid gap-2 sm:grid-cols-2"),
 			subSelect("churn_reason", "Alasan churn", v.ChurnReasons),

@@ -3,17 +3,22 @@ package panel
 import (
 	"strings"
 	"testing"
+
+	g "maragu.dev/gomponents"
 )
 
 // subscriptions_activate_test.go — regresi BL-73: tombol "Aktifkan Langganan" di
-// kartu aksi detail langganan. Tampil HANYA saat status Trial & CanActivate; tak
-// pernah tampil di status lain, dan tak muncul tanpa kapabilitas (view murni-data,
-// flag sudah dihitung handler).
+// aksi detail langganan. Tampil HANYA saat status Trial & CanActivate; tak pernah
+// tampil di status lain, dan tak muncul tanpa kapabilitas (view murni-data, flag
+// sudah dihitung handler).
 
+// renderSubAction = pemicu (header) + dialog (body) aksi digabung untuk assert
+// (BL-125: aksi bukan lagi satu kartu, melainkan tombol header + modal).
 func renderSubAction(t *testing.T, v SubDetailView) string {
 	t.Helper()
 	var sb strings.Builder
-	if err := subActionCard(v).Render(&sb); err != nil {
+	nodes := append(subActionTriggers(v), subActionDialogs(v)...)
+	if err := g.Group(nodes).Render(&sb); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	return sb.String()
