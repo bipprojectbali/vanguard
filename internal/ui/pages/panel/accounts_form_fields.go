@@ -118,14 +118,19 @@ func phoneField(val string) g.Node {
 }
 
 // textareaField = teks bebas panjang (deskripsi). Lebar penuh (rentang 2 kolom).
-func textareaField(label, name, val string) g.Node {
+// extra = atribut tambahan opsional pada <textarea> (mis. data.Attr("required",…)
+// utk wajib-kondisional); pemanggil 3-arg lama tak berubah.
+func textareaField(label, name, val string, extra ...g.Node) g.Node {
+	attrs := []g.Node{
+		h.ID("f-" + name), h.Name(name), h.Class("textarea text-base w-full"),
+		h.Rows("3"),
+	}
+	attrs = append(attrs, extra...)
+	attrs = append(attrs, g.Text(val))
 	return h.Div(
 		h.Class("grid gap-1 min-w-0 sm:col-span-2"),
 		labelFor(label, "f-"+name, false),
-		h.Textarea(
-			h.ID("f-"+name), h.Name(name), h.Class("textarea text-base w-full"),
-			h.Rows("3"), g.Text(val),
-		),
+		h.Textarea(attrs...),
 	)
 }
 

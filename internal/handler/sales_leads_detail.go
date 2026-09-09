@@ -89,13 +89,18 @@ func (h *Handler) leadDetailView(ctx context.Context, base string, l db.Lead, na
 		Regency:           regency,
 		District:          district,
 		MobilePhone:       maskPhone(ctx, deref(l.MobilePhone)),
-		Whatsapp:          maskPhone(ctx, deref(l.Whatsapp)),
 		Email:             deref(l.Email),
 		Owner:             ownerName(l.LeadOwner, names),
 		Converted:         l.Converted,
 		ConvertedDealID:   int64PtrStr(l.ConvertedDealID),
 		CanWrite:          canWrite,
 		CanConvert:        canConvert,
+		// BL-119: kartu "Sistem & Audit" (wireframe 4.1) — pembuat/pengubah + waktu.
+		// created_by/updated_by *int64 → nama via peta anggota (sama pola owner).
+		CreatedByName: ownerName(l.CreatedBy, names),
+		CreatedAt:     fmtDateTime(l.CreatedAt),
+		UpdatedByName: ownerName(l.UpdatedBy, names),
+		UpdatedAt:     fmtDateTime(l.UpdatedAt),
 	}
 }
 

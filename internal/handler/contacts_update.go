@@ -78,12 +78,15 @@ func (h *Handler) ContactUpdate(w http.ResponseWriter, r *http.Request) {
 
 	uid := session.UserID(ctx)
 
-	// F4: editor bukan-Sales tak mengirim nomor HP/WhatsApp (field terkunci) —
-	// nilai tersamar TAK boleh menimpa nomor asli. Pertahankan yang tersimpan.
-	mobile, whatsapp := form.MobilePhone, form.WhatsappNumber
+	// F4: editor bukan-Sales tak mengirim nomor HP (field terkunci) — nilai tersamar
+	// TAK boleh menimpa nomor asli. Pertahankan yang tersimpan.
+	// HP & WhatsApp digabung jadi satu field UI (mobile_phone); kolom whatsapp_number
+	// lama tak lagi ada di form → selalu dipertahankan apa adanya (data tak hilang).
+	mobile := form.MobilePhone
 	if !canEditPhone(ctx) {
-		mobile, whatsapp = c.MobilePhone, c.WhatsappNumber
+		mobile = c.MobilePhone
 	}
+	whatsapp := c.WhatsappNumber
 
 	// Set-primary dua langkah: bila dinaikkan jadi utama, kosongkan yang lama dulu
 	// (satu tx). Bila kontak INI sudah utama, ClearAccount... juga mengosongkannya

@@ -26,6 +26,12 @@ func (h *Handler) LeadEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Lead terkonversi = terminal: sunting ditolak (sejajar convert_guard &
+	// UI yang menyembunyikan tombol Sunting). Backend tetap penjaga sesungguhnya.
+	if l.Converted {
+		wsRedirect(w, r, "/leads/"+strconv.FormatInt(l.ID, 10), "lead_locked")
+		return
+	}
 
 	ctx := r.Context()
 	base := wsPath(slugFromRequest(r), "")
@@ -65,6 +71,12 @@ func (h *Handler) LeadUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Lead terkonversi = terminal: simpan sunting ditolak (jaring balapan bila
+	// dikonversi setelah form GET dibuka). Backend penjaga sesungguhnya.
+	if l.Converted {
+		wsRedirect(w, r, "/leads/"+strconv.FormatInt(id, 10), "lead_locked")
+		return
+	}
 
 	form, errCode := parseLeadForm(r.FormValue)
 	if errCode != "" {
@@ -72,16 +84,19 @@ func (h *Handler) LeadUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// F4: nomor HP/WhatsApp dipertahankan (bukan diambil dari form) bila role tak
-	// berhak sunting (!canEditPhone) — form GET (LeadEdit) sudah menyamarkan
-	// field ini (leadFormFields) buat role itu, jadi POST-nya selalu berisi mask.
-	// Tanpa penjagaan ini, save oleh Manager akan menimpa nomor asli dgn literal
+	// F4: nomor HP dipertahankan (bukan diambil dari form) bila role tak berhak
+	// sunting (!canEditPhone) — form GET (LeadEdit) sudah menyamarkan field ini
+	// (leadFormFields) buat role itu, jadi POST-nya selalu berisi mask. Tanpa
+	// penjagaan ini, save oleh Manager akan menimpa nomor asli dgn literal
 	// flsHidden — kebocoran F4 lewat jalur tulis. Diperbaiki audit FLS M9-1
 	// (simetris dgn ActivityUpdate/Notes & AccountUpdate/ContactPhone).
-	mobile, whatsapp := form.MobilePhone, form.Whatsapp
+	// HP & WhatsApp digabung jadi satu field UI (mobile_phone); kolom whatsapp lama
+	// tak lagi ada di form → selalu dipertahankan apa adanya (data tak hilang).
+	mobile := form.MobilePhone
 	if !canEditPhone(ctx) {
-		mobile, whatsapp = l.MobilePhone, l.Whatsapp
+		mobile = l.MobilePhone
 	}
+	whatsapp := l.Whatsapp
 
 	uid := session.UserID(ctx)
 	if _, err := h.q(ctx).UpdateLead(ctx, db.UpdateLeadParams{

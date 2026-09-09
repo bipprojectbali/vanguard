@@ -91,10 +91,7 @@ func TestLeadConvertPage_Admin_PhoneVisibleReadOnly(t *testing.T) {
 	}
 	body := rec.Body.String()
 	if !strings.Contains(body, convPhoneMobile) {
-		t.Errorf("Admin harus MELIHAT nomor asli HP (FLS §5), body:\n%s", body)
-	}
-	if !strings.Contains(body, convPhoneWA) {
-		t.Errorf("Admin harus MELIHAT nomor asli WhatsApp, body:\n%s", body)
+		t.Errorf("Admin harus MELIHAT nomor asli HP/WhatsApp (FLS §5), body:\n%s", body)
 	}
 	if strings.Contains(body, flsHidden) {
 		t.Errorf("Admin TAK boleh melihat mask %q — regresi F4, body:\n%s", flsHidden, body)
@@ -120,7 +117,7 @@ func TestLeadConvertPage_Manager_PhoneMasked(t *testing.T) {
 		t.Fatalf("LeadConvertPage status %d\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if strings.Contains(body, convPhoneMobile) || strings.Contains(body, convPhoneWA) {
+	if strings.Contains(body, convPhoneMobile) {
 		t.Errorf("Manager TAK boleh menerima nomor asli (F4), body:\n%s", body)
 	}
 	if !strings.Contains(body, flsHidden) {

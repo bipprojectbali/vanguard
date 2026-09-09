@@ -90,14 +90,9 @@ func convertPrefill(l db.Lead, phoneVisible bool) panel.ConvertFormFields {
 	if firstName == "" {
 		firstName = l.LeadName // tak ada nama kontak → pakai nama lead sebagai awal.
 	}
-	mobile, whatsapp := deref(l.MobilePhone), deref(l.Whatsapp)
-	if !phoneVisible {
-		if mobile != "" {
-			mobile = flsHidden
-		}
-		if whatsapp != "" {
-			whatsapp = flsHidden
-		}
+	mobile := deref(l.MobilePhone)
+	if !phoneVisible && mobile != "" {
+		mobile = flsHidden
 	}
 	return panel.ConvertFormFields{
 		AccountType: "prospect", // lead yang dikonversi = prospek baru.
@@ -108,9 +103,12 @@ func convertPrefill(l db.Lead, phoneVisible bool) panel.ConvertFormFields {
 		FirstName:   firstName,
 		JobTitle:    deref(l.JobTitle),
 		MobilePhone: mobile,
-		Whatsapp:    whatsapp,
 		Email:       deref(l.Email),
 		DealName:    l.LeadName,
-		Amount:      numericStr(l.EstimatedValue),
+		// moneyRupiahStr (BUKAN numericStr): kolom NUMERIC(15,2) → "5000000.00";
+		// numgroup.js buang SEMUA non-digit (titik desimal ikut) → "500000000"
+		// (100x) saat disimpan. Buang pecahan di sini, konsisten dgn prefill Deal/
+		// Lead (sales_deals_helpers, sales_leads_helpers).
+		Amount: moneyRupiahStr(l.EstimatedValue),
 	}
 }

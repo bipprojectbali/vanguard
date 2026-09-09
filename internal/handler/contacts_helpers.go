@@ -30,18 +30,12 @@ func contactEditRel(accountID, contactID int64) string {
 }
 
 // contactFormFields memetakan Contact → nilai prefill form. F4: editor non-Sales
-// menerima MASK untuk HP & WhatsApp, bukan nomor asli — nilai asli tak pernah
-// mencapai browsernya (view-source pun bersih). Telepon kantor tak disamarkan.
+// menerima MASK untuk HP/WhatsApp, bukan nomor asli — nilai asli tak pernah mencapai
+// browsernya (view-source pun bersih). Telepon kantor tak disamarkan.
 func contactFormFields(ctx context.Context, c db.Contact) panel.ContactFormFields {
-	phoneEditable := canEditPhone(ctx)
-	mobile, whatsapp := deref(c.MobilePhone), deref(c.WhatsappNumber)
-	if !phoneEditable {
-		if mobile != "" {
-			mobile = flsHidden // tersamar; field dikunci di view, tak ikut ter-submit
-		}
-		if whatsapp != "" {
-			whatsapp = flsHidden
-		}
+	mobile := deref(c.MobilePhone)
+	if !canEditPhone(ctx) && mobile != "" {
+		mobile = flsHidden // tersamar; field dikunci di view, tak ikut ter-submit
 	}
 	return panel.ContactFormFields{
 		FirstName:          c.FirstName,
@@ -54,7 +48,6 @@ func contactFormFields(ctx context.Context, c db.Contact) panel.ContactFormField
 		IsTechnicalContact: c.IsTechnicalContact,
 		TermPeriod:         deref(c.TermPeriod),
 		MobilePhone:        mobile,
-		WhatsappNumber:     whatsapp,
 		OfficePhone:        deref(c.OfficePhone),
 		Email:              deref(c.Email),
 		PreferredChannel:   deref(c.PreferredChannel),

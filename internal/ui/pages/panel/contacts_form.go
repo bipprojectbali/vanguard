@@ -30,7 +30,6 @@ type ContactFormFields struct {
 	IsTechnicalContact bool
 	TermPeriod         string
 	MobilePhone        string
-	WhatsappNumber     string
 	OfficePhone        string
 	Email              string
 	PreferredChannel   string
@@ -132,8 +131,9 @@ func ContactForm(v ContactFormView) g.Node {
 			field("Periode Menjabat", "term_period", v.Fields.TermPeriod, false, "text"),
 		),
 		formCard("Kontak",
-			contactPhoneField(v.PhoneEditable, "HP (Pribadi)", "mobile_phone", v.Fields.MobilePhone),
-			contactPhoneField(v.PhoneEditable, "WhatsApp", "whatsapp_number", v.Fields.WhatsappNumber),
+			// HP & WhatsApp digabung jadi satu field (nomor yang sama); kolom
+			// whatsapp_number lama dipertahankan di DB, tak lagi disunting di form.
+			contactPhoneField(v.PhoneEditable, "HP / WhatsApp", "mobile_phone", v.Fields.MobilePhone),
 			field("Telepon Kantor", "office_phone", v.Fields.OfficePhone, false, "tel"),
 			field("Email", "email", v.Fields.Email, false, "email"),
 			enumFieldHinted("Kanal Pilihan", "preferred_channel", v.Fields.PreferredChannel, v.Channels, false, contactChannelLegend),

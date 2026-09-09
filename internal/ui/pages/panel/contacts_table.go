@@ -46,7 +46,7 @@ func contactsTableCard(showVillage bool, rows []g.Node) g.Node {
 		headers = append(headers, h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")))
 	}
 	headers = append(headers,
-		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("WhatsApp")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("HP / WhatsApp")),
 		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Penanda")),
 		h.Th(h.Class("py-2 font-medium"), g.Text("Terakhir")),
 	)
@@ -67,8 +67,8 @@ func contactsTableCard(showVillage bool, rows []g.Node) g.Node {
 }
 
 // contactRow = satu baris kontak. Kolom Nama membawa kategori jabatan sebagai
-// sub-teks (menggantikan kolom Jabatan tersendiri, wireframe M3). WhatsApp SUDAH
-// disamarkan handler (F4). showVillage menyisipkan kolom Desa (daftar global).
+// sub-teks (menggantikan kolom Jabatan tersendiri, wireframe M3). Nomor HP/WhatsApp
+// SUDAH disamarkan handler (F4). showVillage menyisipkan kolom Desa (daftar global).
 func contactRow(accountBase string, c ContactRow, showVillage bool) g.Node {
 	href := accountBase + "/contacts/" + strconv.FormatInt(c.ID, 10)
 	link := func(text, cls string) g.Node {
@@ -88,7 +88,7 @@ func contactRow(accountBase string, c ContactRow, showVillage bool) g.Node {
 		cells = append(cells, link(orDash(c.Village), "py-2 pr-4"))
 	}
 	cells = append(cells,
-		link(orDash(c.Whatsapp), "py-2 pr-4"),
+		link(orDash(c.Phone), "py-2 pr-4"),
 		h.Td(h.Class("py-2 pr-4"), contactBadges(c)),
 		link(orDash(c.LastActivity), "py-2 text-base-content/60"),
 	)

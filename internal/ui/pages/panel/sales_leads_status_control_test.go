@@ -56,6 +56,20 @@ func TestLeadStatusControl_HadirSaatBolehTulis(t *testing.T) {
 	}
 }
 
+// TestLeadStatusControl_AlasanRequiredKondisional: "Alasan Unqualified" wajib
+// (required) HANYA saat Unqualified — di-set via data-attr Datastar (ekspresi
+// sama dgn data-show) agar field tersembunyi tak memblokir submit status lain.
+// Kalimat penjelasan lama ("Ubah status kualifikasi lead…") sudah dihapus.
+func TestLeadStatusControl_AlasanRequiredKondisional(t *testing.T) {
+	out := renderLeads(t, LeadDetail(leadDetailFixture()))
+	if !strings.Contains(out, `data-attr="{required: $leadstatus == &#39;Unqualified&#39;}"`) {
+		t.Errorf("alasan Unqualified harus required KONDISIONAL (data-attr):\n%s", out)
+	}
+	if strings.Contains(out, "Ubah status kualifikasi lead") {
+		t.Errorf("kalimat penjelasan status harus dihapus:\n%s", out)
+	}
+}
+
 // TestLeadStatusControl_SembunyiSaatConverted: lead terkonversi = status terminal
 // 'Converted' → kontrol status TAK dirender (converted tak boleh diputar balik;
 // selaras guard query AND NOT converted).

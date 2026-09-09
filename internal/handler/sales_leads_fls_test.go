@@ -10,12 +10,14 @@ import (
 	"go_starter/internal/db"
 )
 
-// sales_leads_fls_test.go — F4 (field-level) nomor HP/WhatsApp di form sunting
-// Lead: utuh HANYA Sales (canEditPhone), role lain menerima mask & tak bisa
-// menimpa nilai tersimpan dengan mask itu. Diperbaiki audit FLS M9-1 (gap
-// LIVE: Manager punya crm:leads write tapi di luar allow-list canSeeFullPhone,
-// dan LeadEdit sebelumnya mengirim nomor asli mentah ke form). Pola sama
-// dengan accounts_fls_test.go (F4_PhoneMasking / F4_NonSalesTakBisaTimpaPhone).
+// sales_leads_fls_test.go — F4 (field-level) nomor HP/WhatsApp (satu field
+// gabungan mobile_phone) di form sunting Lead: utuh HANYA Sales (canEditPhone),
+// role lain menerima mask & tak bisa menimpa nilai tersimpan dengan mask itu.
+// Diperbaiki audit FLS M9-1 (gap LIVE: Manager punya crm:leads write tapi di
+// luar allow-list canSeeFullPhone, dan LeadEdit sebelumnya mengirim nomor asli
+// mentah ke form). Pola sama dengan accounts_fls_test.go. Kolom whatsapp lama
+// tetap di DB (disalin apa adanya oleh LeadUpdate) tapi TAK lagi dirender/
+// disunting di form — HP & WhatsApp digabung jadi satu field.
 
 // seedLeadWithPhone menaruh satu Lead Qualified dgn nomor HP/WhatsApp — untuk
 // menguji F4 tanpa merangkai create lewat handler.
@@ -75,12 +77,17 @@ func TestLeadEdit_PhoneMasked(t *testing.T) {
 				t.Fatalf("LeadEdit status %d\n%s", rec.Code, rec.Body.String())
 			}
 			body := rec.Body.String()
-			has := strings.Contains(body, mobile) || strings.Contains(body, whatsapp)
-			if c.full && !has {
+			hasMobile := strings.Contains(body, mobile)
+			if c.full && !hasMobile {
 				t.Errorf("sales harus melihat nomor utuh di form")
 			}
-			if !c.full && has {
+			if !c.full && hasMobile {
 				t.Errorf("role %q BOCOR — nomor asli sampai ke browser (F4)", c.role)
+			}
+			// Kolom whatsapp lama tak lagi dirender (field digabung ke HP) → nilainya
+			// tak boleh muncul untuk peran mana pun.
+			if strings.Contains(body, whatsapp) {
+				t.Errorf("role %q: nilai WhatsApp lama tak boleh lagi dirender (field digabung ke HP)", c.role)
 			}
 		})
 	}
@@ -110,7 +117,7 @@ func TestLeadEdit_PhoneFieldsLocked(t *testing.T) {
 				t.Fatalf("LeadEdit status %d\n%s", rec.Code, rec.Body.String())
 			}
 			body := rec.Body.String()
-			hasName := strings.Contains(body, `name="mobile_phone"`) || strings.Contains(body, `name="whatsapp"`)
+			hasName := strings.Contains(body, `name="mobile_phone"`)
 			if c.wantSubmit && !hasName {
 				t.Errorf("sales: field HP/WA harus ber-name (dapat disunting)")
 			}
@@ -176,7 +183,6 @@ func TestLeadUpdate_MaskPostTakMerusak(t *testing.T) {
 
 	form := leadFormValues("Lead Kontak", "Qualified")
 	form.Set("mobile_phone", flsHidden)
-	form.Set("whatsapp", flsHidden)
 	req := accountsReq(http.MethodPost, "/w/test/leads/"+itoa(l.ID), form, itoa(l.ID))
 	if rec := env.runAccount(uid, "owner", "manager", req, env.h.LeadUpdate); rec.Code != http.StatusSeeOther {
 		t.Fatalf("update gagal: %d\n%s", rec.Code, rec.Body.String())
@@ -189,21 +195,24 @@ func TestLeadUpdate_MaskPostTakMerusak(t *testing.T) {
 	if got.MobilePhone == nil || *got.MobilePhone != mobile {
 		t.Errorf("mobile_phone asli harus utuh, got %v (mask menimpa = F4 bocor)", got.MobilePhone)
 	}
+	// Kolom whatsapp lama selalu dipertahankan LeadUpdate (tak lagi disunting form).
 	if got.Whatsapp == nil || *got.Whatsapp != whatsapp {
-		t.Errorf("whatsapp asli harus utuh, got %v (mask menimpa = F4 bocor)", got.Whatsapp)
+		t.Errorf("whatsapp asli harus utuh, got %v", got.Whatsapp)
 	}
 }
 
-// TestLeadUpdate_PhoneEditable_Sales: Sales tetap bisa mengubah nomor HP/
-// WhatsApp lewat form sunting (canEditPhone tak mengunci role yang berhak).
+// TestLeadUpdate_PhoneEditable_Sales: Sales tetap bisa mengubah nomor HP/WhatsApp
+// (satu field gabungan mobile_phone) lewat form sunting (canEditPhone tak mengunci
+// role yang berhak). Kolom whatsapp lama TAK lagi disunting form → LeadUpdate
+// menyalinnya apa adanya (data lama tak hilang, tapi juga tak berubah dari sini).
 func TestLeadUpdate_PhoneEditable_Sales(t *testing.T) {
 	env, uid := setupAccounts(t)
-	l := env.seedLeadWithPhone(t, "Lead Kontak", uid, "0812-1111-2222", "0812-3333-4444")
+	origWhatsapp := "0812-3333-4444"
+	l := env.seedLeadWithPhone(t, "Lead Kontak", uid, "0812-1111-2222", origWhatsapp)
 
-	newMobile, newWhatsapp := "0899-9999-0000", "0899-8888-0000"
+	newMobile := "0899-9999-0000"
 	form := leadFormValues("Lead Kontak", "Qualified")
 	form.Set("mobile_phone", newMobile)
-	form.Set("whatsapp", newWhatsapp)
 	req := accountsReq(http.MethodPost, "/w/test/leads/"+itoa(l.ID), form, itoa(l.ID))
 	if rec := env.runAccount(uid, "owner", "sales", req, env.h.LeadUpdate); rec.Code != http.StatusSeeOther {
 		t.Fatalf("update gagal: %d\n%s", rec.Code, rec.Body.String())
@@ -214,9 +223,10 @@ func TestLeadUpdate_PhoneEditable_Sales(t *testing.T) {
 		t.Fatalf("get lead: %v", err)
 	}
 	if got.MobilePhone == nil || *got.MobilePhone != newMobile {
-		t.Errorf("sales harus bisa mengubah mobile_phone, got %v", got.MobilePhone)
+		t.Errorf("sales harus bisa mengubah mobile_phone (HP/WhatsApp), got %v", got.MobilePhone)
 	}
-	if got.Whatsapp == nil || *got.Whatsapp != newWhatsapp {
-		t.Errorf("sales harus bisa mengubah whatsapp, got %v", got.Whatsapp)
+	// whatsapp lama dipertahankan (bukan disunting, bukan dikosongkan).
+	if got.Whatsapp == nil || *got.Whatsapp != origWhatsapp {
+		t.Errorf("kolom whatsapp lama harus dipertahankan apa adanya, got %v", got.Whatsapp)
 	}
 }

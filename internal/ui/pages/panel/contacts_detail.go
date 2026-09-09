@@ -10,10 +10,10 @@ import (
 	h "maragu.dev/gomponents/html"
 )
 
-// contacts_detail.go — halaman detail satu kontak. Murni-data: MobilePhone &
-// WhatsappNumber SUDAH disamarkan handler (F4) bila penglihatnya bukan Sales;
-// OfficePhone tidak (nomor kelembagaan). Kolom kosong → "—" (detailCard), bukan
-// disembunyikan: pembaca harus bisa membedakan "belum diisi" dari "tak ada".
+// contacts_detail.go — halaman detail satu kontak. Murni-data: MobilePhone
+// (HP/WhatsApp gabungan) SUDAH disamarkan handler (F4) bila penglihatnya bukan
+// Sales; OfficePhone tidak (nomor kelembagaan). Kolom kosong → "—" (detailCard),
+// bukan disembunyikan: pembaca harus bisa membedakan "belum diisi" dari "tak ada".
 
 // ContactDetailView = seluruh data satu kontak siap render. Semua string sudah
 // diformat/disamarkan di handler. AccountBase = URL desa induk (tautan kembali &
@@ -44,10 +44,9 @@ type ContactDetailView struct {
 	IsPrimary        bool
 	IsTechnical      bool
 
-	MobilePhone    string
-	WhatsappNumber string
-	OfficePhone    string
-	Email          string
+	MobilePhone string
+	OfficePhone string
+	Email       string
 
 	PreferredChannel string
 	MailingAddress   string
