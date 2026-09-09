@@ -35,6 +35,16 @@ type CustomerSuccessDetailView struct {
 	CanReadJourney  bool
 	CanReadAdoption bool
 
+	// BL-102: entry point kontekstual ke daftar onboarding ter-filter desa ini.
+	// CanViewX = gerbang F2 (objek crm:journey, SAMA dgn Journey/Onboarding) sudah
+	// dihitung handler. HrefX = URL /impl-tasks?account={id} & /trainings?account={id}
+	// (dibangun handler). Tombol dirender di KEDUA cabang (Exists & empty-state):
+	// navigasi tak bergantung ada/tidaknya baris CS.
+	CanViewImplTasks bool
+	CanViewTrainings bool
+	ImplTasksHref    string
+	TrainingsHref    string
+
 	// Penugasan CS (BL-108): dipindah ke halaman ini dari form edit desa.
 	// CanAssign = aktor berhak menulis kolom accounts (crm:accounts write & tak
 	// read-only) — gerbang SAMA dengan aksi POST /assign, tak menambah sumbu izin
@@ -107,6 +117,10 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 			g.Text("« Kembali ke Desa")),
 	)
 
+	// BL-102: tautan masuk ke daftar onboarding ter-filter desa ini. Dirender di
+	// KEDUA cabang render (di bawah nav) supaya konsisten & tak bergantung baris CS.
+	entryLinks := csOnboardingEntryLinks(v)
+
 	// BL-108 (revisi 9 Sep): penugasan CS lewat MODAL (tombol di header membuka
 	// $assignOpen), bukan kartu inline. Modal disertakan SEKALI di KEDUA cabang —
 	// assign harus tetap bisa dilakukan bahkan sebelum baris CS pernah diisi
@@ -117,7 +131,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 	if !v.Exists {
 		return h.Div(
 			h.Class("grid gap-4 min-w-0"),
-			header, nav,
+			header, nav, entryLinks,
 			h.Div(
 				h.Class("card bg-base-100 border border-base-300 min-w-0"),
 				h.Div(
@@ -132,7 +146,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 
 	return h.Div(
 		h.Class("grid gap-4 min-w-0"),
-		header, nav,
+		header, nav, entryLinks,
 		onboardingWarningBanners(v.Warnings, "cs-detail-warn"),
 		ui.When(v.CanReadHealth, detailCard("Health Score", []detailField{
 			{"Skor Kesehatan Keseluruhan", v.OverallHealthScore},
@@ -165,6 +179,28 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 		})),
 		assign,
 	)
+}
+
+// csOnboardingEntryLinks (BL-102) = baris tombol tautan ke daftar Implementation
+// Tracker & Training Schedule ter-filter desa ini. Tiap tombol di-gate CanViewX
+// (F2 crm:journey, dihitung handler). Tak ada yang berhak → g.Text("") (tak
+// merender wadah kosong). flex-wrap + min-h-11: tap target ≥44px & tak meluber 375px.
+func csOnboardingEntryLinks(v CustomerSuccessDetailView) g.Node {
+	links := make([]g.Node, 0, 2)
+	if v.CanViewImplTasks && v.ImplTasksHref != "" {
+		links = append(links, h.A(
+			h.Href(v.ImplTasksHref), h.Class("btn btn-sm btn-outline min-h-11"),
+			g.Text("Implementation Tracker")))
+	}
+	if v.CanViewTrainings && v.TrainingsHref != "" {
+		links = append(links, h.A(
+			h.Href(v.TrainingsHref), h.Class("btn btn-sm btn-outline min-h-11"),
+			g.Text("Training Schedule")))
+	}
+	if len(links) == 0 {
+		return g.Text("")
+	}
+	return h.Div(h.Class("flex flex-wrap items-center gap-2 min-w-0"), g.Group(links))
 }
 
 // onboardingWarningBanners merender peringatan keselarasan onboarding↔lifecycle

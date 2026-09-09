@@ -51,12 +51,21 @@ func (h *Handler) CSImplTasksList(w http.ResponseWriter, r *http.Request) {
 		tab = ""
 	}
 
+	accountID, accountName, ok := h.csAccountFilter(w, r, func(a db.Account) bool {
+		return filter.Allows(uid, a.AccountOwner, a.AssignedCsm, a.BackupCsm)
+	})
+	if !ok {
+		return
+	}
+
 	cursorAt, cursorID := pageCursor(r)
 
 	kpis, err := h.q(ctx).CountCSImplTaskKPIs(ctx, db.CountCSImplTaskKPIsParams{
-		ScopeAll: filter.ScopeAll,
-		IsOwn:    filter.IsOwn,
-		Uid:      &uid,
+		ScopeAll:   filter.ScopeAll,
+		IsOwn:      filter.IsOwn,
+		Uid:        &uid,
+		UseAccount: accountID > 0,
+		AccountID:  accountID,
 	})
 	if err != nil {
 		h.Log.Error("cs_impl_tasks: count kpis", "err", err)
@@ -71,6 +80,8 @@ func (h *Handler) CSImplTasksList(w http.ResponseWriter, r *http.Request) {
 		IsOwn:        filter.IsOwn,
 		Uid:          &uid,
 		FilterStatus: filterStatus,
+		UseAccount:   accountID > 0,
+		AccountID:    accountID,
 		PageSize:     pageSize + 1,
 	})
 	if err != nil {
@@ -91,15 +102,17 @@ func (h *Handler) CSImplTasksList(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slug, "")
 	h.renderWorkspaceShell(w, r, "Implementation Tracker", "/impl-tasks", panel.CSImplTasksList(panel.CSImplTasksListView{
-		Base:       base,
-		KPIs:       csImplTaskKPIView(kpis),
-		Items:      items,
-		Tab:        tab,
-		CanWrite:   canWrite,
-		NextCursor: nextCursor,
-		After:      r.URL.Query().Get("after"),
-		Trail:      pageTrail(r),
-		Err:        csImplTasksErrMsg(r.URL.Query().Get("err")),
-		Msg:        csImplTasksMsg(r.URL.Query().Get("ok")),
+		Base:        base,
+		KPIs:        csImplTaskKPIView(kpis),
+		Items:       items,
+		Tab:         tab,
+		AccountID:   accountID,
+		AccountName: accountName,
+		CanWrite:    canWrite,
+		NextCursor:  nextCursor,
+		After:       r.URL.Query().Get("after"),
+		Trail:       pageTrail(r),
+		Err:         csImplTasksErrMsg(r.URL.Query().Get("err")),
+		Msg:         csImplTasksMsg(r.URL.Query().Get("ok")),
 	}))
 }

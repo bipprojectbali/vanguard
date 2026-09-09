@@ -27,13 +27,16 @@ WHERE (
         OR a.assigned_csm = $3
         OR a.backup_csm = $3
     ))
-)
+  )
+  AND (NOT $4::boolean OR t.account_id = $5::bigint)
 `
 
 type CountCSImplTaskKPIsParams struct {
-	ScopeAll bool   `json:"scope_all"`
-	IsOwn    bool   `json:"is_own"`
-	Uid      *int64 `json:"uid"`
+	ScopeAll   bool   `json:"scope_all"`
+	IsOwn      bool   `json:"is_own"`
+	Uid        *int64 `json:"uid"`
+	UseAccount bool   `json:"use_account"`
+	AccountID  int64  `json:"account_id"`
 }
 
 type CountCSImplTaskKPIsRow struct {
@@ -47,7 +50,13 @@ type CountCSImplTaskKPIsRow struct {
 // Agregat KPI header halaman /impl-tasks. Cakupan scope sama persis ListCSImplTasks.
 // uid dioper walau scope_all=true (diabaikan dalam kasus itu).
 func (q *Queries) CountCSImplTaskKPIs(ctx context.Context, arg CountCSImplTaskKPIsParams) (CountCSImplTaskKPIsRow, error) {
-	row := q.db.QueryRow(ctx, countCSImplTaskKPIs, arg.ScopeAll, arg.IsOwn, arg.Uid)
+	row := q.db.QueryRow(ctx, countCSImplTaskKPIs,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.UseAccount,
+		arg.AccountID,
+	)
 	var i CountCSImplTaskKPIsRow
 	err := row.Scan(
 		&i.TotalCount,
@@ -190,8 +199,9 @@ WHERE (t.created_at, t.id) < ($1::timestamptz, $2::bigint)
       ))
   )
   AND ($6 = '' OR t.task_status = $6)
+  AND (NOT $7::boolean OR t.account_id = $8::bigint)
 ORDER BY t.created_at DESC, t.id DESC
-LIMIT $7
+LIMIT $9
 `
 
 type ListCSImplTasksParams struct {
@@ -201,6 +211,8 @@ type ListCSImplTasksParams struct {
 	IsOwn        bool               `json:"is_own"`
 	Uid          *int64             `json:"uid"`
 	FilterStatus interface{}        `json:"filter_status"`
+	UseAccount   bool               `json:"use_account"`
+	AccountID    int64              `json:"account_id"`
 	PageSize     int32              `json:"page_size"`
 }
 
@@ -236,6 +248,8 @@ func (q *Queries) ListCSImplTasks(ctx context.Context, arg ListCSImplTasksParams
 		arg.IsOwn,
 		arg.Uid,
 		arg.FilterStatus,
+		arg.UseAccount,
+		arg.AccountID,
 		arg.PageSize,
 	)
 	if err != nil {
