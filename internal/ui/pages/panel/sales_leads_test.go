@@ -72,8 +72,7 @@ func TestLeadForm_FieldNumerik(t *testing.T) {
 		`pattern="[0-9.]*"`,      // pola uang (titik ribuan ditoleransi)
 		`pattern="[0-9+ -]*"`,    // pola telepon (digit/+/pemisah)
 		`name="estimated_value"`, //
-		`name="mobile_phone"`,    //
-		`name="whatsapp"`,        //
+		`name="mobile_phone"`,    // HP & WhatsApp digabung jadi satu field
 		`/static/numgroup.js`,    // skrip format+normalisasi termuat
 	} {
 		if !strings.Contains(out, want) {
@@ -149,11 +148,11 @@ func TestLeadForm_TanpaStatus(t *testing.T) {
 	}
 }
 
-// TestLeadForm_PhoneLiveFilter — BL-81: HP & WhatsApp membawa kait
+// TestLeadForm_PhoneLiveFilter — BL-81: field HP/WhatsApp membawa kait
 // data-phonenum (dibaca static/phonenum.js) yang menyaring karakter tak-diizinkan
 // SAAT DIKETIK, dan form memuat skripnya. Perilaku ketik (menyaring input event)
-// tak bisa di-unit-test tanpa DOM; di sini kita jaga kontraknya: kedua field
-// telepon punya kait & skrip termuat. Backend optPhone tetap penolak saat submit.
+// tak bisa di-unit-test tanpa DOM; di sini kita jaga kontraknya: field telepon
+// punya kait & skrip termuat. Backend optPhone tetap penolak saat submit.
 func TestLeadForm_PhoneLiveFilter(t *testing.T) {
 	out := renderLeads(t, LeadForm(LeadFormView{
 		Base:          "/w/desa",
@@ -166,9 +165,9 @@ func TestLeadForm_PhoneLiveFilter(t *testing.T) {
 	if !strings.Contains(out, "/static/phonenum.js") {
 		t.Errorf("form lead harus memuat skrip penyaring telepon /static/phonenum.js:\n%s", out)
 	}
-	// Kait data-phonenum WAJIB ada di KEDUA field telepon (HP + WhatsApp) → 2×.
-	if n := strings.Count(out, "data-phonenum"); n != 2 {
-		t.Errorf("kait data-phonenum harus muncul 2× (HP + WhatsApp), dapat %d:\n%s", n, out)
+	// Kait data-phonenum WAJIB ada di field telepon gabungan HP/WhatsApp → 1×.
+	if n := strings.Count(out, "data-phonenum"); n != 1 {
+		t.Errorf("kait data-phonenum harus muncul 1× (HP/WhatsApp), dapat %d:\n%s", n, out)
 	}
 	// BL-2 dipertahankan: tetap tanpa type="number".
 	if strings.Contains(out, `type="number"`) {
@@ -218,16 +217,16 @@ func TestLeadForm_PhoneLocked(t *testing.T) {
 		Ratings:       []string{"Hot"},
 		RegionsJSON:   "[]",
 		PhoneEditable: false,
-		Fields:        LeadFormFields{MobilePhone: "•••", Whatsapp: "•••"},
+		Fields:        LeadFormFields{MobilePhone: "•••"},
 	}))
 
-	if strings.Contains(out, `name="mobile_phone"`) || strings.Contains(out, `name="whatsapp"`) {
+	if strings.Contains(out, `name="mobile_phone"`) {
 		t.Errorf("HP/WA terkunci TAK boleh ber-name (mask akan ter-submit → BL-84):\n%s", out)
 	}
 	if strings.Contains(out, "data-phonenum") {
 		t.Errorf("HP/WA terkunci tak perlu kait data-phonenum (tak dapat diketik):\n%s", out)
 	}
-	if n := strings.Count(out, "disabled"); n < 2 {
-		t.Errorf("kedua field telepon terkunci harus disabled (≥2), dapat %d:\n%s", n, out)
+	if n := strings.Count(out, "disabled"); n < 1 {
+		t.Errorf("field telepon terkunci harus disabled (≥1), dapat %d:\n%s", n, out)
 	}
 }

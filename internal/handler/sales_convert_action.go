@@ -49,8 +49,10 @@ func (h *Handler) LeadConvert(w http.ResponseWriter, r *http.Request) {
 	// F4: aktor tanpa akses nomor penuh kirim mask (field dikunci) — salin nomor asli lead server-side, bukan mask.
 	if !canEditPhone(ctx) {
 		form.MobilePhone = l.MobilePhone
-		form.Whatsapp = l.Whatsapp
 	}
+	// HP & WhatsApp digabung jadi satu field UI (mobile_phone) — form konversi tak lagi
+	// menyertakan WhatsApp; salin nomor WA lead apa adanya ke kontak baru (data tak hilang).
+	form.Whatsapp = l.Whatsapp
 
 	uid := session.UserID(ctx)
 	tenantID := session.TenantID(ctx)

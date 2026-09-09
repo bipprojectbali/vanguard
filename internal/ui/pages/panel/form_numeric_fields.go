@@ -85,17 +85,22 @@ func moneyFieldRp(label, name, val string) g.Node {
 // menolaknya (bukan [0-9+ -]) → seluruh sunting GAGAL validasi, role itu mustahil
 // menyimpan perubahan apa pun. Dengan disabled+tanpa-name, mask tak ikut ter-submit;
 // guard di LeadUpdate mempertahankan nomor asli.
+//
+// BL-118: keterangan "nomor disamarkan" dipindah dari baris teks statis ke balik
+// ikon ⓘ tap (labelWithHint, pola BL-65) — konsisten dgn contactPhoneField &
+// legenda enum, agar tak menuhi form. Hanya cabang non-editable (form Lead
+// non-Sales) yang terpengaruh; pemakai editable=true (form Desa/Deal) tak berubah.
 func phoneNumField(label, name, val string, editable bool) g.Node {
 	if !editable {
+		roID := "f-" + name + "_ro"
 		return h.Div(
 			h.Class("grid gap-1 min-w-0"),
-			labelFor(label, "f-"+name+"_ro", false),
+			labelWithHint(label, roID, false,
+				[]string{"Nomor disamarkan & hanya bisa disunting oleh Sales."}),
 			ui.Input(
-				h.ID("f-"+name+"_ro"), h.Type("tel"), h.Value(val),
+				h.ID(roID), h.Type("tel"), h.Value(val),
 				h.Disabled(), h.Class("input text-base w-full"),
 			),
-			h.P(h.Class("text-xs text-base-content/60"),
-				g.Text("Nomor disamarkan & hanya bisa disunting oleh Sales.")),
 		)
 	}
 	return h.Div(

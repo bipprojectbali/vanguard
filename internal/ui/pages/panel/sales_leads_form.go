@@ -30,7 +30,6 @@ type LeadFormFields struct {
 	EstimatedValue string
 	DistrictID     string
 	MobilePhone    string
-	Whatsapp       string
 	Email          string
 }
 
@@ -100,8 +99,9 @@ func LeadForm(v LeadFormView) g.Node {
 		),
 		formCard("Lokasi & Kontak",
 			regionSelect("lead", v.RegionsJSON, v.Fields.DistrictID, false),
-			phoneNumField("HP", "mobile_phone", v.Fields.MobilePhone, v.PhoneEditable),
-			phoneNumField("WhatsApp", "whatsapp", v.Fields.Whatsapp, v.PhoneEditable),
+			// HP & WhatsApp digabung jadi satu field (nomor yang sama dipakai untuk
+			// keduanya) — kolom whatsapp lama dipertahankan di DB, tak lagi disunting.
+			phoneNumField("HP / WhatsApp", "mobile_phone", v.Fields.MobilePhone, v.PhoneEditable),
 			field("Email", "email", v.Fields.Email, false, "email"),
 		),
 

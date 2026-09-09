@@ -14,8 +14,10 @@ import (
 //   - F3 (ownership) DIWARISI DESA INDUK: kontak yang tampil = desa yang tampil.
 //     Sales lihat kontak desanya; Support nol baris; Admin semua; luar cakupan &
 //     account_id mismatch → 404 (menyangkal keberadaan, bukan 403).
-//   - F4 (field-level): HP & WhatsApp utuh untuk Sales & Admin; role lain menerima mask &
-//     masknya tak boleh menimpa nomor asli. Telepon kantor tak pernah disamarkan.
+//   - F4 (field-level): HP/WhatsApp (mobile_phone, satu field gabungan) utuh untuk
+//     Sales & Admin; role lain menerima mask & masknya tak boleh menimpa nomor asli.
+//     Telepon kantor tak pernah disamarkan. Kolom whatsapp_number lama tetap di DB
+//     (disalin apa adanya) tapi TAK lagi dirender di UI.
 
 // TestContacts_F3_SalesLihatKontakDesanya: di daftar global, Sales melihat HANYA
 // kontak desa miliknya — kontak desa sales lain tak tampil (F3 diwarisi desa).
@@ -105,9 +107,11 @@ func TestContacts_AccountMismatch404(t *testing.T) {
 
 // --- F4: masking nomor -----------------------------------------------------
 
-// TestContacts_F4_PhoneMasking: HP & WhatsApp utuh untuk Sales & Admin; role lain
-// (Manager, CSM) menerima mask. Telepon KANTOR (kelembagaan) tak pernah disamarkan. Nilai asli tak boleh
-// SAMPAI ke browser non-Sales (view-source).
+// TestContacts_F4_PhoneMasking: HP/WhatsApp (satu field gabungan mobile_phone)
+// utuh untuk Sales & Admin; role lain (Manager, CSM) menerima mask. Telepon
+// KANTOR (kelembagaan) tak pernah disamarkan. Nilai asli tak boleh SAMPAI ke
+// browser non-Sales (view-source). Nilai whatsapp_number lama TAK lagi dirender
+// (field digabung) → tak boleh muncul untuk peran mana pun.
 func TestContacts_F4_PhoneMasking(t *testing.T) {
 	env, uid := setupAccounts(t)
 	mobile, whatsapp, office := "0812-3456-7890", "0813-0000-1111", "021-555-0000"
@@ -132,12 +136,15 @@ func TestContacts_F4_PhoneMasking(t *testing.T) {
 			body := env.runAccount(uid, "owner", tc.role, req, env.h.ContactDetail).Body.String()
 
 			hasMobile := strings.Contains(body, mobile)
-			hasWhatsapp := strings.Contains(body, whatsapp)
-			if tc.full && (!hasMobile || !hasWhatsapp) {
-				t.Errorf("role %q harus melihat HP & WhatsApp utuh", tc.role)
+			if tc.full && !hasMobile {
+				t.Errorf("role %q harus melihat HP/WhatsApp utuh", tc.role)
 			}
-			if !tc.full && (hasMobile || hasWhatsapp) {
+			if !tc.full && hasMobile {
 				t.Errorf("role %q BOCOR — nomor pribadi sampai ke browser non-Sales", tc.role)
+			}
+			// Nilai whatsapp_number lama tak pernah dirender (field digabung ke HP).
+			if strings.Contains(body, whatsapp) {
+				t.Errorf("role %q: nilai WhatsApp lama tak boleh lagi dirender (field digabung ke HP)", tc.role)
 			}
 			// Telepon kantor = kelembagaan → selalu tampil, semua role.
 			if !strings.Contains(body, office) {
@@ -165,10 +172,10 @@ func TestContactDetailView_PhoneMasked_Support(t *testing.T) {
 	env.runAccount(uid, "owner", "support", req, func(w http.ResponseWriter, r *http.Request) {
 		got = env.h.contactDetailView(r.Context(), "", "", a.VillageName, c, nil, "")
 	})
-	if got.MobilePhone != flsHidden || got.WhatsappNumber != flsHidden {
-		t.Errorf("support: HP/WhatsApp harus tersamar (%s), got %q/%q", flsHidden, got.MobilePhone, got.WhatsappNumber)
+	if got.MobilePhone != flsHidden {
+		t.Errorf("support: HP/WhatsApp harus tersamar (%s), got %q", flsHidden, got.MobilePhone)
 	}
-	if got.MobilePhone == mobile || got.WhatsappNumber == whatsapp {
+	if got.MobilePhone == mobile {
 		t.Errorf("support: nomor pribadi mentah BOCOR")
 	}
 	if got.OfficePhone != office {
@@ -195,7 +202,7 @@ func TestContacts_F4_OverrideLewatSettings(t *testing.T) {
 
 	// Default: Manager (DataScopeAll → bisa membuka) menerima mask.
 	body := env.runAccount(uid, "owner", "manager", detailReq(), env.h.ContactDetail).Body.String()
-	if strings.Contains(body, mobile) || strings.Contains(body, whatsapp) {
+	if strings.Contains(body, mobile) {
 		t.Fatal("prakondisi: Manager default harus menerima mask")
 	}
 
@@ -208,8 +215,8 @@ func TestContacts_F4_OverrideLewatSettings(t *testing.T) {
 
 	// Permintaan berikutnya: Manager kini melihat nomor utuh.
 	body = env.runAccount(uid, "owner", "manager", detailReq(), env.h.ContactDetail).Body.String()
-	if !strings.Contains(body, mobile) || !strings.Contains(body, whatsapp) {
-		t.Error("setelah override: Manager harus melihat HP & WhatsApp utuh")
+	if !strings.Contains(body, mobile) {
+		t.Error("setelah override: Manager harus melihat HP/WhatsApp utuh")
 	}
 	// Telepon kantor tetap tampil (bukan sasaran F4).
 	if !strings.Contains(body, office) {
@@ -219,7 +226,7 @@ func TestContacts_F4_OverrideLewatSettings(t *testing.T) {
 	sReq := contactsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/contacts/"+itoa(c.ID),
 		nil, itoa(a.ID), itoa(c.ID))
 	sBody := env.runAccount(uid, "owner", "sales", sReq, env.h.ContactDetail).Body.String()
-	if strings.Contains(sBody, mobile) || strings.Contains(sBody, whatsapp) {
+	if strings.Contains(sBody, mobile) {
 		t.Error("tenant terkonfigurasi: Sales tak dicentang harus fail-closed (mask), bukan default lama")
 	}
 }

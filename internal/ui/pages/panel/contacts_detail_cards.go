@@ -33,8 +33,7 @@ func contactDetailCards(v ContactDetailView) g.Node {
 			{"Periode Menjabat", v.TermPeriod},
 		}),
 		detailCard("Komunikasi", []detailField{
-			{"HP (Pribadi)", v.MobilePhone},
-			{"WhatsApp", v.WhatsappNumber},
+			{"HP / WhatsApp", v.MobilePhone},
 			{"Telepon Kantor", v.OfficePhone},
 			{"Email", v.Email},
 			{"Kanal Pilihan", v.PreferredChannel},

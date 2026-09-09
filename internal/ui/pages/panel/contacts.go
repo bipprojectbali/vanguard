@@ -13,12 +13,12 @@ import (
 // opt-out dirender sebagai badge agar terbaca sekilas (kriteria M3: "opt-out
 // tampil jelas").
 
-// ContactRow = satu baris daftar kontak. WhatsApp IKUT (kolom daftar, wireframe M3)
-// tapi SUDAH disamarkan handler (F4) bila penglihatnya bukan Sales — nomor asli tak
-// pernah dioper ke view. Village = nama desa induk (hanya terisi di daftar global,
-// dari JOIN accounts). LastActivity = ringkasan "terakhir dihubungi" — DITUNDA
-// sampai modul Activities; handler mengisi "" → dirender "—". AccountID untuk
-// menautkan ke desa induk saat di daftar global.
+// ContactRow = satu baris daftar kontak. Phone (HP/WhatsApp gabungan) IKUT (kolom
+// daftar, wireframe M3) tapi SUDAH disamarkan handler (F4) bila penglihatnya bukan
+// Sales — nomor asli tak pernah dioper ke view. Village = nama desa induk (hanya
+// terisi di daftar global, dari JOIN accounts). LastActivity = ringkasan "terakhir
+// dihubungi" — DITUNDA sampai modul Activities; handler mengisi "" → dirender "—".
+// AccountID untuk menautkan ke desa induk saat di daftar global.
 type ContactRow struct {
 	ID               int64
 	AccountID        int64
@@ -26,7 +26,7 @@ type ContactRow struct {
 	Village          string
 	PositionCategory string
 	ContactRole      string
-	Whatsapp         string
+	Phone            string
 	LastActivity     string
 	IsPrimary        bool
 	IsTechnical      bool

@@ -27,7 +27,14 @@ func (h *Handler) LeadDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, ok := h.loadOwnedLead(w, r, id); !ok {
+	l, ok := h.loadOwnedLead(w, r, id)
+	if !ok {
+		return
+	}
+	// Lead terkonversi = terminal: hapus ditolak (sejajar UI yang menyembunyikan
+	// tombol Hapus & guard LeadEdit/LeadUpdate). Backend penjaga sesungguhnya.
+	if l.Converted {
+		wsRedirect(w, r, "/leads/"+strconv.FormatInt(id, 10), "lead_locked")
 		return
 	}
 
@@ -77,14 +84,9 @@ func (h *Handler) loadOwnedLead(w http.ResponseWriter, r *http.Request, id int64
 // mentah di form sunting. Diperbaiki audit FLS M9-1 (gap live, simetris dgn
 // ActivityUpdate/Notes — lihat guard tulis di LeadUpdate, sales_leads_update.go).
 func leadFormFields(l db.Lead, phoneEditable bool) panel.LeadFormFields {
-	mobile, whatsapp := deref(l.MobilePhone), deref(l.Whatsapp)
-	if !phoneEditable {
-		if mobile != "" {
-			mobile = flsHidden
-		}
-		if whatsapp != "" {
-			whatsapp = flsHidden
-		}
+	mobile := deref(l.MobilePhone)
+	if !phoneEditable && mobile != "" {
+		mobile = flsHidden
 	}
 	return panel.LeadFormFields{
 		LeadName:       l.LeadName,
@@ -95,7 +97,6 @@ func leadFormFields(l db.Lead, phoneEditable bool) panel.LeadFormFields {
 		EstimatedValue: moneyRupiahStr(l.EstimatedValue),
 		DistrictID:     int64PtrStr(l.DistrictID),
 		MobilePhone:    mobile,
-		Whatsapp:       whatsapp,
 		Email:          deref(l.Email),
 	}
 }

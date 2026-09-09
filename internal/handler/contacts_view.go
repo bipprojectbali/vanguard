@@ -10,13 +10,14 @@ import (
 // contacts_view.go — pemetaan model DB → data siap-render view (murni-data).
 // Penyamaran Field-Level Security (F4) dilakukan DI SINI, di handler, sebelum
 // nilai menyentuh view: yang tak berhak TAK PERNAH menerima nomor aslinya (lihat
-// fls.go). Kontak punya TIGA nomor (HP, WhatsApp, kantor) — HP & WhatsApp adalah
-// kanal pribadi perangkat desa (PII, disamarkan bagi non-Sales); telepon kantor
-// = nomor kelembagaan, tak disamarkan (sejajar OfficePhone di accounts).
+// fls.go). Kontak punya nomor pribadi HP/WhatsApp (satu kolom mobile_phone; kolom
+// whatsapp_number lama tetap ada di DB tapi tak lagi ditampilkan) — PII, disamarkan
+// bagi non-Sales; telepon kantor = nomor kelembagaan, tak disamarkan (sejajar
+// OfficePhone di accounts).
 
-// contactRowView memetakan satu baris daftar kontak SATU desa. WhatsApp ikut di
-// baris (wireframe M3) tapi DISAMARKAN di sini (F4) bila aktor bukan Sales — nomor
-// asli tak pernah dioper ke view. Village kosong (daftar per-desa tak berkolom
+// contactRowView memetakan satu baris daftar kontak SATU desa. Nomor HP/WhatsApp
+// ikut di baris (wireframe M3) tapi DISAMARKAN di sini (F4) bila aktor bukan Sales —
+// nomor asli tak pernah dioper ke view. Village kosong (daftar per-desa tak berkolom
 // Desa). LastActivity ditunda modul Activities → "" (view: "—").
 func contactRowView(ctx context.Context, c db.Contact) panel.ContactRow {
 	return panel.ContactRow{
@@ -25,7 +26,7 @@ func contactRowView(ctx context.Context, c db.Contact) panel.ContactRow {
 		Name:             contactFullName(c),
 		PositionCategory: deref(c.PositionCategory),
 		ContactRole:      deref(c.ContactRole),
-		Whatsapp:         maskPhone(ctx, deref(c.WhatsappNumber)),
+		Phone:            maskPhone(ctx, deref(c.MobilePhone)),
 		IsPrimary:        c.IsPrimaryContact,
 		IsTechnical:      c.IsTechnicalContact,
 		EmailOptOut:      c.EmailOptOut,
@@ -45,7 +46,7 @@ func contactRowViewGlobal(ctx context.Context, r db.ListContactsRow) panel.Conta
 		Village:          r.VillageName,
 		PositionCategory: deref(r.PositionCategory),
 		ContactRole:      deref(r.ContactRole),
-		Whatsapp:         maskPhone(ctx, deref(r.WhatsappNumber)),
+		Phone:            maskPhone(ctx, deref(r.MobilePhone)),
 		IsPrimary:        r.IsPrimaryContact,
 		IsTechnical:      r.IsTechnicalContact,
 		EmailOptOut:      r.EmailOptOut,
@@ -83,12 +84,11 @@ func (h *Handler) contactDetailView(ctx context.Context, base, accountBase, vill
 		IsPrimary:        c.IsPrimaryContact,
 		IsTechnical:      c.IsTechnicalContact,
 
-		// F4: HP & WhatsApp = PII pribadi perangkat desa (Sales saja utuh);
-		// telepon kantor = nomor kelembagaan → tak disamarkan.
-		MobilePhone:    maskPhone(ctx, deref(c.MobilePhone)),
-		WhatsappNumber: maskPhone(ctx, deref(c.WhatsappNumber)),
-		OfficePhone:    deref(c.OfficePhone),
-		Email:          deref(c.Email),
+		// F4: HP/WhatsApp = PII pribadi perangkat desa (Sales saja utuh); telepon
+		// kantor = nomor kelembagaan → tak disamarkan.
+		MobilePhone: maskPhone(ctx, deref(c.MobilePhone)),
+		OfficePhone: deref(c.OfficePhone),
+		Email:       deref(c.Email),
 
 		PreferredChannel: deref(c.PreferredChannel),
 		MailingAddress:   deref(c.MailingAddress),

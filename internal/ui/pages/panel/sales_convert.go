@@ -32,7 +32,6 @@ type ConvertFormFields struct {
 	LastName    string
 	JobTitle    string
 	MobilePhone string
-	Whatsapp    string
 	Email       string
 
 	DealName string
@@ -131,13 +130,17 @@ func LeadConvert(v LeadConvertView) g.Node {
 			field("Nama Depan", "first_name", v.Fields.FirstName, true, "text"),
 			field("Nama Belakang", "last_name", v.Fields.LastName, false, "text"),
 			field("Jabatan", "job_title", v.Fields.JobTitle, false, "text"),
-			convertPhoneField("HP", "mobile_phone", v.Fields.MobilePhone, v.PhoneEditable, v.PhoneVisible),
-			convertPhoneField("WhatsApp", "whatsapp_number", v.Fields.Whatsapp, v.PhoneEditable, v.PhoneVisible),
+			// HP & WhatsApp digabung jadi satu field (nomor yang sama); kolom
+			// whatsapp_number lama tetap terisi di DB — nomor lead disalin handler.
+			convertPhoneField("HP / WhatsApp", "mobile_phone", v.Fields.MobilePhone, v.PhoneEditable, v.PhoneVisible),
 			field("Email", "email", v.Fields.Email, false, "email"),
 		),
 		formCard("Deal",
 			field("Nama Deal", "deal_name", v.Fields.DealName, true, "text"),
-			field("Nilai (Rp)", "amount", v.Fields.Amount, false, "text"),
+			// BL-122: nilai deal berformat ribuan (moneyField + numgroup.js), selaras
+			// form Lead & Deal. Backend (parseConvertForm → optNumeric/cleanThousands)
+			// membuang pemisah; tanpa JS pun aman.
+			moneyField("Nilai (Rp)", "amount", v.Fields.Amount),
 		),
 
 		h.Div(
@@ -150,6 +153,9 @@ func LeadConvert(v LeadConvertView) g.Node {
 	// Cascading dropdown wilayah (regionSelect di atas cuma menanam data + markup;
 	// interaksi berjenjangnya di sini, same-origin CSP-safe, gotcha #12).
 	body = append(body, h.Script(h.Src("/static/regions.js"), h.Defer()))
+	// BL-122: pengelompokan ribuan input "Nilai (Rp)" (data-numgroup) — memformat
+	// tampilan & menormalkan jadi digit polos saat submit. Same-origin CSP-safe.
+	body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }

@@ -51,6 +51,8 @@ func wsErrMsgCRM(code string) string {
 		return "Desa (account) wajib dipilih untuk deal ini."
 	case "convert_guard":
 		return "Lead ini tak bisa dikonversi — harus berstatus Qualified dan belum pernah dikonversi."
+	case "lead_locked":
+		return "Lead ini sudah dikonversi — tak bisa disunting atau dihapus."
 	// ── Sales: Deal Closed Won → auto-create Subscription (BL-21, BL-88) ─────
 	case "quote_required":
 		return "Deal harus punya quote yang di-Accept (dengan termin langganan) sebelum dimenangkan — nilai & termin langganan diturunkan dari quote."
