@@ -145,9 +145,11 @@ func TestContacts_TabMyFiltersToOwned(t *testing.T) {
 
 // --- Detail: nama Owner/Atasan/Audit + kolom ditunda ----------------------
 
-// TestContacts_DetailNamesAndAudit: detail meresolvasi id → NAMA untuk Pemilik,
-// Atasan, dan Dibuat/Diubah Oleh; tanggal audit terformat; kolom aktivitas yang
-// ditunda modul Activities dirender "—".
+// TestContacts_DetailNamesAndAudit: detail meresolvasi id → NAMA untuk Pemilik
+// dan Dibuat/Diubah Oleh; tanggal audit terformat; kolom aktivitas yang ditunda
+// modul Activities dirender "—". BL-116: baris "Atasan" DILEPAS dari tampilan
+// detail (kolom reports_to_id tetap; resolusi handler tetap jalan, hanya tak
+// dirender) — seed reports_to dipertahankan agar render tetap aman saat terisi.
 func TestContacts_DetailNamesAndAudit(t *testing.T) {
 	env, admin := setupAccounts(t)
 	owner := env.seedMember(t, "pemilik@local", "member", 0).ID
@@ -163,9 +165,9 @@ func TestContacts_DetailNamesAndAudit(t *testing.T) {
 	if !strings.Contains(body, "pemilik@local") {
 		t.Error("detail harus menampilkan NAMA pemilik/pembuat, bukan id")
 	}
-	// Atasan → nama kontak atasan (reports_to_id resolusi).
-	if !strings.Contains(body, "Pak Atasan") {
-		t.Error("detail harus meresolusi nama atasan (reports_to)")
+	// BL-116: nama atasan TAK lagi dirender di detail (baris dilepas).
+	if strings.Contains(body, "Pak Atasan") {
+		t.Error("BL-116: baris Atasan harus dilepas dari detail — nama atasan tak boleh muncul")
 	}
 	// Tanggal audit terformat — bandingkan dengan format handler atas nilai tersimpan.
 	got, err := env.q.GetContact(t.Context(), c.ID)
@@ -181,5 +183,33 @@ func TestContacts_DetailNamesAndAudit(t *testing.T) {
 		if !strings.Contains(body, label) {
 			t.Errorf("detail harus memuat kartu/kolom %q", label)
 		}
+	}
+}
+
+// TestContacts_EditFormActionHasWorkspacePrefix (BL-117): form SUNTING kontak
+// memasang action ter-prefiks /w/{slug}. Sebelum perbaikan, Action = contactPath()
+// yang root-absolut (/accounts/{id}/contacts/{cid}) → di luar grup route
+// /w/{slug} → klik Simpan 404. Regresi bug 9 Sep: action WAJIB pakai accountBase
+// ter-prefiks, sejajar form CREATE.
+func TestContacts_EditFormActionHasWorkspacePrefix(t *testing.T) {
+	env, uid := setupAccounts(t)
+	a := env.seedAccount(t, "Desa Sunting", &uid, nil, nil)
+	c := env.seedContact(t, a.ID, "Budi", &uid, false)
+
+	req := contactsReq(http.MethodGet,
+		"/w/test/accounts/"+itoa(a.ID)+"/contacts/"+itoa(c.ID)+"/edit",
+		nil, itoa(a.ID), itoa(c.ID))
+	body := env.runAccount(uid, "owner", "admin", req, env.h.ContactEdit).Body.String()
+
+	// Bug: action = contactPath() root-absolut, TANPA prefiks workspace. Fix:
+	// action lewat accountBase (ter-prefiks wsPath) → di harness slug kosong jadi
+	// "/workspace/new/accounts/{id}/contacts/{cid}", di produksi "/w/{slug}/...".
+	// Kunci regresi: action TAK boleh bare "/accounts/{id}/contacts/{cid}".
+	target := "/accounts/" + itoa(a.ID) + "/contacts/" + itoa(c.ID)
+	if buggy := `action="` + target + `"`; strings.Contains(body, buggy) {
+		t.Errorf("BL-117: form sunting ber-action root-absolut %s — tanpa prefiks workspace → submit 404", buggy)
+	}
+	if !strings.Contains(body, target+`"`) {
+		t.Fatalf("form sunting harus punya action menuju %s (dengan prefiks workspace)", target)
 	}
 }

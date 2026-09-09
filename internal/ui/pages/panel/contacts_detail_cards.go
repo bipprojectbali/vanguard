@@ -23,11 +23,10 @@ func contactDetailCards(v ContactDetailView) g.Node {
 			{"Nama Belakang", v.LastName},
 			{"Jabatan", v.JobTitle},
 			{"Desa", v.VillageName},
-			{"Atasan", v.ReportsToName},
 			{"Pemilik Kontak", v.OwnerName},
 		}),
 		detailCard("Peran & Otoritas", []detailField{
-			{"Jabatan (Kategori)", v.PositionCategory},
+			{"Kategori Perangkat Desa", v.PositionCategory},
 			{"Peran", v.ContactRole},
 			{"Kontak Utama", boolLabel(v.IsPrimary)},
 			{"Kontak Teknis", boolLabel(v.IsTechnical)},
@@ -41,7 +40,7 @@ func contactDetailCards(v ContactDetailView) g.Node {
 			{"Kanal Pilihan", v.PreferredChannel},
 		}),
 		detailCard("Alamat", []detailField{
-			{"Alamat Surat", v.MailingAddress},
+			{"Alamat", v.MailingAddress},
 			{"Kota", v.City},
 			{"Kode Pos", v.PostalCode},
 		}),
