@@ -50,12 +50,13 @@ func (h *Handler) DealNew(w http.ResponseWriter, r *http.Request) {
 	}
 	base := wsPath(slugFromRequest(r), "")
 	v := panel.DealFormView{
-		Base:     base,
-		Action:   base + "/deals",
-		IsEdit:   false,
-		Err:      wsErrMsg(r.URL.Query().Get("err")),
-		Types:    dealTypeOptions,
-		Accounts: accounts,
+		Base:               base,
+		Action:             base + "/deals",
+		IsEdit:             false,
+		Err:                wsErrMsg(r.URL.Query().Get("err")),
+		Types:              dealTypeOptions,
+		ForecastCategories: forecastCategoryOptions,
+		Accounts:           accounts,
 	}
 	h.renderWorkspaceShell(w, r, "Tambah Deal", "/deals", panel.DealForm(v))
 }
