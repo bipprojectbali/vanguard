@@ -105,23 +105,16 @@ func dateFieldMin(label, name, val, min string) g.Node {
 	)
 }
 
-// phoneField = HP kontak. Bila tak boleh disunting (bukan Sales), field dikunci
-// menampilkan nilai tersamar + keterangan, dan TANPA name agar tak terkirim —
-// handler juga mempertahankan nomor asli, jadi mask tak pernah menimpa data.
-func phoneField(editable bool, val string) g.Node {
-	if editable {
-		return field("HP Kontak", "contact_phone", val, false, "tel")
-	}
-	return h.Div(
-		h.Class("grid gap-1 min-w-0"),
-		labelFor("HP Kontak", "f-contact_phone_ro", false),
-		ui.Input(
-			h.ID("f-contact_phone_ro"), h.Type("tel"), h.Value(val),
-			h.Disabled(), h.Class("input text-base w-full"),
-		),
-		h.P(h.Class("text-xs text-base-content/60"),
-			g.Text("Nomor disamarkan & hanya bisa disunting oleh Sales.")),
-	)
+// phoneField = HP Kontak desa. BL-106: field biasa — HP Kontak account tak lagi
+// ber-FLS (semua yang boleh melihat desa boleh lihat & sunting nomor penuh).
+// Mask/kunci per-peran tinggal di modul Kontak & Lead, bukan di sini.
+//
+// Input ANGKA (pola sama HP/WhatsApp Lead): inputmode=numeric (keypad angka
+// mobile) + data-phonenum (phonenum.js membuang huruf/simbol SAAT diketik) +
+// pattern jaring klien; backend optPhone penjaga sesungguhnya. editable=true
+// karena account tak pernah mengunci HP (BL-106).
+func phoneField(val string) g.Node {
+	return phoneNumField("HP Kontak", "contact_phone", val, true)
 }
 
 // textareaField = teks bebas panjang (deskripsi). Lebar penuh (rentang 2 kolom).

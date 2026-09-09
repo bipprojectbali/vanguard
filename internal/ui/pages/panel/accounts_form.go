@@ -51,9 +51,8 @@ type AccountMemberOption struct {
 }
 
 // AccountFormView = data halaman form. Action = URL POST tujuan. IsEdit
-// mengubah judul/label & memunculkan kartu penugasan. PhoneEditable=false (bukan
-// Sales) → field HP dikunci: nilainya tersamar, dan membiarkannya editable akan
-// menimpa nomor asli dengan mask saat submit (handler juga mempertahankannya).
+// mengubah judul/label & memunculkan kartu penugasan. BL-106: HP Kontak account
+// tak lagi ber-FLS — field HP selalu biasa (tak ada flag kunci per-peran).
 type AccountFormView struct {
 	Base   string
 	Action string
@@ -69,8 +68,6 @@ type AccountFormView struct {
 	// mis. "/w/{slug}/accounts/villages". Dataset Desa (~83.762) terlalu besar
 	// utk diembed di RegionsJSON → dropdown level 4 memuatnya on-demand.
 	VillagesURL string
-
-	PhoneEditable bool
 
 	Types           []string
 	Statuses        []string
@@ -145,7 +142,7 @@ func AccountForm(v AccountFormView) g.Node {
 			moneyFieldRp("Anggaran (APBDes)", "village_budget", v.Fields.VillageBudget),
 		),
 		formCard("Kontak",
-			phoneField(v.PhoneEditable, v.Fields.ContactPhone),
+			phoneField(v.Fields.ContactPhone),
 			field("Telepon Kantor", "office_phone", v.Fields.OfficePhone, false, "tel"),
 			field("Email Kantor", "office_email", v.Fields.OfficeEmail, false, "email"),
 		),
@@ -166,6 +163,9 @@ func AccountForm(v AccountFormView) g.Node {
 	// BL-60: pengelompokan ribuan utk Anggaran (APBDes) (data-numgroup di
 	// moneyFieldRp) — format tampilan + normalisasi digit polos saat submit.
 	body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
+	// BL-106: HP Kontak = input angka (data-phonenum di phoneField) — phonenum.js
+	// membuang huruf/simbol sejak diketik. Tanpa JS pun aman (backend optPhone).
+	body = append(body, h.Script(h.Src("/static/phonenum.js"), h.Defer()))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }

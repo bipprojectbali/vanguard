@@ -89,3 +89,19 @@ func TestAccountCreate_BudgetInvalidRejected(t *testing.T) {
 		t.Errorf("input invalid tak boleh menyimpan, ada %d baris", len(rows))
 	}
 }
+
+// TestAccountCreate_PhoneInvalidRejected (BL-106): HP Kontak berisi huruf ditolak
+// backend (err=contact_phone) — penjaga optPhone saat JS mati; tak menyimpan baris.
+func TestAccountCreate_PhoneInvalidRejected(t *testing.T) {
+	env, uid := setupAccounts(t)
+
+	form := accountFormValues("prospect")
+	form.Set("contact_phone", "08ab-bukan-nomor")
+	rec := createAccountForm(t, env, uid, form)
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=contact_phone") {
+		t.Errorf("HP Kontak non-angka harus err=contact_phone, got %q", loc)
+	}
+	if rows := env.allAccounts(t); len(rows) != 0 {
+		t.Errorf("input invalid tak boleh menyimpan, ada %d baris", len(rows))
+	}
+}

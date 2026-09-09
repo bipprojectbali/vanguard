@@ -230,11 +230,16 @@ Sesuai spec §9.2 dan sudah tergambar di board 9.2:
 | Field | Aturan | Alasan |
 |---|---|---|
 | Nilai Kontrak / ARR | Disembunyikan dari Support Agent | Agen tiket tak perlu tahu nilai komersial |
-| Nomor HP Kontak | Utuh untuk Sales & Admin; tersamar untuk Manager, CSM, Support | Batasi sebaran PII; Admin = pengelola workspace yang perlu verifikasi/perbaiki kontak |
+| Nomor HP/WhatsApp pribadi (modul Kontak & Lead) | Utuh untuk Sales & Admin; tersamar untuk Manager, CSM, Support | Batasi sebaran PII; Admin = pengelola workspace yang perlu verifikasi/perbaiki kontak |
 | Catatan Internal | Hanya Admin & CSM | Isinya penilaian jujur tentang pelanggan |
 | Health Score | Terbuka untuk semua role | Justru harus dilihat bersama |
 
 Aturan ini **juga mengikat Manager**, kecuali Nilai Kontrak / ARR — lihat §8.3.
+
+> **BL-106:** field **HP Kontak pada Account (Desa)** (`contact_phone`) TAK lagi
+> ber-FLS — data kelembagaan desa, bukan PII pribadi. Siapa pun yang boleh melihat
+> desa melihat & menyunting nomor penuh. Masking nomor di atas kini KHUSUS nomor
+> pribadi di modul Kontak (HP Pribadi/WhatsApp) & Lead (dikonfigurasikan di BL-107).
 
 ## 6. Alur renewal — CSM memimpin, Sales untuk upsell
 
@@ -367,8 +372,9 @@ Terlihat oleh Manager/Admin yang berwenang menugaskan — menutup celah "desa
 hilang senyap" yang jadi alasan §8.1 memilih pemilik tunggal.
 
 **Field sensitif di modul ini (tunduk §5):**
-- `Contact Phone` (2.C) — nomor HP, **tersamar untuk non-Sales** (termasuk
-  Support saat membuka tiket, termasuk Manager).
+- `Contact Phone` (2.C) — **BL-106: TAK lagi ber-FLS.** Nomor HP kontak desa =
+  data kelembagaan (bukan PII pribadi), tampil & tersunting penuh bagi siapa pun
+  yang boleh melihat desa. (Masking nomor pribadi tinggal di modul Kontak & Lead.)
 - `Village Budget / APBDes` (2.C) — indikator daya beli, sifatnya seperti Nilai
   Kontrak: **dibatasi dari Support** (disembunyikan/tersamar). Diputuskan
   2026-08-07.
@@ -378,8 +384,8 @@ adalah tempat beda-akses paling kentara:
 - **Sales** → 2.1 terfilter desa tugasnya, bisa edit; badge desa-yatim tak tampak
   (bukan wewenangnya menugaskan).
 - **CSM** → terfilter desa binaan; fokus grup 2.E; grup komersial read-only.
-- **Support** → hanya baca, muncul saat menelusuri tiket; `Contact Phone`
-  tersamar; grup 2.D komersial disembunyikan.
+- **Support** → hanya baca, muncul saat menelusuri tiket; `Contact Phone` kini
+  penuh (BL-106 lepas FLS); grup 2.D komersial disembunyikan.
 
 ## 8c. Modul 3 Contacts — catatan rancangan
 

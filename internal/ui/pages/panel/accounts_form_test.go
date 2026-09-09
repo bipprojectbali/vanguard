@@ -29,7 +29,6 @@ func baseFormView() AccountFormView {
 		IsEdit:          false,
 		RegionsJSON:     "[]",
 		VillagesURL:     "/w/desa/accounts/villages",
-		PhoneEditable:   true,
 		Types:           []string{"prospect", "customer"},
 		Statuses:        []string{"Desa"},
 		Classifications: []string{"Maju"},
@@ -52,6 +51,42 @@ func TestAccountForm_DropsSystemCodeAndTerritory(t *testing.T) {
 		} {
 			if strings.Contains(out, banned) {
 				t.Errorf("isEdit=%v: form TAK boleh memuat %q (dilepas BL-60):\n%s", isEdit, banned, out)
+			}
+		}
+	}
+}
+
+// TestAccountForm_PhoneAlwaysEditable (BL-106): HP Kontak account tak lagi
+// ber-FLS — field HP selalu input biasa (name="contact_phone", ter-submit),
+// TANPA kunci/mask/keterangan "hanya bisa disunting oleh Sales". Berlaku di add
+// & edit (dulu ada varian terkunci untuk non-Sales; kini tak ada lagi).
+//
+// Juga: field jadi INPUT ANGKA (inputmode=numeric + data-phonenum + pattern
+// telepon) — huruf/simbol tak bisa masuk (phonenum.js), keypad angka di mobile.
+func TestAccountForm_PhoneAlwaysEditable(t *testing.T) {
+	for _, isEdit := range []bool{false, true} {
+		v := baseFormView()
+		v.IsEdit = isEdit
+		v.Fields.ContactPhone = "0812-3456-7890"
+		out := renderAccountForm(t, v)
+
+		for _, want := range []string{
+			`name="contact_phone"`,   // field biasa ter-submit
+			`value="0812-3456-7890"`, // nomor asli apa adanya (tak di-mask)
+			`inputmode="numeric"`,    // keypad angka mobile
+			`pattern="[0-9+ -]*"`,    // pola telepon (jaring klien)
+			`data-phonenum`,          // kait phonenum.js (buang huruf saat diketik)
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("isEdit=%v: HP Kontak harus input angka ter-submit, memuat %q:\n%s", isEdit, want, out)
+			}
+		}
+		for _, banned := range []string{
+			"hanya bisa disunting oleh Sales", // keterangan varian terkunci lama
+			"•••",                             // penanda mask FLS
+		} {
+			if strings.Contains(out, banned) {
+				t.Errorf("isEdit=%v: HP Kontak account TAK boleh lagi ber-FLS, memuat %q:\n%s", isEdit, banned, out)
 			}
 		}
 	}

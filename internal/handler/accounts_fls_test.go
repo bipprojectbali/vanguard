@@ -10,11 +10,13 @@ import (
 	"go_starter/internal/ui/pages/panel"
 )
 
-// accounts_fls_test.go — dua sumbu izin di-level baris & field untuk Desa:
+// accounts_fls_test.go — sumbu izin di-level baris & field untuk Desa:
 //   - F3 (ownership): Sales lihat miliknya, CSM lihat binaan, Support nol baris,
 //     Admin lihat semua; di luar cakupan → 404 (bukan 403).
-//   - F4 (field-level): nomor HP kontak utuh untuk Sales & Admin; role lain tak
-//     pernah menerima nomor asli & masknya tak boleh menimpa nilai tersimpan.
+//   - F4 (field-level): anggaran desa (VillageBudget) & ARR langganan tersamar
+//     untuk Support. BL-106: HP Kontak account TAK lagi ber-FLS — semua role yang
+//     boleh melihat desa melihat & menyunting nomor penuh (mask HP kini khusus
+//     modul Kontak/Lead, diuji di contacts_fls_test.go & sales_leads_fls_test.go).
 //
 // F2 gate + CRUD + keyset diuji di file lain; helper bersama di accounts_test.go.
 
@@ -105,44 +107,35 @@ func TestAccounts_F3_AdminLihatSemua(t *testing.T) {
 
 // --- F4: field masking -----------------------------------------------------
 
-// TestAccounts_F4_PhoneMasking: nomor HP kontak utuh untuk Sales & Admin; role
-// lain (Manager, CSM) menerima mask. Nilai asli tak boleh SAMPAI ke browser.
-func TestAccounts_F4_PhoneMasking(t *testing.T) {
+// TestAccounts_BL106_PhoneNoFLS: BL-106 — HP Kontak account tak lagi ber-FLS.
+// SEMUA business_role yang boleh melihat desa (di sini yang punya scope: sales,
+// admin, manager, csm) melihat nomor PENUH di halaman detail; tak ada lagi yang
+// menerima mask. Kebalikan dari perilaku lama (dulu manager/csm ter-mask).
+func TestAccounts_BL106_PhoneNoFLS(t *testing.T) {
 	env, uid := setupAccounts(t)
 	phone := "0812-3456-7890"
 	a := env.seedAccountWithPhone(t, "Desa Kontak", uid, phone)
 
-	cases := []struct {
-		role string
-		full bool
-	}{
-		{"sales", true},
-		{"admin", true}, // Admin CRM = pengelola workspace → akses penuh HP
-		{"manager", false},
-		{"csm", false},
-	}
-	for _, c := range cases {
-		t.Run("role="+c.role, func(t *testing.T) {
+	for _, role := range []string{"sales", "admin", "manager", "csm"} {
+		t.Run("role="+role, func(t *testing.T) {
 			req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID), nil, itoa(a.ID))
-			body := env.runAccount(uid, "owner", c.role, req, env.h.AccountDetail).Body.String()
-			has := strings.Contains(body, phone)
-			if c.full && !has {
-				t.Errorf("role %q harus melihat nomor utuh", c.role)
+			body := env.runAccount(uid, "owner", role, req, env.h.AccountDetail).Body.String()
+			if !strings.Contains(body, phone) {
+				t.Errorf("role %q harus melihat nomor penuh (HP Kontak account tak lagi ber-FLS)", role)
 			}
-			if !c.full && has {
-				t.Errorf("role %q BOCOR — nomor asli sampai ke browser non-Sales", c.role)
+			if strings.Contains(body, flsHidden) {
+				t.Errorf("role %q: tak boleh ada mask HP di detail account (BL-106)", role)
 			}
 		})
 	}
 }
 
-// TestAccountDetailView_PhoneMasked_Support: nomor HP kontak tersamar utk
-// Support — melengkapi matriks F4_PhoneMasking di atas (yang tak bisa
-// mencakup Support: F3 ScopeNone, TestAccounts_F3_SupportNolBaris, membuat
-// filter.Allows di AccountDetail SELALU menolak Support (404) sebelum
-// accountDetailView pernah dipanggil). Diuji LANGSUNG atas accountDetailView,
-// pola sama TestAccountDetailView_VillageBudgetMasked. Gap M9-2.
-func TestAccountDetailView_PhoneMasked_Support(t *testing.T) {
+// TestAccountDetailView_BL106_PhoneUnmaskedSupport: bahkan Support (bila jalur
+// memanggil accountDetailView) menerima nomor PENUH — bukan lagi mask. Diuji
+// LANGSUNG atas accountDetailView karena Support ScopeNone selalu 404 di jalur
+// HTTP (TestAccounts_F3_SupportNolBaris); ini mengunci bahwa masking phone sudah
+// benar-benar dilepas di builder view, bukan sekadar tak terlihat via HTTP.
+func TestAccountDetailView_BL106_PhoneUnmaskedSupport(t *testing.T) {
 	env, uid := setupAccounts(t)
 	phone := "0812-3456-7890"
 	a := env.seedAccountWithPhone(t, "Desa Kontak Support", uid, phone)
@@ -152,34 +145,30 @@ func TestAccountDetailView_PhoneMasked_Support(t *testing.T) {
 	env.runAccount(uid, "owner", "support", req, func(w http.ResponseWriter, r *http.Request) {
 		got = env.h.accountDetailView(r.Context(), "", a).ContactPhone
 	})
-	if got != flsHidden {
-		t.Errorf("support: ContactPhone harus tersamar (%s), got %q", flsHidden, got)
-	}
-	if got == phone {
-		t.Errorf("support: ContactPhone mentah %q BOCOR", phone)
+	if got != phone {
+		t.Errorf("BL-106: ContactPhone harus nomor penuh %q, got %q", phone, got)
 	}
 }
 
-// TestAccounts_F4_NonSalesTakBisaTimpaPhone: editor non-Sales mengirim mask
-// (field terkunci), tapi handler mempertahankan nomor ASLI — mask tak boleh
-// menimpa nilai tersimpan.
-func TestAccounts_F4_NonSalesTakBisaTimpaPhone(t *testing.T) {
+// TestAccounts_BL106_NonSalesBisaSuntingPhone: editor non-Sales (admin) kini
+// BISA mengubah nomor HP — tak ada lagi field terkunci maupun preservation guard.
+// Nilai yang dikirim form tersimpan apa adanya.
+func TestAccounts_BL106_NonSalesBisaSuntingPhone(t *testing.T) {
 	env, uid := setupAccounts(t)
-	phone := "0812-3456-7890"
-	a := env.seedAccountWithPhone(t, "Desa Kontak", uid, phone)
+	a := env.seedAccountWithPhone(t, "Desa Kontak", uid, "0812-3456-7890")
 
-	// Admin menyunting: form mengirim mask (flsHidden) sebagai contact_phone.
+	const newPhone = "0899-0000-1111"
 	// Tanpa village_id, nama Desa dipertahankan dari seed (BL-66).
 	form := accountFormValues("prospect")
-	form.Set("contact_phone", flsHidden)
+	form.Set("contact_phone", newPhone)
 	req := accountsReq(http.MethodPost, "/w/test/accounts/"+itoa(a.ID), form, itoa(a.ID))
 	if rec := env.runAccount(uid, "owner", "admin", req, env.h.AccountUpdate); rec.Code != http.StatusSeeOther {
 		t.Fatalf("update gagal: %d\n%s", rec.Code, rec.Body.String())
 	}
 
 	got, _ := env.q.GetAccount(t.Context(), a.ID)
-	if got.ContactPhone == nil || *got.ContactPhone != phone {
-		t.Errorf("nomor asli harus dipertahankan, got %v (mask menimpa = F4 bocor)", got.ContactPhone)
+	if got.ContactPhone == nil || *got.ContactPhone != newPhone {
+		t.Errorf("BL-106: admin harus bisa mengubah HP, got %v want %q", got.ContactPhone, newPhone)
 	}
 }
 

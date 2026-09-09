@@ -200,8 +200,8 @@ func contactAccountPickerField(accounts []AccountOption) g.Node {
 // contactPhoneField = nomor pribadi (HP/WhatsApp). Bila tak boleh disunting (bukan
 // Sales), field dikunci menampilkan nilai tersamar + keterangan, dan TANPA name
 // agar tak terkirim — handler juga mempertahankan nomor asli, jadi mask tak pernah
-// menimpa data. Sejajar phoneField di accounts_form.go, tapi label & name variabel
-// (dua nomor pribadi di form kontak).
+// menimpa data. (HP Kontak modul Account sendiri sudah dilepas dari FLS di BL-106;
+// mask per-peran kini khusus Kontak/Lead.) label & name variabel (dua nomor di form).
 func contactPhoneField(editable bool, label, name, val string) g.Node {
 	if editable {
 		return field(label, name, val, false, "tel")

@@ -71,7 +71,8 @@ func (h *Handler) loadOwnedLead(w http.ResponseWriter, r *http.Request, id int64
 
 // leadFormFields memetakan Lead → nilai prefill form (semua string; nil → "").
 // F4: nomor HP/WhatsApp disamarkan bila phoneEditable=false (canEditPhone,
-// sales-only) — persis pola accountFormFields. Tanpa ini, Manager (pemegang
+// sales-only) — pola sama contactFormFields (BL-106 melepas mask ini dari
+// accountFormFields; modul Kontak & Lead tetap memakainya). Tanpa ini, Manager (pemegang
 // crm:leads write tapi di luar allow-list canSeeFullPhone) menerima nomor asli
 // mentah di form sunting. Diperbaiki audit FLS M9-1 (gap live, simetris dgn
 // ActivityUpdate/Notes — lihat guard tulis di LeadUpdate, sales_leads_update.go).
