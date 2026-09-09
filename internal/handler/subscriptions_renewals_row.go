@@ -26,7 +26,7 @@ const dueSoonDays = 30
 // subscription.status) sesuai wireframe. Prev→Current = previous_value → MRR,
 // keduanya nilai komersial → maskARR (F4, diperbaiki audit FLS M9-1).
 func renewalRowView(s db.ListRenewalsRow, now time.Time, businessRole string) panel.RenewalRow {
-	label, cls := renewalDerivedStatus(now, s.EndDate, s.RenewalStatus)
+	label, cls := renewalDerivedStatus(now, s.Status, s.EndDate, s.RenewalStatus)
 	return panel.RenewalRow{
 		ID:          s.ID,
 		Village:     s.VillageName,
@@ -54,30 +54,41 @@ func renewalTypeLabel(renewalType *string, autoRenew bool) string {
 	return "Manual"
 }
 
-// renewalDerivedStatus = Status DERIVASI renewal (BL-94), berbeda dari
-// subscription.status (lifecycle). Prioritas: sudah diperpanjang (renewal_status=
-// 'Renewed') → "Diperpanjang" (agar baris renewed tak keliru "Masa Tenggang").
-// Selebihnya dari selisih end_date vs hari ini: lewat tempo → "Masa Tenggang"
-// (error), ≤ dueSoonDays → "Jatuh Tempo" (warning), selain itu → "Aman" (success).
+// renewalDerivedStatus = Status DERIVASI renewal (BL-94), MENGIKUTI PERSIS predikat
+// jendela ListRenewals (queries/subscriptions.sql) agar badge ⇔ tab konsisten
+// (BL-127: dulu label murni selisih tanggal tanpa cek status → langganan non-aktif
+// ber-end_date dekat memakai badge "Jatuh Tempo"/"Masa Tenggang" di tab "Semua"
+// padahal tereksklusi dari tab-tab itu). Urutan URGENSI-DULU agar tab 'due'/'grace'
+// 100% seragam dgn badge-nya:
+//   • 'due'   : status ∈ {Active,PendingApproval} & 0 ≤ sisa ≤ 30 → "Jatuh Tempo".
+//   • 'grace' : status = Active & sisa < 0                        → "Masa Tenggang".
+//   • renewal_status = 'Renewed' (bukan due/grace)               → "Diperpanjang".
+//   • status non-Active lain (Trial/Churned/Expired/…)           → label lifecycle.
+//   • sisanya (Active, sisa > 30)                                → "Aman".
 // Mengembalikan label + class badge daisyUI (token semantik, bukan absolut).
-func renewalDerivedStatus(now time.Time, end pgtype.Date, renewalStatus *string) (label, badgeClass string) {
+func renewalDerivedStatus(now time.Time, status string, end pgtype.Date, renewalStatus *string) (label, badgeClass string) {
+	dueEligible := status == "Active" || status == "PendingApproval"
+	if end.Valid {
+		a := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		b := time.Date(end.Time.Year(), end.Time.Month(), end.Time.Day(), 0, 0, 0, 0, time.UTC)
+		d := int(b.Sub(a).Hours() / 24)
+		switch {
+		case dueEligible && d >= 0 && d <= dueSoonDays:
+			return "Jatuh Tempo", "badge badge-warning"
+		case status == "Active" && d < 0:
+			return "Masa Tenggang", "badge badge-error"
+		}
+	}
 	if renewalStatus != nil && *renewalStatus == "Renewed" {
 		return "Diperpanjang", "badge badge-success"
+	}
+	if status != "Active" {
+		return status, subStatusLifecycleClass(status)
 	}
 	if !end.Valid {
 		return "—", "badge badge-ghost"
 	}
-	a := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	b := time.Date(end.Time.Year(), end.Time.Month(), end.Time.Day(), 0, 0, 0, 0, time.UTC)
-	d := int(b.Sub(a).Hours() / 24)
-	switch {
-	case d < 0:
-		return "Masa Tenggang", "badge badge-error"
-	case d <= dueSoonDays:
-		return "Jatuh Tempo", "badge badge-warning"
-	default:
-		return "Aman", "badge badge-success"
-	}
+	return "Aman", "badge badge-success"
 }
 
 // daysLeftLabel = selisih hari (kalender) end_date terhadap hari ini, diformat.
