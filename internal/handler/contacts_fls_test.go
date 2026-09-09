@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -172,6 +173,54 @@ func TestContactDetailView_PhoneMasked_Support(t *testing.T) {
 	}
 	if got.OfficePhone != office {
 		t.Errorf("support: telepon kantor tak boleh disamarkan, got %q", got.OfficePhone)
+	}
+}
+
+// TestContacts_F4_OverrideLewatSettings: BL-107 end-to-end. Manager default TAK
+// melihat nomor; setelah admin memberi Manager "lihat" lewat halaman Field Security,
+// permintaan detail Manager BERIKUTNYA menampilkan nomor utuh — bukti config
+// per-tenant mengalir dari POST Settings → cache → masking handler, tanpa restart.
+// Pakai setupRoles: WorkspaceFieldSecurityUpdate menulis baris ber-FK ke
+// business_roles, jadi peran wajib tertanam di DB.
+func TestContacts_F4_OverrideLewatSettings(t *testing.T) {
+	env, uid := setupRoles(t)
+	mobile, whatsapp, office := "0812-3456-7890", "0813-0000-1111", "021-555-0000"
+	a := env.seedAccount(t, "Desa Override", &uid, nil, nil)
+	c := env.seedContactPhone(t, a.ID, "Budi", mobile, whatsapp, office)
+
+	detailReq := func() *http.Request {
+		return contactsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/contacts/"+itoa(c.ID),
+			nil, itoa(a.ID), itoa(c.ID))
+	}
+
+	// Default: Manager (DataScopeAll → bisa membuka) menerima mask.
+	body := env.runAccount(uid, "owner", "manager", detailReq(), env.h.ContactDetail).Body.String()
+	if strings.Contains(body, mobile) || strings.Contains(body, whatsapp) {
+		t.Fatal("prakondisi: Manager default harus menerima mask")
+	}
+
+	// Admin memberi Manager "lihat" lewat halaman Settings.
+	form := url.Values{"view.manager": {"1"}}
+	post := rolesReq(http.MethodPost, "/w/test/field-security", form, "")
+	if rec := env.runAccount(uid, "owner", "admin", post, env.h.WorkspaceFieldSecurityUpdate); rec.Code != http.StatusSeeOther {
+		t.Fatalf("simpan kebijakan gagal: %d", rec.Code)
+	}
+
+	// Permintaan berikutnya: Manager kini melihat nomor utuh.
+	body = env.runAccount(uid, "owner", "manager", detailReq(), env.h.ContactDetail).Body.String()
+	if !strings.Contains(body, mobile) || !strings.Contains(body, whatsapp) {
+		t.Error("setelah override: Manager harus melihat HP & WhatsApp utuh")
+	}
+	// Telepon kantor tetap tampil (bukan sasaran F4).
+	if !strings.Contains(body, office) {
+		t.Error("telepon kantor tak boleh disamarkan")
+	}
+	// Sales TAK dicentang → tenant kini terkonfigurasi → Sales fail-closed di detail.
+	sReq := contactsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/contacts/"+itoa(c.ID),
+		nil, itoa(a.ID), itoa(c.ID))
+	sBody := env.runAccount(uid, "owner", "sales", sReq, env.h.ContactDetail).Body.String()
+	if strings.Contains(sBody, mobile) || strings.Contains(sBody, whatsapp) {
+		t.Error("tenant terkonfigurasi: Sales tak dicentang harus fail-closed (mask), bukan default lama")
 	}
 }
 

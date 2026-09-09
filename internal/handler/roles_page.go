@@ -37,6 +37,15 @@ func (h *Handler) RolesPage(w http.ResponseWriter, r *http.Request) {
 	// Daftar (arsip/read-only) tetap tampil; form tambah & aksi hapus disembunyikan.
 	canEdit := !IsReadOnly(ctx)
 
+	// Section Field Security (sumbu F4, ADR 0012 opsi B) ditanam di bawah tabel peran
+	// bila peninjau berwenang (crm:field_security); nil → tak dirender. Kegagalan
+	// baca kebijakan tak boleh merobohkan halaman peran — log & lanjut tanpa section.
+	fsec, err := h.fieldSecurityViewFor(r)
+	if err != nil {
+		h.Log.Error("roles: field-security section", "err", err)
+		fsec = nil
+	}
+
 	h.renderWorkspaceShell(w, r, "Peran CRM", "/roles",
 		panel.Roles(
 			wsPath(slugFromRequest(r), ""),
@@ -45,6 +54,7 @@ func (h *Handler) RolesPage(w http.ResponseWriter, r *http.Request) {
 			canEdit,
 			wsErrMsg(r.URL.Query().Get("err")),
 			rolesMsg(r.URL.Query().Get("ok")),
+			fsec,
 		))
 }
 

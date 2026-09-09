@@ -271,6 +271,13 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/codes", h.WorkspaceCodeFormats)
 		r.Post("/codes", h.WorkspaceCodeFormatUpdate)
 
+		// Field Security (BL-107, sumbu F4): matriks business_role × {lihat, sunting}
+		// nomor HP/WhatsApp untuk Kontak/Lead/Konversi. Sejak opsi B (ADR 0012) matriks
+		// DIRENDER sebagai section di halaman /roles (RolesPage) — tak ada GET tersendiri;
+		// hanya AKSI simpan yang punya rute, PRG-nya kembali ke /roles. Gerbang di HANDLER
+		// (canManageFieldSecurity, objek crm:field_security) — bukan role tenant.
+		r.Post("/field-security", h.WorkspaceFieldSecurityUpdate)
+
 		// Anggota (model membership). Lihat = semua anggota; ubah/keluarkan/undang
 		// = owner/admin (di-guard handler via canManageMembers).
 		r.Get("/members", h.MembersPage)

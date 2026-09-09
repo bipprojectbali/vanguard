@@ -13,6 +13,7 @@ import (
 	"go_starter/internal/authz"
 	"go_starter/internal/config"
 	"go_starter/internal/db"
+	"go_starter/internal/fls"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -88,6 +89,32 @@ func loadBusinessPerms(ctx context.Context, pool *pgxpool.Pool) ([]authz.Busines
 		for _, r := range rows {
 			out = append(out, authz.BusinessPerm{
 				TenantID: r.TenantID, Role: r.Role, Obj: r.Obj, Act: r.Act,
+			})
+		}
+		return nil
+	})
+	return out, err
+}
+
+// loadFieldSecurity membaca SELURUH kebijakan FLS phone (semua tenant) untuk mengisi
+// cache internal/fls saat startup. WithSuper WAJIB dengan alasan sama loadBusinessPerms:
+// field_security_policies ber-RLS, jadi di tenant-tx tenant lain tak terbaca. Baris
+// sqlc dipetakan ke fls.Row agar paket fls tetap DB-free. Nol baris = semua tenant
+// pakai default terkunci (pola code_formats).
+func loadFieldSecurity(ctx context.Context, pool *pgxpool.Pool) ([]fls.Row, error) {
+	var out []fls.Row
+	err := db.WithSuper(ctx, pool, func(q *db.Queries) error {
+		rows, e := q.ListAllFieldSecurityPolicies(ctx)
+		if e != nil {
+			return e
+		}
+		out = make([]fls.Row, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, fls.Row{
+				TenantID:     r.TenantID,
+				BusinessRole: r.BusinessRole,
+				CanViewPhone: r.CanViewPhone,
+				CanEditPhone: r.CanEditPhone,
 			})
 		}
 		return nil

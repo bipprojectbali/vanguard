@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"go_starter/internal/db"
-	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 )
 
@@ -26,7 +25,7 @@ func contactRowView(ctx context.Context, c db.Contact) panel.ContactRow {
 		Name:             contactFullName(c),
 		PositionCategory: deref(c.PositionCategory),
 		ContactRole:      deref(c.ContactRole),
-		Whatsapp:         maskPhone(deref(c.WhatsappNumber), session.BusinessRole(ctx)),
+		Whatsapp:         maskPhone(ctx, deref(c.WhatsappNumber)),
 		IsPrimary:        c.IsPrimaryContact,
 		IsTechnical:      c.IsTechnicalContact,
 		EmailOptOut:      c.EmailOptOut,
@@ -46,7 +45,7 @@ func contactRowViewGlobal(ctx context.Context, r db.ListContactsRow) panel.Conta
 		Village:          r.VillageName,
 		PositionCategory: deref(r.PositionCategory),
 		ContactRole:      deref(r.ContactRole),
-		Whatsapp:         maskPhone(deref(r.WhatsappNumber), session.BusinessRole(ctx)),
+		Whatsapp:         maskPhone(ctx, deref(r.WhatsappNumber)),
 		IsPrimary:        r.IsPrimaryContact,
 		IsTechnical:      r.IsTechnicalContact,
 		EmailOptOut:      r.EmailOptOut,
@@ -62,7 +61,6 @@ func contactRowViewGlobal(ctx context.Context, r db.ListContactsRow) panel.Conta
 // sudah diresolusi handler). Kolom "Terakhir Dihubungi/Aktivitas" ditunda modul
 // Activities → "" (view: "—").
 func (h *Handler) contactDetailView(ctx context.Context, base, accountBase, villageName string, c db.Contact, names map[int64]string, reportsToName string) panel.ContactDetailView {
-	br := session.BusinessRole(ctx)
 	return panel.ContactDetailView{
 		Base:        base,
 		AccountBase: accountBase,
@@ -87,8 +85,8 @@ func (h *Handler) contactDetailView(ctx context.Context, base, accountBase, vill
 
 		// F4: HP & WhatsApp = PII pribadi perangkat desa (Sales saja utuh);
 		// telepon kantor = nomor kelembagaan → tak disamarkan.
-		MobilePhone:    maskPhone(deref(c.MobilePhone), br),
-		WhatsappNumber: maskPhone(deref(c.WhatsappNumber), br),
+		MobilePhone:    maskPhone(ctx, deref(c.MobilePhone)),
+		WhatsappNumber: maskPhone(ctx, deref(c.WhatsappNumber)),
 		OfficePhone:    deref(c.OfficePhone),
 		Email:          deref(c.Email),
 

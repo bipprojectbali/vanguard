@@ -18,6 +18,7 @@ import (
 	"go_starter/internal/authz"
 	"go_starter/internal/config"
 	"go_starter/internal/database"
+	"go_starter/internal/fls"
 	"go_starter/internal/handler"
 	"go_starter/internal/maintenance"
 	"go_starter/internal/mcpserver"
@@ -203,6 +204,15 @@ func run() (err error) {
 		return err
 	}
 	authz.InitBusiness(bEnforcer)
+
+	// FLS phone (BL-107): kebijakan lihat/sunting HP & WhatsApp konfigurabel per-tenant,
+	// di-cache in-proses (pola enforcer bisnis di atas). Load-all WithSuper; tenant tanpa
+	// baris jatuh ke default terkunci (Sales+Admin lihat, Sales sunting).
+	fsPolicies, err := loadFieldSecurity(ctx, pool)
+	if err != nil {
+		return err
+	}
+	fls.Load(fsPolicies)
 
 	// Google OAuth — di-wire bila kredensial tersedia. Di dev tanpa kredensial,
 	// app tetap start (tombol Google membalas 503 saat diklik).

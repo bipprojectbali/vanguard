@@ -32,11 +32,14 @@ type ScopeOption struct {
 	Label string
 }
 
-// Roles merender panel daftar: alert, form tambah peran (bila canEdit), lalu
-// tabel peran. base = prefix URL workspace (dioper handler — view tak merakit
-// path sendiri, konvensi 0004). canEdit=false (workspace read-only/arsip) → form
-// tambah & aksi hapus disembunyikan; daftar tetap bisa dibuka (Detail).
-func Roles(base string, rows []RoleRow, scopes []ScopeOption, canEdit bool, errMsg, okMsg string) g.Node {
+// Roles merender panel daftar: alert, form tambah peran (bila canEdit), tabel
+// peran, lalu — bila handler menyertakan fsec — section Field Security (ADR 0012
+// opsi B: sumbu F4 digabung ke halaman ini, form/POST/gerbang tetap terpisah).
+// base = prefix URL workspace (dioper handler — view tak merakit path sendiri,
+// konvensi 0004). canEdit=false (workspace read-only/arsip) → form tambah & aksi
+// hapus disembunyikan; daftar tetap bisa dibuka (Detail). fsec nil = peninjau tak
+// berwenang atas Field Security (crm:field_security) → section tak dirender.
+func Roles(base string, rows []RoleRow, scopes []ScopeOption, canEdit bool, errMsg, okMsg string, fsec *FieldSecurityView) g.Node {
 	body := []g.Node{
 		h.H1(h.Class("text-xl font-semibold mb-2"), g.Text("Peran CRM")),
 		h.P(h.Class("text-base-content/70 mb-1"),
@@ -55,6 +58,9 @@ func Roles(base string, rows []RoleRow, scopes []ScopeOption, canEdit bool, errM
 		body = append(body, roleCreateForm(base, scopes))
 	}
 	body = append(body, rolesTableCard(base, rows, canEdit))
+	if fsec != nil {
+		body = append(body, fieldSecuritySection(*fsec))
+	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 

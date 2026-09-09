@@ -292,6 +292,18 @@ type Engagement struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+type FieldSecurityPolicy struct {
+	ID           int64              `json:"id"`
+	TenantID     int64              `json:"tenant_id"`
+	BusinessRole string             `json:"business_role"`
+	CanViewPhone bool               `json:"can_view_phone"`
+	CanEditPhone bool               `json:"can_edit_phone"`
+	CreatedBy    *int64             `json:"created_by"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy    *int64             `json:"updated_by"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Invite struct {
 	ID         int64              `json:"id"`
 	TenantID   int64              `json:"tenant_id"`
