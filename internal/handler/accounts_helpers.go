@@ -64,15 +64,10 @@ func int64PtrStr(p *int64) string {
 	return strconv.FormatInt(*p, 10)
 }
 
-// accountFormFields memetakan Account → nilai prefill form. phoneEditable
-// menentukan apakah nomor asli atau mask yang ditaruh di field (F4): editor
-// non-Sales menerima mask, bukan nomor asli — nilai asli tak pernah mencapai
-// browsernya (view-source pun bersih).
-func accountFormFields(a db.Account, phoneEditable bool) panel.AccountFormFields {
-	phone := deref(a.ContactPhone)
-	if !phoneEditable {
-		phone = flsHidden // tersamar; field dikunci di view, tak ikut ter-submit
-	}
+// accountFormFields memetakan Account → nilai prefill form. BL-106: HP Kontak
+// account tak lagi ber-FLS — nomor asli selalu diisi apa adanya (tak ada lagi
+// mask/kunci per-peran; itu tinggal di modul Kontak/Lead).
+func accountFormFields(a db.Account) panel.AccountFormFields {
 	return panel.AccountFormFields{
 		VillageName:           a.VillageName,
 		AccountType:           a.AccountType,
@@ -89,7 +84,7 @@ func accountFormFields(a db.Account, phoneEditable bool) panel.AccountFormFields
 		// membuang non-digit, jadi "750000000.00" dari numericStr akan salah
 		// tampil "75000000000". Territory tak lagi punya field form (di-drop UI).
 		VillageBudget: moneyRupiahStr(a.VillageBudget),
-		ContactPhone:  phone,
+		ContactPhone:  deref(a.ContactPhone),
 		OfficePhone:   deref(a.OfficePhone),
 		OfficeEmail:   deref(a.OfficeEmail),
 	}

@@ -85,13 +85,21 @@ func parseAccountForm(fv func(string) string) (accountForm, string) {
 		f.EntityCode = &s
 	}
 
+	// HP Kontak: nomor OPSIONAL yang WAJIB berupa angka bila diisi (BL-106 — input
+	// jadi bertema angka; phonenum.js jaring klien, optPhone penjaga backend).
+	// Kosong → nil. Pola sama HP/WhatsApp Lead.
+	phone, code := optPhone(fv("contact_phone"), "contact_phone")
+	if code != "" {
+		return accountForm{}, code
+	}
+	f.ContactPhone = phone
+
 	// Teks bebas opsional: trim, kosong → NULL.
 	f.Website = optTrim(fv("website"))
 	f.Description = optTrim(fv("description"))
 	f.VillageAddress = optTrim(fv("village_address"))
 	f.PostalCode = optTrim(fv("postal_code"))
 	f.Territory = optTrim(fv("territory"))
-	f.ContactPhone = optTrim(fv("contact_phone"))
 	f.OfficePhone = optTrim(fv("office_phone"))
 	f.OfficeEmail = optTrim(fv("office_email"))
 

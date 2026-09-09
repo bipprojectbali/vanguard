@@ -1,6 +1,11 @@
 package handler
 
-import "go_starter/internal/authz"
+import (
+	"context"
+
+	"go_starter/internal/authz"
+	"go_starter/internal/session"
+)
 
 // fls.go — Field-Level Security (sistem-dan-role.md §5, diperkuat §8.3).
 //
@@ -58,6 +63,14 @@ func canSeeARR(businessRole string) bool {
 func canSeeFullPhone(businessRole string) bool {
 	return businessRole == authz.BusinessRoleSales ||
 		businessRole == authz.BusinessRoleAdmin
+}
+
+// canEditPhone = boleh MENYUNTING nomor HP kontak (F4: Sales saja lihat penuh,
+// jadi hanya Sales boleh menyuntingnya — selain itu formnya mengirim mask).
+// Dipakai modul Kontak & Lead (form + konversi); BL-106 melepasnya dari Account,
+// jadi rumahnya pindah ke sini bersama helper phone FLS lain.
+func canEditPhone(ctx context.Context) bool {
+	return session.BusinessRole(ctx) == authz.BusinessRoleSales
 }
 
 // canSeeInternalNotes — Catatan Internal HANYA Admin & CSM (§5): isinya penilaian

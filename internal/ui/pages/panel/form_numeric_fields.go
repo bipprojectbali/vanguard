@@ -78,7 +78,8 @@ func moneyFieldRp(label, name, val string) g.Node {
 // (optPhone) tetap penolak sesungguhnya saat submit. Tanpa JS pun aman.
 //
 // BL-84: editable=false → field DIKUNCI (disabled, TANPA name) menampilkan nilai
-// tersamar ("•••") + keterangan, persis phoneField (accounts_form_fields.go).
+// tersamar ("•••") + keterangan (pola mask HP/WA modul Lead & Kontak; HP Kontak
+// account sendiri sudah dilepas dari FLS di BL-106, lihat phoneField).
 // Bug yang diperbaiki: dulu field bermask "•••" tetap punya name & aktif, jadi
 // role tak-berhak-lihat (mis. Manager) mengirim "•••" saat submit → optPhone
 // menolaknya (bukan [0-9+ -]) → seluruh sunting GAGAL validasi, role itu mustahil

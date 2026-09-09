@@ -1,12 +1,10 @@
 package handler
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strconv"
 
-	"go_starter/internal/authz"
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
@@ -16,8 +14,8 @@ import (
 
 // accounts_update.go — sunting profil desa: form terisi (AccountEdit) + simpan
 // (AccountUpdate). entity_code/village_code/owner/CSM TIDAK disentuh di jalur ini
-// (penugasan CSM di accounts_assign.go). canEditPhone menegakkan F4: hanya Sales
-// (yang melihat nomor penuh) boleh menyuntingnya.
+// (penugasan CSM di accounts_assign.go). BL-106: HP Kontak account tak lagi
+// ber-FLS — disunting seperti field biasa (tunduk gerbang tulis account umum).
 
 // AccountEdit — GET /w/{workspace}/accounts/{id}/edit. Form terisi. Mensyaratkan
 // F3: hanya yang boleh MELIHAT baris yang boleh membuka form suntingnya (404 bila
@@ -39,7 +37,7 @@ func (h *Handler) AccountEdit(w http.ResponseWriter, r *http.Request) {
 	base := wsPath(slugFromRequest(r), "")
 	idStr := strconv.FormatInt(a.ID, 10)
 
-	fields := accountFormFields(a, canEditPhone(ctx))
+	fields := accountFormFields(a)
 	// BL-66: preselect dropdown Desa dari village_code tersimpan (resolve → id
 	// master). Legacy/kode tak cocok → "" (dropdown kosong; nama tetap tampil
 	// sbg catatan di view).
@@ -54,7 +52,6 @@ func (h *Handler) AccountEdit(w http.ResponseWriter, r *http.Request) {
 		Err:             wsErrMsg(r.URL.Query().Get("err")),
 		RegionsJSON:     h.regionsJSON(ctx),
 		VillagesURL:     base + "/accounts/villages",
-		PhoneEditable:   canEditPhone(ctx),
 		Fields:          fields,
 		Types:           accountTypeOptions,
 		Statuses:        villageStatusOptions,
@@ -85,18 +82,10 @@ func (h *Handler) AccountUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// F4: editor bukan-Sales tak mengirim contact_phone (field terkunci) — nilai
-	// tersamar TAK boleh menimpa nomor asli. Pertahankan yang tersimpan. Sales
-	// mengirim nilai apa adanya (termasuk pengosongan yang disengaja).
-	contactPhone := form.ContactPhone
-	if !canEditPhone(ctx) {
-		contactPhone = a.ContactPhone
-	}
-
 	// BL-66: Desa/Kelurahan (village_id) opsional saat edit. Terpilih → turunkan
 	// nama, village_code (Kemendagri), & district_id dari master (satu sumber).
 	// Kosong → pertahankan nilai tersimpan (desa legacy yang dropdown-nya tak bisa
-	// preselect tak boleh kehilangan datanya) — pola sama dgn Teritori/contactPhone.
+	// preselect tak boleh kehilangan datanya) — pola sama dgn Teritori di bawah.
 	villageName := a.VillageName
 	villageCode := a.VillageCode
 	districtID := a.DistrictID
@@ -119,7 +108,7 @@ func (h *Handler) AccountUpdate(w http.ResponseWriter, r *http.Request) {
 
 	// BL-60: field Teritori dilepas dari UI → form tak lagi mengirimnya
 	// (form.Territory selalu nil). Pertahankan nilai tersimpan agar edit profil
-	// tak menghapus data teritori lama (pola sama dgn contactPhone di atas).
+	// tak menghapus data teritori lama (pola sama dgn village_code di atas).
 	uid := session.UserID(ctx)
 	if _, err := h.q(ctx).UpdateAccount(ctx, db.UpdateAccountParams{
 		VillageName:           villageName,
@@ -136,7 +125,7 @@ func (h *Handler) AccountUpdate(w http.ResponseWriter, r *http.Request) {
 		Population:            form.Population,
 		HamletsCount:          form.HamletsCount,
 		VillageBudget:         form.VillageBudget,
-		ContactPhone:          contactPhone,
+		ContactPhone:          form.ContactPhone,
 		OfficePhone:           form.OfficePhone,
 		OfficeEmail:           form.OfficeEmail,
 		UpdatedBy:             &uid,
@@ -155,10 +144,4 @@ func (h *Handler) AccountUpdate(w http.ResponseWriter, r *http.Request) {
 		"account_id": strconv.FormatInt(id, 10),
 	})
 	wsRedirectOK(w, r, "/accounts/"+strconv.FormatInt(id, 10), "saved")
-}
-
-// canEditPhone = boleh menyunting nomor HP kontak (F4: Sales saja lihat penuh,
-// jadi hanya Sales boleh menyuntingnya — selain itu formnya mengirim mask).
-func canEditPhone(ctx context.Context) bool {
-	return session.BusinessRole(ctx) == authz.BusinessRoleSales
 }
