@@ -33,7 +33,7 @@ func (e *testEnv) seedChurnedSub(
 		EntityCode:        &code,
 		SubscriptionOwner: owner,
 		AccountID:         accountID,
-		PlanID:            planID,
+		PlanID:            &planID,
 		Status:            "Churned",
 		AutoRenew:         false,
 		Mrr:               numFrom(t, lostMRR),

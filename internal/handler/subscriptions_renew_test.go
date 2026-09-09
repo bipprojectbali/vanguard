@@ -52,7 +52,7 @@ func (e *testEnv) seedPendingRenewal(
 		EntityCode:             &code,
 		SubscriptionOwner:      owner,
 		AccountID:              accountID,
-		PlanID:                 planID,
+		PlanID:                 &planID,
 		PreviousSubscriptionID: &prevID,
 		Status:                 "PendingApproval",
 		ApprovalStatus:         &pending,

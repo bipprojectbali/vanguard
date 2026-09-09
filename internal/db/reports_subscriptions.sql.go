@@ -26,7 +26,10 @@ FROM subscriptions
 WHERE deleted_at IS NULL
   AND ($1::timestamptz IS NULL OR cancellation_date >= $1::timestamptz::date)
   AND ($2::timestamptz IS NULL OR cancellation_date < $2::timestamptz::date)
-  AND ($3::bigint IS NULL OR plan_id = $3)
+  AND ($3::bigint IS NULL OR EXISTS (
+      SELECT 1 FROM subscription_items si
+      WHERE si.subscription_id = subscriptions.id AND si.plan_id = $3
+  ))
   AND (
       $4::boolean
       OR ($5::boolean AND subscription_owner = $6)
@@ -81,7 +84,10 @@ WHERE s.deleted_at IS NULL
   AND s.end_date IS NOT NULL
   AND ($1::timestamptz IS NULL OR s.end_date >= $1::timestamptz::date)
   AND ($2::timestamptz IS NULL OR s.end_date < $2::timestamptz::date)
-  AND ($3::bigint IS NULL OR s.plan_id = $3)
+  AND ($3::bigint IS NULL OR EXISTS (
+      SELECT 1 FROM subscription_items si
+      WHERE si.subscription_id = s.id AND si.plan_id = $3
+  ))
   AND (
       $4::boolean
       OR ($5::boolean AND s.subscription_owner = $6)
@@ -164,7 +170,10 @@ SELECT
     )::bigint AS due_30
 FROM subscriptions s
 WHERE s.deleted_at IS NULL
-  AND ($4::bigint IS NULL OR s.plan_id = $4)
+  AND ($4::bigint IS NULL OR EXISTS (
+      SELECT 1 FROM subscription_items si
+      WHERE si.subscription_id = s.id AND si.plan_id = $4
+  ))
   AND (
       $5::boolean
       OR ($6::boolean AND s.subscription_owner = $7)
@@ -220,16 +229,18 @@ func (q *Queries) ReportRenewalSummary(ctx context.Context, arg ReportRenewalSum
 const reportRevenueByPlan = `-- name: ReportRevenueByPlan :many
 SELECT
     p.plan_name                                 AS plan_name,
-    COUNT(*)::bigint                            AS village_count,
-    COALESCE(SUM(s.mrr), 0)::numeric            AS mrr
-FROM subscriptions s
-JOIN plans p ON p.id = s.plan_id
-WHERE s.deleted_at IS NULL
-  AND s.status = 'Active'
-  AND ($1::bigint IS NULL OR s.plan_id = $1)
+    COUNT(DISTINCT si.account_id)::bigint       AS village_count,
+    COALESCE(SUM(si.mrr), 0)::numeric           AS mrr
+FROM subscription_items si
+JOIN plans p ON p.id = si.plan_id
+WHERE si.parent_active
+  AND ($1::bigint IS NULL OR si.plan_id = $1)
   AND (
       $2::boolean
-      OR ($3::boolean AND s.subscription_owner = $4)
+      OR ($3::boolean AND EXISTS (
+          SELECT 1 FROM subscriptions s
+          WHERE s.id = si.subscription_id AND s.subscription_owner = $4
+      ))
   )
 GROUP BY p.id, p.plan_name
 ORDER BY mrr DESC, p.plan_name
@@ -248,12 +259,13 @@ type ReportRevenueByPlanRow struct {
 	Mrr          pgtype.Numeric `json:"mrr"`
 }
 
-// Panel 4 (Revenue by Plan): JOIN subscriptions × plans GROUP BY plan_id atas
-// langganan Active. Nama paket dari plans.plan_name (apa pun yang di-seed
-// tenant, BUKAN hardcode). Rata per Desa dihitung handler (mrr/desa). Diurut
-// MRR terbesar. RLS mengurung tenant di kedua tabel.
-// BL-52: SNAPSHOT (nilai Active SEKARANG) → Periode TAK diterapkan; Paket
-// menyaring ke plan_id terpilih (panel menampilkan paket itu saja).
+// Panel 4 (Revenue by Plan): BL-88 PR2b — agregasi per-produk PINDAH ke
+// subscription_items (langganan kini multi-paket; s.plan_id tak lagi otoritatif).
+// Baris = item ber-parent Active (parent_active). MRR = SUM(item.mrr); village_count =
+// desa DISTINCT (invarian 1 item Active per account+plan → tepat 1 item/desa/paket,
+// tapi DISTINCT eksplisit tetap benar bila invarian berubah). Nama paket dari plans
+// (di-seed tenant). Rata per Desa dihitung handler. Diurut MRR terbesar. RLS mengurung
+// tenant. BL-52: SNAPSHOT (Active SEKARANG) → Periode TAK diterapkan; Paket menyaring.
 func (q *Queries) ReportRevenueByPlan(ctx context.Context, arg ReportRevenueByPlanParams) ([]ReportRevenueByPlanRow, error) {
 	rows, err := q.db.Query(ctx, reportRevenueByPlan,
 		arg.PlanFilter,
@@ -337,7 +349,10 @@ SELECT
     )::bigint AS churn_count
 FROM subscriptions
 WHERE deleted_at IS NULL
-  AND ($4::bigint IS NULL OR plan_id = $4)
+  AND ($4::bigint IS NULL OR EXISTS (
+      SELECT 1 FROM subscription_items si
+      WHERE si.subscription_id = subscriptions.id AND si.plan_id = $4
+  ))
   AND (
       $5::boolean
       OR ($6::boolean AND subscription_owner = $7)
@@ -467,7 +482,10 @@ LEFT JOIN customer_success cs
        ON cs.account_id = s.account_id AND cs.tenant_id = s.tenant_id
 WHERE s.deleted_at IS NULL
   AND s.start_date IS NOT NULL
-  AND ($2::bigint IS NULL OR s.plan_id = $2)
+  AND ($2::bigint IS NULL OR EXISTS (
+      SELECT 1 FROM subscription_items si
+      WHERE si.subscription_id = s.id AND si.plan_id = $2
+  ))
   AND (
       $3::boolean
       OR ($4::boolean AND s.subscription_owner = $5)
@@ -542,11 +560,12 @@ func (q *Queries) ReportSubscriptionAging(ctx context.Context, arg ReportSubscri
 
 const reportSubscriptionPlans = `-- name: ReportSubscriptionPlans :many
 SELECT
-    p.id::bigint     AS plan_id,
-    p.plan_name      AS plan_name,
-    COUNT(*)::bigint AS subscription_count
-FROM subscriptions s
-JOIN plans p ON p.id = s.plan_id
+    p.id::bigint                                AS plan_id,
+    p.plan_name                                 AS plan_name,
+    COUNT(DISTINCT si.subscription_id)::bigint  AS subscription_count
+FROM subscription_items si
+JOIN plans p ON p.id = si.plan_id
+JOIN subscriptions s ON s.id = si.subscription_id
 WHERE s.deleted_at IS NULL
   AND (
       $1::boolean
@@ -574,6 +593,9 @@ type ReportSubscriptionPlansRow struct {
 // daripada pilihan yang tak ada". F3 pakai flag subscription yang SAMA
 // (SubscriptionsListFilterFor). TAK disaring Periode/Paket agar daftar stabil
 // (paket terpilih selalu tampil walau rentang dipersempit).
+// BL-88 PR2b: paket dari subscription_items (langganan multi-paket → tiap paket
+// yang dipakai muncul; parent plan_id bisa NULL). subscription_count = langganan
+// DISTINCT yang memuat paket itu.
 func (q *Queries) ReportSubscriptionPlans(ctx context.Context, arg ReportSubscriptionPlansParams) ([]ReportSubscriptionPlansRow, error) {
 	rows, err := q.db.Query(ctx, reportSubscriptionPlans, arg.ScopeAll, arg.IsOwn, arg.Uid)
 	if err != nil {

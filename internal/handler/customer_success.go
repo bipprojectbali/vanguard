@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"go_starter/internal/authz"
 	"go_starter/internal/db"
@@ -90,6 +91,26 @@ func (h *Handler) CustomerSuccessDetail(w http.ResponseWriter, r *http.Request) 
 
 	base := wsPath(slugFromRequest(r), "")
 	v := customerSuccessDetailView(ctx, base, account, cs, exists)
+
+	// BL-108: kartu Penugasan CS dipindah ke halaman ini dari form edit desa.
+	// Gerbang SAMA dengan aksi POST /assign (crm:accounts write & tak read-only)
+	// — bukan sumbu izin baru; keempat role ber-tulis-account juga bisa membuka
+	// halaman ini (punya ≥1 section CS read), jadi tak ada yang kehilangan akses.
+	// Kandidat CSM dimuat DI SINI (assignableMembers = query DB) bukan di mapper.
+	if canWriteAccountsPerm(ctx) && !IsReadOnly(ctx) {
+		members, err := h.assignableMembers(ctx)
+		if err != nil {
+			h.Log.Error("customer_success: assignable members", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		v.CanAssign = true
+		v.AssignAction = base + "/accounts/" + strconv.FormatInt(accountID, 10) + "/assign"
+		v.Members = members
+		v.AssignedCSM = int64PtrStr(account.AssignedCsm)
+		v.BackupCSM = int64PtrStr(account.BackupCsm)
+	}
+
 	h.renderWorkspaceShell(w, r, account.VillageName+" · Customer Success", "/accounts",
 		panel.CustomerSuccessDetail(v))
 }

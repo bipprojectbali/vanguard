@@ -35,6 +35,17 @@ type CustomerSuccessDetailView struct {
 	CanReadJourney  bool
 	CanReadAdoption bool
 
+	// Penugasan CS (BL-108): dipindah ke halaman ini dari form edit desa.
+	// CanAssign = aktor berhak menulis kolom accounts (crm:accounts write & tak
+	// read-only) — gerbang SAMA dengan aksi POST /assign, tak menambah sumbu izin
+	// baru. AssignAction = URL POST /accounts/{id}/assign. Members = kandidat.
+	// AssignedCSM/BackupCSM = pilihan saat ini (id sebagai string, "" = kosong).
+	CanAssign    bool
+	AssignAction string
+	Members      []AccountMemberOption
+	AssignedCSM  string
+	BackupCSM    string
+
 	OverallHealthScore   string
 	HealthStatus         string
 	AdoptionScore        string
@@ -81,9 +92,13 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 			h.H1(h.Class("text-xl font-semibold truncate"), g.Text(v.AccountName)),
 			h.P(h.Class("text-sm text-base-content/60"), g.Text("Customer Success")),
 		),
-		ui.When(v.CanWrite, h.A(
-			h.Href(base+"/customer-success/edit"), h.Class("btn btn-sm min-h-11"),
-			g.Text(editLabel))),
+		h.Div(
+			h.Class("flex flex-wrap items-center gap-2"),
+			ui.When(v.CanAssign, assignCSTrigger()),
+			ui.When(v.CanWrite, h.A(
+				h.Href(base+"/customer-success/edit"), h.Class("btn btn-sm min-h-11"),
+				g.Text(editLabel))),
+		),
 	)
 
 	nav := h.Div(
@@ -91,6 +106,13 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 		h.A(h.Href(base), h.Class("text-sm text-base-content/60"),
 			g.Text("« Kembali ke Desa")),
 	)
+
+	// BL-108 (revisi 9 Sep): penugasan CS lewat MODAL (tombol di header membuka
+	// $assignOpen), bukan kartu inline. Modal disertakan SEKALI di KEDUA cabang —
+	// assign harus tetap bisa dilakukan bahkan sebelum baris CS pernah diisi
+	// (empty-state). Gerbang CanAssign dihitung di handler.
+	assign := ui.When(v.CanAssign,
+		assignCSModal(v.AssignAction, v.AssignedCSM, v.BackupCSM, v.Members))
 
 	if !v.Exists {
 		return h.Div(
@@ -104,6 +126,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 						g.Text("Belum ada data Customer Success untuk desa ini.")),
 				),
 			),
+			assign,
 		)
 	}
 
@@ -140,6 +163,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 			{"Tren Penggunaan", v.UsageTrend},
 			{"Sumber Data", v.UsageDataSource},
 		})),
+		assign,
 	)
 }
 

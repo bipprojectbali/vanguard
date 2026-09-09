@@ -34,7 +34,7 @@ func (h *Handler) subscriptionSummaryFor(ctx context.Context, base string, accou
 		return panel.SubscriptionSummaryView{Href: href}
 	}
 	return panel.SubscriptionSummaryView{
-		PlanName:         s.PlanName,
+		PlanName:         subPlanDisplay(s.PlanName, s.ItemCount),
 		StatusLabel:      s.Status,
 		MRR:              maskARR(formatRupiah(s.Mrr), br),
 		ARR:              maskARR(formatRupiah(s.Arr), br),

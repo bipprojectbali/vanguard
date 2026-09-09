@@ -109,7 +109,7 @@ func CustomerSuccessSummaryCard(v CustomerSuccessSummaryView) g.Node {
 		detailRow("Kesehatan", healthBadge),
 		detailRow("Tahap Siklus Hidup", g.Text(orDash(v.LifecycleStage))),
 		detailRow("Terakhir Engagement", g.Text(orDash(v.LastEngagementDate))),
-		detailRow("CSM", g.Text(orDash(v.CSMName))),
+		detailRow("CS", g.Text(orDash(v.CSMName))),
 	)
 }
 

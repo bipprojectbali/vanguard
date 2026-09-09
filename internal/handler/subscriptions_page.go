@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -127,13 +128,28 @@ func subRowView(s db.ListSubscriptionsRow, names map[int64]string, businessRole 
 	return panel.SubRow{
 		ID:          s.ID,
 		Village:     s.VillageName,
-		Plan:        s.PlanName,
+		Plan:        subPlanDisplay(s.PlanName, s.ItemCount),
 		Status:      label,
 		StatusClass: cls,
 		MRR:         maskARR(formatRupiah(s.Mrr), businessRole),
 		Renewal:     dateStr(s.EndDate),
 		CSM:         ownerName(s.SubscriptionOwner, names),
 	}
+}
+
+// subPlanDisplay merender kolom "Paket" daftar langganan (BL-88 PR2b): >1 item →
+// "N paket" (langganan multi-paket, parent plan_name NULL); 1 item → nama paket
+// (single-plan mengisi plan_name parent lewat JOIN); tanpa plan_name & ≤1 item
+// (paket terhapus / langganan lama tanpa item) → "—". itemCount dari subquery
+// COUNT(subscription_items) di query daftar.
+func subPlanDisplay(planName *string, itemCount int64) string {
+	if itemCount > 1 {
+		return strconv.FormatInt(itemCount, 10) + " paket"
+	}
+	if planName != nil && *planName != "" {
+		return *planName
+	}
+	return "—"
 }
 
 // subDerivedStatus = Status kolom daftar langganan (BL-95). Untuk langganan

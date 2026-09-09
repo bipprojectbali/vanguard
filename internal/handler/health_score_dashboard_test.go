@@ -262,7 +262,7 @@ func TestListHealthScores_RenewalEndDate(t *testing.T) {
 		TenantID:   env.tenantID,
 		EntityCode: &code,
 		AccountID:  acc.ID,
-		PlanID:     planID,
+		PlanID:     &planID,
 		Status:     "Active",
 		EndDate:    end,
 		CreatedBy:  &uid,

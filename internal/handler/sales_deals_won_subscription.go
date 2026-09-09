@@ -76,13 +76,6 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 		wsRedirect(w, r, "/deals/"+idStr, "failed")
 		return nil, false
 	}
-	// subscriptions.plan_id NOT NULL; PR1 masih single-plan (identitas paket dari
-	// deals.plan_requested_id yang di-backfill saat Accept). Quote multi-paket → backfill
-	// di-skip → nil di sini; PR2 (subscription_items) menutup kasus itu. Tolak eksplisit.
-	if deal.PlanRequestedID == nil {
-		wsRedirect(w, r, "/deals/"+idStr, "plan_required")
-		return nil, false
-	}
 	// Termin dari QUOTE (BL-88), bukan deal. subscription_term = billing cycle (harus
 	// enum valid Monthly/Annual/Multi-year) + fallback bulan-kontrak; contract_term_months
 	// (opsional) MENIMPA durasi numerik (mis. Multi-year = 24). Quote tanpa termin valid →
@@ -102,13 +95,29 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 		wsRedirect(w, r, "/deals/"+idStr, "sub_status")
 		return nil, false
 	}
+	// BL-88 PR2b: identitas paket ada di subscription_items (mirror quote_items). Ambil
+	// baris quote LEBIH DULU: darinya diturunkan (a) plan_id parent — SATU paket distinct →
+	// paket itu (kenyamanan single-plan agar label/JOIN lama tetap berguna); >1 → NULL
+	// (identitas di item); (b) pre-check one-active lintas SEMUA paket quote. Quote tanpa
+	// baris berpaket tak bisa jadi langganan bermakna → tolak (plan_required).
+	items, err := h.q(ctx).ListQuoteItems(ctx, quote.ID)
+	if err != nil {
+		h.Log.Error("deals: won quote items", "deal_id", deal.ID, "quote_id", quote.ID, "err", err)
+		wsRedirect(w, r, "/deals/"+idStr, "failed")
+		return nil, false
+	}
+	parentPlan, hasPlan := singleQuotePlan(items)
+	if !hasPlan {
+		wsRedirect(w, r, "/deals/"+idStr, "plan_required")
+		return nil, false
+	}
 	// Konflik one-active (keputusan c: TOLAK) — hanya menggigit bila status Active
-	// (idx_subs_one_active WHERE status='Active'); Trial boleh koeksis. Pre-check beri
-	// pesan ramah; index tetap penjaga keras bila balapan.
+	// (parent_active); Trial boleh koeksis. Pre-check lintas SEMUA paket quote beri pesan
+	// ramah; idx_subscription_items_one_active tetap penjaga keras bila balapan.
 	if status == "Active" {
-		exists, err := h.q(ctx).HasActiveSubscriptionForPlan(ctx, db.HasActiveSubscriptionForPlanParams{
+		exists, err := h.q(ctx).HasActiveItemForQuotePlans(ctx, db.HasActiveItemForQuotePlansParams{
 			AccountID: deal.AccountID,
-			PlanID:    *deal.PlanRequestedID,
+			QuoteID:   quote.ID,
 		})
 		if err != nil {
 			h.Log.Error("deals: won sub active-check", "deal_id", deal.ID, "err", err)
@@ -145,7 +154,7 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 		EntityCode:         &code,
 		SubscriptionOwner:  deal.DealOwner,
 		AccountID:          deal.AccountID,
-		PlanID:             *deal.PlanRequestedID,
+		PlanID:             parentPlan,
 		SourceDealID:       &deal.ID,
 		Status:             status,
 		StartDate:          startDate,
@@ -168,12 +177,7 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 	// diturunkan dari subtotal item (bukan grand_total) — Σ item.mrr bisa selisih tipis
 	// dari parent.mrr bila quote punya diskon/pembulatan, item mengikuti subtotalnya.
 	// FAIL-SOFT: parent langganan sudah lahir; gagal buat item TAK menggagalkan Won
-	// (hanya di-log) — backfill/perbaikan menyusul, bukan rollback nilai yang diakui.
-	items, err := h.q(ctx).ListQuoteItems(ctx, quote.ID)
-	if err != nil {
-		h.Log.Error("deals: won sub items list", "sub_id", sub.ID, "quote_id", quote.ID, "err", err)
-		return &sub, true
-	}
+	// (hanya di-log). items sudah diambil di atas (dipakai turunkan plan_id parent).
 	for _, it := range items {
 		imrr := divNumericInt(it.Subtotal, int64(months))
 		iarr := mulNumericInt(imrr, monthsPerYear)
@@ -193,4 +197,27 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 		}
 	}
 	return &sub, true
+}
+
+// singleQuotePlan menurunkan plan_id PARENT langganan dari baris quote (BL-88 PR2b):
+// bila SEMUA baris berpaket menunjuk SATU paket distinct → (&paket, true) (kenyamanan
+// single-plan agar label & JOIN plans lama tetap berguna); >1 paket distinct → (nil,
+// true) (identitas ada di subscription_items, parent plan_id NULL); tak ada baris
+// berpaket sama sekali → (nil, false) (quote tak bisa jadi langganan bermakna).
+func singleQuotePlan(items []db.QuoteItem) (*int64, bool) {
+	var seen *int64
+	for _, it := range items {
+		if it.PlanID == nil {
+			continue
+		}
+		if seen == nil {
+			p := *it.PlanID
+			seen = &p
+			continue
+		}
+		if *seen != *it.PlanID {
+			return nil, true // >1 paket distinct → parent NULL
+		}
+	}
+	return seen, seen != nil
 }

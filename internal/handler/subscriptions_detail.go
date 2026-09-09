@@ -70,13 +70,30 @@ func (h *Handler) SubscriptionDetail(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscription, names map[int64]string) panel.SubDetailView {
 	br := session.BusinessRole(ctx)
 	canARR := canSeeSubscriptionARR(ctx) // BL-58: kapabilitas ter-matriks, bukan nama role
+
+	// Item paket (BL-88 PR2b): best-effort (gagal → nil, detail tetap terbaca).
+	// >1 item → label "N paket" (parent plan_id NULL); 1 item → nama paket item
+	// itu; 0 item (langganan lama tanpa item) → planLabel(parent) cadangan.
+	items, err := h.q(ctx).ListSubscriptionItemsWithPlan(ctx, s.ID)
+	if err != nil {
+		h.Log.Error("subscriptions: items", "err", err)
+	}
+	planDisplay := h.planLabel(ctx, s.PlanID)
+	switch {
+	case len(items) > 1:
+		planDisplay = strconv.Itoa(len(items)) + " paket"
+	case len(items) == 1 && items[0].PlanName != nil && *items[0].PlanName != "":
+		planDisplay = *items[0].PlanName
+	}
+
 	return panel.SubDetailView{
 		Base:         base,
 		ID:           s.ID,
 		EntityCode:   deref(s.EntityCode),
 		Village:      h.accountLabel(ctx, s.AccountID),
 		AccountID:    s.AccountID,
-		Plan:         h.planLabel(ctx, s.PlanID),
+		Plan:         planDisplay,
+		Items:        subItemRows(items, br, canARR),
 		Status:       s.Status,
 		MRR:          maskARR(formatRupiah(s.Mrr), br),
 		ARR:          maskSubscriptionARR(formatRupiah(s.Arr), canARR),
@@ -123,12 +140,39 @@ func (h *Handler) renewalChainView(ctx context.Context, id int64, businessRole s
 	return out
 }
 
-// planLabel meresolusi nama plan untuk detail (nama saja). Gagal → "Plan #<id>"
+// subItemRows memetakan baris subscription_items → baris tabel item detail (BL-88
+// PR2b). Nilai komersial disamarkan F4: MRR & Subtotal ikut kebijakan maskARR (br),
+// ARR ikut kapabilitas ARR (maskSubscriptionARR). PlanName NULL (plan terhapus /
+// item tanpa plan) → "—" via view (orDash). Kuantitas & harga satuan bukan sensitif.
+func subItemRows(items []db.ListSubscriptionItemsWithPlanRow, businessRole string, canARR bool) []panel.SubItemRow {
+	out := make([]panel.SubItemRow, 0, len(items))
+	for _, it := range items {
+		name := ""
+		if it.PlanName != nil {
+			name = *it.PlanName
+		}
+		out = append(out, panel.SubItemRow{
+			PlanName:  name,
+			Quantity:  strconv.FormatInt(int64(it.Quantity), 10),
+			UnitPrice: formatRupiah(it.UnitPrice),
+			Subtotal:  maskARR(formatRupiah(it.Subtotal), businessRole),
+			MRR:       maskARR(formatRupiah(it.Mrr), businessRole),
+			ARR:       maskSubscriptionARR(formatRupiah(it.Arr), canARR),
+		})
+	}
+	return out
+}
+
+// planLabel meresolusi nama plan untuk detail (nama saja). id NULL (BL-88 PR2b
+// langganan multi-paket → parent plan_id NULL) → "—". Gagal baca → "Plan #<id>"
 // cadangan (bukan 500): detail langganan tetap terbaca.
-func (h *Handler) planLabel(ctx context.Context, id int64) string {
-	p, err := h.q(ctx).GetPlan(ctx, id)
+func (h *Handler) planLabel(ctx context.Context, id *int64) string {
+	if id == nil {
+		return "—"
+	}
+	p, err := h.q(ctx).GetPlan(ctx, *id)
 	if err != nil {
-		return "Plan #" + strconv.FormatInt(id, 10)
+		return "Plan #" + strconv.FormatInt(*id, 10)
 	}
 	return p.PlanName
 }

@@ -122,13 +122,12 @@ func (h *Handler) QuoteStatus(w http.ResponseWriter, r *http.Request) {
 		"quote_id": strconv.FormatInt(quoteID, 10), "status": status,
 	})
 
-	// BL-88: quote di-Accept → quote jadi SUMBER KEBENARAN komersial. (a) salin
-	// grand_total → deal.amount (nilai DIAKUI, menggantikan perkiraan manual); (b) tetap
-	// backfill plan_requested_id agar jalur Won single-plan PR1 bisa membuat langganan
-	// (di-retire PR2 multi-baris). Keduanya fail-soft: gagal di-Log, tak batalkan Accept.
+	// BL-88: quote di-Accept → quote jadi SUMBER KEBENARAN komersial: salin
+	// grand_total → deal.amount (nilai DIAKUI, menggantikan perkiraan manual). Fail-soft:
+	// gagal di-Log, tak batalkan Accept. (Backfill plan_requested_id single-plan PR1
+	// di-retire PR2b — paket kini diturunkan langsung dari quote_items saat Closed Won.)
 	if status == "Accepted" {
 		h.recognizeDealValueFromQuote(ctx, dealID, quoteID, q.GrandTotal, uid)
-		h.backfillDealPlanFromQuote(ctx, dealID, quoteID, uid)
 	}
 	wsRedirectOK(w, r, quoteSub(dealID, quoteID), "status")
 }

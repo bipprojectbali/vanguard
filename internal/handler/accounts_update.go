@@ -38,12 +38,6 @@ func (h *Handler) AccountEdit(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slugFromRequest(r), "")
 	idStr := strconv.FormatInt(a.ID, 10)
-	members, err := h.assignableMembers(ctx)
-	if err != nil {
-		h.Log.Error("accounts: members", "err", err)
-		wsRedirect(w, r, "/accounts/"+idStr, "failed")
-		return
-	}
 
 	fields := accountFormFields(a, canEditPhone(ctx))
 	// BL-66: preselect dropdown Desa dari village_code tersimpan (resolve → id
@@ -51,6 +45,8 @@ func (h *Handler) AccountEdit(w http.ResponseWriter, r *http.Request) {
 	// sbg catatan di view).
 	fields.VillageID = h.villageIDForCode(ctx, a.VillageCode)
 
+	// BL-108: penugasan CS (assigned/backup) TAK lagi di form ini — dipindah ke
+	// halaman detail Customer Success desa.
 	v := panel.AccountFormView{
 		Base:            base,
 		Action:          base + "/accounts/" + idStr,
@@ -63,10 +59,6 @@ func (h *Handler) AccountEdit(w http.ResponseWriter, r *http.Request) {
 		Types:           accountTypeOptions,
 		Statuses:        villageStatusOptions,
 		Classifications: classificationOptions,
-		AssignAction:    base + "/accounts/" + idStr + "/assign",
-		Members:         members,
-		AssignedCSM:     int64PtrStr(a.AssignedCsm),
-		BackupCSM:       int64PtrStr(a.BackupCsm),
 	}
 	h.renderWorkspaceShell(w, r, "Sunting Desa", "/accounts", panel.AccountForm(v))
 }

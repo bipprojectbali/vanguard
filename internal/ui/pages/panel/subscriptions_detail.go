@@ -39,6 +39,10 @@ type SubDetailView struct {
 
 	Chain []SubChainRow
 
+	// Items = baris paket langganan (BL-88 PR2b subscription_items). Kolom "Paket"
+	// header = "N paket" bila >1 (dirakit handler); tabel ini merinci tiap paket.
+	Items []SubItemRow
+
 	// Umpan balik PRG (?ok=/?err=) — dirakit handler (subscriptionsMsg/wsErrMsg).
 	Msg string
 	Err string
@@ -54,6 +58,18 @@ type SubDetailView struct {
 	// Domain dropdown churn (dari handler; satu sumber dgn validasi backend).
 	ChurnReasons []string
 	ChurnTypes   []string
+}
+
+// SubItemRow = satu baris paket langganan (subscription_items). Nilai komersial
+// (Subtotal/MRR/ARR) SUDAH diformat & disamarkan handler (F4); PlanName kosong →
+// dirender "—".
+type SubItemRow struct {
+	PlanName  string
+	Quantity  string
+	UnitPrice string
+	Subtotal  string
+	MRR       string
+	ARR       string
 }
 
 // SubChainRow = satu periode di rantai renewal. IsThis menandai baris yang sedang
@@ -107,8 +123,50 @@ func SubDetail(v SubDetailView) g.Node {
 			{"Jumlah Seat", v.Seats},
 			{"Status Pembayaran", v.PaymentState},
 		}),
+		subItemsCard(v),
 		subActionCard(v),
 		subRenewalChainCard(v),
+	)
+}
+
+// subItemsCard = rincian paket langganan (subscription_items, BL-88 PR2b). Kosong
+// (langganan lama tanpa item) → kartu tak dirender (nil). Dibungkus ui.TableScroll
+// (scroll terkurung di mobile), mirror subRenewalChainCard.
+func subItemsCard(v SubDetailView) g.Node {
+	if len(v.Items) == 0 {
+		return nil
+	}
+	rows := make([]g.Node, 0, len(v.Items))
+	for _, it := range v.Items {
+		rows = append(rows, h.Tr(
+			h.Class("border-b border-base-300/50 hover:bg-base-200/50"),
+			h.Td(h.Class("py-2 pr-4 font-medium"), g.Text(orDash(it.PlanName))),
+			h.Td(h.Class("py-2 pr-4 text-right"), g.Text(orDash(it.Quantity))),
+			h.Td(h.Class("py-2 pr-4 text-right"), g.Text(orDash(it.UnitPrice))),
+			h.Td(h.Class("py-2 pr-4 text-right"), g.Text(orDash(it.Subtotal))),
+			h.Td(h.Class("py-2 pr-4 text-right"), g.Text(orDash(it.MRR))),
+			h.Td(h.Class("py-2 text-right"), g.Text(orDash(it.ARR))),
+		))
+	}
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+		h.Div(
+			h.Class("card-body min-w-0"),
+			h.H2(h.Class("font-semibold mb-2"), g.Text("Rincian Paket")),
+			ui.TableScroll(h.Table(
+				h.Class("w-full text-sm"),
+				h.THead(h.Tr(
+					h.Class("border-b border-base-300 text-left text-base-content/70"),
+					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Paket")),
+					h.Th(h.Class("py-2 pr-4 font-medium text-right"), g.Text("Qty")),
+					h.Th(h.Class("py-2 pr-4 font-medium text-right"), g.Text("Harga Satuan")),
+					h.Th(h.Class("py-2 pr-4 font-medium text-right"), g.Text("Subtotal")),
+					h.Th(h.Class("py-2 pr-4 font-medium text-right"), g.Text("MRR")),
+					h.Th(h.Class("py-2 font-medium text-right"), g.Text("ARR")),
+				)),
+				h.TBody(g.Group(rows)),
+			)),
+		),
 	)
 }
 

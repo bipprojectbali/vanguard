@@ -577,11 +577,17 @@ type Querier interface {
 	// Kecamatan induk). Filter level = 4 eksplisit: id level lain / tak ada →
 	// pgx.ErrNoRows → galat "village_id" (payload bukan Desa sah).
 	GetVillageRegion(ctx context.Context, id int64) (GetVillageRegionRow, error)
-	// Benar bila sudah ADA langganan Active hidup untuk (account, plan) di tenant ini —
-	// cermin partial-unique idx_subs_one_active (1 Active per account+plan). Dipakai
-	// create-from-deal (BL-21) untuk menolak lebih dini dengan pesan ramah SEBELUM INSERT
-	// (index tetap penjaga keras bila balapan). RLS menjamin tenant_id lewat GUC.
-	HasActiveSubscriptionForPlan(ctx context.Context, arg HasActiveSubscriptionForPlanParams) (bool, error)
+	// Pre-check aktivasi Trial→Active (BL-88 PR2b): benar bila SALAH SATU paket langganan
+	// yang hendak diaktifkan sudah punya item Active di langganan LAIN untuk desa yang sama.
+	// Langganan yg diaktifkan masih Trial (parent_active=false pada item-nya) → sisi `other`
+	// (parent_active) mengecualikannya dgn sendirinya. RLS jamin tenant.
+	HasActiveItemConflictForSubscription(ctx context.Context, subscriptionID int64) (bool, error)
+	// Pre-check Won (BL-88 PR2b): benar bila SALAH SATU paket di quote yang di-Accept sudah
+	// punya item Active untuk desa ini. Menggantikan HasActiveSubscriptionForPlan berbasis
+	// deals.plan_requested_id (single-plan) — kini invarian ada di subscription_items
+	// (parent_active = status Active & belum terhapus). Pesan ramah SEBELUM buat langganan;
+	// idx_subscription_items_one_active tetap penjaga keras bila balapan. RLS jamin tenant.
+	HasActiveItemForQuotePlans(ctx context.Context, arg HasActiveItemForQuotePlansParams) (bool, error)
 	// Tambah satu baris matriks (role,obj,act). Idempoten via UNIQUE. Dipakai seed
 	// dan saat matriks disunting (handler menghitung selisih, sisipkan yang baru).
 	InsertBusinessRolePermission(ctx context.Context, arg InsertBusinessRolePermissionParams) error
@@ -1062,12 +1068,18 @@ type Querier interface {
 	// Baris item satu langganan, urut tampil (line_no lalu id). Menopang tabel item di
 	// detail langganan & agregasi per-produk. Bounded per-langganan → tanpa keyset.
 	ListSubscriptionItems(ctx context.Context, subscriptionID int64) ([]SubscriptionItem, error)
+	// Sama seperti ListSubscriptionItems + nama paket (LEFT JOIN plans agar baris item
+	// ber-plan_id NULL / plan terhapus tetap muncul, nama → NULL). Menopang tabel item di
+	// detail langganan (BL-88 PR2b). Bounded per-langganan → tanpa keyset.
+	ListSubscriptionItemsWithPlan(ctx context.Context, subscriptionID int64) ([]ListSubscriptionItemsWithPlanRow, error)
 	// Daftar langganan (menu /subscriptions), keyset (created_at DESC, id DESC) + filter
 	// ownership F3 + filter status opsional. Dua flag ownership (sumber SATU dgn
 	// SubscriptionsListFilter): scope_all → semua; is_own → subscription_owner = uid;
 	// keduanya false → NOL baris (fail-closed). status_filter '' → semua status.
-	// JOIN accounts+plans membawa nama untuk kolom (hindari N+1, rule 13); INNER JOIN
-	// aman karena account_id/plan_id NOT NULL. accounts di-filter baris hidup.
+	// JOIN accounts membawa nama desa (INNER — account_id NOT NULL). plans di-LEFT JOIN:
+	// BL-88 PR2b plan_id NULLABLE (langganan multi-paket → identitas di subscription_items,
+	// plan_name parent NULL). accounts di-filter baris hidup. Kolom "Paket" dirakit handler
+	// ("N paket" bila >1 item) — plan_name di sini hanya label cepat single-plan.
 	//
 	// search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
 	// insensitive) di ATAS ownership+status — tak pernah melebarkan baris. Hanya
@@ -1361,12 +1373,13 @@ type Querier interface {
 	// dgn tabel Alasan Churn. RetentionRate = active/(active+churnedDalamPeriode).
 	// Segmen = band kesehatan atas customer_success desa langganan (LEFT JOIN cs).
 	ReportRetention(ctx context.Context, arg ReportRetentionParams) (ReportRetentionRow, error)
-	// Panel 4 (Revenue by Plan): JOIN subscriptions × plans GROUP BY plan_id atas
-	// langganan Active. Nama paket dari plans.plan_name (apa pun yang di-seed
-	// tenant, BUKAN hardcode). Rata per Desa dihitung handler (mrr/desa). Diurut
-	// MRR terbesar. RLS mengurung tenant di kedua tabel.
-	// BL-52: SNAPSHOT (nilai Active SEKARANG) → Periode TAK diterapkan; Paket
-	// menyaring ke plan_id terpilih (panel menampilkan paket itu saja).
+	// Panel 4 (Revenue by Plan): BL-88 PR2b — agregasi per-produk PINDAH ke
+	// subscription_items (langganan kini multi-paket; s.plan_id tak lagi otoritatif).
+	// Baris = item ber-parent Active (parent_active). MRR = SUM(item.mrr); village_count =
+	// desa DISTINCT (invarian 1 item Active per account+plan → tepat 1 item/desa/paket,
+	// tapi DISTINCT eksplisit tetap benar bila invarian berubah). Nama paket dari plans
+	// (di-seed tenant). Rata per Desa dihitung handler. Diurut MRR terbesar. RLS mengurung
+	// tenant. BL-52: SNAPSHOT (Active SEKARANG) → Periode TAK diterapkan; Paket menyaring.
 	ReportRevenueByPlan(ctx context.Context, arg ReportRevenueByPlanParams) ([]ReportRevenueByPlanRow, error)
 	// Panel 2 tabel per-prioritas. 3 tingkat NYATA (rendah/sedang/tinggi) — mockup
 	// pakai 4 (Kritis tak ada di skema). target_minutes = target penyelesaian dari
@@ -1462,6 +1475,9 @@ type Querier interface {
 	// daripada pilihan yang tak ada". F3 pakai flag subscription yang SAMA
 	// (SubscriptionsListFilterFor). TAK disaring Periode/Paket agar daftar stabil
 	// (paket terpilih selalu tampil walau rentang dipersempit).
+	// BL-88 PR2b: paket dari subscription_items (langganan multi-paket → tiap paket
+	// yang dipakai muncul; parent plan_id bisa NULL). subscription_count = langganan
+	// DISTINCT yang memuat paket itu.
 	ReportSubscriptionPlans(ctx context.Context, arg ReportSubscriptionPlansParams) ([]ReportSubscriptionPlansRow, error)
 	// KPI header + kartu SLA panel 2. total = Total Tiket; met/with_sla = Kepatuhan
 	// SLA (hanya tiket ber-SLA jadi denominator — tiket tanpa deadline tak punya

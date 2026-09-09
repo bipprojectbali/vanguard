@@ -33,7 +33,7 @@ INSERT INTO subscriptions (
     created_by
 ) VALUES (
     sqlc.arg(tenant_id), sqlc.narg(entity_code), sqlc.narg(subscription_owner),
-    sqlc.arg(account_id), sqlc.arg(plan_id),
+    sqlc.arg(account_id), sqlc.narg(plan_id),
     sqlc.narg(source_deal_id), sqlc.narg(previous_subscription_id),
     sqlc.arg(status), sqlc.narg(approval_status), sqlc.narg(start_date), sqlc.narg(end_date),
     sqlc.narg(billing_cycle), sqlc.arg(auto_renew), sqlc.narg(contract_term_months),
@@ -45,17 +45,37 @@ INSERT INTO subscriptions (
 )
 RETURNING *;
 
--- name: HasActiveSubscriptionForPlan :one
--- Benar bila sudah ADA langganan Active hidup untuk (account, plan) di tenant ini —
--- cermin partial-unique idx_subs_one_active (1 Active per account+plan). Dipakai
--- create-from-deal (BL-21) untuk menolak lebih dini dengan pesan ramah SEBELUM INSERT
--- (index tetap penjaga keras bila balapan). RLS menjamin tenant_id lewat GUC.
+-- name: HasActiveItemForQuotePlans :one
+-- Pre-check Won (BL-88 PR2b): benar bila SALAH SATU paket di quote yang di-Accept sudah
+-- punya item Active untuk desa ini. Menggantikan HasActiveSubscriptionForPlan berbasis
+-- deals.plan_requested_id (single-plan) — kini invarian ada di subscription_items
+-- (parent_active = status Active & belum terhapus). Pesan ramah SEBELUM buat langganan;
+-- idx_subscription_items_one_active tetap penjaga keras bila balapan. RLS jamin tenant.
 SELECT EXISTS (
-    SELECT 1 FROM subscriptions
-    WHERE account_id = sqlc.arg(account_id)
-      AND plan_id    = sqlc.arg(plan_id)
-      AND status     = 'Active'
-      AND deleted_at IS NULL
+    SELECT 1
+    FROM subscription_items si
+    JOIN quote_items qi ON qi.plan_id = si.plan_id
+    WHERE si.account_id = sqlc.arg(account_id)
+      AND si.parent_active
+      AND qi.quote_id = sqlc.arg(quote_id)
+      AND qi.plan_id IS NOT NULL
+);
+
+-- name: HasActiveItemConflictForSubscription :one
+-- Pre-check aktivasi Trial→Active (BL-88 PR2b): benar bila SALAH SATU paket langganan
+-- yang hendak diaktifkan sudah punya item Active di langganan LAIN untuk desa yang sama.
+-- Langganan yg diaktifkan masih Trial (parent_active=false pada item-nya) → sisi `other`
+-- (parent_active) mengecualikannya dgn sendirinya. RLS jamin tenant.
+SELECT EXISTS (
+    SELECT 1
+    FROM subscription_items si
+    JOIN subscription_items other
+      ON other.account_id = si.account_id
+     AND other.plan_id    = si.plan_id
+     AND other.subscription_id <> si.subscription_id
+     AND other.parent_active
+    WHERE si.subscription_id = sqlc.arg(subscription_id)
+      AND si.plan_id IS NOT NULL
 );
 
 -- name: GetSubscription :one
@@ -69,17 +89,20 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 -- ownership F3 + filter status opsional. Dua flag ownership (sumber SATU dgn
 -- SubscriptionsListFilter): scope_all → semua; is_own → subscription_owner = uid;
 -- keduanya false → NOL baris (fail-closed). status_filter '' → semua status.
--- JOIN accounts+plans membawa nama untuk kolom (hindari N+1, rule 13); INNER JOIN
--- aman karena account_id/plan_id NOT NULL. accounts di-filter baris hidup.
+-- JOIN accounts membawa nama desa (INNER — account_id NOT NULL). plans di-LEFT JOIN:
+-- BL-88 PR2b plan_id NULLABLE (langganan multi-paket → identitas di subscription_items,
+-- plan_name parent NULL). accounts di-filter baris hidup. Kolom "Paket" dirakit handler
+-- ("N paket" bila >1 item) — plan_name di sini hanya label cepat single-plan.
 --
 -- search '' → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
 -- insensitive) di ATAS ownership+status — tak pernah melebarkan baris. Hanya
 -- kolom tak-tersamar yang TAMPIL di tabel jadi kunci cari (desa, paket, kode
 -- entitas); nilai MRR/ARR tersamar TIDAK dijadikan kunci cari (BL-6).
-SELECT s.*, a.village_name, p.plan_name
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
-JOIN plans    p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 WHERE s.deleted_at IS NULL
   AND a.deleted_at IS NULL
   AND (s.created_at, s.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
@@ -110,10 +133,11 @@ LIMIT sqlc.arg(page_size);
 -- Urut created_at DESC + keyset SAMA dgn ListSubscriptions (reuse pageCursor/
 -- splitPage); pengurutan "paling dekat jatuh tempo" ditunda ke slice KPI/agregasi.
 -- previous_value dibawa di s.* untuk kolom "Prev→Current" (tanpa JOIN tambahan).
-SELECT s.*, a.village_name, p.plan_name
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
-JOIN plans    p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 WHERE s.deleted_at IS NULL
   AND a.deleted_at IS NULL
   AND s.end_date IS NOT NULL
@@ -232,10 +256,11 @@ WHERE s.deleted_at IS NULL
 -- (Voluntary/Involuntary); '' → semua tipe. Kolom churn (lost_value_mrr, churn_reason,
 -- cancellation_date) dibawa di s.* → tanpa JOIN tambahan. Urut created_at DESC +
 -- keyset SAMA dgn ListSubscriptions (reuse pageCursor/splitPage).
-SELECT s.*, a.village_name, p.plan_name
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
-JOIN plans    p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 WHERE s.deleted_at IS NULL
   AND a.deleted_at IS NULL
   AND s.status IN ('Cancelled', 'Churned')
@@ -252,9 +277,10 @@ LIMIT sqlc.arg(page_size);
 -- Daftar langganan satu desa (detail account → langganannya), keyset. Account sudah
 -- ter-scope ownership di handler; di sini cukup filter account_id + baris hidup.
 -- plan_name dibawa untuk kolom "Paket".
-SELECT s.*, p.plan_name
+SELECT s.*, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
-JOIN plans p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 WHERE s.deleted_at IS NULL
   AND s.account_id = sqlc.arg(account_id)
   AND (s.created_at, s.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg(cursor_id)::bigint)
@@ -282,7 +308,7 @@ ORDER BY created_at ASC, id ASC;
 -- churn terlihat sebagai aksi tersendiri, bukan efek samping edit.
 UPDATE subscriptions SET
     subscription_owner   = sqlc.narg(subscription_owner),
-    plan_id              = sqlc.arg(plan_id),
+    plan_id              = sqlc.narg(plan_id),
     start_date           = sqlc.narg(start_date),
     end_date             = sqlc.narg(end_date),
     billing_cycle        = sqlc.narg(billing_cycle),
@@ -384,10 +410,11 @@ SELECT
     s.created_at,
     a.village_name,
     p.plan_name,
-    u.name AS renewal_owner_name
+    u.name AS renewal_owner_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id AND a.deleted_at IS NULL
-JOIN plans    p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 LEFT JOIN users u ON u.id = s.renewal_owner
 WHERE s.deleted_at IS NULL
   AND s.end_date IS NOT NULL
@@ -431,9 +458,10 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 -- satu baris tanpa keyset, beda kebutuhan dari ListSubscriptionsForAccount (daftar
 -- berhalaman). plan_name ikut lewat JOIN plans yang sama. pgx.ErrNoRows = desa
 -- belum pernah berlangganan (empty-state di handler, bukan error).
-SELECT s.*, p.plan_name
+SELECT s.*, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
-JOIN plans p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 WHERE s.account_id = sqlc.arg(account_id) AND s.deleted_at IS NULL
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT 1;
@@ -461,3 +489,16 @@ RETURNING *;
 SELECT * FROM subscription_items
 WHERE subscription_id = sqlc.arg(subscription_id)
 ORDER BY line_no ASC NULLS LAST, id ASC;
+
+-- name: ListSubscriptionItemsWithPlan :many
+-- Sama seperti ListSubscriptionItems + nama paket (LEFT JOIN plans agar baris item
+-- ber-plan_id NULL / plan terhapus tetap muncul, nama → NULL). Menopang tabel item di
+-- detail langganan (BL-88 PR2b). Bounded per-langganan → tanpa keyset.
+SELECT si.id, si.subscription_id, si.tenant_id, si.plan_id, si.quantity,
+       si.unit_price, si.discount_pct, si.subtotal, si.mrr, si.arr, si.line_no,
+       si.account_id, si.parent_active,
+       p.plan_name AS plan_name
+FROM subscription_items si
+LEFT JOIN plans p ON p.id = si.plan_id
+WHERE si.subscription_id = sqlc.arg(subscription_id)
+ORDER BY si.line_no ASC NULLS LAST, si.id ASC;

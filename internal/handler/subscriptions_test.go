@@ -46,7 +46,7 @@ func (e *testEnv) seedSubscription(
 		EntityCode:        &code,
 		SubscriptionOwner: owner,
 		AccountID:         accountID,
-		PlanID:            planID,
+		PlanID:            &planID,
 		Status:            status,
 		ApprovalStatus:    nil, // seed langsung: jalur non-approval (approval_status NULL)
 		AutoRenew:         false,
@@ -56,6 +56,23 @@ func (e *testEnv) seedSubscription(
 	})
 	if err != nil {
 		t.Fatalf("seed subscription: %v", err)
+	}
+	// BL-88 PR2b: langganan nyata punya ≥1 subscription_items (agregasi laporan &
+	// invarian 1-Active kini via item). Seed 1 item cermin parent agar seed langsung
+	// setara jalur Won. account_id/parent_active diturunkan trigger dari parent.
+	lineNo := int16(1)
+	if _, err := e.q.AddSubscriptionItem(t.Context(), db.AddSubscriptionItemParams{
+		SubscriptionID: s.ID,
+		TenantID:       e.tenantID,
+		PlanID:         &planID,
+		Quantity:       1,
+		UnitPrice:      numFrom(t, mrr),
+		Subtotal:       numFrom(t, mrr),
+		Mrr:            numFrom(t, mrr),
+		Arr:            numFrom(t, arr),
+		LineNo:         &lineNo,
+	}); err != nil {
+		t.Fatalf("seed subscription item: %v", err)
 	}
 	return s
 }

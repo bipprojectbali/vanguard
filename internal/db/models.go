@@ -496,7 +496,7 @@ type Subscription struct {
 	EntityCode             *string            `json:"entity_code"`
 	SubscriptionOwner      *int64             `json:"subscription_owner"`
 	AccountID              int64              `json:"account_id"`
-	PlanID                 int64              `json:"plan_id"`
+	PlanID                 *int64             `json:"plan_id"`
 	SourceDealID           *int64             `json:"source_deal_id"`
 	PreviousSubscriptionID *int64             `json:"previous_subscription_id"`
 	Status                 string             `json:"status"`
@@ -547,6 +547,8 @@ type SubscriptionItem struct {
 	Mrr            pgtype.Numeric `json:"mrr"`
 	Arr            pgtype.Numeric `json:"arr"`
 	LineNo         *int16         `json:"line_no"`
+	AccountID      int64          `json:"account_id"`
+	ParentActive   bool           `json:"parent_active"`
 }
 
 type SuccessPlan struct {
