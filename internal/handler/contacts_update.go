@@ -37,9 +37,13 @@ func (h *Handler) ContactEdit(w http.ResponseWriter, r *http.Request) {
 	base := wsPath(slugFromRequest(r), "")
 	accountBase := base + "/accounts/" + strconv.FormatInt(accountID, 10)
 	h.renderWorkspaceShell(w, r, "Sunting Kontak", "/accounts", panel.ContactForm(panel.ContactFormView{
-		AccountBase:   accountBase,
-		AccountName:   account.VillageName,
-		Action:        contactPath(accountID, contactID),
+		AccountBase: accountBase,
+		AccountName: account.VillageName,
+		// BL-117: Action WAJIB ter-prefiks /w/{slug} (pakai accountBase) — form
+		// dirender langsung, jadi butuh path lengkap. contactPath() workspace-RELATIF
+		// (dipakai wsRedirectOK yang menambah prefiks); dipasang mentah di sini → di
+		// luar grup route /w/{slug} → submit 404. Sejajar form CREATE (contacts.go).
+		Action:        accountBase + "/contacts/" + strconv.FormatInt(contactID, 10),
 		IsEdit:        true,
 		Err:           wsErrMsg(r.URL.Query().Get("err")),
 		PhoneEditable: canEditPhone(ctx),
