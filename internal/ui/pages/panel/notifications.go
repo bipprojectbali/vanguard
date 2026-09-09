@@ -1,6 +1,8 @@
 package panel
 
 import (
+	"net/url"
+
 	"go_starter/internal/ui"
 
 	g "maragu.dev/gomponents"
@@ -37,6 +39,19 @@ type NotifView struct {
 	NextCursor string
 	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
 	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
+	// From = slug workspace asal (BL-103). Dijahit ke pager & action undangan agar
+	// akun platform tetap melihat shell workspace itu saat menavigasi di halaman
+	// ini — bukan memantul ke panel dev. "" = tak ada asal (shell mengikuti role).
+	From string
+}
+
+// fromSuffix = "?from={slug}" untuk ditempel ke URL BARU (pager, action form),
+// atau "" bila tak ada asal. Slug terbatas [a-z0-9-] tapi tetap di-escape.
+func (v NotifView) fromSuffix() string {
+	if v.From == "" {
+		return ""
+	}
+	return "?from=" + url.QueryEscape(v.From)
 }
 
 // Notifications merender umpan notifikasi user. Undangan DI ATAS karena butuh
@@ -52,7 +67,7 @@ func Notifications(v NotifView) g.Node {
 		body = append(body, ui.Alert(ui.VariantDestructive, "notif-err", g.Text(v.ErrMsg)))
 	}
 	if len(v.Invites) > 0 {
-		body = append(body, inviteInbox(v.Invites))
+		body = append(body, inviteInbox(v.Invites, v.fromSuffix()))
 	}
 	if len(v.Events) > 0 {
 		body = append(body, eventList(v.Events))
@@ -74,15 +89,15 @@ func Notifications(v NotifView) g.Node {
 // notifPager = jalan ke peristiwa lebih lama. Link biasa (navigasi: harus bisa
 // di-bookmark & dimuat ulang), tap target 44px, flex-wrap untuk 375px.
 func notifPager(v NotifView) g.Node {
-	return ui.KeysetPager("/notifications", v.After, v.Trail, v.NextCursor)
+	return ui.KeysetPager("/notifications"+v.fromSuffix(), v.After, v.Trail, v.NextCursor)
 }
 
 // inviteInbox = undangan menunggu keputusan. Terima/Tolak = form NATIVE POST →
 // 303 (gotcha #16: redirect lewat SSE diblokir CSP).
-func inviteInbox(invites []NotifInviteRow) g.Node {
+func inviteInbox(invites []NotifInviteRow, fromSuffix string) g.Node {
 	cards := make([]g.Node, 0, len(invites))
 	for _, i := range invites {
-		cards = append(cards, inviteCard(i))
+		cards = append(cards, inviteCard(i, fromSuffix))
 	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
@@ -94,7 +109,7 @@ func inviteInbox(invites []NotifInviteRow) g.Node {
 	)
 }
 
-func inviteCard(i NotifInviteRow) g.Node {
+func inviteCard(i NotifInviteRow, fromSuffix string) g.Node {
 	return h.Div(
 		// Mobile-first: tumpuk vertikal, sejajar mulai sm (konvensi mobile-first).
 		h.Class("flex flex-col gap-3 rounded-md border border-base-300 p-3 "+
@@ -108,13 +123,15 @@ func inviteCard(i NotifInviteRow) g.Node {
 		),
 		h.Div(
 			h.Class("flex gap-2 shrink-0"),
+			// Terima → redirect ke beranda workspace baru (from tak relevan). Tolak →
+			// balik ke /notifications; bawa ?from agar shell tetap workspace asal.
 			h.FormEl(
 				h.Method("post"), h.Action("/notifications/invite/"+i.Token+"/accept"),
 				h.Button(h.Type("submit"), h.Class("btn btn-primary btn-sm"),
 					g.Text("Terima")),
 			),
 			h.FormEl(
-				h.Method("post"), h.Action("/notifications/invite/"+i.Token+"/decline"),
+				h.Method("post"), h.Action("/notifications/invite/"+i.Token+"/decline"+fromSuffix),
 				h.Button(h.Type("submit"), h.Class("btn btn-ghost btn-sm"),
 					g.Text("Tolak")),
 			),

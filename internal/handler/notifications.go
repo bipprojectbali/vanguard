@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"go_starter/internal/db"
@@ -35,10 +36,12 @@ func (h *Handler) NotificationsPage(w http.ResponseWriter, r *http.Request) {
 	email := normalizeEmail(session.Email(ctx))
 	cursorAt, cursorID := pageCursor(r)
 
+	from := r.URL.Query().Get("from")
 	vm := panel.NotifView{
 		ErrMsg: notifErrMsg(r.URL.Query().Get("err")),
 		After:  r.URL.Query().Get("after"),
 		Trail:  pageTrail(r),
+		From:   from,
 	}
 	// Fail-soft: gagal baca salah satu sumber tak boleh mengosongkan halaman
 	// diam-diam tanpa jejak — error dicatat, bagian yang berhasil tetap tampil.
@@ -79,8 +82,25 @@ func (h *Handler) NotificationsPage(w http.ResponseWriter, r *http.Request) {
 		h.Log.Error("notifications: load", "err", err)
 	}
 
-	h.renderShell(w, r, "Notifikasi", brandFor(ctx), "/notifications", navFor(ctx),
-		panel.Notifications(vm))
+	// Shell default = role global (perilaku lama). BL-103: bila lonceng ditekan
+	// dari dalam workspace (?from={slug}), render nav/brand workspace itu — bukan
+	// panel dev untuk akun platform. Notifikasi tetap dibaca lintas-workspace
+	// (WithSuper di atas), hanya KEMASAN sidebar yang mengikuti asal. Validasi ikut
+	// cabang Scope: platform adopsi tanpa cek membership (anti-escalation dari ROLE,
+	// bukan data), non-platform WAJIB anggota (slug asing fail-closed, tak bocor).
+	nav, brand := navFor(ctx), brandFor(ctx)
+	if from != "" {
+		if isPlatformRole(session.Role(ctx)) || session.IsRoot(ctx) {
+			if ctx2, ok := h.adoptTenantBySlug(ctx, from); ok {
+				ctx = ctx2
+				r = r.WithContext(ctx)
+				nav, brand = workspaceNavCtx(ctx, from), session.TenantName(ctx)
+			}
+		} else if _, ok := h.resolveTenantBySlug(ctx, uid, from); ok {
+			nav, brand = workspaceNavCtx(ctx, from), session.TenantName(ctx)
+		}
+	}
+	h.renderShell(w, r, "Notifikasi", brand, "/notifications", nav, panel.Notifications(vm))
 }
 
 // NotificationAccept — POST /notifications/invite/{token}/accept. Memakai ulang
@@ -112,14 +132,24 @@ func (h *Handler) NotificationDecline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := normalizeEmail(session.Email(ctx))
+	// BL-103: pertahankan asal agar akun platform kembali ke shell workspace, bukan
+	// memantul ke panel dev. Ditempel ke redirect sukses & gagal (keduanya /notifications).
+	suffix := ""
+	if from := r.URL.Query().Get("from"); from != "" {
+		suffix = "&from=" + url.QueryEscape(from)
+	}
 	if err := db.WithSuper(ctx, h.Pool, func(q *db.Queries) error {
 		return q.DeclineInvite(ctx, db.DeclineInviteParams{Token: token, Email: email})
 	}); err != nil {
 		h.Log.Error("notifications: decline invite", "err", err)
-		http.Redirect(w, r, "/notifications?err=failed", http.StatusSeeOther)
+		http.Redirect(w, r, "/notifications?err=failed"+suffix, http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/notifications", http.StatusSeeOther)
+	dest := "/notifications"
+	if suffix != "" {
+		dest += "?" + strings.TrimPrefix(suffix, "&")
+	}
+	http.Redirect(w, r, dest, http.StatusSeeOther)
 }
 
 // normalizeEmail menyamakan bentuk email sebelum dibandingkan dengan
