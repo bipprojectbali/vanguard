@@ -230,7 +230,7 @@ Sesuai spec §9.2 dan sudah tergambar di board 9.2:
 | Field | Aturan | Alasan |
 |---|---|---|
 | Nilai Kontrak / ARR | Disembunyikan dari Support Agent | Agen tiket tak perlu tahu nilai komersial |
-| Nomor HP/WhatsApp pribadi (modul Kontak & Lead) | Utuh untuk Sales & Admin; tersamar untuk Manager, CSM, Support | Batasi sebaran PII; Admin = pengelola workspace yang perlu verifikasi/perbaiki kontak |
+| Nomor HP/WhatsApp pribadi (modul Kontak, Lead & Konversi Lead) | **Konfigurabel per-tenant** (BL-107) lewat section **Field Security** di halaman Roles & Permissions (`/w/{slug}/roles`); **default** = utuh untuk Sales & Admin, tersamar untuk Manager/CSM/Support (lihat) + sunting Sales-only | Batasi sebaran PII, tapi tiap workspace mengatur sendiri peran mana yang berhak — lihat [ADR 0012](../decisions/0012-fls-per-tenant-configurable.md) |
 | Catatan Internal | Hanya Admin & CSM | Isinya penilaian jujur tentang pelanggan |
 | Health Score | Terbuka untuk semua role | Justru harus dilihat bersama |
 
@@ -239,7 +239,16 @@ Aturan ini **juga mengikat Manager**, kecuali Nilai Kontrak / ARR — lihat §8.
 > **BL-106:** field **HP Kontak pada Account (Desa)** (`contact_phone`) TAK lagi
 > ber-FLS — data kelembagaan desa, bukan PII pribadi. Siapa pun yang boleh melihat
 > desa melihat & menyunting nomor penuh. Masking nomor di atas kini KHUSUS nomor
-> pribadi di modul Kontak (HP Pribadi/WhatsApp) & Lead (dikonfigurasikan di BL-107).
+> pribadi di modul Kontak (HP Pribadi/WhatsApp), Lead, & form Konversi Lead.
+>
+> **BL-107:** masking HP/WhatsApp pribadi (Kontak+Lead+Konversi) kini **konfigurabel
+> per-tenant** — admin mengatur matriks `peran × {lihat, sunting}` lewat section
+> **Field Security** di halaman Roles & Permissions (`/w/{slug}/roles`, opsi B ADR 0012),
+> bukan lagi hardcode. Section punya form, endpoint POST, penyimpanan & gate SENDIRI
+> (`crm:field_security`) — berbagi halaman dengan editor peran F2, bukan berbagi tabel.
+> Satu kebijakan berlaku untuk ketiga modul; dua sumbu terpisah (edit⇒view). Tenant yang
+> belum dikonfigurasi memakai default di atas (nol perubahan perilaku). Detail:
+> [ADR 0012](../decisions/0012-fls-per-tenant-configurable.md).
 
 ## 6. Alur renewal — CSM memimpin, Sales untuk upsell
 

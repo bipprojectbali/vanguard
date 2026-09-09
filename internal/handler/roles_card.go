@@ -103,6 +103,10 @@ func rolesMsg(code string) string {
 		return "Perubahan peran disimpan."
 	case "deleted":
 		return "Peran dihapus."
+	case "fsec_saved":
+		// Section Field Security (sumbu F4) berbagi region alert halaman /roles;
+		// kode terpisah agar pesannya spesifik, tak tertukar dengan "Perubahan peran".
+		return "Kebijakan Field Security disimpan dan berlaku seketika."
 	default:
 		return ""
 	}

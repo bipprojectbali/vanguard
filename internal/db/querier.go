@@ -416,6 +416,9 @@ type Querier interface {
 	// selisih daripada diff per-baris). CASCADE peran tak menyentuh ini; ini untuk
 	// peran yang TETAP ada tapi izinnya diganti.
 	DeleteBusinessRolePermissionsForRole(ctx context.Context, arg DeleteBusinessRolePermissionsForRoleParams) error
+	// Bersihkan seluruh kebijakan tenant sebelum replace-all upsert. Menyimpan matriks
+	// sebagai transaksi ganti-total menjaga "peran yang dihapus dari form" tak tertinggal.
+	DeleteFieldSecurityPoliciesForTenant(ctx context.Context, tenantID int64) error
 	// Batalkan undangan yang belum diterima (sisi PENGUNDANG, di panel anggota).
 	DeleteInvite(ctx context.Context, arg DeleteInviteParams) error
 	// Keluarkan anggota dari workspace (atau user keluar sendiri).
@@ -686,6 +689,10 @@ type Querier interface {
 	// WithSuper — di tenant-tx, RLS menyembunyikan tenant lain → enforcer deny-all
 	// senyap untuk mereka.
 	ListAllBusinessRolePermissions(ctx context.Context) ([]ListAllBusinessRolePermissionsRow, error)
+	// Muat-semua saat startup (dipanggil dalam db.WithSuper, seperti loadBusinessPerms):
+	// RLS menyembunyikan tenant lain di dalam tx ber-scope, jadi konteks super wajib
+	// untuk memindai semua tenant sekaligus. Loader mengelompokkan per tenant_id.
+	ListAllFieldSecurityPolicies(ctx context.Context) ([]FieldSecurityPolicy, error)
 	// SEMUA ~7.817 baris (3 level), dipakai SEKALI di handler form utk embed
 	// <script type="application/json"> yang dibaca static/regions.js — cascading
 	// dropdown Provinsi→Kabupaten/Kota→Kecamatan 100% di browser, tanpa round-trip
@@ -843,6 +850,11 @@ type Querier interface {
 	// Kandidat purge permanen: terhapus melewati masa tenggang. Dipanggil perintah
 	// terjadwal, TAK PERNAH di jalur request (purge = kerja berat & tak reversibel).
 	ListExpiredTenants(ctx context.Context, deletedAt pgtype.Timestamptz) ([]Tenant, error)
+	// Kebijakan FLS phone satu workspace, untuk halaman Settings DAN reload cache
+	// per-tenant. Sedikit barisnya (satu per business_role), tak dipaginasi. Urut per
+	// role agar tampilan & muat stabil. Nol baris = SAH: tenant belum dikonfigurasi →
+	// pemanggil jatuh ke default terkunci (internal/fls).
+	ListFieldSecurityPolicies(ctx context.Context, tenantID int64) ([]FieldSecurityPolicy, error)
 	// health_score.sql — workspace-level Health Score listing (Modul 6 slice C1).
 	// Data sumber: customer_success (1:1 dengan accounts). Tidak ada tabel baru.
 	// F3 ownership: scope_all (admin/manager) / is_csm / is_sales — pola SAMA
@@ -1783,6 +1795,11 @@ type Querier interface {
 	// dipakai) — operator hanya menyentuh baris saat ingin MENGUBAH default. created_by
 	// diisi saat pertama dibuat; updated_by/updated_at tiap kali diubah.
 	UpsertCodeFormat(ctx context.Context, arg UpsertCodeFormatParams) error
+	// Simpan/ubah kebijakan satu peran. Dipakai replace-all: handler menulis satu baris
+	// untuk SETIAP peran tenant (termasuk all-false) agar "terkonfigurasi" bisa dibedakan
+	// dari "default" (= tanpa baris sama sekali). created_by diisi saat pertama; updated_*
+	// tiap kali diubah. CHECK edit⇒view ditegakkan DB (handler juga meng-coerce).
+	UpsertFieldSecurityPolicy(ctx context.Context, arg UpsertFieldSecurityPolicyParams) error
 	// Simpan pengaturan. UPSERT karena baris mungkin belum ada (deployment baru yang
 	// tak menjalankan seed): pemanggil tak perlu tahu bedanya.
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error

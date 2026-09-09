@@ -19,7 +19,7 @@ func workspaceSettingsGroup(slug string, canMembers, canRoles, canSettings bool)
 	if !canMembers && !canRoles && !canSettings {
 		return nil
 	}
-	children := make([]ui.NavItem, 0, 3)
+	children := make([]ui.NavItem, 0, 4)
 	// Identitas workspace (ganti nama) & daur hidup (arsip/hapus) TAK lagi punya
 	// item di sini — dipindah ke /dev/workspaces/{id} sebagai wewenang platform
 	// (BL-53). Yang tersisa di grup Settings ruang kerja: Anggota, Peran, dan
@@ -46,6 +46,8 @@ func workspaceSettingsGroup(slug string, canMembers, canRoles, canSettings bool)
 			Icon: lucide.Wrench(html.Class("size-4")),
 		})
 	}
+	// Field Security (sumbu F4) TAK punya item nav sendiri: sejak opsi B (ADR 0012)
+	// matriksnya jadi section di halaman Roles & Permissions, dibuka lewat item itu.
 	return &ui.NavItem{
 		Label: "Settings", Icon: lucide.Settings(html.Class("size-4")), Children: children,
 	}

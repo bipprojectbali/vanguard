@@ -12,6 +12,7 @@ import (
 
 	"go_starter/internal/appmode"
 	"go_starter/internal/db"
+	"go_starter/internal/fls"
 	"go_starter/internal/session"
 
 	"github.com/alexedwards/scs/v2"
@@ -55,6 +56,11 @@ func setupTest(t *testing.T) (*testEnv, int64) {
 	if _, err := pool.Exec(ctx, "TRUNCATE notifications, activity_presence, audit_logs, oauth_accounts, invites, memberships, users, tenants RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
+	// Reset cache FLS phone (BL-107) ke default (kosong). Cache global in-proses TAK
+	// tersentuh TRUNCATE; tanpa reset, tenant yang dikonfigurasi satu test bocor ke
+	// test berikut (tenantID sama karena RESTART IDENTITY) → default Sales+Admin gagal.
+	fls.Load(nil)
+
 	tenant, err := q.CreateTenant(ctx, db.CreateTenantParams{Name: "Test", Slug: "test"})
 	if err != nil {
 		t.Fatalf("seed tenant: %v", err)

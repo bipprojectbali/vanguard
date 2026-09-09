@@ -1,19 +1,24 @@
 package handler
 
 import (
-	"strings"
 	"testing"
+
+	"go_starter/internal/fls"
 )
 
 // fls_test.go — Field-Level Security per business_role (sistem-dan-role.md §5, §8.3).
 // Yang dijaga, bila rusak, tak terlihat di layar tapi bocor di source: nilai
 // sensitif yang lolos ke role yang tak berhak. Maka setiap kasus menegakkan DUA
 // arah — yang berhak menerima nilai ASLI, yang tak berhak TIDAK PERNAH menerimanya.
+//
+// FLS phone (HP/WhatsApp) kini konfigurabel per-tenant (BL-107) → kontrak default/
+// override/fail-closed murni-nya diuji di internal/fls (tanpa ctx). Di sini yang
+// tersisa untuk phone: ketegaklurusan sumbu (role platform tak pernah lolos default),
+// dan bocor-digit level-render diuji end-to-end via harness (contacts/sales_leads).
 
 const (
-	arrValue   = "Rp 120.000.000"
-	phoneValue = "0812-3456-7890"
-	noteValue  = "Kades sulit dihubungi; perpanjangan berisiko."
+	arrValue  = "Rp 120.000.000"
+	noteValue = "Kades sulit dihubungi; perpanjangan berisiko."
 )
 
 // TestFLS_ARR — terbuka bagi semua KECUALI Support. Manager SENGAJA lolos (§8.3:
@@ -37,45 +42,6 @@ func TestFLS_ARR(t *testing.T) {
 		}
 		if !c.see && got == arrValue {
 			t.Errorf("ARR untuk %q BOCOR — nilai asli lolos ke yang tak berhak", c.role)
-		}
-	}
-}
-
-// TestFLS_Phone — utuh untuk Sales & Admin; role lain (Manager, CSM, Support)
-// tersamar. Nomor kosong tetap kosong.
-func TestFLS_Phone(t *testing.T) {
-	cases := []struct {
-		role string
-		full bool
-	}{
-		{"sales", true},
-		{"admin", true},    // Admin CRM = pengelola workspace → akses penuh HP/WA
-		{"manager", false}, // §8.3: nomor HP tetap tersamar bagi Manager
-		{"csm", false},
-		{"support", false},
-		{"", false},
-	}
-	for _, c := range cases {
-		got := maskPhone(phoneValue, c.role)
-		if c.full && got != phoneValue {
-			t.Errorf("HP untuk %q harus utuh, got %q", c.role, got)
-		}
-		if !c.full && got == phoneValue {
-			t.Errorf("HP untuk %q BOCOR — PII lolos ke role non-Sales", c.role)
-		}
-	}
-	if got := maskPhone("", "support"); got != "" {
-		t.Errorf("nomor kosong harus tetap kosong, got %q", got)
-	}
-}
-
-// TestFLS_Phone_TakBocorkanDigit: penyamaran = sembunyikan PENUH. Membocorkan
-// digit awal/akhir tetap membocorkan nomor + panjangnya (§5: batasi sebaran PII).
-func TestFLS_Phone_TakBocorkanDigit(t *testing.T) {
-	got := maskPhone(phoneValue, "support")
-	for _, d := range []string{"0812", "7890", "3456"} {
-		if strings.Contains(got, d) {
-			t.Errorf("HP tersamar %q masih memuat potongan digit %q", got, d)
 		}
 	}
 }
@@ -139,7 +105,10 @@ func TestFLS_TegakLurusRolePlatform(t *testing.T) {
 			// "super_admin" dll BUKAN business_role valid → harus tersembunyi.
 			t.Errorf("ARR lolos untuk role non-bisnis %q — sumbu tercampur", role)
 		}
-		if maskPhone(phoneValue, role) == phoneValue {
+		// Phone konfigurabel per-tenant: pada tenant belum-dikonfigurasi (tenantID 0),
+		// default = Sales+Admin. Role platform (super_admin/owner/staff) & "" BUKAN
+		// business_role → CanViewPhone false. Sumbu F4 tegak lurus dari role platform.
+		if fls.CanViewPhone(0, role) {
 			t.Errorf("HP lolos untuk role non-bisnis %q — sumbu tercampur", role)
 		}
 		if maskInternalNotes(noteValue, role) == noteValue {

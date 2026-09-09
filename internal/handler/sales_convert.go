@@ -44,7 +44,7 @@ func (h *Handler) LeadConvertPage(w http.ResponseWriter, r *http.Request) {
 	// walau berhak lihat (tak konsisten dgn detail lead yang pakai maskPhone/
 	// canSeeFullPhone). Pisahkan: visibilitas (mask/tidak) = canSeeFullPhone,
 	// editability (field terkunci) = canEditPhone.
-	phoneVisible := canSeeFullPhone(session.BusinessRole(ctx))
+	phoneVisible := canSeeFullPhone(ctx)
 	phoneEditable := canEditPhone(ctx)
 	errCode := r.URL.Query().Get("err")
 	v := panel.LeadConvertView{

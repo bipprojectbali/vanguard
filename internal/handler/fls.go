@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go_starter/internal/authz"
+	"go_starter/internal/fls"
 	"go_starter/internal/session"
 )
 
@@ -51,26 +52,27 @@ func canSeeARR(businessRole string) bool {
 	}
 }
 
-// canSeeFullPhone — Nomor HP kontak utuh untuk Sales & Admin (§5): Sales adalah
-// pemegang hubungan yang memang menghubungi kepala desa; Admin CRM diberi akses
-// penuh sebagai pengelola workspace yang perlu memverifikasi/memperbaiki kontak.
-// Manager, CSM, & Support tetap melihat versi tersamar — membatasi sebaran PII.
+// canSeeFullPhone — boleh melihat nomor HP/WhatsApp kontak UTUH. Kebijakan kini
+// KONFIGURABEL per-tenant (BL-107, ADR 0012): tiap workspace menentukan sendiri
+// business_role mana yang lolos, disunting di halaman Settings /field-security.
+// Default (tenant belum mengonfigurasi) = perilaku pra-BL-107: Sales & Admin —
+// Sales pemegang hubungan yang menghubungi kepala desa, Admin pengelola workspace.
 //
-// Tetap allow-list (fail-CLOSED): role platform yang tersasar ke sini
-// (super_admin/owner/staff BUKAN business_role) & nilai liar tersembunyi. Sumbu
-// tetap tegak lurus (§3) — otoritas platform TIDAK membuka field ini; hanya
-// business_role = admin yang lolos.
-func canSeeFullPhone(businessRole string) bool {
-	return businessRole == authz.BusinessRoleSales ||
-		businessRole == authz.BusinessRoleAdmin
+// Fail-CLOSED tetap dijamin di internal/fls: role platform tersasar
+// (super_admin/owner/staff BUKAN business_role) & nilai liar tersembunyi, dan
+// peran tanpa baris pada tenant terkonfigurasi → false. Sumbu tetap tegak lurus
+// (§3) — otoritas platform TIDAK membuka field ini.
+func canSeeFullPhone(ctx context.Context) bool {
+	return fls.CanViewPhone(session.TenantID(ctx), session.BusinessRole(ctx))
 }
 
-// canEditPhone = boleh MENYUNTING nomor HP kontak (F4: Sales saja lihat penuh,
-// jadi hanya Sales boleh menyuntingnya — selain itu formnya mengirim mask).
-// Dipakai modul Kontak & Lead (form + konversi); BL-106 melepasnya dari Account,
-// jadi rumahnya pindah ke sini bersama helper phone FLS lain.
+// canEditPhone = boleh MENYUNTING nomor HP/WhatsApp kontak. Sumbu terpisah dari
+// lihat (edit⇒view ditegakkan config): role bisa lihat-penuh tapi read-only,
+// mempertahankan realita Admin=lihat-saja. KONFIGURABEL per-tenant (BL-107);
+// default pra-BL-107 = Sales saja. Dipakai modul Kontak & Lead (form + konversi);
+// BL-106 melepasnya dari Account, jadi rumahnya di sini bersama helper phone FLS lain.
 func canEditPhone(ctx context.Context) bool {
-	return session.BusinessRole(ctx) == authz.BusinessRoleSales
+	return fls.CanEditPhone(session.TenantID(ctx), session.BusinessRole(ctx))
 }
 
 // canSeeInternalNotes — Catatan Internal HANYA Admin & CSM (§5): isinya penilaian
@@ -97,18 +99,19 @@ func maskARR(formatted, businessRole string) string {
 	return flsHidden
 }
 
-// maskPhone menyamarkan nomor HP bagi role selain Sales & Admin. Penyamaran = SEMBUNYIKAN PENUH
-// (penanda tetap), bukan sekadar menutup sebagian: alasan §5 adalah "membatasi
-// sebaran PII", dan membocorkan digit awal/akhir tetap membocorkan nomor sekaligus
-// panjangnya. Baris tetap bisa dibedakan lewat NAMA kontak — jadi tak ada guna
-// membocorkan digit demi "biar bisa dikenali" (beda dari maskEmail, yang lahir
-// saat tabel belum punya kolom nama). Nomor kosong tetap kosong (tak ada yang
-// disembunyikan).
-func maskPhone(phone, businessRole string) string {
+// maskPhone menyamarkan nomor HP bagi role yang tak berhak melihat penuh (kebijakan
+// per-tenant, lihat canSeeFullPhone). Penyamaran = SEMBUNYIKAN PENUH (penanda tetap),
+// bukan sekadar menutup sebagian: alasan §5 adalah "membatasi sebaran PII", dan
+// membocorkan digit awal/akhir tetap membocorkan nomor sekaligus panjangnya. Baris
+// tetap bisa dibedakan lewat NAMA kontak — jadi tak ada guna membocorkan digit demi
+// "biar bisa dikenali" (beda dari maskEmail, yang lahir saat tabel belum punya kolom
+// nama). Nomor kosong tetap kosong (tak ada yang disembunyikan). Menerima ctx (bukan
+// businessRole) karena kebijakan kini bergantung tenant.
+func maskPhone(ctx context.Context, phone string) string {
 	if phone == "" {
 		return ""
 	}
-	if canSeeFullPhone(businessRole) {
+	if canSeeFullPhone(ctx) {
 		return phone
 	}
 	return flsHidden
