@@ -87,6 +87,9 @@ type SubChainRow struct {
 // SubDetail merender detail: header (desa + kode + status), kartu identitas,
 // kartu nilai & masa berlaku, lalu riwayat rantai renewal.
 func SubDetail(v SubDetailView) g.Node {
+	// Tombol aksi (BL-125) pindah ke kanan-atas header — tak lagi kartu "Tindakan".
+	// Modal dialog-nya dirender terpisah di body (subActionDialogs).
+	triggers := subActionTriggers(v)
 	header := h.Div(
 		h.Class("flex flex-wrap items-start justify-between gap-2"),
 		h.Div(
@@ -99,6 +102,10 @@ func SubDetail(v SubDetailView) g.Node {
 				subStatusBadge(v.Status),
 			),
 		),
+		ui.When(len(triggers) > 0, h.Div(
+			h.Class("flex flex-wrap items-center gap-2 shrink-0"),
+			g.Group(triggers),
+		)),
 	)
 
 	villageLink := h.A(
@@ -124,8 +131,10 @@ func SubDetail(v SubDetailView) g.Node {
 			{"Status Pembayaran", v.PaymentState},
 		}),
 		subItemsCard(v),
-		subActionCard(v),
 		subRenewalChainCard(v),
+		// Modal aksi (BL-125): pemicunya di header; dialog checkbox-toggle disisipkan
+		// di sini (posisi DOM bebas — visibilitas via checkbox, bukan aliran dokumen).
+		g.Group(subActionDialogs(v)),
 		// Pengelompokan ribuan + saring non-digit utk input "MRR baru" (data-numgroup
 		// di subRenewForm): reformat() numgroup.js membuang non-digit pada TIAP input
 		// (bukan sekadar saat submit) — huruf mustahil bertahan di field. Dimuat HANYA
