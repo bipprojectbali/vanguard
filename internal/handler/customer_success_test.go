@@ -349,6 +349,62 @@ func TestCustomerSuccess_F3_AccountDiLuarCakupan404_Edit(t *testing.T) {
 	}
 }
 
+// --- BL-108: penugasan CS pindah ke halaman detail Customer Success -----
+
+// TestCustomerSuccess_AssignCardDitampilkan: kartu "Penugasan CS" (form POST
+// /assign) dirender di halaman detail CS bagi aktor ber-tulis-account — bahkan
+// pada EMPTY-STATE (baris CS belum ada), sebab penugasan harus bisa dilakukan
+// sebelum data CS pernah diisi. csm = pemilik binaan (F3) + crm:accounts write.
+func TestCustomerSuccess_AssignCardDitampilkan(t *testing.T) {
+	env, uid := setupAccounts(t)
+	a := env.seedAccount(t, "Desa Tugas CS", nil, &uid, nil) // csm = owner binaan
+
+	req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/customer-success", nil, itoa(a.ID))
+	rec := env.runAccount(uid, "member", "csm", req, env.h.CustomerSuccessDetail)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("harus 200, got %d\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Penugasan CS") {
+		t.Error("BL-108: kartu Penugasan CS harus tampil di halaman detail Customer Success")
+	}
+	// SUBMIT: form harus posting ke aksi /assign desa ini (verifikasi UI mencakup
+	// jalur simpan, bukan cuma keberadaan judul).
+	if !strings.Contains(body, "/accounts/"+itoa(a.ID)+"/assign") {
+		t.Error("BL-108: form Penugasan CS harus posting ke /accounts/{id}/assign")
+	}
+}
+
+// Catatan: gerbang CanAssign=false (aktor bisa BACA halaman CS tapi TAK berhak
+// tulis account) diuji di level view murni — TestCustomerSuccessDetail_
+// AssignCardTanpaTulisTersembunyi di paket panel — karena tak ada role bawaan
+// begini yang lolos F3 lewat HTTP (support ber-accounts-read ditolak F3;
+// sales/csm/admin/manager semua ber-accounts-write).
+
+// TestAccounts_EditFormTanpaKartuAssign: form SUNTING desa TAK lagi memuat kartu
+// Penugasan CS (BL-108 memindahkannya ke halaman Customer Success) — mencegah
+// dua pintu penugasan yang sama.
+func TestAccounts_EditFormTanpaKartuAssign(t *testing.T) {
+	env, uid := setupAccounts(t)
+	a := env.seedAccount(t, "Desa Sunting", &uid, nil, nil)
+
+	req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/edit", nil, itoa(a.ID))
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.AccountEdit)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("form edit harus 200, got %d", rec.Code)
+	}
+	// Tombol submit unik kartu assign ("Simpan Penugasan") sbg penanda — BUKAN
+	// frasa "Penugasan CS" yang kini sah muncul di hint form (mengarahkan ke
+	// halaman Customer Success). Yang harus hilang: kartu interaktifnya.
+	body := rec.Body.String()
+	if strings.Contains(body, "Simpan Penugasan") {
+		t.Error("BL-108: form edit desa TAK boleh lagi memuat kartu Penugasan CS (tombol Simpan Penugasan)")
+	}
+	if strings.Contains(body, "/assign") {
+		t.Error("BL-108: form edit desa TAK boleh lagi memuat form POST /assign")
+	}
+}
+
 // --- Create (baris belum ada) -------------------------------------------
 
 // TestCustomerSuccess_CreateEmptyState: GET detail pada desa TANPA baris CS

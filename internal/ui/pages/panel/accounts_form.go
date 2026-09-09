@@ -5,7 +5,9 @@ import (
 
 	"go_starter/internal/ui"
 
+	lucide "github.com/eduardolat/gomponents-lucide"
 	g "maragu.dev/gomponents"
+	data "maragu.dev/gomponents-datastar"
 	h "maragu.dev/gomponents/html"
 )
 
@@ -73,14 +75,6 @@ type AccountFormView struct {
 	Types           []string
 	Statuses        []string
 	Classifications []string
-
-	// Penugasan CSM (hanya edit). AssignAction = URL POST /assign. Members =
-	// kandidat. AssignedCSM/BackupCSM = pilihan saat ini (id sebagai string, ""
-	// = belum ditugaskan).
-	AssignAction string
-	Members      []AccountMemberOption
-	AssignedCSM  string
-	BackupCSM    string
 }
 
 // AccountForm merender halaman form lengkap.
@@ -163,9 +157,9 @@ func AccountForm(v AccountFormView) g.Node {
 		),
 	))
 
-	if v.IsEdit {
-		body = append(body, assignCard(v))
-	}
+	// BL-108: kartu "Penugasan CS" TIDAK lagi di form edit desa — dipindah ke
+	// halaman detail Customer Success (assignCSCard, customer_success_view.go).
+	// Satu pintu penugasan, tak menumpang form profil.
 	// Cascading dropdown wilayah (regionSelect di atas cuma menanam data + markup;
 	// interaksi berjenjangnya di sini, same-origin CSP-safe, gotcha #12).
 	body = append(body, h.Script(h.Src("/static/regions.js"), h.Defer()))
@@ -178,35 +172,78 @@ func AccountForm(v AccountFormView) g.Node {
 
 // accountFormHint = penjelasan singkat di bawah judul form, beda utk tambah vs
 // sunting — sama pola dgn accountsTabDesc (penjelasan mengikuti konteks yang
-// sedang dilihat, bukan satu kalimat generik). Menyebut penugasan CSM eksplisit
-// karena assignCard baru muncul setelah desa TERSIMPAN (IsEdit) — tanpa hint ini
-// pengguna baru bisa bingung kenapa opsi itu tak ada di form tambah.
+// sedang dilihat, bukan satu kalimat generik). BL-108: penugasan CS dipindah ke
+// halaman detail Customer Success desa, jadi hint mengarahkan ke sana (bukan
+// lagi "kartu di bawah") — form ini murni profil desa.
 func accountFormHint(isEdit bool) string {
 	if isEdit {
-		return "Ubah data desa ini. Penugasan CS (utama/cadangan) diatur terpisah lewat kartu \"Penugasan CS\" di bawah."
+		return "Ubah data desa ini. Penugasan CS (utama/cadangan) diatur di halaman Customer Success desa."
 	}
-	return "Lengkapi data desa baru untuk workspace ini. Penugasan CS (utama/cadangan) bisa dilakukan setelah desa tersimpan, dari halaman sunting."
+	return "Lengkapi data desa baru untuk workspace ini. Penugasan CS (utama/cadangan) diatur di halaman Customer Success desa setelah tersimpan."
 }
 
-// assignCard = penugasan CSM (assigned + backup). FORM TERPISAH posting ke
-// /assign — aksi berbeda dari simpan-field, jadi tak boleh berbagi tombol submit.
-func assignCard(v AccountFormView) g.Node {
+// assignCSSignal = signal Datastar boolean pengendali modal Penugasan CS.
+const assignCSSignal = "assignOpen"
+
+// assignCSTrigger = tombol pembuka modal Penugasan CS (klik → set signal true).
+// BL-108 (revisi 9 Sep): penugasan CSM dibuka lewat modal, BUKAN kartu inline di
+// halaman detail — sepasang dengan assignCSModal (signal sama).
+func assignCSTrigger() g.Node {
+	return h.Button(
+		h.Type("button"),
+		h.Class("btn btn-sm min-h-11"),
+		data.On("click", "$"+assignCSSignal+" = true"),
+		g.Text("Penugasan CS"),
+	)
+}
+
+// assignCSModal = modal berisi form penugasan CSM (utama + cadangan). Pola sama
+// ConfirmModal/ChangelogModal (signal Datastar $assignOpen; inline display:none
+// anti-FOUC; backdrop/tombol Batal menutup via signal). Form NATIVE POST ke
+// action /assign → 303 balik ke CS detail (gotcha #16: navigasi tak lewat SSE).
+// Sertakan SEKALI di halaman. Aksi berbeda dari simpan-field profil, jadi form
+// & tombol submit terpisah. Parameter telanjang agar tak tergantung view manapun.
+func assignCSModal(action, assignedCSM, backupCSM string, members []AccountMemberOption) g.Node {
+	openExpr := "$" + assignCSSignal
 	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+		h.Class("fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"),
+		g.Attr("style", "display:none"),
+		data.Show(openExpr),
+		data.On("click", openExpr+" = false"), // klik backdrop → tutup
 		h.Div(
-			h.Class("card-body min-w-0"),
-			h.H2(h.Class("font-semibold mb-1"), g.Text("Penugasan CS")),
-			h.P(h.Class("text-sm text-base-content/60 mb-2"),
-				g.Text("Menentukan siapa yang melihat desa ini di daftar mereka.")),
-			h.FormEl(
-				h.Method("post"), h.Action(v.AssignAction),
-				h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
-				memberSelect("CS Utama", "assigned_csm", v.AssignedCSM, v.Members),
-				memberSelect("CS Cadangan", "backup_csm", v.BackupCSM, v.Members),
-				h.Div(
-					h.Class("sm:col-span-2"),
-					h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
-						g.Text("Simpan Penugasan")),
+			// max-height via inline style: kelas arbitrer max-h-[80vh] tak ada di
+			// app.css prebuilt & binary tailwind tak tersedia utk make css (pola sama
+			// ChangelogModal). max-w-lg muat di 320px (p-4 luar).
+			h.Class("card bg-base-100 shadow-lg w-full max-w-lg flex flex-col"),
+			g.Attr("style", "max-height:80vh"),
+			data.On("click", "evt.stopPropagation()"),
+			h.Div(
+				h.Class("flex items-center justify-between gap-2 px-5 pt-5 pb-3 border-b border-base-300"),
+				h.H2(h.Class("text-lg font-semibold"), g.Text("Penugasan CS")),
+				h.Button(
+					h.Type("button"),
+					h.Class("btn btn-ghost btn-sm btn-circle"),
+					g.Attr("aria-label", "Tutup"),
+					data.On("click", openExpr+" = false"),
+					lucide.X(h.Class("size-5")),
+				),
+			),
+			h.Div(
+				h.Class("px-5 py-4 overflow-y-auto"),
+				h.P(h.Class("text-sm text-base-content/60 mb-3"),
+					g.Text("Menentukan siapa yang melihat desa ini di daftar mereka.")),
+				h.FormEl(
+					h.Method("post"), h.Action(action),
+					h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
+					memberSelect("CS Utama", "assigned_csm", assignedCSM, members),
+					memberSelect("CS Cadangan", "backup_csm", backupCSM, members),
+					h.Div(
+						h.Class("sm:col-span-2 flex flex-wrap justify-end gap-2"),
+						h.Button(h.Type("button"), h.Class("btn btn-ghost min-h-11"),
+							data.On("click", openExpr+" = false"), g.Text("Batal")),
+						h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
+							g.Text("Simpan Penugasan")),
+					),
 				),
 			),
 		),

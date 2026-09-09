@@ -17,6 +17,10 @@ import (
 // AccountAssign — POST /w/{workspace}/accounts/{id}/assign. Menetapkan CSM utama
 // & cadangan. Kandidat WAJIB anggota workspace (dicek GetMembership) — memasang
 // non-anggota membuat baris yang tak bisa dilihat siapa pun lewat F3.
+//
+// BL-108: formnya kini di halaman detail Customer Success desa (bukan form edit),
+// jadi PRG (sukses & gagal validasi) kembali ke sana. Gerbang TAK berubah
+// (requireAccountWrite + F3) — hanya lokasi UI & tujuan redirect yang pindah.
 func (h *Handler) AccountAssign(w http.ResponseWriter, r *http.Request) {
 	if !h.requireAccountWrite(w, r) {
 		return
@@ -31,14 +35,16 @@ func (h *Handler) AccountAssign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	csPath := "/accounts/" + strconv.FormatInt(id, 10) + "/customer-success"
+
 	assigned, code := h.parseMemberRef(ctx, r.FormValue("assigned_csm"))
 	if code != "" {
-		wsRedirect(w, r, "/accounts/"+strconv.FormatInt(id, 10)+"/edit", code)
+		wsRedirect(w, r, csPath, code)
 		return
 	}
 	backup, code := h.parseMemberRef(ctx, r.FormValue("backup_csm"))
 	if code != "" {
-		wsRedirect(w, r, "/accounts/"+strconv.FormatInt(id, 10)+"/edit", code)
+		wsRedirect(w, r, csPath, code)
 		return
 	}
 
@@ -50,14 +56,14 @@ func (h *Handler) AccountAssign(w http.ResponseWriter, r *http.Request) {
 		ID:          id,
 	}); err != nil {
 		h.Log.Error("accounts: assign", "err", err)
-		wsRedirect(w, r, "/accounts/"+strconv.FormatInt(id, 10)+"/edit", "failed")
+		wsRedirect(w, r, csPath, "failed")
 		return
 	}
 
 	h.auditWorkspace(ctx, uid, "account.assign", session.TenantID(ctx), map[string]string{
 		"account_id": strconv.FormatInt(id, 10),
 	})
-	wsRedirectOK(w, r, "/accounts/"+strconv.FormatInt(id, 10), "assigned")
+	wsRedirectOK(w, r, csPath, "assigned")
 }
 
 // AccountDelete — POST /w/{workspace}/accounts/{id}/delete. Soft-delete.

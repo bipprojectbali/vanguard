@@ -419,8 +419,14 @@ func TestAccounts_AssignSuccess(t *testing.T) {
 	req := accountsReq(http.MethodPost, "/w/test/accounts/"+itoa(a.ID)+"/assign", form, itoa(a.ID))
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.AccountAssign)
 
-	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=assigned") {
+	// BL-108: PRG kembali ke halaman detail Customer Success desa (form assign
+	// kini di sana, bukan form edit) — bukan lagi /accounts/{id}.
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "ok=assigned") {
 		t.Errorf("harus ok=assigned, got %q (status %d)", loc, rec.Code)
+	}
+	if !strings.Contains(loc, "/accounts/"+itoa(a.ID)+"/customer-success") {
+		t.Errorf("BL-108: redirect harus ke halaman customer-success, got %q", loc)
 	}
 	got, _ := env.q.GetAccount(t.Context(), a.ID)
 	if got.AssignedCsm == nil || *got.AssignedCsm != csm {
@@ -440,8 +446,14 @@ func TestAccounts_AssignNonMemberDitolak(t *testing.T) {
 	req := accountsReq(http.MethodPost, "/w/test/accounts/"+itoa(a.ID)+"/assign", form, itoa(a.ID))
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.AccountAssign)
 
-	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=csm") {
+	// BL-108: gagal validasi juga kembali ke halaman customer-success (tempat
+	// form assign berada), bukan /accounts/{id}/edit.
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "err=csm") {
 		t.Errorf("non-anggota harus ditolak err=csm, got %q", loc)
+	}
+	if !strings.Contains(loc, "/accounts/"+itoa(a.ID)+"/customer-success") {
+		t.Errorf("BL-108: redirect gagal harus ke halaman customer-success, got %q", loc)
 	}
 	got, _ := env.q.GetAccount(t.Context(), a.ID)
 	if got.AssignedCsm != nil {
