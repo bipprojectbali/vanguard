@@ -50,6 +50,37 @@ func TestParseDealForm_NilaiBukanAngkaDitolak(t *testing.T) {
 	}
 }
 
+// BL-124: forecast_category kini enum (Pipeline/Best Case/Commit/Closed), bukan
+// teks bebas. Backend penjaga: nilai di luar himpunan ditolak, kosong = NULL.
+func TestParseDealForm_ForecastCategoryEnum(t *testing.T) {
+	t.Run("nilai sah diterima", func(t *testing.T) {
+		for _, v := range forecastCategoryOptions {
+			f, code := parseDealForm(fvFromMap(dealBase(map[string]string{"forecast_category": v})))
+			if code != "" {
+				t.Fatalf("forecast %q ditolak (code=%q), harusnya diterima", v, code)
+			}
+			if f.ForecastCategory == nil || *f.ForecastCategory != v {
+				t.Errorf("forecast %q → %v, mau pointer ke %q", v, f.ForecastCategory, v)
+			}
+		}
+	})
+	t.Run("kosong → NULL", func(t *testing.T) {
+		f, code := parseDealForm(fvFromMap(dealBase(map[string]string{"forecast_category": ""})))
+		if code != "" {
+			t.Fatalf("forecast kosong ditolak (code=%q)", code)
+		}
+		if f.ForecastCategory != nil {
+			t.Errorf("forecast kosong → %v, mau nil (NULL)", *f.ForecastCategory)
+		}
+	})
+	t.Run("nilai asing ditolak", func(t *testing.T) {
+		_, code := parseDealForm(fvFromMap(dealBase(map[string]string{"forecast_category": "Bukan Kategori"})))
+		if code != "forecast" {
+			t.Errorf("forecast asing: code=%q, mau %q", code, "forecast")
+		}
+	})
+}
+
 // moneyRupiahStr HARUS membuang bagian pecahan skala kolom NUMERIC(15,2). Tanpa
 // ini prefill "7500000.00" akan dibaca numgroup.js sebagai digit "750000000"
 // (100x) → korupsi nilai saat deal disunting & disimpan ulang.

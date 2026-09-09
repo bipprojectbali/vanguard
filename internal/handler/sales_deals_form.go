@@ -14,8 +14,9 @@ import (
 //
 // Enum di sini = CERMIN CHECK constraint migrasi 00009 (deals_type_chk,
 // deals_term_chk) — penolakan terjadi di sini SEBELUM DB; CHECK jaring terakhir.
-// forecast_category SENGAJA teks bebas (tak ada CHECK di 00009) → tak divalidasi
-// enum. Stage TAK diparse di sini: create memulai di 'Prospecting' dan perpindahan
+// forecast_category kini enum (BL-124, validForecastCategories) walau TAK ada CHECK
+// di 00009 → validasi handler adalah satu-satunya penjaganya. Stage TAK diparse di
+// sini: create memulai di 'Prospecting' dan perpindahan
 // stage adalah aksi tersendiri (UpdateDealStage), bukan field form profil.
 
 const maxDealNameLen = 200
@@ -111,8 +112,16 @@ func parseDealForm(fv func(string) string) (dealForm, string) {
 	}
 	f.ExpectedCloseDate = ecd
 
-	// Teks bebas opsional: trim, kosong → NULL. forecast_category tanpa CHECK.
-	f.ForecastCategory = optTrim(fv("forecast_category"))
+	// forecast_category opsional (BL-124): kosong = NULL; terisi wajib enum
+	// (validForecastCategories). Tak ada CHECK di DB → validasi ini penjaganya.
+	if s := strings.TrimSpace(fv("forecast_category")); s != "" {
+		if _, ok := validForecastCategories[s]; !ok {
+			return dealForm{}, "forecast"
+		}
+		f.ForecastCategory = &s
+	}
+
+	// Teks bebas opsional: trim, kosong → NULL.
 	f.NextStep = optTrim(fv("next_step"))
 	f.Competitor = optTrim(fv("competitor"))
 

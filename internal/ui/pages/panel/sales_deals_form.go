@@ -41,10 +41,13 @@ type DealFormView struct {
 	Base     string
 	Action   string
 	IsEdit   bool
-	Err      string
-	Fields   DealFormFields
-	Types    []string
-	Accounts []AccountMemberOption
+	Err    string
+	Fields DealFormFields
+	Types  []string
+	// ForecastCategories = opsi enum Kategori Forecast (BL-124). Dioper handler
+	// (forecastCategoryOptions) agar view tetap murni-data.
+	ForecastCategories []string
+	Accounts           []AccountMemberOption
 }
 
 // DealForm merender halaman form lengkap.
@@ -80,7 +83,7 @@ func DealForm(v DealFormView) g.Node {
 			moneyField("Nilai perkiraan (Rp)", "amount", v.Fields.Amount),
 			field("Probabilitas (%)", "probability", v.Fields.Probability, false, "number"),
 			field("Perkiraan Tutup", "expected_close_date", v.Fields.ExpectedCloseDate, false, "date"),
-			field("Kategori Forecast", "forecast_category", v.Fields.ForecastCategory, false, "text"),
+			selectField("Kategori Forecast", "forecast_category", v.Fields.ForecastCategory, v.ForecastCategories, false),
 			dealEstimateHint(),
 		),
 		formCard("Catatan",
