@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"go_starter/internal/authz"
@@ -94,13 +95,20 @@ func panelForRole(ctx context.Context) ui.Panel {
 //
 // FAIL-SOFT 3 lapis (pola workspaceOptions): tanpa uid → nil; gagal query → log
 // + nil. Badge hilang jauh lebih baik daripada halaman gagal render.
-func (h *Handler) notifBadge(ctx context.Context) *ui.NavBadge {
+func (h *Handler) notifBadge(ctx context.Context, fromSlug string) *ui.NavBadge {
 	uid := session.UserID(ctx)
 	if uid == 0 {
 		return nil
 	}
+	// BL-103: bila lonceng dirender di dalam workspace, bawa ?from={slug} agar
+	// /notifications merender shell workspace itu (bukan panel dev) untuk akun
+	// platform. Selain workspace (dev/landing) fromSlug kosong → tautan telanjang.
+	href := "/notifications"
+	if fromSlug != "" {
+		href += "?from=" + url.QueryEscape(fromSlug)
+	}
 	item := ui.NavItem{
-		Label: "Notifikasi", Href: "/notifications",
+		Label: "Notifikasi", Href: href,
 		Icon: lucide.Bell(html.Class("size-4")),
 	}
 	var total int64

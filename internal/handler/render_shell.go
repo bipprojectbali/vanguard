@@ -38,6 +38,14 @@ func (h *Handler) renderWorkspaceShell(w http.ResponseWriter, r *http.Request, t
 func (h *Handler) renderShell(w http.ResponseWriter, r *http.Request, title, brand, currentPath string, nav []ui.NavItem, body g.Node) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	workspaces, canCreate := h.workspaceOptions(r.Context())
+	// Slug asal untuk lonceng (BL-103): halaman di dalam workspace punya {workspace}
+	// di path; halaman /notifications sendiri membawanya di ?from — dibaca agar
+	// lonceng tetap menautkan workspace yang sama saat sudah di /notifications?from=X
+	// (kalau tidak, klik lonceng di sana akan memantul balik ke shell dev).
+	fromSlug := slugFromRequest(r)
+	if fromSlug == "" {
+		fromSlug = r.URL.Query().Get("from")
+	}
 	d := ui.ShellData{
 		Title:              title,
 		BrandLabel:         brand,
@@ -49,7 +57,7 @@ func (h *Handler) renderShell(w http.ResponseWriter, r *http.Request, title, bra
 		Nav:                nav,
 		Panel:              h.panelOf(r.Context(), currentPath),
 		QuickLinks:         quickLinksFor(r.Context()),
-		Notifications:      h.notifBadge(r.Context()),
+		Notifications:      h.notifBadge(r.Context(), fromSlug),
 		Workspaces:         workspaces,
 		ActiveTenantID:     session.TenantID(r.Context()),
 		CanCreateWorkspace: canCreate,

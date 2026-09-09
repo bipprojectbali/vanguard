@@ -148,7 +148,7 @@ func TestNotifBadge_TanpaUserNil(t *testing.T) {
 	env, _ := setupTest(t)
 	var got *ui.NavBadge
 	env.withSession(t, 0, func(sc sessionCtx) {
-		got = env.h.notifBadge(sc.ctx)
+		got = env.h.notifBadge(sc.ctx, "")
 	})
 	if got != nil {
 		t.Errorf("tanpa user login badge harus nil, got %+v", got)
@@ -166,7 +166,7 @@ func TestNotifBadge_JumlahGabungan(t *testing.T) {
 	var got *ui.NavBadge
 	env.withSession(t, uid, func(sc sessionCtx) {
 		session.SetIdentity(sc.ctx, uid, "test@local", "owner", false, env.tenantID, "Test", "test", "")
-		got = env.h.notifBadge(sc.ctx)
+		got = env.h.notifBadge(sc.ctx, "")
 	})
 	if got == nil {
 		t.Fatal("badge harus ada untuk user login")
@@ -176,5 +176,23 @@ func TestNotifBadge_JumlahGabungan(t *testing.T) {
 	}
 	if got.Item.Href != "/notifications" {
 		t.Errorf("href badge salah: %q", got.Item.Href)
+	}
+}
+
+// TestNotifBadge_FromSlugMenautkanWorkspace: BL-103 — lonceng yang dirender di
+// dalam workspace membawa ?from={slug} agar /notifications merender shell
+// workspace itu (bukan panel dev) untuk akun platform.
+func TestNotifBadge_FromSlugMenautkanWorkspace(t *testing.T) {
+	env, uid := setupTest(t)
+	var got *ui.NavBadge
+	env.withSession(t, uid, func(sc sessionCtx) {
+		session.SetIdentity(sc.ctx, uid, "test@local", "owner", false, env.tenantID, "Test", "test", "")
+		got = env.h.notifBadge(sc.ctx, "acme")
+	})
+	if got == nil {
+		t.Fatal("badge harus ada untuk user login")
+	}
+	if got.Item.Href != "/notifications?from=acme" {
+		t.Errorf("href lonceng harus membawa ?from=acme, got %q", got.Item.Href)
 	}
 }
