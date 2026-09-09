@@ -90,7 +90,10 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 		// (kebijakan umum kecuali Support, skema.md §9). Diperbaiki audit FLS M9-1
 		// (sebelumnya mentah; laten krn F3 sudah nol-baris utk Support — defense
 		// in depth bila F3 pernah berubah).
-		VillageBudget: maskARR(numericStr(a.VillageBudget), br),
+		// BL-112: tampilkan terformat "Rp 7.500.000" (formatRupiah), bukan angka
+		// mentah "7500000.00" (numericStr). Masking F4 (maskARR) tetap memutuskan
+		// tampil/sembunyi TERPISAH dari format.
+		VillageBudget: maskARR(formatRupiah(a.VillageBudget), br),
 
 		// BL-106: HP Kontak account TAK lagi ber-FLS — siapa pun yang boleh melihat
 		// desa ini melihat nomor penuh (beda dari Kontak/Lead yang tetap ber-mask).

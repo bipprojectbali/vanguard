@@ -2,6 +2,22 @@ package handler
 
 import "strings"
 
+// normalizeWebsite mengurai field Website OPSIONAL: trim, kosong → nil. Bila
+// terisi tanpa skema (tak memuat "://"), prepend "https://" agar domain telanjang
+// (mis. "www.facebook.com") tersimpan sebagai URL sah (BL-110). Nilai yang sudah
+// berskema (http/https/ftp/…) dibiarkan apa adanya. Bukan validator URL penuh —
+// cukup menutup kasus umum "domain tanpa skema" yang ditolak input type=url.
+func normalizeWebsite(s string) *string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	if !strings.Contains(s, "://") {
+		s = "https://" + s
+	}
+	return &s
+}
+
 // accounts_form_parse.go — parseAccountForm: baca & validasi field form Account
 // (Desa) menjadi accountForm tervalidasi. Dipisah dari accounts_form.go (const
 // batas, enum, tipe accountForm) agar tiap file di bawah ambang Route/Handler
@@ -85,22 +101,28 @@ func parseAccountForm(fv func(string) string) (accountForm, string) {
 		f.EntityCode = &s
 	}
 
-	// HP Kontak: nomor OPSIONAL yang WAJIB berupa angka bila diisi (BL-106 — input
-	// jadi bertema angka; phonenum.js jaring klien, optPhone penjaga backend).
-	// Kosong → nil. Pola sama HP/WhatsApp Lead.
+	// HP Kontak & Telepon Kantor: nomor OPSIONAL yang WAJIB berupa angka bila diisi
+	// (BL-106 — input jadi bertema angka; phonenum.js jaring klien, optPhone penjaga
+	// backend). Kosong → nil. Pola sama HP/WhatsApp Lead.
 	phone, code := optPhone(fv("contact_phone"), "contact_phone")
 	if code != "" {
 		return accountForm{}, code
 	}
 	f.ContactPhone = phone
+	office, code := optPhone(fv("office_phone"), "office_phone")
+	if code != "" {
+		return accountForm{}, code
+	}
+	f.OfficePhone = office
 
 	// Teks bebas opsional: trim, kosong → NULL.
-	f.Website = optTrim(fv("website"))
+	// BL-110: Website menerima domain telanjang (www.facebook.com) — normalkan ke
+	// URL berskema agar tersimpan valid tanpa memaksa operator mengetik "https://".
+	f.Website = normalizeWebsite(fv("website"))
 	f.Description = optTrim(fv("description"))
 	f.VillageAddress = optTrim(fv("village_address"))
 	f.PostalCode = optTrim(fv("postal_code"))
 	f.Territory = optTrim(fv("territory"))
-	f.OfficePhone = optTrim(fv("office_phone"))
 	f.OfficeEmail = optTrim(fv("office_email"))
 
 	return f, ""

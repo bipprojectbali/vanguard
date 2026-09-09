@@ -99,19 +99,8 @@ func AccountForm(v AccountFormView) g.Node {
 		h.Method("post"), h.Action(v.Action),
 		h.Class("grid gap-4 min-w-0"),
 
-		formCard("Identitas",
-			// BL-66: input "Nama Desa" dilepas — nama diturunkan dari Desa yang
-			// dipilih di kartu Wilayah (master Kemendagri), bukan diketik bebas.
-			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.Types, true,
-				"Prospect = calon pelanggan (belum berlangganan) · Customer = pelanggan aktif · "+
-					"Former Customer = pernah berlangganan, sudah berhenti."),
-			// BL-60: input "Kode Sistem" (entity_code) dilepas dari UI — kode desa
-			// yang dipakai manusia adalah village_code (Kemendagri). entity_code
-			// TETAP dibuat otomatis & disimpan (accounts_codes.go); hanya pintu
-			// override manual di form yang dihapus.
-			field("Website", "website", v.Fields.Website, false, "url"),
-			textareaField("Deskripsi", "description", v.Fields.Description),
-		),
+		// BL-109: kartu "Wilayah" didahulukan — operator memilih Desa dulu
+		// (menurunkan village_code/nama) sebelum melengkapi identitas & profil.
 		formCard("Wilayah",
 			// BL-66: cascading 4 level (Provinsi→Kab/Kota→Kecamatan→Desa). Desa
 			// (level 4) menentukan village_code Kemendagri + district_id; nama desa
@@ -127,6 +116,23 @@ func AccountForm(v AccountFormView) g.Node {
 			// data lama DIPERTAHANKAN (tetap tampil di detail; AccountUpdate tak
 			// menimpanya) — cukup input form yang disembunyikan.
 		),
+		formCard("Identitas",
+			// BL-66: input "Nama Desa" dilepas — nama diturunkan dari Desa yang
+			// dipilih di kartu Wilayah (master Kemendagri), bukan diketik bebas.
+			selectField("Tipe Akun", "account_type", v.Fields.AccountType, v.Types, true,
+				"Prospect = calon pelanggan (belum berlangganan) · Customer = pelanggan aktif · "+
+					"Former Customer = pernah berlangganan, sudah berhenti."),
+			// BL-60: input "Kode Sistem" (entity_code) dilepas dari UI — kode desa
+			// yang dipakai manusia adalah village_code (Kemendagri). entity_code
+			// TETAP dibuat otomatis & disimpan (accounts_codes.go); hanya pintu
+			// override manual di form yang dihapus.
+			// BL-110: input Website = type "text" (bukan "url") — HTML5 type=url
+			// menolak domain telanjang (www.facebook.com) saat submit di browser.
+			// Backend menormalkan (prepend https:// bila tak berskema), jadi jaring
+			// klien yang menolak itu justru menghalangi input yang sah.
+			field("Website", "website", v.Fields.Website, false, "text"),
+			textareaField("Deskripsi", "description", v.Fields.Description),
+		),
 		formCard("Profil Desa",
 			selectField("Status", "village_status", v.Fields.VillageStatus, v.Statuses, false,
 				"Sebutan resmi wilayah administratif setingkat desa — beda istilah per daerah "+
@@ -141,9 +147,14 @@ func AccountForm(v AccountFormView) g.Node {
 			// submit (numgroup.js); backend cleanThousands penjaga tanpa JS.
 			moneyFieldRp("Anggaran (APBDes)", "village_budget", v.Fields.VillageBudget),
 		),
-		formCard("Kontak",
+		// BL-113: judul "Kontak Kantor Desa" — memuat HP/telp/email KANTOR desa,
+		// dibedakan dari entitas Contact (perangkat desa perorangan).
+		formCard("Kontak Kantor Desa",
 			phoneField(v.Fields.ContactPhone),
-			field("Telepon Kantor", "office_phone", v.Fields.OfficePhone, false, "tel"),
+			// Telepon Kantor = input ANGKA (pola sama HP Kontak): inputmode numeric +
+			// data-phonenum (phonenum.js buang huruf/simbol saat diketik) + pattern
+			// jaring klien; backend optPhone penjaga. Bukan lagi type="tel" bebas.
+			phoneNumField("Telepon Kantor", "office_phone", v.Fields.OfficePhone, true),
 			field("Email Kantor", "office_email", v.Fields.OfficeEmail, false, "email"),
 		),
 

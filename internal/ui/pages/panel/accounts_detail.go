@@ -102,31 +102,28 @@ func AccountDetail(v AccountDetailView) g.Node {
 		)),
 	)
 
-	parentAccountValue := g.Node(g.Text(orDash(v.ParentAccountLabel)))
-	if v.ParentAccountHref != "" {
-		parentAccountValue = h.A(h.Href(v.ParentAccountHref), h.Class("link link-hover"),
-			g.Text(v.ParentAccountLabel))
-	}
-
+	// BL-130: baris "Induk Akun" (parent_account_id) DISEMBUNYIKAN dari UI — konsep
+	// "akun induk" generik CRM tak relevan untuk domain desa (desa tak punya "desa
+	// induk"). Kolom & data DIBIARKAN di DB (tanpa drop schema); handler tetap
+	// meresolvenya, hanya tak dirender di sini.
 	identitas := cardRows("Identitas", "",
 		detailRow("Nama Desa", g.Text(orDash(v.VillageName))),
 		detailRow("Kode Desa (Kemendagri)", g.Text(orDash(v.VillageCode))),
 		detailRow("Tipe Akun", g.Text(orDash(v.AccountType))),
 		detailRow("Pemilik Akun", g.Text(orDash(v.AccountOwnerName))),
-		detailRow("Induk Akun", parentAccountValue),
 		detailRow("Website", g.Text(orDash(v.Website))),
 		detailRow("Deskripsi", g.Text(orDash(v.Description))),
 	)
 
+	// BL-111: "Teritori", "Lintang", "Bujur" dilepas dari tampilan detail —
+	// teritori sudah dilepas dari FORM (BL-60), lat/long tak pernah di form.
+	// Kolom & data DIBIARKAN di DB (tanpa DDL), hanya tak dirender.
 	wilayah := detailCard("Wilayah", []detailField{
 		{"Provinsi", v.Province},
 		{"Kabupaten/Kota", v.Regency},
 		{"Kecamatan", v.District},
 		{"Alamat", v.VillageAddress},
 		{"Kode Pos", v.PostalCode},
-		{"Teritori", v.Territory},
-		{"Lintang", v.Latitude},
-		{"Bujur", v.Longitude},
 	})
 
 	profilDesa := detailCard("Profil Desa", []detailField{
@@ -137,7 +134,9 @@ func AccountDetail(v AccountDetailView) g.Node {
 		{"Anggaran (APBDes)", v.VillageBudget},
 	})
 
-	kontak := detailCard("Kontak", []detailField{
+	// BL-113: judul "Kontak Kantor Desa" — HP/telp/email KANTOR desa, dibedakan
+	// dari entitas Contact (perangkat desa perorangan).
+	kontak := detailCard("Kontak Kantor Desa", []detailField{
 		{"HP Kontak", v.ContactPhone},
 		{"Telepon Kantor", v.OfficePhone},
 		{"Email Kantor", v.OfficeEmail},

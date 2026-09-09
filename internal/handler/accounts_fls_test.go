@@ -197,7 +197,7 @@ func TestAccountDetailView_VillageBudgetMasked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed account: %v", err)
 	}
-	const wantBudget = "750000000.00" // NUMERIC(15,2) — numericStr formats dgn skala kolom
+	const wantBudget = "Rp 750.000.000" // BL-112: detail terformat rupiah (formatRupiah), bukan angka mentah
 
 	view := func(role string) string {
 		req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID), nil, itoa(a.ID))
