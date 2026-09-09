@@ -32,7 +32,7 @@ func (e *testEnv) seedChurnedSubDated(
 		EntityCode:        &code,
 		SubscriptionOwner: owner,
 		AccountID:         accountID,
-		PlanID:            planID,
+		PlanID:            &planID,
 		Status:            "Churned",
 		StartDate:         pgtype.Date{Time: start, Valid: true},
 		AutoRenew:         false,

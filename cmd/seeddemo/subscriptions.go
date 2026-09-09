@@ -253,7 +253,7 @@ func createSubscription(ctx context.Context, q *db.Queries, tenantID int64, seq 
 		EntityCode:         &code,
 		SubscriptionOwner:  subOwner,
 		AccountID:          accountID,
-		PlanID:             planID,
+		PlanID:             &planID,
 		Status:             status,
 		ApprovalStatus:     approvalStatus,
 		StartDate:          pgDate(start),

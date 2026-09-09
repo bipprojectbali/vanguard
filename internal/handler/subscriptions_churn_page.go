@@ -206,7 +206,7 @@ func churnRowView(s db.ListChurnedRow, names map[int64]string, businessRole stri
 	return panel.ChurnRow{
 		ID:        s.ID,
 		Village:   s.VillageName,
-		Plan:      s.PlanName,
+		Plan:      subPlanDisplay(s.PlanName, s.ItemCount),
 		LostMRR:   maskARR(formatRupiah(s.LostValueMrr), businessRole),
 		Reason:    deref(s.ChurnReason),
 		Type:      deref(s.ChurnType),

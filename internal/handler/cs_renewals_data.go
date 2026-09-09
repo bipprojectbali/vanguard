@@ -96,7 +96,7 @@ func csRenewalRowView(r db.ListCSRenewalsRow, slug string) panel.CSRenewalRow {
 	return panel.CSRenewalRow{
 		ID:             r.ID,
 		VillageName:    r.VillageName,
-		PlanName:       r.PlanName,
+		PlanName:       subPlanDisplay(r.PlanName, r.ItemCount),
 		RenewalDate:    dateStr(r.EndDate),
 		RenewalStatus:  deref(r.RenewalStatus),
 		StageLabel:     csRenewalStageLabel(r.RenewalStage),

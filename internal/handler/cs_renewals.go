@@ -96,13 +96,9 @@ func (h *Handler) CSRenewalEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ambil nama plan untuk judul form.
-	plan, err := h.q(ctx).GetPlan(ctx, sub.PlanID)
-	if err != nil {
-		h.Log.Error("cs-renewals: load plan for form", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
+	// Nama plan untuk judul form (BL-88 PR2b: parent plan_id bisa NULL untuk
+	// langganan multi-paket → planLabel mengembalikan "—", best-effort).
+	planName := h.planLabel(ctx, sub.PlanID)
 
 	slug := slugFromRequest(r)
 
@@ -133,7 +129,7 @@ func (h *Handler) CSRenewalEdit(w http.ResponseWriter, r *http.Request) {
 			Base:              wsPath(slug, ""),
 			Action:            wsPath(slug, "/renewal-management/"+strconv.FormatInt(id, 10)),
 			VillageName:       acct.VillageName,
-			PlanName:          plan.PlanName,
+			PlanName:          planName,
 			RenewalDate:       dateStr(sub.EndDate),
 			RenewalStatus:     deref(sub.RenewalStatus),
 			CurrentStage:      deref(sub.RenewalStage),

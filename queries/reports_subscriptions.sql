@@ -100,7 +100,10 @@ SELECT
     )::bigint AS churn_count
 FROM subscriptions
 WHERE deleted_at IS NULL
-  AND (sqlc.narg(plan_filter)::bigint IS NULL OR plan_id = sqlc.narg(plan_filter))
+  AND (sqlc.narg(plan_filter)::bigint IS NULL OR EXISTS (
+      SELECT 1 FROM subscription_items si
+      WHERE si.subscription_id = subscriptions.id AND si.plan_id = sqlc.narg(plan_filter)
+  ))
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND subscription_owner = sqlc.arg(uid))
@@ -143,7 +146,10 @@ SELECT
     )::bigint AS due_30
 FROM subscriptions s
 WHERE s.deleted_at IS NULL
-  AND (sqlc.narg(plan_filter)::bigint IS NULL OR s.plan_id = sqlc.narg(plan_filter))
+  AND (sqlc.narg(plan_filter)::bigint IS NULL OR EXISTS (
+      SELECT 1 FROM subscription_items si
+      WHERE si.subscription_id = s.id AND si.plan_id = sqlc.narg(plan_filter)
+  ))
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
@@ -166,7 +172,10 @@ WHERE s.deleted_at IS NULL
   AND s.end_date IS NOT NULL
   AND (sqlc.narg(period_start)::timestamptz IS NULL OR s.end_date >= sqlc.narg(period_start)::timestamptz::date)
   AND (sqlc.narg(period_end)::timestamptz IS NULL OR s.end_date < sqlc.narg(period_end)::timestamptz::date)
-  AND (sqlc.narg(plan_filter)::bigint IS NULL OR s.plan_id = sqlc.narg(plan_filter))
+  AND (sqlc.narg(plan_filter)::bigint IS NULL OR EXISTS (
+      SELECT 1 FROM subscription_items si
+      WHERE si.subscription_id = s.id AND si.plan_id = sqlc.narg(plan_filter)
+  ))
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
@@ -195,31 +204,37 @@ FROM subscriptions
 WHERE deleted_at IS NULL
   AND (sqlc.narg(period_start)::timestamptz IS NULL OR cancellation_date >= sqlc.narg(period_start)::timestamptz::date)
   AND (sqlc.narg(period_end)::timestamptz IS NULL OR cancellation_date < sqlc.narg(period_end)::timestamptz::date)
-  AND (sqlc.narg(plan_filter)::bigint IS NULL OR plan_id = sqlc.narg(plan_filter))
+  AND (sqlc.narg(plan_filter)::bigint IS NULL OR EXISTS (
+      SELECT 1 FROM subscription_items si
+      WHERE si.subscription_id = subscriptions.id AND si.plan_id = sqlc.narg(plan_filter)
+  ))
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND subscription_owner = sqlc.arg(uid))
   );
 
 -- name: ReportRevenueByPlan :many
--- Panel 4 (Revenue by Plan): JOIN subscriptions × plans GROUP BY plan_id atas
--- langganan Active. Nama paket dari plans.plan_name (apa pun yang di-seed
--- tenant, BUKAN hardcode). Rata per Desa dihitung handler (mrr/desa). Diurut
--- MRR terbesar. RLS mengurung tenant di kedua tabel.
--- BL-52: SNAPSHOT (nilai Active SEKARANG) → Periode TAK diterapkan; Paket
--- menyaring ke plan_id terpilih (panel menampilkan paket itu saja).
+-- Panel 4 (Revenue by Plan): BL-88 PR2b — agregasi per-produk PINDAH ke
+-- subscription_items (langganan kini multi-paket; s.plan_id tak lagi otoritatif).
+-- Baris = item ber-parent Active (parent_active). MRR = SUM(item.mrr); village_count =
+-- desa DISTINCT (invarian 1 item Active per account+plan → tepat 1 item/desa/paket,
+-- tapi DISTINCT eksplisit tetap benar bila invarian berubah). Nama paket dari plans
+-- (di-seed tenant). Rata per Desa dihitung handler. Diurut MRR terbesar. RLS mengurung
+-- tenant. BL-52: SNAPSHOT (Active SEKARANG) → Periode TAK diterapkan; Paket menyaring.
 SELECT
     p.plan_name                                 AS plan_name,
-    COUNT(*)::bigint                            AS village_count,
-    COALESCE(SUM(s.mrr), 0)::numeric            AS mrr
-FROM subscriptions s
-JOIN plans p ON p.id = s.plan_id
-WHERE s.deleted_at IS NULL
-  AND s.status = 'Active'
-  AND (sqlc.narg(plan_filter)::bigint IS NULL OR s.plan_id = sqlc.narg(plan_filter))
+    COUNT(DISTINCT si.account_id)::bigint       AS village_count,
+    COALESCE(SUM(si.mrr), 0)::numeric           AS mrr
+FROM subscription_items si
+JOIN plans p ON p.id = si.plan_id
+WHERE si.parent_active
+  AND (sqlc.narg(plan_filter)::bigint IS NULL OR si.plan_id = sqlc.narg(plan_filter))
   AND (
       sqlc.arg(scope_all)::boolean
-      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_own)::boolean AND EXISTS (
+          SELECT 1 FROM subscriptions s
+          WHERE s.id = si.subscription_id AND s.subscription_owner = sqlc.arg(uid)
+      ))
   )
 GROUP BY p.id, p.plan_name
 ORDER BY mrr DESC, p.plan_name;
@@ -258,7 +273,10 @@ LEFT JOIN customer_success cs
        ON cs.account_id = s.account_id AND cs.tenant_id = s.tenant_id
 WHERE s.deleted_at IS NULL
   AND s.start_date IS NOT NULL
-  AND (sqlc.narg(plan_filter)::bigint IS NULL OR s.plan_id = sqlc.narg(plan_filter))
+  AND (sqlc.narg(plan_filter)::bigint IS NULL OR EXISTS (
+      SELECT 1 FROM subscription_items si
+      WHERE si.subscription_id = s.id AND si.plan_id = sqlc.narg(plan_filter)
+  ))
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
@@ -273,12 +291,16 @@ ORDER BY bucket;
 -- daripada pilihan yang tak ada". F3 pakai flag subscription yang SAMA
 -- (SubscriptionsListFilterFor). TAK disaring Periode/Paket agar daftar stabil
 -- (paket terpilih selalu tampil walau rentang dipersempit).
+-- BL-88 PR2b: paket dari subscription_items (langganan multi-paket → tiap paket
+-- yang dipakai muncul; parent plan_id bisa NULL). subscription_count = langganan
+-- DISTINCT yang memuat paket itu.
 SELECT
-    p.id::bigint     AS plan_id,
-    p.plan_name      AS plan_name,
-    COUNT(*)::bigint AS subscription_count
-FROM subscriptions s
-JOIN plans p ON p.id = s.plan_id
+    p.id::bigint                                AS plan_id,
+    p.plan_name                                 AS plan_name,
+    COUNT(DISTINCT si.subscription_id)::bigint  AS subscription_count
+FROM subscription_items si
+JOIN plans p ON p.id = si.plan_id
+JOIN subscriptions s ON s.id = si.subscription_id
 WHERE s.deleted_at IS NULL
   AND (
       sqlc.arg(scope_all)::boolean

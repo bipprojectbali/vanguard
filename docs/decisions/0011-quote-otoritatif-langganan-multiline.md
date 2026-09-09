@@ -1,10 +1,11 @@
 # 0011 — Quote otoritatif: nilai & termin langganan bersumber dari quote Accepted
 
-Status: **Diterima** (2026-09-09) — dikerjakan **bertahap**. PR1 ("quote
-otoritatif") SELESAI; PR2 ("langganan multi-baris") dipecah lagi jadi **PR2a**
-(fondasi `subscription_items` + tulis-ganda, `plan_id` tetap NOT NULL — SELESAI
-9 Sep) dan **PR2b** (`plan_id` nullable + flip laporan + retire single-plan —
-DITUNDA ke sesi terpisah). Men-supersede jalur nilai/termin di
+Status: **Diterima & SELESAI PENUH** (2026-09-09) — dikerjakan **bertahap**. PR1
+("quote otoritatif") SELESAI; PR2 ("langganan multi-baris") dipecah lagi jadi
+**PR2a** (fondasi `subscription_items` + tulis-ganda, `plan_id` tetap NOT NULL —
+SELESAI 9 Sep) dan **PR2b** (`plan_id` nullable + flip laporan + retire
+single-plan — SELESAI 9 Sep; multi-plan kini aktif, BL-88 & BL-100 tertutup
+penuh; belum merge/push). Men-supersede jalur nilai/termin di
 [0004 §BL-21](0004-workspace-di-path-url.md)? tidak — melengkapi alur Closed Won
 (`sales_deals_won_subscription.go`) yang lahir di BL-21.
 
@@ -119,23 +120,37 @@ MASIH dari `deal.PlanRequestedID` (single-plan) — dipertahankan sengaja.
 - Queries `AddSubscriptionItem`/`ListSubscriptionItems`; tes Won-buat-item +
   backfill idempotent.
 
-**PR2b (DITUNDA — enable multi-plan):** sisa poin 6. Baru di sini multi-plan
-benar-benar aktif:
+**PR2b (SELESAI 9 Sep — enable multi-plan):** sisa poin 6. Migrasi
+`00043_crm_subscription_multiplan.sql`. Multi-plan kini benar-benar aktif:
 
-- **`subscriptions.plan_id` → NULLABLE**; identitas paket SEPENUHNYA di items
-  (TANPA `primary_plan_id`).
-- **Invarian 1-Active → pindah ke `subscription_items`**: unique partial 1 item
-  Active per (tenant, account, plan) via join status parent — mengganti
-  `idx_subs_one_active` + `HasActiveSubscriptionForPlan`.
-- **Alur Won**: gerbang jadi "punya quote Accepted dgn ≥1 item paket" (menutup
-  akar BL-100); quote multi-plan → parent `plan_id` NULL + N item.
-- **Renewal**: kloning `subscription_items` dari `previous_subscription_id` ke
-  baris baru.
-- **Laporan** (`reports_subscriptions.sql` + ~26 ref query JOIN plans): agregasi
-  per-produk via `subscription_items`; INNER JOIN `plans` → LEFT JOIN (plan bisa
-  NULL).
-- **Retire**: `plan_requested_id` (biarkan kolom, usang),
-  `backfillDealPlanFromQuote`, `singlePlanID`.
+- **`subscriptions.plan_id` → NULLABLE** (`ALTER COLUMN … DROP NOT NULL`);
+  identitas paket SEPENUHNYA di items (TANPA `primary_plan_id`).
+  `Subscription.PlanID`/`CreateSubscriptionParams.PlanID` jadi `*int64` — pointer
+  churn ~15 situs baca ditangani nil-safe.
+- **Invarian 1-Active → pindah ke `subscription_items`**: `DROP INDEX
+  idx_subs_one_active`; partial unique `idx_subscription_items_one_active
+  (tenant_id, account_id, plan_id) WHERE parent_active AND plan_id IS NOT NULL`.
+  Kolom turunan-trigger `subscription_items.account_id` + `parent_active`
+  (trigger `sync_subscription_item_parent` BEFORE INSERT menurunkan dari parent;
+  `resync_subscription_items_active` AFTER UPDATE status/deleted_at parent
+  menyegarkan `parent_active`) — invarian melihat status parent tanpa join saat
+  INSERT item. Konflik Won via `HasActiveItemForQuotePlans`.
+- **Alur Won**: gerbang `plan_required` DIHAPUS; `singleQuotePlan(items)` →
+  1 paket distinct → parent `plan_id` terisi (label cepat); >1 distinct → parent
+  `plan_id` NULL + N item; 0 item ber-paket → tetap `plan_required` (menutup akar
+  BL-100 — paket dibaca LANGSUNG dari `quote_items`, bukan `deal.plan_requested_id`).
+- **Renewal**: `renewUpsell`/`renewStraight` kloning `subscription_items` dari
+  `previous_subscription_id` ke baris baru (tx `h.q(ctx)` sama).
+- **Laporan**: `ReportRevenueByPlan`/`ReportSubscriptionPlans` + `plan_filter`
+  re-agregasi per-produk via `subscription_items` (bukan `s.plan_id`); 8 INNER
+  JOIN `plans` → LEFT JOIN (plan bisa NULL → `PlanName *string`); list tampil
+  `"N paket"` bila `item_count>1`.
+- **UI**: kolom "Paket" `"N paket"` bila >1 + tabel item di detail langganan
+  (`subscriptions_detail.go` + `ui/pages/panel/subscriptions_detail.go`,
+  `TableScroll`).
+- **Retire**: `sales_quotes_plan_backfill.go`(+test) DIHAPUS;
+  `deal.PlanRequestedID`/`backfillDealPlanFromQuote`/`singlePlanID` disingkirkan
+  (kolom `deals.plan_requested_id` dibiarkan usang, tak dibaca lagi).
 
 ## Konsekuensi
 
@@ -143,14 +158,16 @@ benar-benar aktif:
   di-Accept di quote; tak bisa lagi divergen dari yang diketik di deal.
 - **Perkiraan tetap berguna.** Nilai manual pra-quote masih menopang forecast
   pipeline — tak dibuang, hanya dilabeli beda.
-- **PR1 belum menutup BL-100** (multi-baris) — itu PR2. Baris BL-88 di tasks.md
-  ditandai progress PR1, BUKAN selesai penuh.
-- **`deal.SubscriptionTerm` & `deal.PlanRequestedID` jadi warisan transisi** —
-  masih dibaca jalur Won single-plan di PR1, di-retire di PR2.
+- **BL-100 tertutup penuh di PR2b** — Won membaca paket langsung dari
+  `quote_items`; multi-paket (>1 distinct) didukung penuh (parent `plan_id` NULL
+  + N item), tak lagi di-skip seperti Fix B lama.
+- **`deal.PlanRequestedID` di-retire di PR2b** (kolom `deals.plan_requested_id`
+  dibiarkan usang, tak dibaca lagi). `deal.SubscriptionTerm` tetap warisan
+  transisi (kolom ada, tak diset — termin milik quote sejak PR1).
 
 ## Di luar cakupan (ditunda / ditolak eksplisit)
 
 - Pindah `expected_close_date` ke quote — **ditolak** (poin 4).
-- Multi-baris `subscription_items` & `plan_id` NULLABLE — **ditunda ke PR2**
-  (poin 6).
 - Reuse `expiration_date` sebagai tenor kontrak — **ditolak** (poin 3).
+- Multi-baris `subscription_items` & `plan_id` NULLABLE — **SELESAI di PR2a+PR2b**
+  (poin 6), bukan lagi di luar cakupan.

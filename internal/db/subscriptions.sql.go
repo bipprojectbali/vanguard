@@ -21,7 +21,7 @@ INSERT INTO subscription_items (
     $5, $6, $7,
     $8, $9, $10
 )
-RETURNING id, subscription_id, tenant_id, plan_id, quantity, unit_price, discount_pct, subtotal, mrr, arr, line_no
+RETURNING id, subscription_id, tenant_id, plan_id, quantity, unit_price, discount_pct, subtotal, mrr, arr, line_no, account_id, parent_active
 `
 
 type AddSubscriptionItemParams struct {
@@ -67,6 +67,8 @@ func (q *Queries) AddSubscriptionItem(ctx context.Context, arg AddSubscriptionIt
 		&i.Mrr,
 		&i.Arr,
 		&i.LineNo,
+		&i.AccountID,
+		&i.ParentActive,
 	)
 	return i, err
 }
@@ -216,7 +218,7 @@ type CreateSubscriptionParams struct {
 	EntityCode             *string        `json:"entity_code"`
 	SubscriptionOwner      *int64         `json:"subscription_owner"`
 	AccountID              int64          `json:"account_id"`
-	PlanID                 int64          `json:"plan_id"`
+	PlanID                 *int64         `json:"plan_id"`
 	SourceDealID           *int64         `json:"source_deal_id"`
 	PreviousSubscriptionID *int64         `json:"previous_subscription_id"`
 	Status                 string         `json:"status"`
@@ -341,9 +343,10 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 }
 
 const getLatestSubscriptionForAccount = `-- name: GetLatestSubscriptionForAccount :one
-SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, p.plan_name
+SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
-JOIN plans p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 WHERE s.account_id = $1 AND s.deleted_at IS NULL
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT 1
@@ -355,7 +358,7 @@ type GetLatestSubscriptionForAccountRow struct {
 	EntityCode             *string            `json:"entity_code"`
 	SubscriptionOwner      *int64             `json:"subscription_owner"`
 	AccountID              int64              `json:"account_id"`
-	PlanID                 int64              `json:"plan_id"`
+	PlanID                 *int64             `json:"plan_id"`
 	SourceDealID           *int64             `json:"source_deal_id"`
 	PreviousSubscriptionID *int64             `json:"previous_subscription_id"`
 	Status                 string             `json:"status"`
@@ -392,7 +395,8 @@ type GetLatestSubscriptionForAccountRow struct {
 	ApprovalStatus         *string            `json:"approval_status"`
 	ApprovedBy             *int64             `json:"approved_by"`
 	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
-	PlanName               string             `json:"plan_name"`
+	PlanName               *string            `json:"plan_name"`
+	ItemCount              int64              `json:"item_count"`
 }
 
 // Langganan TERBARU satu desa (kartu "Ringkasan Langganan" di detail Account) —
@@ -446,6 +450,7 @@ func (q *Queries) GetLatestSubscriptionForAccount(ctx context.Context, accountID
 		&i.ApprovedBy,
 		&i.ApprovedAt,
 		&i.PlanName,
+		&i.ItemCount,
 	)
 	return i, err
 }
@@ -507,27 +512,55 @@ func (q *Queries) GetSubscription(ctx context.Context, id int64) (Subscription, 
 	return i, err
 }
 
-const hasActiveSubscriptionForPlan = `-- name: HasActiveSubscriptionForPlan :one
+const hasActiveItemConflictForSubscription = `-- name: HasActiveItemConflictForSubscription :one
 SELECT EXISTS (
-    SELECT 1 FROM subscriptions
-    WHERE account_id = $1
-      AND plan_id    = $2
-      AND status     = 'Active'
-      AND deleted_at IS NULL
+    SELECT 1
+    FROM subscription_items si
+    JOIN subscription_items other
+      ON other.account_id = si.account_id
+     AND other.plan_id    = si.plan_id
+     AND other.subscription_id <> si.subscription_id
+     AND other.parent_active
+    WHERE si.subscription_id = $1
+      AND si.plan_id IS NOT NULL
 )
 `
 
-type HasActiveSubscriptionForPlanParams struct {
-	AccountID int64 `json:"account_id"`
-	PlanID    int64 `json:"plan_id"`
+// Pre-check aktivasi Trial→Active (BL-88 PR2b): benar bila SALAH SATU paket langganan
+// yang hendak diaktifkan sudah punya item Active di langganan LAIN untuk desa yang sama.
+// Langganan yg diaktifkan masih Trial (parent_active=false pada item-nya) → sisi `other`
+// (parent_active) mengecualikannya dgn sendirinya. RLS jamin tenant.
+func (q *Queries) HasActiveItemConflictForSubscription(ctx context.Context, subscriptionID int64) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveItemConflictForSubscription, subscriptionID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
-// Benar bila sudah ADA langganan Active hidup untuk (account, plan) di tenant ini —
-// cermin partial-unique idx_subs_one_active (1 Active per account+plan). Dipakai
-// create-from-deal (BL-21) untuk menolak lebih dini dengan pesan ramah SEBELUM INSERT
-// (index tetap penjaga keras bila balapan). RLS menjamin tenant_id lewat GUC.
-func (q *Queries) HasActiveSubscriptionForPlan(ctx context.Context, arg HasActiveSubscriptionForPlanParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasActiveSubscriptionForPlan, arg.AccountID, arg.PlanID)
+const hasActiveItemForQuotePlans = `-- name: HasActiveItemForQuotePlans :one
+SELECT EXISTS (
+    SELECT 1
+    FROM subscription_items si
+    JOIN quote_items qi ON qi.plan_id = si.plan_id
+    WHERE si.account_id = $1
+      AND si.parent_active
+      AND qi.quote_id = $2
+      AND qi.plan_id IS NOT NULL
+)
+`
+
+type HasActiveItemForQuotePlansParams struct {
+	AccountID int64 `json:"account_id"`
+	QuoteID   int64 `json:"quote_id"`
+}
+
+// Pre-check Won (BL-88 PR2b): benar bila SALAH SATU paket di quote yang di-Accept sudah
+// punya item Active untuk desa ini. Menggantikan HasActiveSubscriptionForPlan berbasis
+// deals.plan_requested_id (single-plan) — kini invarian ada di subscription_items
+// (parent_active = status Active & belum terhapus). Pesan ramah SEBELUM buat langganan;
+// idx_subscription_items_one_active tetap penjaga keras bila balapan. RLS jamin tenant.
+func (q *Queries) HasActiveItemForQuotePlans(ctx context.Context, arg HasActiveItemForQuotePlansParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveItemForQuotePlans, arg.AccountID, arg.QuoteID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -548,10 +581,11 @@ SELECT
     s.created_at,
     a.village_name,
     p.plan_name,
-    u.name AS renewal_owner_name
+    u.name AS renewal_owner_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id AND a.deleted_at IS NULL
-JOIN plans    p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 LEFT JOIN users u ON u.id = s.renewal_owner
 WHERE s.deleted_at IS NULL
   AND s.end_date IS NOT NULL
@@ -592,8 +626,9 @@ type ListCSRenewalsRow struct {
 	RenewalOwner          *int64             `json:"renewal_owner"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	VillageName           string             `json:"village_name"`
-	PlanName              string             `json:"plan_name"`
+	PlanName              *string            `json:"plan_name"`
 	RenewalOwnerName      *string            `json:"renewal_owner_name"`
+	ItemCount             int64              `json:"item_count"`
 }
 
 // Daftar Renewal Management CS (Menu 6.6). Menampilkan langganan yang punya
@@ -639,6 +674,7 @@ func (q *Queries) ListCSRenewals(ctx context.Context, arg ListCSRenewalsParams) 
 			&i.VillageName,
 			&i.PlanName,
 			&i.RenewalOwnerName,
+			&i.ItemCount,
 		); err != nil {
 			return nil, err
 		}
@@ -651,10 +687,11 @@ func (q *Queries) ListCSRenewals(ctx context.Context, arg ListCSRenewalsParams) 
 }
 
 const listChurned = `-- name: ListChurned :many
-SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, a.village_name, p.plan_name
+SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
-JOIN plans    p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 WHERE s.deleted_at IS NULL
   AND a.deleted_at IS NULL
   AND s.status IN ('Cancelled', 'Churned')
@@ -684,7 +721,7 @@ type ListChurnedRow struct {
 	EntityCode             *string            `json:"entity_code"`
 	SubscriptionOwner      *int64             `json:"subscription_owner"`
 	AccountID              int64              `json:"account_id"`
-	PlanID                 int64              `json:"plan_id"`
+	PlanID                 *int64             `json:"plan_id"`
 	SourceDealID           *int64             `json:"source_deal_id"`
 	PreviousSubscriptionID *int64             `json:"previous_subscription_id"`
 	Status                 string             `json:"status"`
@@ -722,7 +759,8 @@ type ListChurnedRow struct {
 	ApprovedBy             *int64             `json:"approved_by"`
 	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
 	VillageName            string             `json:"village_name"`
-	PlanName               string             `json:"plan_name"`
+	PlanName               *string            `json:"plan_name"`
+	ItemCount              int64              `json:"item_count"`
 }
 
 // Dasbor Churn (Menu 5.2/5.4, READ-ONLY). Langganan yang telah berhenti
@@ -794,6 +832,7 @@ func (q *Queries) ListChurned(ctx context.Context, arg ListChurnedParams) ([]Lis
 			&i.ApprovedAt,
 			&i.VillageName,
 			&i.PlanName,
+			&i.ItemCount,
 		); err != nil {
 			return nil, err
 		}
@@ -822,7 +861,7 @@ type ListRenewalChainRow struct {
 	EntityCode             *string            `json:"entity_code"`
 	SubscriptionOwner      *int64             `json:"subscription_owner"`
 	AccountID              int64              `json:"account_id"`
-	PlanID                 int64              `json:"plan_id"`
+	PlanID                 *int64             `json:"plan_id"`
 	SourceDealID           *int64             `json:"source_deal_id"`
 	PreviousSubscriptionID *int64             `json:"previous_subscription_id"`
 	Status                 string             `json:"status"`
@@ -930,10 +969,11 @@ func (q *Queries) ListRenewalChain(ctx context.Context, id int64) ([]ListRenewal
 }
 
 const listRenewals = `-- name: ListRenewals :many
-SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, a.village_name, p.plan_name
+SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
-JOIN plans    p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 WHERE s.deleted_at IS NULL
   AND a.deleted_at IS NULL
   AND s.end_date IS NOT NULL
@@ -973,7 +1013,7 @@ type ListRenewalsRow struct {
 	EntityCode             *string            `json:"entity_code"`
 	SubscriptionOwner      *int64             `json:"subscription_owner"`
 	AccountID              int64              `json:"account_id"`
-	PlanID                 int64              `json:"plan_id"`
+	PlanID                 *int64             `json:"plan_id"`
 	SourceDealID           *int64             `json:"source_deal_id"`
 	PreviousSubscriptionID *int64             `json:"previous_subscription_id"`
 	Status                 string             `json:"status"`
@@ -1011,7 +1051,8 @@ type ListRenewalsRow struct {
 	ApprovedBy             *int64             `json:"approved_by"`
 	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
 	VillageName            string             `json:"village_name"`
-	PlanName               string             `json:"plan_name"`
+	PlanName               *string            `json:"plan_name"`
+	ItemCount              int64              `json:"item_count"`
 }
 
 // Dasbor Renewals (Menu 5.2, READ-ONLY — aksi perpanjangan ada di detail langganan,
@@ -1090,6 +1131,7 @@ func (q *Queries) ListRenewals(ctx context.Context, arg ListRenewalsParams) ([]L
 			&i.ApprovedAt,
 			&i.VillageName,
 			&i.PlanName,
+			&i.ItemCount,
 		); err != nil {
 			return nil, err
 		}
@@ -1102,7 +1144,7 @@ func (q *Queries) ListRenewals(ctx context.Context, arg ListRenewalsParams) ([]L
 }
 
 const listSubscriptionItems = `-- name: ListSubscriptionItems :many
-SELECT id, subscription_id, tenant_id, plan_id, quantity, unit_price, discount_pct, subtotal, mrr, arr, line_no FROM subscription_items
+SELECT id, subscription_id, tenant_id, plan_id, quantity, unit_price, discount_pct, subtotal, mrr, arr, line_no, account_id, parent_active FROM subscription_items
 WHERE subscription_id = $1
 ORDER BY line_no ASC NULLS LAST, id ASC
 `
@@ -1130,6 +1172,74 @@ func (q *Queries) ListSubscriptionItems(ctx context.Context, subscriptionID int6
 			&i.Mrr,
 			&i.Arr,
 			&i.LineNo,
+			&i.AccountID,
+			&i.ParentActive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubscriptionItemsWithPlan = `-- name: ListSubscriptionItemsWithPlan :many
+SELECT si.id, si.subscription_id, si.tenant_id, si.plan_id, si.quantity,
+       si.unit_price, si.discount_pct, si.subtotal, si.mrr, si.arr, si.line_no,
+       si.account_id, si.parent_active,
+       p.plan_name AS plan_name
+FROM subscription_items si
+LEFT JOIN plans p ON p.id = si.plan_id
+WHERE si.subscription_id = $1
+ORDER BY si.line_no ASC NULLS LAST, si.id ASC
+`
+
+type ListSubscriptionItemsWithPlanRow struct {
+	ID             int64          `json:"id"`
+	SubscriptionID int64          `json:"subscription_id"`
+	TenantID       int64          `json:"tenant_id"`
+	PlanID         *int64         `json:"plan_id"`
+	Quantity       int32          `json:"quantity"`
+	UnitPrice      pgtype.Numeric `json:"unit_price"`
+	DiscountPct    pgtype.Numeric `json:"discount_pct"`
+	Subtotal       pgtype.Numeric `json:"subtotal"`
+	Mrr            pgtype.Numeric `json:"mrr"`
+	Arr            pgtype.Numeric `json:"arr"`
+	LineNo         *int16         `json:"line_no"`
+	AccountID      int64          `json:"account_id"`
+	ParentActive   bool           `json:"parent_active"`
+	PlanName       *string        `json:"plan_name"`
+}
+
+// Sama seperti ListSubscriptionItems + nama paket (LEFT JOIN plans agar baris item
+// ber-plan_id NULL / plan terhapus tetap muncul, nama → NULL). Menopang tabel item di
+// detail langganan (BL-88 PR2b). Bounded per-langganan → tanpa keyset.
+func (q *Queries) ListSubscriptionItemsWithPlan(ctx context.Context, subscriptionID int64) ([]ListSubscriptionItemsWithPlanRow, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionItemsWithPlan, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSubscriptionItemsWithPlanRow{}
+	for rows.Next() {
+		var i ListSubscriptionItemsWithPlanRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubscriptionID,
+			&i.TenantID,
+			&i.PlanID,
+			&i.Quantity,
+			&i.UnitPrice,
+			&i.DiscountPct,
+			&i.Subtotal,
+			&i.Mrr,
+			&i.Arr,
+			&i.LineNo,
+			&i.AccountID,
+			&i.ParentActive,
+			&i.PlanName,
 		); err != nil {
 			return nil, err
 		}
@@ -1142,10 +1252,11 @@ func (q *Queries) ListSubscriptionItems(ctx context.Context, subscriptionID int6
 }
 
 const listSubscriptions = `-- name: ListSubscriptions :many
-SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, a.village_name, p.plan_name
+SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
 JOIN accounts a ON a.id = s.account_id
-JOIN plans    p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 WHERE s.deleted_at IS NULL
   AND a.deleted_at IS NULL
   AND (s.created_at, s.id) < ($1::timestamptz, $2::bigint)
@@ -1181,7 +1292,7 @@ type ListSubscriptionsRow struct {
 	EntityCode             *string            `json:"entity_code"`
 	SubscriptionOwner      *int64             `json:"subscription_owner"`
 	AccountID              int64              `json:"account_id"`
-	PlanID                 int64              `json:"plan_id"`
+	PlanID                 *int64             `json:"plan_id"`
 	SourceDealID           *int64             `json:"source_deal_id"`
 	PreviousSubscriptionID *int64             `json:"previous_subscription_id"`
 	Status                 string             `json:"status"`
@@ -1219,15 +1330,18 @@ type ListSubscriptionsRow struct {
 	ApprovedBy             *int64             `json:"approved_by"`
 	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
 	VillageName            string             `json:"village_name"`
-	PlanName               string             `json:"plan_name"`
+	PlanName               *string            `json:"plan_name"`
+	ItemCount              int64              `json:"item_count"`
 }
 
 // Daftar langganan (menu /subscriptions), keyset (created_at DESC, id DESC) + filter
 // ownership F3 + filter status opsional. Dua flag ownership (sumber SATU dgn
 // SubscriptionsListFilter): scope_all → semua; is_own → subscription_owner = uid;
 // keduanya false → NOL baris (fail-closed). status_filter ” → semua status.
-// JOIN accounts+plans membawa nama untuk kolom (hindari N+1, rule 13); INNER JOIN
-// aman karena account_id/plan_id NOT NULL. accounts di-filter baris hidup.
+// JOIN accounts membawa nama desa (INNER — account_id NOT NULL). plans di-LEFT JOIN:
+// BL-88 PR2b plan_id NULLABLE (langganan multi-paket → identitas di subscription_items,
+// plan_name parent NULL). accounts di-filter baris hidup. Kolom "Paket" dirakit handler
+// ("N paket" bila >1 item) — plan_name di sini hanya label cepat single-plan.
 //
 // search ” → tak menyaring; selain itu MEMPERSEMPIT (ILIKE substring, case-
 // insensitive) di ATAS ownership+status — tak pernah melebarkan baris. Hanya
@@ -1296,6 +1410,7 @@ func (q *Queries) ListSubscriptions(ctx context.Context, arg ListSubscriptionsPa
 			&i.ApprovedAt,
 			&i.VillageName,
 			&i.PlanName,
+			&i.ItemCount,
 		); err != nil {
 			return nil, err
 		}
@@ -1308,9 +1423,10 @@ func (q *Queries) ListSubscriptions(ctx context.Context, arg ListSubscriptionsPa
 }
 
 const listSubscriptionsForAccount = `-- name: ListSubscriptionsForAccount :many
-SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, p.plan_name
+SELECT s.id, s.tenant_id, s.entity_code, s.subscription_owner, s.account_id, s.plan_id, s.source_deal_id, s.previous_subscription_id, s.status, s.start_date, s.end_date, s.billing_cycle, s.auto_renew, s.contract_term_months, s.mrr, s.arr, s.quantity_seats, s.discount_pct, s.payment_status, s.renewal_status, s.renewal_type, s.renewal_owner, s.renewal_quote_id, s.previous_value, s.renewal_stage, s.renewal_risk, s.renewal_action_plan, s.renewal_next_action_date, s.cancellation_date, s.churn_reason, s.churn_type, s.churn_notes, s.lost_value_mrr, s.win_back_eligible, s.deleted_at, s.created_by, s.created_at, s.updated_by, s.updated_at, s.approval_status, s.approved_by, s.approved_at, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
 FROM subscriptions s
-JOIN plans p ON p.id = s.plan_id
+LEFT JOIN plans p ON p.id = s.plan_id
 WHERE s.deleted_at IS NULL
   AND s.account_id = $1
   AND (s.created_at, s.id) < ($2::timestamptz, $3::bigint)
@@ -1331,7 +1447,7 @@ type ListSubscriptionsForAccountRow struct {
 	EntityCode             *string            `json:"entity_code"`
 	SubscriptionOwner      *int64             `json:"subscription_owner"`
 	AccountID              int64              `json:"account_id"`
-	PlanID                 int64              `json:"plan_id"`
+	PlanID                 *int64             `json:"plan_id"`
 	SourceDealID           *int64             `json:"source_deal_id"`
 	PreviousSubscriptionID *int64             `json:"previous_subscription_id"`
 	Status                 string             `json:"status"`
@@ -1368,7 +1484,8 @@ type ListSubscriptionsForAccountRow struct {
 	ApprovalStatus         *string            `json:"approval_status"`
 	ApprovedBy             *int64             `json:"approved_by"`
 	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
-	PlanName               string             `json:"plan_name"`
+	PlanName               *string            `json:"plan_name"`
+	ItemCount              int64              `json:"item_count"`
 }
 
 // Daftar langganan satu desa (detail account → langganannya), keyset. Account sudah
@@ -1432,6 +1549,7 @@ func (q *Queries) ListSubscriptionsForAccount(ctx context.Context, arg ListSubsc
 			&i.ApprovedBy,
 			&i.ApprovedAt,
 			&i.PlanName,
+			&i.ItemCount,
 		); err != nil {
 			return nil, err
 		}
@@ -1778,7 +1896,7 @@ RETURNING id, tenant_id, entity_code, subscription_owner, account_id, plan_id, s
 
 type UpdateSubscriptionParams struct {
 	SubscriptionOwner  *int64         `json:"subscription_owner"`
-	PlanID             int64          `json:"plan_id"`
+	PlanID             *int64         `json:"plan_id"`
 	StartDate          pgtype.Date    `json:"start_date"`
 	EndDate            pgtype.Date    `json:"end_date"`
 	BillingCycle       *string        `json:"billing_cycle"`

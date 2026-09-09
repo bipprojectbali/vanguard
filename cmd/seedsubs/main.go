@@ -247,7 +247,7 @@ func createSub(ctx context.Context, q *db.Queries, tenantID, accountID, planID i
 		TenantID:   tenantID,
 		EntityCode: &code,
 		AccountID:  accountID,
-		PlanID:     planID,
+		PlanID:     &planID,
 		Status:     status,
 		StartDate:  pgtype.Date{Time: time.Now().AddDate(-1, 0, 0), Valid: true},
 		EndDate:    end,

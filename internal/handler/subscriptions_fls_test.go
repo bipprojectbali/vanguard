@@ -30,7 +30,7 @@ import (
 func TestSubRowView_MRRMasked(t *testing.T) {
 	row := db.ListSubscriptionsRow{
 		VillageName: "Desa MRR",
-		PlanName:    "Paket MRR",
+		PlanName:    ptr("Paket MRR"),
 		Mrr:         numFrom(t, "5000000"),
 		Arr:         numFrom(t, "60000000"),
 	}
@@ -55,7 +55,7 @@ func TestSubRowView_MRRMasked(t *testing.T) {
 func TestRenewalRowView_MRRMasked(t *testing.T) {
 	row := db.ListRenewalsRow{
 		VillageName:   "Desa Renewal",
-		PlanName:      "Paket Renewal",
+		PlanName:      ptr("Paket Renewal"),
 		Mrr:           numFrom(t, "5000000"),
 		PreviousValue: numFrom(t, "4500000"),
 	}
@@ -86,7 +86,7 @@ func TestRenewalRowView_MRRMasked(t *testing.T) {
 func TestChurnRowView_MRRMasked(t *testing.T) {
 	row := db.ListChurnedRow{
 		VillageName:  "Desa Churn",
-		PlanName:     "Paket Churn",
+		PlanName:     ptr("Paket Churn"),
 		LostValueMrr: numFrom(t, "500000"),
 	}
 	const wantLostMRR = "Rp 500.000"

@@ -44,8 +44,8 @@ func TestGetLatestSubscriptionForAccount(t *testing.T) {
 	if got.ID != latest.ID {
 		t.Errorf("harus kembalikan baris TERBARU (id=%d), got id=%d", latest.ID, got.ID)
 	}
-	if got.PlanName != "Paket Inti" {
-		t.Errorf("plan_name harus ikut lewat JOIN, got %q", got.PlanName)
+	if got.PlanName == nil || *got.PlanName != "Paket Inti" {
+		t.Errorf("plan_name harus ikut lewat JOIN, got %v", got.PlanName)
 	}
 	if numStr(t, got.Arr) != "2000.00" {
 		t.Errorf("arr harus dari baris terbaru (2000.00), got %q", numStr(t, got.Arr))

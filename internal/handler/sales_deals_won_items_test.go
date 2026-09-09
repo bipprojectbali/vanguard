@@ -23,22 +23,25 @@ func (e *testEnv) subscriptionItems(t *testing.T, subID int64) []db.Subscription
 	return items
 }
 
-// TestWonCreatesSubscriptionItems: quote single-plan dengan 2 baris (paket sama) →
-// Accept (grand_total → deal.Amount, plan di-backfill) → Closed Won → langganan lahir
-// dengan 2 subscription_items yang mencerminkan quote_items, Σ item.mrr == parent.mrr.
+// TestWonCreatesSubscriptionItems: quote MULTI-plan (2 paket berbeda) → Accept
+// (grand_total → deal.Amount) → Closed Won → langganan lahir dengan 2 subscription_items
+// yang mencerminkan quote_items, parent plan_id NULL (identitas di item, BL-88 PR2b), &
+// Σ item.mrr == parent.mrr. Dua paket harus DISTINCT: idx_subscription_items_one_active
+// menolak 2 item Active ber-paket sama pada satu desa (invarian pindah ke item PR2b).
 func TestWonCreatesSubscriptionItems(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Multiline", &uid, nil, nil)
 	deal := env.seedDeal(t, acc.ID, &uid)
 	env.setDealStage(t, deal.ID, "Qualification") // BL-13: jendela quoting
 	q := env.seedQuote(t, deal.ID, acc.ID, "0")
-	plan := env.seedPlan(t, "Paket Inti", "PLN-ITM", "1000000")
-	// Dua baris paket SAMA → singlePlanID tetap resolve (1 paket distinct) → gerbang
-	// plan_required PR2a lolos; grand_total = 2×1jt = 2jt.
-	env.addQuoteItem(t, uid, deal.ID, q.ID, plan, "1")
-	env.addQuoteItem(t, uid, deal.ID, q.ID, plan, "1")
+	planA := env.seedPlan(t, "Paket Inti", "PLN-ITM-A", "1000000")
+	planB := env.seedPlan(t, "Paket Tambahan", "PLN-ITM-B", "1000000")
+	// Dua baris paket BERBEDA → singleQuotePlan >1 distinct → parent plan_id NULL
+	// (identitas di item); grand_total = 2×1jt = 2jt.
+	env.addQuoteItem(t, uid, deal.ID, q.ID, planA, "1")
+	env.addQuoteItem(t, uid, deal.ID, q.ID, planB, "1")
 
-	env.acceptQuote(t, uid, deal.ID, q.ID, "Accepted") // salin grand_total → deal.Amount, backfill plan
+	env.acceptQuote(t, uid, deal.ID, q.ID, "Accepted") // salin grand_total → deal.Amount
 
 	// Termin Annual (12 bln) di quote agar Won punya termin sah.
 	if _, err := env.h.Pool.Exec(t.Context(),
@@ -65,9 +68,12 @@ func TestWonCreatesSubscriptionItems(t *testing.T) {
 	}
 
 	sumMRR := new(big.Rat)
+	seenPlans := map[int64]bool{}
 	for _, it := range items {
-		if it.PlanID == nil || *it.PlanID != plan {
-			t.Errorf("item.plan_id = %v, want %d", it.PlanID, plan)
+		if it.PlanID == nil {
+			t.Errorf("item.plan_id harus terisi (paket per-baris)")
+		} else {
+			seenPlans[*it.PlanID] = true
 		}
 		if it.Quantity != 1 {
 			t.Errorf("item.quantity = %d, want 1", it.Quantity)
@@ -76,6 +82,9 @@ func TestWonCreatesSubscriptionItems(t *testing.T) {
 			t.Errorf("item.subtotal = %s, want 1000000 (snapshot dari quote)", formatRupiah(it.Subtotal))
 		}
 		sumMRR.Add(sumMRR, ratFromNumeric(it.Mrr))
+	}
+	if !seenPlans[planA] || !seenPlans[planB] {
+		t.Errorf("kedua paket (%d, %d) harus tercermin di item, got %v", planA, planB, seenPlans)
 	}
 
 	// Σ item.mrr ≈ parent.mrr (2jt/12): item mrr diturunkan per-baris dari subtotal/
@@ -86,6 +95,10 @@ func TestWonCreatesSubscriptionItems(t *testing.T) {
 	sub, err := env.q.GetSubscription(t.Context(), subID)
 	if err != nil {
 		t.Fatalf("get subscription: %v", err)
+	}
+	// Multi-plan → parent plan_id NULL (identitas paket sepenuhnya di item, BL-88 PR2b).
+	if sub.PlanID != nil {
+		t.Errorf("parent plan_id harus NULL untuk quote multi-paket, got %d", *sub.PlanID)
 	}
 	diff := new(big.Rat).Abs(new(big.Rat).Sub(sumMRR, ratFromNumeric(sub.Mrr)))
 	tol := new(big.Rat).SetFrac64(int64(len(items)), 100) // len × 0.01

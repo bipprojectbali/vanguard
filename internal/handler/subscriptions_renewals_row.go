@@ -30,7 +30,7 @@ func renewalRowView(s db.ListRenewalsRow, now time.Time, businessRole string) pa
 	return panel.RenewalRow{
 		ID:          s.ID,
 		Village:     s.VillageName,
-		Plan:        s.PlanName,
+		Plan:        subPlanDisplay(s.PlanName, s.ItemCount),
 		RenewalDate: dateStr(s.EndDate),
 		DaysLeft:    daysLeftLabel(now, s.EndDate),
 		Type:        renewalTypeLabel(s.RenewalType, s.AutoRenew),

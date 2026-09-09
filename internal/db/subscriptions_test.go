@@ -45,7 +45,7 @@ func seedSubscription(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ten
 			TenantID:   tenantID,
 			EntityCode: &code,
 			AccountID:  accountID,
-			PlanID:     planID,
+			PlanID:     &planID,
 			Status:     "Active",
 		}
 		if mut != nil {
@@ -79,7 +79,7 @@ func TestCreateSubscriptionFromDeal(t *testing.T) {
 		}
 		sub, err = q.CreateSubscription(ctx, CreateSubscriptionParams{
 			TenantID: ten.ID, EntityCode: &code,
-			AccountID: acc.ID, PlanID: plan, SourceDealID: &deal.ID,
+			AccountID: acc.ID, PlanID: &plan, SourceDealID: &deal.ID,
 			Status: "Active", Arr: numeric(t, "12000.00"),
 		})
 		if err != nil {
@@ -95,8 +95,8 @@ func TestCreateSubscriptionFromDeal(t *testing.T) {
 	if sub.EntityCode == nil || *sub.EntityCode != "SUB-0001" {
 		t.Errorf("entity_code pertama harus SUB-0001, got %v", sub.EntityCode)
 	}
-	if sub.AccountID != acc.ID || sub.PlanID != plan {
-		t.Errorf("account/plan harus terikat, got acc=%d plan=%d", sub.AccountID, sub.PlanID)
+	if sub.AccountID != acc.ID || sub.PlanID == nil || *sub.PlanID != plan {
+		t.Errorf("account/plan harus terikat, got acc=%d plan=%v", sub.AccountID, sub.PlanID)
 	}
 	if sub.SourceDealID == nil || *sub.SourceDealID != deal.ID {
 		t.Errorf("source_deal_id harus terikat, got %v", sub.SourceDealID)
@@ -116,6 +116,11 @@ func TestCreateSubscriptionFromDeal(t *testing.T) {
 	}
 }
 
+// TestOneActivePerChain_Guard — BL-88 PR2b: invarian "1 Active per (tenant,account,
+// plan)" PINDAH dari parent (idx_subs_one_active, di-DROP) ke subscription_items
+// (idx_subscription_items_one_active WHERE parent_active AND plan_id IS NOT NULL).
+// Parent kini boleh koeksis; yang diserialkan index adalah ITEM ber-paket pada parent
+// Active. Trigger menurunkan account_id/parent_active dari parent saat item lahir.
 func TestOneActivePerChain_Guard(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
@@ -128,36 +133,39 @@ func TestOneActivePerChain_Guard(t *testing.T) {
 	plan := seedPlan(t, ctx, pool, ten.ID, "PKG-A", "100.00")
 	plan2 := seedPlan(t, ctx, pool, ten.ID, "PKG-B", "200.00")
 
-	seedSubscription(t, ctx, pool, ten.ID, acc.ID, plan, nil) // Active (acc,plan)
-
-	// Active KEDUA untuk (acc,plan) yang sama → ditolak idx_subs_one_active.
-	if e := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
-		_, err := q.CreateSubscription(ctx, CreateSubscriptionParams{
-			TenantID: ten.ID, AccountID: acc.ID, PlanID: plan, Status: "Active",
+	// addItem menyisipkan satu subscription_items ber-paket ke parent tertentu; error
+	// dikembalikan agar test bisa menegaskan lolos/ditolak invarian item.
+	addItem := func(subID, planID int64) error {
+		return WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
+			_, err := q.AddSubscriptionItem(ctx, AddSubscriptionItemParams{
+				SubscriptionID: subID, TenantID: ten.ID, PlanID: &planID,
+				Quantity: 1, UnitPrice: numeric(t, "100.00"), Subtotal: numeric(t, "100.00"),
+			})
+			return err
 		})
-		return err
-	}); e == nil {
-		t.Errorf("Active kedua untuk (acc,plan) sama harus ditolak idx_subs_one_active")
 	}
 
+	// sub1 Active (acc,plan) + item(plan) → parent_active=true, item terdaftar.
+	sub1 := seedSubscription(t, ctx, pool, ten.ID, acc.ID, plan, nil)
+	if err := addItem(sub1.ID, plan); err != nil {
+		t.Fatalf("item pertama (acc,plan) harus lolos, got %v", err)
+	}
+
+	// sub2 Active (acc,plan) — PARENT kini boleh lahir (tak ada lagi index parent).
+	sub2 := seedSubscription(t, ctx, pool, ten.ID, acc.ID, plan, nil)
+	// Item KEDUA ber-paket sama pada parent Active → ditolak idx_subscription_items_one_active.
+	if err := addItem(sub2.ID, plan); err == nil {
+		t.Errorf("item Active kedua untuk (acc,plan) sama harus ditolak idx_subscription_items_one_active")
+	}
 	// Plan lain (acc,plan2) → lolos: guard per (account,plan).
-	if e := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
-		_, err := q.CreateSubscription(ctx, CreateSubscriptionParams{
-			TenantID: ten.ID, AccountID: acc.ID, PlanID: plan2, Status: "Active",
-		})
-		return err
-	}); e != nil {
-		t.Errorf("Active untuk plan berbeda harus lolos, got %v", e)
+	if err := addItem(sub2.ID, plan2); err != nil {
+		t.Errorf("item untuk plan berbeda harus lolos, got %v", err)
 	}
 
 	// Account lain (acc2,plan) → lolos.
-	if e := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
-		_, err := q.CreateSubscription(ctx, CreateSubscriptionParams{
-			TenantID: ten.ID, AccountID: acc2.ID, PlanID: plan, Status: "Active",
-		})
-		return err
-	}); e != nil {
-		t.Errorf("Active untuk account berbeda harus lolos, got %v", e)
+	sub3 := seedSubscription(t, ctx, pool, ten.ID, acc2.ID, plan, nil)
+	if err := addItem(sub3.ID, plan); err != nil {
+		t.Errorf("item untuk account berbeda harus lolos, got %v", err)
 	}
 }
 
@@ -191,7 +199,7 @@ func TestRenewSubscription_NewRowOldExpired(t *testing.T) {
 		}
 		fresh, e = q.CreateSubscription(ctx, CreateSubscriptionParams{
 			TenantID: ten.ID, EntityCode: &code,
-			AccountID: acc.ID, PlanID: plan, Status: "Active",
+			AccountID: acc.ID, PlanID: &plan, Status: "Active",
 			PreviousSubscriptionID: &old.ID, PreviousValue: numeric(t, "1000.00"),
 			RenewalType: strPtr("Auto"), Arr: numeric(t, "1200.00"),
 		})
@@ -331,7 +339,7 @@ func TestListSubscriptions_OwnershipFailClosed(t *testing.T) {
 		t.Errorf("tanpa flag harus 0 baris (fail-closed), got %d", len(got))
 	}
 	// JOIN membawa nama untuk kolom (hindari N+1).
-	if got := listWith(true, false, sales.ID); got[0].VillageName == "" || got[0].PlanName == "" {
+	if got := listWith(true, false, sales.ID); got[0].VillageName == "" || got[0].PlanName == nil || *got[0].PlanName == "" {
 		t.Errorf("JOIN harus membawa village_name & plan_name")
 	}
 }

@@ -46,7 +46,7 @@ func (e *testEnv) seedActiveSubStart(
 		EntityCode:        &code,
 		SubscriptionOwner: owner,
 		AccountID:         accountID,
-		PlanID:            planID,
+		PlanID:            &planID,
 		Status:            "Active",
 		StartDate:         pgtype.Date{Time: start, Valid: true},
 		EndDate:           pgtype.Date{Time: start.AddDate(1, 0, 0), Valid: true},
@@ -57,6 +57,23 @@ func (e *testEnv) seedActiveSubStart(
 	})
 	if err != nil {
 		t.Fatalf("seed active subscription: %v", err)
+	}
+	// BL-88 PR2b: laporan (Revenue-by-Plan, Plan-count) mengagregasi via subscription_items,
+	// bukan lagi parent.plan_id. Seed 1 item cermin parent agar agregasi per-paket berisi.
+	// account_id/parent_active diturunkan trigger dari parent (Active → aktif).
+	lineNo := int16(1)
+	if _, err := e.q.AddSubscriptionItem(t.Context(), db.AddSubscriptionItemParams{
+		SubscriptionID: s.ID,
+		TenantID:       e.tenantID,
+		PlanID:         &planID,
+		Quantity:       1,
+		UnitPrice:      numFrom(t, mrr),
+		Subtotal:       numFrom(t, mrr),
+		Mrr:            numFrom(t, mrr),
+		Arr:            numFrom(t, "6000000"),
+		LineNo:         &lineNo,
+	}); err != nil {
+		t.Fatalf("seed subscription item: %v", err)
 	}
 	return s
 }

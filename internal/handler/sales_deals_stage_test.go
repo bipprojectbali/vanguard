@@ -47,15 +47,18 @@ func (e *testEnv) seedWonReadyDeal(
 	if err != nil {
 		t.Fatalf("seed won-ready deal: %v", err)
 	}
-	e.seedAcceptedQuote(t, d.ID, accountID, term)
+	e.seedAcceptedQuote(t, d.ID, accountID, term, planID, amount)
 	return d
 }
 
 // seedAcceptedQuote menaruh satu quote berstatus Accepted untuk deal — BL-88: sumber
 // termin (& di produksi grand_total → deal.Amount) saat Closed Won. contract_term_months
 // diturunkan dari peta termContractMonths (sumber tunggal, dipakai handler Won). Index
-// idx_quotes_one_accepted menjamin ≤1 Accepted per (tenant, deal).
-func (e *testEnv) seedAcceptedQuote(t *testing.T, dealID, accountID int64, term string) db.Quote {
+// idx_quotes_one_accepted menjamin ≤1 Accepted per (tenant, deal). BL-88 PR2b: identitas
+// paket kini diturunkan dari quote_items — bila planID != 0 diseed SATU baris berpaket
+// (subtotal = amount) agar Won menemukan paket; planID == 0 = quote tanpa paket (kasus
+// negatif plan_required).
+func (e *testEnv) seedAcceptedQuote(t *testing.T, dealID, accountID int64, term string, planID int64, amount string) db.Quote {
 	t.Helper()
 	code, err := e.q.GenerateEntityCode(t.Context(), e.tenantID, codes.EntityQuote)
 	if err != nil {
@@ -74,6 +77,20 @@ func (e *testEnv) seedAcceptedQuote(t *testing.T, dealID, accountID int64, term 
 	})
 	if err != nil {
 		t.Fatalf("seed accepted quote: %v", err)
+	}
+	if planID != 0 {
+		lineNo := int16(1)
+		if _, err := e.q.AddQuoteItem(t.Context(), db.AddQuoteItemParams{
+			QuoteID:   q.ID,
+			TenantID:  e.tenantID,
+			PlanID:    &planID,
+			Quantity:  1,
+			UnitPrice: numFrom(t, amount),
+			Subtotal:  numFrom(t, amount),
+			LineNo:    &lineNo,
+		}); err != nil {
+			t.Fatalf("seed quote item: %v", err)
+		}
 	}
 	return q
 }
@@ -153,8 +170,8 @@ func TestDealWon_CreatesActiveSubscription(t *testing.T) {
 	if sub.Status != "Active" {
 		t.Errorf("sub.status = %q, want Active", sub.Status)
 	}
-	if sub.PlanID != plan {
-		t.Errorf("sub.plan_id = %d, want %d", sub.PlanID, plan)
+	if sub.PlanID == nil || *sub.PlanID != plan {
+		t.Errorf("sub.plan_id = %v, want %d", sub.PlanID, plan)
 	}
 	if sub.SubscriptionOwner == nil || *sub.SubscriptionOwner != uid {
 		t.Errorf("sub.owner = %v, want %d (deal owner)", sub.SubscriptionOwner, uid)
@@ -280,7 +297,7 @@ func TestDealWon_ValidationAtomic(t *testing.T) {
 	// plan_required: quote Accepted BER-termin ada, tapi deal tak menunjuk plan
 	// (plan_requested_id kosong) → gerbang plan single-plan PR1 menolak.
 	noPlanDeal := env.seedReportDeal(t, acc.ID, &uid, "Negotiation", "12000000")
-	env.seedAcceptedQuote(t, noPlanDeal.ID, acc.ID, "Annual")
+	env.seedAcceptedQuote(t, noPlanDeal.ID, acc.ID, "Annual", 0, "")
 
 	cases := []struct {
 		name    string

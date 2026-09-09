@@ -21,8 +21,9 @@ import (
 // langganan Trial → Active. Menolak bila bukan Trial (sub_not_trial) atau sudah ada
 // langganan Active untuk (account, plan) yang sama (sub_dup_active). Cek satu-Active
 // WAJIB di sini: pre-check Won dilewati untuk Trial (sales_deals_won_subscription.go)
-// & idx_subs_one_active cuma WHERE status='Active' — membiarkan UPDATE melanggar
-// partial-unique meng-abort seluruh tx ber-tenant.
+// & idx_subscription_items_one_active cuma WHERE parent_active — membiarkan UPDATE
+// (status→Active memicu resync parent_active item) melanggar partial-unique meng-abort
+// seluruh tx ber-tenant.
 func (h *Handler) SubscriptionActivate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !canActivateSubscriptions(ctx) {
@@ -44,11 +45,10 @@ func (h *Handler) SubscriptionActivate(w http.ResponseWriter, r *http.Request) {
 	}
 	// Cek satu-Active SAAT aktivasi (pre-check beri pesan ramah; index tetap penjaga
 	// keras bila balapan). Trial boleh koeksis dgn Active, tapi menaikkan ke Active
-	// akan melanggar idx_subs_one_active bila sudah ada Active plan sama.
-	exists, err := h.q(ctx).HasActiveSubscriptionForPlan(ctx, db.HasActiveSubscriptionForPlanParams{
-		AccountID: sub.AccountID,
-		PlanID:    sub.PlanID,
-	})
+	// akan melanggar idx_subscription_items_one_active bila sudah ada item Active plan
+	// sama di langganan lain. BL-88 PR2b: cek lintas SEMUA paket langganan ini (item),
+	// bukan sekadar sub.PlanID parent (yang bisa NULL utk multi-paket).
+	exists, err := h.q(ctx).HasActiveItemConflictForSubscription(ctx, id)
 	if err != nil {
 		h.Log.Error("subscriptions: activate active-check", "subscription_id", id, "err", err)
 		wsRedirect(w, r, "/subscriptions/"+idStr, "failed")

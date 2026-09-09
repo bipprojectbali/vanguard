@@ -51,7 +51,7 @@ func (e *testEnv) seedDashboardSub(
 		EntityCode:        &code,
 		SubscriptionOwner: owner,
 		AccountID:         accountID,
-		PlanID:            planID,
+		PlanID:            &planID,
 		Status:            status,
 		EndDate:           end,
 		AutoRenew:         false,
@@ -61,6 +61,23 @@ func (e *testEnv) seedDashboardSub(
 	})
 	if err != nil {
 		t.Fatalf("seed dashboard subscription: %v", err)
+	}
+	// BL-88 PR2b: langganan nyata punya ≥1 subscription_items (invarian 1-Active &
+	// agregasi laporan kini via item). Seed 1 item cermin parent; parent_active
+	// diturunkan trigger dari status (Active → aktif → menegakkan idx item).
+	lineNo := int16(1)
+	if _, err := e.q.AddSubscriptionItem(t.Context(), db.AddSubscriptionItemParams{
+		SubscriptionID: s.ID,
+		TenantID:       e.tenantID,
+		PlanID:         &planID,
+		Quantity:       1,
+		UnitPrice:      numFrom(t, "500000"),
+		Subtotal:       numFrom(t, "500000"),
+		Mrr:            numFrom(t, "500000"),
+		Arr:            numFrom(t, arr),
+		LineNo:         &lineNo,
+	}); err != nil {
+		t.Fatalf("seed dashboard subscription item: %v", err)
 	}
 	return s
 }

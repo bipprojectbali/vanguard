@@ -41,7 +41,7 @@ func (e *testEnv) seedRenewalSub(
 		EntityCode:        &code,
 		SubscriptionOwner: owner,
 		AccountID:         accountID,
-		PlanID:            planID,
+		PlanID:            &planID,
 		Status:            status,
 		EndDate:           pgtype.Date{Time: endDate, Valid: true},
 		AutoRenew:         false,
