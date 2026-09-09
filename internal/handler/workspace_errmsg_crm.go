@@ -25,6 +25,8 @@ func wsErrMsgCRM(code string) string {
 		return "Nomor WhatsApp tidak valid (6–20 digit; boleh diawali + dan pemisah spasi/-)."
 	case "contact_phone":
 		return "Nomor HP Kontak tidak valid (6–20 digit; boleh diawali + dan pemisah spasi/-)."
+	case "office_phone":
+		return "Nomor Telepon Kantor tidak valid (6–20 digit; boleh diawali + dan pemisah spasi/-)."
 	case "date":
 		return "Tanggal tidak valid (format YYYY-MM-DD)."
 	case "probability":
