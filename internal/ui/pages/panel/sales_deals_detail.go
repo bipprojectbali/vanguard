@@ -58,6 +58,12 @@ type DealDetailView struct {
 	Owner    string
 	CanWrite bool
 
+	// BL-123: kartu "Sistem & Audit" (wireframe). Nilai sudah diformat handler.
+	CreatedByName string
+	CreatedAt     string
+	UpdatedByName string
+	UpdatedAt     string
+
 	// CanCreateQuote (BL-86) = boleh MEMBUAT quote baru: CanWrite DAN stage dalam
 	// jendela quotable (Qualification–Negotiation). Digate terpisah dari CanWrite
 	// agar tombol "Buat Quote" tak tampil saat aksinya pasti ditolak backend
@@ -86,28 +92,38 @@ type DealDetailView struct {
 	Msg string
 }
 
-// DealDetail merender hub detail: header (nama + kode + stage + aksi), stepper
-// pipeline, kontrol ganti stage (bila boleh tulis), kartu inti & analisis, lalu
-// placeholder lintas-modul (Activities & Modul 5).
+// DealDetail merender hub detail (BL-123, wireframe): header (nama + badge kode/
+// stage + baris meta Pemilik·Tipe + grup aksi), lalu kartu Tahap Pipeline penuh-
+// lebar (stepper horizontal), lalu grid 4-kolom — Identitas (75%) · Nilai &
+// Peluang (40%), Hasil & Analisis (60%) · Sistem & Audit (40%), Quote (100%),
+// Aktivitas (100%). Dua kartu sebaris tingginya disamakan (sel grid + kartu
+// meregang). Aksi ubah tahap = modal CSP-safe (signal Datastar; form NATIVE
+// POST → 303, gotcha #16).
 func DealDetail(v DealDetailView) g.Node {
 	idStr := strconv.FormatInt(v.ID, 10)
 	base := v.Base + "/deals/" + idStr
 
+	// Deal terminal (Closed Won/Closed Lost) = terkunci → tak boleh disunting/ubah
+	// tahap/hapus. Sembunyikan ketiga aksi (dan modal tahap di bawah).
+	canAct := v.CanWrite && v.Stage != stageClosedWon && v.Stage != stageClosedLost
+	meta := dealMetaLine(v)
 	header := h.Div(
 		h.Class("flex flex-wrap items-start justify-between gap-2"),
 		h.Div(
 			h.Class("min-w-0"),
-			h.H1(h.Class("text-xl font-semibold truncate"), g.Text(v.DealName)),
 			h.Div(
-				h.Class("flex flex-wrap items-center gap-2 mt-1"),
+				h.Class("flex flex-wrap items-center gap-2"),
+				h.H1(h.Class("text-xl font-semibold truncate"), g.Text(v.DealName)),
 				ui.When(v.EntityCode != "", h.Span(
 					h.Class("badge badge-neutral font-mono"), g.Text(v.EntityCode))),
 				dealStageBadge(v.Stage),
 			),
+			ui.When(meta != "", h.P(h.Class("text-sm text-base-content/60 mt-1"), g.Text(meta))),
 		),
-		ui.When(v.CanWrite, h.Div(
+		ui.When(canAct, h.Div(
 			h.Class("flex flex-wrap items-center gap-2"),
 			h.A(h.Href(base+"/edit"), h.Class("btn btn-sm min-h-11"), g.Text("Sunting")),
+			dealStageTrigger(),
 			deleteDealForm(base),
 		)),
 	)
@@ -124,34 +140,122 @@ func DealDetail(v DealDetailView) g.Node {
 		h.Href(v.Base+"/accounts/"+strconv.FormatInt(v.AccountID, 10)),
 		h.Class("link link-hover"), g.Text(orDash(v.AccountLabel)))
 
-	return h.Div(
-		h.Class("grid gap-4 min-w-0"),
-		header,
-		h.A(h.Href(v.Base+"/deals"), h.Class("text-sm text-base-content/60"),
-			g.Text("« Kembali ke pipeline")),
-		// BL-99: banner umpan balik PRG (pola sama halaman pipeline). Ditaruh dekat
-		// atas agar alasan penolakan tahap terminal langsung terlihat di dekat form.
-		ui.When(v.Err != "", ui.Alert(ui.VariantDestructive, "deal-err", g.Text(v.Err))),
-		ui.When(v.Msg != "", ui.Alert(ui.VariantDefault, "deal-ok", g.Text(v.Msg))),
-		dealStepper(displayStages(v.Stages, v.Stage), v.Stage),
-		ui.When(v.CanWrite, dealStageControl(v, base)),
-		dealIdentityCard(v, accountLink),
-		detailCard("Nilai & Peluang", []detailField{
+	// Grid 5-kolom (mobile: 1 kolom, semua penuh-lebar). Baris 60/40 pakai
+	// lg:col-span-3 (60%) & lg:col-span-2 (40%); Quote & Aktivitas penuh-lebar
+	// (lg:col-span-5). Wrapper per-sel membawa col-span (helper kartu tak menerima
+	// kelas ekstra) DAN `grid` agar kartu di dalamnya menyusut/meregang mengisi
+	// TINGGI sel — sel meregang ke tinggi baris (grid align stretch), lalu kartu
+	// meregang mengisi sel → dua kartu sebaris tingginya sama.
+	grid := h.Div(
+		h.Class("grid gap-4 min-w-0 lg:grid-cols-5"),
+		h.Div(h.Class("min-w-0 grid lg:col-span-3"), dealIdentityCard(v, accountLink)),
+		h.Div(h.Class("min-w-0 grid lg:col-span-2"), detailCardWideLabel("Nilai & Peluang", []detailField{
 			{amountLabel, v.Amount},
 			{"Probabilitas", prob},
 			{"Perkiraan Tutup", v.ExpectedClose},
 			{"Kategori Forecast", v.ForecastCategory},
 			{"Termin Langganan", v.SubscriptionTerm},
-		}),
-		detailCard("Hasil & Analisis", []detailField{
+		})),
+		h.Div(h.Class("min-w-0 grid lg:col-span-3"), detailCard("Hasil & Analisis", []detailField{
 			{"Alasan Menang/Kalah", v.WinLossReason},
 			{"Kode Alasan Kalah", v.LossReasonCode},
 			{"Kompetitor", v.Competitor},
 			{"Tanggal Tutup", v.ClosedDate},
 			{"Catatan Kekalahan", v.LossNotes},
-		}),
-		dealQuotesCard(v),
-		ActivityTimeline(v.Activities),
+		})),
+		h.Div(h.Class("min-w-0 grid lg:col-span-2"), dealSystemAuditCard(v)),
+		h.Div(h.Class("min-w-0 lg:col-span-5"), dealQuotesCard(v)),
+		h.Div(h.Class("min-w-0 lg:col-span-5"), ActivityTimeline(v.Activities)),
+	)
+
+	body := []g.Node{
+		header,
+		h.A(h.Href(v.Base+"/deals"), h.Class("text-sm text-base-content/60"),
+			g.Text("« Kembali ke pipeline")),
+		// BL-99: banner umpan balik PRG (pola sama halaman pipeline). Ditaruh dekat
+		// atas agar alasan penolakan tahap terminal langsung terlihat.
+		ui.When(v.Err != "", ui.Alert(ui.VariantDestructive, "deal-err", g.Text(v.Err))),
+		ui.When(v.Msg != "", ui.Alert(ui.VariantDefault, "deal-ok", g.Text(v.Msg))),
+		// Kartu Tahap Pipeline penuh-lebar di atas (stepper horizontal), lalu grid.
+		dealPipelineCard(v),
+		grid,
+	}
+	// Modal ubah tahap: hanya bila aksi tersedia (boleh-tulis & belum Closed Won);
+	// tersembunyi sampai dipicu dealStageTrigger di header (signal $dealStageOpen).
+	if canAct {
+		body = append(body, dealStageModal(v, base))
+	}
+
+	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+}
+
+// dealMetaLine = "Pemilik: X · Tipe Deal: Y" (bagian yang terisi saja). "" bila
+// keduanya kosong (baris tak dirender). Owner & Tipe Deal pindah dari kartu
+// Identitas ke baris meta header (wireframe).
+func dealMetaLine(v DealDetailView) string {
+	parts := make([]string, 0, 2)
+	if v.Owner != "" {
+		parts = append(parts, "Pemilik: "+v.Owner)
+	}
+	if v.DealType != "" {
+		parts = append(parts, "Tipe Deal: "+v.DealType)
+	}
+	line := ""
+	for i, p := range parts {
+		if i > 0 {
+			line += " · "
+		}
+		line += p
+	}
+	return line
+}
+
+// dealPipelineCard = kartu "Tahap Pipeline" (sidebar) membungkus stepper vertikal
+// read-only. Aksi ubah tahap terpisah di modal (dealStageTrigger di header).
+func dealPipelineCard(v DealDetailView) g.Node {
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+		h.Div(
+			h.Class("card-body min-w-0 gap-3"),
+			h.H2(h.Class("font-semibold"), g.Text("Tahap Pipeline")),
+			dealStepper(displayStages(v.Stages, v.Stage), v.Stage),
+		),
+	)
+}
+
+// dealSystemAuditCard = "Sistem & Audit" (BL-123, wireframe): pembuat/pengubah +
+// waktu (read-only). Sejajar leadSystemAuditCard. Kartu ini sekolom-sempit (40%)
+// bersama Nilai & Peluang → pakai detailCardWideLabel agar label tak wrap.
+func dealSystemAuditCard(v DealDetailView) g.Node {
+	return detailCardWideLabel("Sistem & Audit", []detailField{
+		{"Dibuat Oleh", v.CreatedByName},
+		{"Tanggal Dibuat", v.CreatedAt},
+		{"Diubah Oleh", v.UpdatedByName},
+		{"Terakhir Diubah", v.UpdatedAt},
+	})
+}
+
+// detailCardWideLabel = varian detailCard untuk kartu SEMPIT (kolom 40% di grid
+// detail deal). detailRow standar memberi label hanya 1/3 lebar (sm:grid-cols-3)
+// → di kartu sempit label panjang ("Nilai diakui (dari quote)", "Terakhir
+// Diubah") wrap ke banyak baris. Di sini label 3/5 & nilai 2/5 (nilai pendek:
+// Rp/%/tanggal/enum/"—") lewat detailRowWideLabel. Scoped ke file ini (bukan ubah
+// detailRow global yang dipakai lintas halaman) agar blast radius nol.
+func detailCardWideLabel(title string, fields []detailField) g.Node {
+	rows := make([]g.Node, 0, len(fields))
+	for _, f := range fields {
+		rows = append(rows, detailRowWideLabel(f.label, orDash(f.value)))
+	}
+	return cardRows(title, "", rows...)
+}
+
+// detailRowWideLabel = detailRow dgn kolom label lebih lebar (3/5 vs 1/3). Sejajar
+// detailRow (accounts_detail_rollup.go) selain rasio kolom.
+func detailRowWideLabel(label, value string) g.Node {
+	return h.Div(
+		h.Class("grid gap-1 sm:grid-cols-5 sm:gap-2 py-2 border-b border-base-300/50 last:border-0"),
+		h.Dt(h.Class("sm:col-span-3 text-sm text-base-content/60"), g.Text(label)),
+		h.Dd(h.Class("sm:col-span-2 break-words"), g.Text(value)),
 	)
 }
 
@@ -231,9 +335,7 @@ func dealIdentityCard(v DealDetailView, accountLink g.Node) g.Node {
 	return cardRows("Identitas Deal", "",
 		detailRow("Desa", accountLink),
 		detailRow("Kontak Utama", g.Text(orDash(v.PrimaryContact))),
-		detailRow("Tipe Deal", g.Text(orDash(v.DealType))),
 		detailRow("Langkah Berikutnya", g.Text(orDash(v.NextStep))),
-		detailRow("Pemilik", g.Text(orDash(v.Owner))),
 	)
 }
 
