@@ -112,14 +112,16 @@ func TestLeadForm_LegendaRating(t *testing.T) {
 	}
 
 	// (b) BL-69: legenda di balik reveal ⓘ (details.hint-reveal + summary + ikon).
+	// (c) BL-129: legenda disajikan sebagai bubble/popover mengambang (.hint-pop).
 	for _, want := range []string{
 		`class="hint-reveal`,  // pembungkus reveal
 		`class="hint-summary`, // baris label yg bisa di-tap
 		`aria-hidden="true"`,  // ikon ⓘ (dekoratif)
 		`size-4`,              // lucide.Info
+		`class="hint-pop`,     // BL-129: bubble/popover pembungkus legenda
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("BL-69: reveal ikon ⓘ harus memuat %q:\n%s", want, out)
+			t.Errorf("BL-69/BL-129: reveal ikon ⓘ harus memuat %q:\n%s", want, out)
 		}
 	}
 }

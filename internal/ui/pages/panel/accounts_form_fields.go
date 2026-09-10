@@ -29,11 +29,12 @@ func formCard(title string, fields ...g.Node) g.Node {
 // labelWithHint = label field + (opsional) ikon ⓘ tap-friendly (BL-65).
 // Tanpa hint → label biasa (labelFor). Dengan hint → seluruh baris label
 // dibungkus <details class="hint-reveal"> (CSP-safe, tanpa JS inline): summary
-// memuat label + ikon ⓘ, dan keterangan muncul INLINE penuh-lebar di bawahnya
-// saat di-TAP/klik/Enter — BUKAN hover (hover mati di sentuh; ini menjawab
-// keberatan enum_field.go BL-3/BL-4 terhadap tooltip/title). Karena keterangan
-// mengalir (bukan absolut) ia membungkus teks & tak pernah meluber di 375px.
-// Menggantikan (a) baris fieldHint lama di bawah input dan (b) pelebaran
+// memuat label + ikon ⓘ, dan keterangan muncul saat di-TAP/klik/Enter — BUKAN
+// hover (hover mati di sentuh; ini menjawab keberatan enum_field.go BL-3/BL-4
+// terhadap tooltip/title). BL-129: keterangan kini disajikan sebagai bubble/
+// popover mengambang (.hint-pop via hintPop, digayai di input.css) di ATAS baris
+// label — di-anchor ke .hint-reveal & dibatasi max-width agar nol overflow di
+// 375px. Menggantikan (a) baris fieldHint lama di bawah input dan (b) pelebaran
 // sm:col-span-2 field ber-hint — sekarang semua field tetap single-column
 // seragam. Tap-target ikon ≥44px (min-h-11 min-w-11).
 func labelWithHint(text, forID string, required bool, hint []string) g.Node {
@@ -55,10 +56,10 @@ func labelWithHint(text, forID string, required bool, hint []string) g.Node {
 				lucide.Info(h.Class("size-4")),
 			),
 		),
-		h.P(
-			h.Class("mt-1 text-xs font-normal text-base-content/70 break-words"),
+		hintPop(h.P(
+			h.Class("text-xs font-normal text-base-content/70 break-words"),
 			g.Text(hint[0]),
-		),
+		)),
 	)
 }
 

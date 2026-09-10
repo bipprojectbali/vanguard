@@ -63,10 +63,11 @@ func enumFieldHinted(label, name, current string, opts []string, required bool, 
 // tiap opsi (BL-69) — varian labelWithHint (BL-65) untuk keterangan BERBARIS
 // BANYAK (satu baris per opsi). Seluruh baris label dibungkus
 // <details class="hint-reveal"> (CSP-safe, tanpa JS inline): summary memuat label
-// + ikon ⓘ, dan enumLegend mengalir penuh-lebar di bawahnya saat di-TAP/klik/Enter
-// — BUKAN hover (hover mati di sentuh; ini menjawab keberatan enum_field.go BL-3
-// atas tooltip/title). Karena legenda mengalir (bukan absolut) ia membungkus teks
-// & tak pernah meluber di 375px. legend kosong → label biasa (labelFor). Tap-target
+// + ikon ⓘ, dan enumLegend muncul saat di-TAP/klik/Enter — BUKAN hover (hover mati
+// di sentuh; ini menjawab keberatan enum_field.go BL-3 atas tooltip/title). BL-129:
+// legenda kini disajikan sebagai bubble/popover mengambang (.hint-pop, digayai di
+// input.css) di ATAS baris label — di-anchor ke .hint-reveal & dibatasi max-width
+// agar nol overflow di 375px. legend kosong → label biasa (labelFor). Tap-target
 // ikon ≥44px (min-h-11 min-w-11), sama dgn labelWithHint.
 func labelWithLegend(text, forID string, required bool, legend [][2]string) g.Node {
 	if len(legend) == 0 {
@@ -85,7 +86,19 @@ func labelWithLegend(text, forID string, required bool, legend [][2]string) g.No
 				lucide.Info(h.Class("size-4")),
 			),
 		),
-		enumLegend(legend),
+		hintPop(enumLegend(legend)),
+	)
+}
+
+// hintPop membungkus konten reveal (legenda/keterangan) sebagai bubble/popover
+// mengambang (BL-129). Kelas .hint-pop diposisikan di input.css (absolut, di atas
+// baris label, dgn panah); chrome warna pakai token daisyUI (bg-base-100/border/
+// shadow, gotcha #4/#11) — bukan absolut. Dipakai bersama labelWithLegend (BL-69)
+// & labelWithHint (BL-65) agar SEMUA tap-info ⓘ seragam bubble.
+func hintPop(body g.Node) g.Node {
+	return h.Div(
+		h.Class("hint-pop bg-base-100 text-base-content border border-base-300 rounded-xl shadow-lg px-3 py-2"),
+		body,
 	)
 }
 

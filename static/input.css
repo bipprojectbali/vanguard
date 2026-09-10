@@ -112,14 +112,42 @@ html[data-sidebar="collapsed"] .app-navlabel.badge {
     padding-inline: 0;
   }
 
-  /* BL-65: ikon ⓘ tap-friendly untuk keterangan field (selectField/field hint).
-     Reveal via <details> = CSP-safe (tanpa JS inline) & TAP bukan hover (hover
-     mati di sentuh — lih. enum_field.go BL-3/BL-4). Sembunyikan segitiga
+  /* BL-65 + BL-129: ikon ⓘ tap-friendly untuk keterangan field (selectField/enum
+     hint). Reveal via <details> = CSP-safe (tanpa JS inline) & TAP bukan hover
+     (hover mati di sentuh — lih. enum_field.go BL-3/BL-4). Sembunyikan segitiga
      disclosure bawaan; summary sudah display:flex (utility) jadi bukan list-item,
-     tapi tetap tutup marker webkit lama agar konsisten lintas engine. Konten
-     keterangan mengalir inline (bukan absolut) → tak pernah meluber di 375px. */
+     tapi tetap tutup marker webkit lama agar konsisten lintas engine.
+     BL-129: keterangan yang terungkap kini disajikan sebagai BUBBLE/POPOVER
+     mengambang (.hint-pop) DI ATAS baris label dengan panah menunjuk ke bawah —
+     bukan lagi aliran inline di bawah. Bubble di-anchor ke .hint-reveal (relative)
+     & dibatasi max-width:100% (≤ lebar kolom field; kolom sudah viewport-bounded)
+     → NOL overflow horizontal di 320–375px. .card tak meng-clip (hanya .card
+     figure yang overflow:hidden) jadi bubble tak terpotong walau meluap ke atas.
+     Chrome warna (bg/border/shadow) via utility token daisyUI di .go (gotcha #4/#11);
+     di sini hanya posisi + panah. */
+  .hint-reveal { position: relative; }
   .hint-reveal > summary { list-style: none; }
   .hint-reveal > summary::-webkit-details-marker { display: none; }
+  .hint-pop { display: none; }
+  .hint-reveal[open] > .hint-pop {
+    display: block;
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 0.5rem);
+    z-index: 30;
+    width: max-content;
+    max-width: 100%;
+  }
+  /* Panah menunjuk ke bawah (ke ikon ⓘ). Warna = bg bubble (token base-100 aktif
+     per-tema); duduk tepat di tepi bawah bubble. */
+  .hint-reveal[open] > .hint-pop::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 1.25rem;
+    border: 0.375rem solid transparent;
+    border-top-color: var(--color-base-100);
+  }
 
   /* Toast flash: muncul lalu memudar sendiri (~3.2s) tanpa JS. */
   .toast-flash {

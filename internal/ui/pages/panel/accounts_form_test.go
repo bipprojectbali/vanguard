@@ -169,4 +169,9 @@ func TestAccountForm_HintAsTapInfoIcon(t *testing.T) {
 	if !strings.Contains(out, "min-h-11 min-w-11") {
 		t.Errorf("ikon ⓘ harus tap-target ≥44px (min-h-11 min-w-11):\n%s", out)
 	}
+	// (4) BL-129: keterangan disajikan sebagai bubble/popover mengambang
+	//     (.hint-pop) di dalam <details>, bukan lagi aliran <p> inline telanjang.
+	if !strings.Contains(out, `class="hint-pop`) {
+		t.Errorf("keterangan harus dibungkus bubble .hint-pop (BL-129):\n%s", out)
+	}
 }
