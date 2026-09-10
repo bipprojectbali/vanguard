@@ -28,7 +28,7 @@ import (
 type renewalWindow struct{ Key, Label string }
 
 var renewalWindows = []renewalWindow{
-	{"due", "Jatuh Tempo"},
+	{"due", "Akan Jatuh Tempo"},
 	{"grace", "Masa Tenggang"},
 	{"renewed", "Diperpanjang"},
 	{"all", "Semua"},

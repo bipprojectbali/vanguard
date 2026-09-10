@@ -77,7 +77,7 @@ func TestSubscriptionRenewalsExport_GateAndWindow(t *testing.T) {
 
 // TestSubscriptionRenewals_DashboardHeader: dasbor merender elemen BL-94 —
 // subtitle, banner info netral, tombol Ekspor CSV, 4 label KPI, dan badge Status
-// derivasi (bukan lifecycle). due (Active +10 hari) → badge "Jatuh Tempo".
+// derivasi (bukan lifecycle). due (Active +10 hari) → badge "Akan Jatuh Tempo".
 func TestSubscriptionRenewals_DashboardHeader(t *testing.T) {
 	env, uid := setupAccounts(t)
 	now := time.Now().In(appTZ)
@@ -94,7 +94,7 @@ func TestSubscriptionRenewals_DashboardHeader(t *testing.T) {
 		"Langganan mendekati / melewati tanggal perpanjangan", // subtitle
 		"Ekspor CSV", // tombol ekspor
 		"/subscriptions/renewals/export?window=due", // href ekspor ikut jendela
-		"Jatuh Tempo 30 Hari",                       // KPI 1
+		"Akan Jatuh Tempo (30 Hari)",                // KPI 1
 		"Masa Tenggang",                             // KPI 2
 		"Diperpanjang",                              // KPI 3
 		"Renewal Rate",                              // KPI 4

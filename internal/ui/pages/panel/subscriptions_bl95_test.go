@@ -46,7 +46,7 @@ func TestSubList_SlimColumns(t *testing.T) {
 		}},
 	}))
 	// Header baru hadir (anchor </th> agar tak bentrok dgn label kartu KPI).
-	for _, want := range []string{"Renewal Date</th>", "CSM</th>", "MRR</th>", "Status</th>"} {
+	for _, want := range []string{"Renewal Date</th>", "CSM</th>", "MRR</th>", "Masa Berlaku</th>"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("header %q harus hadir:\n%s", want, out)
 		}

@@ -126,7 +126,9 @@ LIMIT sqlc.arg(page_size);
 -- ownership (F3) dengan flag yang SAMA dgn ListSubscriptions. Empat JENDELA lewat
 -- window_filter (today dioper handler agar mengikuti zona waktu app & bisa
 -- dideterministikkan test):
---   • 'due'     : Active/PendingApproval, end_date ∈ [today, today+30] — jatuh tempo.
+--   • 'due'     : Active/PendingApproval, end_date ∈ [today, today+30], BELUM Renewed
+--                 — jatuh tempo (BL-152: yang sudah Renewed eksklusif ke tab 'renewed'
+--                 agar tak dobel-hitung & badge Diperpanjang menang).
 --   • 'grace'   : Active, end_date < today — lewat tempo tapi masih berjalan.
 --   • 'renewed' : renewal_status = 'Renewed' — sudah diperpanjang.
 --   • lainnya   : semua langganan ber-end_date (jendela 'Semua').
@@ -151,6 +153,7 @@ WHERE s.deleted_at IS NULL
         WHEN 'due'     THEN s.status IN ('Active','PendingApproval')
                             AND s.end_date >= sqlc.arg(today)::date
                             AND s.end_date <= (sqlc.arg(today)::date + 30)
+                            AND s.renewal_status IS DISTINCT FROM 'Renewed'
         WHEN 'grace'   THEN s.status = 'Active' AND s.end_date < sqlc.arg(today)::date
         WHEN 'renewed' THEN s.renewal_status = 'Renewed'
         ELSE TRUE
@@ -164,7 +167,8 @@ LIMIT sqlc.arg(page_size);
 -- SAMA dgn ListRenewals/ListSubscriptions: scope_all → semua; is_own →
 -- subscription_owner = uid; keduanya false → NOL, fail-closed). Predikat cacah
 -- MENGIKUTI jendela ListRenewals agar KPI konsisten dgn tab:
---   * due_30      : Active/PendingApproval, end_date in [today, today+30] (= window 'due').
+--   * due_30      : Active/PendingApproval, end_date in [today, today+30], BELUM Renewed
+--                   (= window 'due'; BL-152: Renewed eksklusif ke renewed_count, tak dobel).
 --   * grace       : Active, end_date < today (= window 'grace').
 --   * renewed     : renewal_status = 'Renewed' (= window 'renewed', sudah diperpanjang).
 --   * Renewal Rate 12 bln (BL-94, definisi SAMA dgn ReportRenewalSummary): renewed_past
@@ -177,6 +181,7 @@ SELECT
         WHERE s.status IN ('Active','PendingApproval')
           AND s.end_date >= sqlc.arg(today)::date
           AND s.end_date <= (sqlc.arg(today)::date + 30)
+          AND s.renewal_status IS DISTINCT FROM 'Renewed'
     )::bigint AS due_30,
     COUNT(*) FILTER (
         WHERE s.status = 'Active' AND s.end_date < sqlc.arg(today)::date

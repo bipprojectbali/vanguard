@@ -203,6 +203,7 @@ WHERE deleted_at IS NULL
   AND status IN ('Active', 'PendingApproval')
   AND end_date >= $1::date
   AND end_date <= $1::date + 30
+  AND renewal_status IS DISTINCT FROM 'Renewed'
   AND (
       $2::boolean
       OR ($3::boolean AND subscription_owner = $4)
@@ -222,8 +223,9 @@ type DashboardRenewalsDueRow struct {
 }
 
 // Langganan jatuh tempo 30 hari ke depan (jendela SAMA dgn ListRenewals window
-// "due": status Active/PendingApproval, end_date antara today..today+30) + ARR
-// yang mengambang di dalamnya (masking F4 di handler, bukan di sini).
+// "due": status Active/PendingApproval, end_date antara today..today+30, BELUM
+// Renewed — BL-152) + ARR yang mengambang di dalamnya (masking F4 di handler,
+// bukan di sini).
 func (q *Queries) DashboardRenewalsDue(ctx context.Context, arg DashboardRenewalsDueParams) (DashboardRenewalsDueRow, error) {
 	row := q.db.QueryRow(ctx, dashboardRenewalsDue,
 		arg.Today,
