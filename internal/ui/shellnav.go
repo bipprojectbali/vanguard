@@ -88,6 +88,23 @@ func notifBlock(d ShellData) g.Node {
 			h.Class("app-navlabel badge badge-primary badge-sm ml-auto"),
 			g.Text(strconv.FormatInt(d.Notifications.Count, 10)),
 		)
+		// Dot di sudut ikon lonceng — KEBALIKAN app-navlabel: saat rail 4rem angka
+		// tersembunyi, dot inilah satu-satunya penanda unread (lihat CSS app-navdot).
+		// Menempel ke IKON (bukan ujung baris), maka ikon dibungkus relative inline-flex
+		// agar dot bisa absolut di sudut. aria-label/title bawa jumlah karena angka
+		// tak terlihat di rail. it = salinan nilai, aman dimutasi.
+		if it.Icon != nil {
+			label := strconv.FormatInt(d.Notifications.Count, 10) + " notifikasi belum dibaca"
+			it.Icon = h.Span(
+				h.Class("relative inline-flex"),
+				it.Icon,
+				h.Span(
+					h.Class("app-navdot absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary"),
+					g.Attr("aria-label", label),
+					h.Title(label),
+				),
+			)
+		}
 	}
 	return h.Div(
 		h.Class("border-t border-base-300 px-3 py-2 flex flex-col gap-1"),

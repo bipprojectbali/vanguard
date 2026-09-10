@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	lucide "github.com/eduardolat/gomponents-lucide"
 	g "maragu.dev/gomponents"
 )
 
@@ -14,6 +15,56 @@ func renderNav(items []NavItem, path string) string {
 	var sb strings.Builder
 	navList(items, path).Render(&sb)
 	return sb.String()
+}
+
+func renderNotif(d ShellData) string {
+	var sb strings.Builder
+	notifBlock(d).Render(&sb)
+	return sb.String()
+}
+
+// TestNotifBlock_DotDanBadge (BL-136): saat ada unread (Count>0) blok notifikasi
+// membawa DUA penanda — badge angka (app-navlabel, tampil sidebar penuh) DAN dot
+// (app-navdot, tampil di rail collapse saat angka tersembunyi). Dot menempel ke
+// IKON (bungkus relative inline-flex), bukan ujung baris, dan bawa aria-label
+// karena angka tak terlihat di rail.
+func TestNotifBlock_DotDanBadge(t *testing.T) {
+	d := ShellData{
+		CurrentPath:   "/w/acme",
+		Notifications: &NavBadge{Item: NavItem{Label: "Notifikasi", Href: "/w/acme/notifications", Icon: lucide.Bell()}, Count: 3},
+	}
+	out := renderNotif(d)
+	if !strings.Contains(out, "badge badge-primary badge-sm") || !strings.Contains(out, ">3<") {
+		t.Errorf("badge angka (app-navlabel) harus tetap ada untuk mode expanded:\n%s", out)
+	}
+	if !strings.Contains(out, "app-navdot") {
+		t.Errorf("dot unread (app-navdot) harus ada saat Count>0:\n%s", out)
+	}
+	if !strings.Contains(out, "relative inline-flex") {
+		t.Errorf("dot harus menempel ikon (bungkus relative inline-flex), bukan ujung baris:\n%s", out)
+	}
+	if !strings.Contains(out, "bg-primary") {
+		t.Errorf("dot harus token semantik bg-primary (gotcha #11), bukan warna absolut:\n%s", out)
+	}
+	if !strings.Contains(out, `aria-label="3 notifikasi belum dibaca"`) {
+		t.Errorf("dot harus punya aria-label berjumlah (angka tak terlihat di rail):\n%s", out)
+	}
+}
+
+// TestNotifBlock_KosongTanpaKeduanya (BL-136): tanpa unread (Count==0) tak ada
+// badge angka MAUPUN dot — nol bukan informasi, keduanya hanya bising.
+func TestNotifBlock_KosongTanpaKeduanya(t *testing.T) {
+	d := ShellData{
+		CurrentPath:   "/w/acme",
+		Notifications: &NavBadge{Item: NavItem{Label: "Notifikasi", Href: "/w/acme/notifications", Icon: lucide.Bell()}, Count: 0},
+	}
+	out := renderNotif(d)
+	if strings.Contains(out, "app-navdot") {
+		t.Errorf("dot tak boleh muncul saat Count==0:\n%s", out)
+	}
+	if strings.Contains(out, "badge badge-primary") {
+		t.Errorf("badge angka tak boleh muncul saat Count==0:\n%s", out)
+	}
 }
 
 // TestNavDisabled_BukanLink: item Disabled dirender <span>, BUKAN <a> (link mati

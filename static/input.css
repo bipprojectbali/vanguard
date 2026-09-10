@@ -22,6 +22,17 @@
   --radius-selector: 0.5rem; /* btn, badge, tab (rounded-selector) */
 }
 
+/* BL-136: badge angka notifikasi WAJIB tersembunyi saat rail collapse. Aturan
+   .app-navlabel{display:none} di @layer components KALAH lawan daisyUI
+   .badge{display:inline-flex} yang berada di @layer utilities (layer lebih akhir
+   menang atas specificity). Label teks polos tersembunyi mulus (truncate tak set
+   display), tapi badge di-set .badge → tetap tampil. UNLAYERED → menang atas SEMUA
+   layer tanpa !important (pola sama override radius di atas). Di rail, dot
+   app-navdot menggantikan angka sebagai penanda unread. */
+html[data-sidebar="collapsed"] .app-navlabel.badge {
+  display: none;
+}
+
 /* Scan class di file Go (gomponents). */
 @source "../internal";
 
@@ -85,6 +96,17 @@
   }
   html[data-sidebar="collapsed"] .app-navlink {
     justify-content: center;
+  }
+  /* BL-136: dot notifikasi belum-dibaca = KEBALIKAN app-navlabel. Badge angka
+     (app-navlabel) tampil saat sidebar penuh; di rail 4rem angka disembunyikan →
+     dot kecil di sudut ikon lonceng jadi satu-satunya penanda unread. Default
+     tersembunyi, hanya muncul saat collapse (rail = md:+; mobile drawer terbuka
+     penuh, dot tak relevan — sama pola dengan aturan collapse lain di atas). */
+  .app-navdot {
+    display: none;
+  }
+  html[data-sidebar="collapsed"] .app-navdot {
+    display: block;
   }
   html[data-sidebar="collapsed"] .app-sidebar .btn {
     padding-inline: 0;
