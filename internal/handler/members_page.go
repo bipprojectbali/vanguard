@@ -3,8 +3,6 @@ package handler
 import (
 	"net/http"
 
-	"go_starter/internal/appmode"
-	"go_starter/internal/authz"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 )
@@ -120,7 +118,7 @@ func (h *Handler) MembersPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.renderWorkspaceShell(w, r, "Anggota", "/members",
-		panel.Members(wsPath(slugFromRequest(r), ""), authz.AssignableRoles(appmode.IsSingle()),
+		panel.Members(wsPath(slugFromRequest(r), ""),
 			crmRoles, members, invites, canManage, session.UserID(ctx),
 			wsErrMsg(r.URL.Query().Get("err")), membersMsg(r.URL.Query().Get("ok"))))
 }

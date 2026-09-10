@@ -55,7 +55,7 @@ type InviteRow struct {
 // prefix URL workspace ini (mis. "/w/acme"), DIOPER dari handler — view
 // tak boleh merakit path sendiri: sejak 0004 setiap aksi bergantung slug, dan
 // path yang di-hardcode di view akan diam-diam menunjuk workspace yang salah.
-func Members(base string, roles []string, crmRoles []CRMRoleOption, members []MemberRow, invites []InviteRow, canManage bool, selfID int64, errMsg, okMsg string) g.Node {
+func Members(base string, crmRoles []CRMRoleOption, members []MemberRow, invites []InviteRow, canManage bool, selfID int64, errMsg, okMsg string) g.Node {
 	body := []g.Node{
 		h.H1(h.Class("text-xl font-semibold mb-2"), g.Text("Anggota Workspace")),
 		h.P(h.Class("text-base-content/70 mb-4"),
@@ -70,7 +70,7 @@ func Members(base string, roles []string, crmRoles []CRMRoleOption, members []Me
 	if canManage {
 		body = append(body, inviteForm(base))
 	}
-	body = append(body, memberList(base, roles, crmRoles, members, canManage, selfID))
+	body = append(body, memberList(base, crmRoles, members, canManage, selfID))
 	if canManage && len(invites) > 0 {
 		body = append(body, inviteList(base, invites))
 	}
@@ -99,10 +99,10 @@ func MembersForbidden() g.Node {
 
 // memberList = tabel anggota. Tabel dibungkus ui.TableScroll agar scroll-nya
 // terkurung, tak mendorong lebar halaman di mobile (konvensi mobile-first).
-func memberList(base string, roles []string, crmRoles []CRMRoleOption, members []MemberRow, canManage bool, selfID int64) g.Node {
+func memberList(base string, crmRoles []CRMRoleOption, members []MemberRow, canManage bool, selfID int64) g.Node {
 	rows := make([]g.Node, 0, len(members))
 	for _, m := range members {
-		rows = append(rows, memberRow(base, roles, crmRoles, m, canManage, selfID))
+		rows = append(rows, memberRow(base, crmRoles, m, canManage, selfID))
 	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
@@ -136,20 +136,17 @@ func memberList(base string, roles []string, crmRoles []CRMRoleOption, members [
 	)
 }
 
-func memberRow(base string, roles []string, crmRoles []CRMRoleOption, m MemberRow, canManage bool, selfID int64) g.Node {
+func memberRow(base string, crmRoles []CRMRoleOption, m MemberRow, canManage bool, selfID int64) g.Node {
 	id := strconv.FormatInt(m.UserID, 10)
 	roleCell := roleBadges(m)
 	action := g.Node(g.Text(""))
 	if canManage {
-		// SATU form, DUA sumbu: role tenant + peran CRM disimpan sekali klik
-		// (POST .../role menilai tiap sumbu dgn guard-nya sendiri). Sumbu tenant
-		// DISEMBUNYIKAN untuk diri sendiri — cegah menurunkan/mengunci diri, jaga
-		// owner terakhir. Sumbu CRM tetap ADA di baris sendiri: itu opt-in owner
-		// ke CRM (penugasan business_role, gerbang = canManageMembers sumbu tenant).
-		fields := make([]g.Node, 0, 3)
-		if m.UserID != selfID {
-			fields = append(fields, memberRoleSelect("Role", "role", roleOpts(roles, m.Role)))
-		}
+		// HANYA sumbu CRM di baris: form POST .../role tanpa field `role` melewati
+		// sumbu tenant (guard MemberSetRole menilainya via PostForm.Has("role")),
+		// jadi menyimpan tak pernah menyentuh role tenant. Ubah role tenant kini
+		// lewat /dev/users (BL-135). Sumbu CRM tetap ada di baris sendiri: itu
+		// opt-in owner ke CRM (penugasan business_role, gerbang = canManageMembers).
+		fields := make([]g.Node, 0, 2)
 		fields = append(fields, memberRoleSelect("Peran CRM", "business_role", crmRoleOpts(crmRoles, m.BusinessRole)))
 		fields = append(fields, h.Button(h.Type("submit"), h.Class("btn btn-sm self-end"), g.Text("Simpan")))
 		roleCell = h.FormEl(
