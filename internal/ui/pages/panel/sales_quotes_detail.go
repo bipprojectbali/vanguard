@@ -79,6 +79,13 @@ type QuoteDetailView struct {
 	// di-precompute handler. Badge muncul di baris "Kedaluwarsa" kartu identitas —
 	// terpisah dari Status (bisa kedaluwarsa walau status belum diubah manual).
 	Expired bool
+
+	// Err/OK (BL-149) = pesan PRG untuk halaman detail quote. Sebelumnya redirect
+	// ?err=/?ok= ke detail (QuoteTax, item, status, tolakan Accept kedua) ditelan
+	// senyap karena view tak punya slot — user tak pernah lihat konfirmasi/kesalahan.
+	// Di-precompute handler (wsErrMsg/quotesMsg), pola sama halaman DAFTAR quote.
+	Err string
+	OK  string
 }
 
 // CanMutate = boleh mengubah quote/item (punya izin tulis DAN deal di jendela
@@ -147,6 +154,13 @@ func QuoteDetail(v QuoteDetailView) g.Node {
 	// BL-13: pemegang tulis yang diblokir stage diberi alasan (read-only jujur).
 	if v.CanWrite && !v.Quotable && v.StageLockMsg != "" {
 		body = append(body, ui.Alert(ui.VariantDefault, "quote-lock", g.Text(v.StageLockMsg)))
+	}
+	// BL-149: flash PRG di halaman detail (galat lalu sukses, urutan cermin daftar).
+	if v.Err != "" {
+		body = append(body, ui.Alert(ui.VariantDestructive, "quote-err", g.Text(v.Err)))
+	}
+	if v.OK != "" {
+		body = append(body, ui.Alert(ui.VariantDefault, "quote-ok", g.Text(v.OK)))
 	}
 	body = append(body,
 		quoteIdentityCard(v),
