@@ -1,6 +1,7 @@
 package panel
 
 import (
+	lucide "github.com/eduardolat/gomponents-lucide"
 	g "maragu.dev/gomponents"
 	data "maragu.dev/gomponents-datastar"
 	h "maragu.dev/gomponents/html"
@@ -40,7 +41,8 @@ func displayStages(stages []string, current string) []string {
 	return append(out, terminal)
 }
 
-// dealStepper = penanda visual posisi stage di sepanjang pipeline. Discroll dalam
+// dealStepper = penanda visual posisi stage di sepanjang pipeline. BL-123: kartu
+// "Tahap Pipeline" penuh-lebar di atas → stepper HORIZONTAL, discroll dalam
 // kontainer sendiri (overflow-x-auto) agar tak meluberkan halaman di mobile.
 func dealStepper(stages []string, current string) g.Node {
 	items := make([]g.Node, 0, len(stages))
@@ -57,7 +59,7 @@ func dealStepper(stages []string, current string) g.Node {
 	}
 	return h.Div(
 		h.Class("overflow-x-auto min-w-0 pb-1"),
-		h.Ul(h.Class("steps steps-horizontal text-xs"), g.Group(items)),
+		h.Ul(h.Class("steps steps-horizontal text-xs w-full"), g.Group(items)),
 	)
 }
 
@@ -91,10 +93,60 @@ func selectedOptions(values []string, selected string) []g.Node {
 	return opts
 }
 
-// dealStageControl = kontrol ganti stage: NATIVE POST (gotcha #16). Menyediakan
+// dealStageSignal = signal Datastar boolean pengendali modal Ubah Tahap.
+const dealStageSignal = "dealStageOpen"
+
+// dealStageTrigger = tombol pembuka modal Ubah Tahap (klik → set signal true).
+// Dipasang di grup aksi header (DealDetail), hanya untuk aktor boleh-tulis —
+// sepasang dengan dealStageModal (signal sama).
+func dealStageTrigger() g.Node {
+	return h.Button(
+		h.Type("button"),
+		h.Class("btn btn-sm min-h-11"),
+		data.On("click", "$"+dealStageSignal+" = true"),
+		g.Text("Ubah Tahap"),
+	)
+}
+
+// dealStageModal = modal ganti tahap (BL-123, pola leadStatusModal): shell modal
+// tersembunyi (signal $dealStageOpen; inline display:none anti-FOUC; klik backdrop
+// & tombol X/Batal menutup via signal) membungkus form kontrol tahap. Form TETAP
+// NATIVE POST → /stage (gotcha #16). Hanya dirender saat aktor boleh tulis.
+func dealStageModal(v DealDetailView, base string) g.Node {
+	openExpr := "$" + dealStageSignal
+	return h.Div(
+		h.Class("fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"),
+		g.Attr("style", "display:none"),
+		data.Show(openExpr),
+		data.On("click", openExpr+" = false"), // klik backdrop → tutup
+		h.Div(
+			h.Class("card bg-base-100 shadow-lg w-full max-w-lg flex flex-col"),
+			g.Attr("style", "max-height:80vh"),
+			data.On("click", "evt.stopPropagation()"),
+			h.Div(
+				h.Class("flex items-center justify-between gap-2 px-5 pt-5 pb-3 border-b border-base-300"),
+				h.H2(h.Class("text-lg font-semibold"), g.Text("Ubah Tahap")),
+				h.Button(
+					h.Type("button"),
+					h.Class("btn btn-ghost btn-sm btn-circle"),
+					g.Attr("aria-label", "Tutup"),
+					data.On("click", openExpr+" = false"),
+					lucide.X(h.Class("size-5")),
+				),
+			),
+			h.Div(
+				h.Class("px-5 py-4 overflow-y-auto"),
+				dealStageControl(v, base),
+			),
+		),
+	)
+}
+
+// dealStageControl = FORM ganti stage: NATIVE POST (gotcha #16). Menyediakan
 // field win/loss reason + catatan kekalahan yang WAJIB diisi backend saat stage
 // terminal (Closed Won/Lost) — select-onchange tak bisa mengumpulkannya, maka
 // bukan FormPostSelect. Backend tetap penjaga sesungguhnya (validDealStages + guard).
+// BL-123: mengembalikan <form> telanjang (bungkus kartu/judul pindah ke dealStageModal).
 //
 // Field kondisional (BL-12): <select> di-bind ke signal $stage (data.Bind) →
 // "Alasan Menang/Kalah" tampil saat Closed Won ATAU Closed Lost; "Catatan
@@ -102,65 +154,58 @@ func selectedOptions(values []string, selected string) []g.Node {
 // saat kalah). Toggle klien murni UX — validasi & pembersihan tetap di handler.
 func dealStageControl(v DealDetailView, base string) g.Node {
 	opts := selectedOptions(v.Stages, v.Stage)
-	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+	return h.FormEl(
+		h.Method("post"), h.Action(base+"/stage"),
+		data.Signals(map[string]any{"stage": v.Stage}),
+		h.Class("grid gap-3 min-w-0"),
 		h.Div(
-			h.Class("card-body min-w-0 gap-3"),
-			h.H2(h.Class("font-semibold"), g.Text("Ubah Tahap")),
-			h.P(h.Class("text-sm text-base-content/60"),
-				g.Text("Tahap Closed Won/Closed Lost wajib menyertakan alasan menang/kalah.")),
-			h.FormEl(
-				h.Method("post"), h.Action(base+"/stage"),
-				data.Signals(map[string]any{"stage": v.Stage}),
-				h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
-				h.Div(
-					h.Class("grid gap-1 min-w-0"),
-					labelFor("Tahap", "f-stage", true),
-					h.Select(
-						append([]g.Node{
-							h.ID("f-stage"), h.Name("stage"), h.Required(),
-							data.Bind("stage"),
-							h.Class("select text-base w-full"),
-						}, g.Group(opts))...,
-					),
-				),
-				showWhen(
-					"$stage == '"+stageClosedWon+"' || $stage == '"+stageClosedLost+"'",
-					"min-w-0", field("Alasan Menang/Kalah", "win_loss_reason", v.WinLossReason, false, "text"),
-				),
-				// BL-21: Closed Won membuat langganan otomatis — user memilih status awalnya
-				// (Active/Trial). Default (opsi pertama = Active) selalu terisi → select tetap
-				// valid meski tersembunyi di stage lain (tak memblok submit). g.Iff (bukan
-				// g.If): argumen g.If dievaluasi eager, jadi WonSubStatuses[0] panic saat slice
-				// kosong — bungkus dalam closure agar hanya diakses bila ada opsi.
-				g.Iff(len(v.WonSubStatuses) > 0, func() g.Node {
-					return showWhen(
-						"$stage == '"+stageClosedWon+"'",
-						"min-w-0", selectField("Status Langganan Awal", "subscription_status",
-							v.WonSubStatuses[0], v.WonSubStatuses, true,
-							"Deal menang membuat langganan otomatis untuk desa & paket deal ini."),
-					)
-				}),
-				// BL-44 (3a): kode alasan kalah terstruktur (picklist) — muncul HANYA saat
-				// Closed Lost. required=false di HTML (select tersembunyi tak boleh memblok
-				// submit stage lain); backend WAJIB memvalidasinya saat Closed Lost
-				// (sales_deals_stage.go → ?err=loss_reason). Dipakai grouping bersih laporan.
-				showWhen(
-					"$stage == '"+stageClosedLost+"'",
-					"min-w-0", selectField("Alasan Kalah (Kode)", "loss_reason_code",
-						v.LossReasonCode, v.LossReasonCodes, false,
-						"Wajib dipilih saat deal Closed Lost — dipakai laporan Win/Loss."),
-				),
-				showWhen(
-					"$stage == '"+stageClosedLost+"'",
-					"sm:col-span-2 min-w-0", textareaField("Catatan Kekalahan", "loss_notes", v.LossNotes),
-				),
-				h.Div(
-					h.Class("sm:col-span-2"),
-					h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
-						g.Text("Simpan Tahap")),
-				),
+			h.Class("grid gap-1 min-w-0"),
+			labelFor("Tahap", "f-stage", true),
+			h.Select(
+				append([]g.Node{
+					h.ID("f-stage"), h.Name("stage"), h.Required(),
+					data.Bind("stage"),
+					h.Class("select text-base w-full"),
+				}, g.Group(opts))...,
 			),
+		),
+		showWhen(
+			"$stage == '"+stageClosedWon+"' || $stage == '"+stageClosedLost+"'",
+			"min-w-0", field("Alasan Menang/Kalah", "win_loss_reason", v.WinLossReason, false, "text"),
+		),
+		// BL-21: Closed Won membuat langganan otomatis — user memilih status awalnya
+		// (Active/Trial). Default (opsi pertama = Active) selalu terisi → select tetap
+		// valid meski tersembunyi di stage lain (tak memblok submit). g.Iff (bukan
+		// g.If): argumen g.If dievaluasi eager, jadi WonSubStatuses[0] panic saat slice
+		// kosong — bungkus dalam closure agar hanya diakses bila ada opsi.
+		g.Iff(len(v.WonSubStatuses) > 0, func() g.Node {
+			return showWhen(
+				"$stage == '"+stageClosedWon+"'",
+				"min-w-0", selectField("Status Langganan Awal", "subscription_status",
+					v.WonSubStatuses[0], v.WonSubStatuses, true,
+					"Deal menang membuat langganan otomatis untuk desa & paket deal ini."),
+			)
+		}),
+		// BL-44 (3a): kode alasan kalah terstruktur (picklist) — muncul HANYA saat
+		// Closed Lost. required=false di HTML (select tersembunyi tak boleh memblok
+		// submit stage lain); backend WAJIB memvalidasinya saat Closed Lost
+		// (sales_deals_stage.go → ?err=loss_reason). Dipakai grouping bersih laporan.
+		showWhen(
+			"$stage == '"+stageClosedLost+"'",
+			"min-w-0", selectField("Alasan Kalah (Kode)", "loss_reason_code",
+				v.LossReasonCode, v.LossReasonCodes, false,
+				"Wajib dipilih saat deal Closed Lost — dipakai laporan Win/Loss."),
+		),
+		showWhen(
+			"$stage == '"+stageClosedLost+"'",
+			"min-w-0", textareaField("Catatan Kekalahan", "loss_notes", v.LossNotes),
+		),
+		h.Div(
+			h.Class("flex flex-wrap justify-end gap-2"),
+			h.Button(h.Type("button"), h.Class("btn btn-ghost min-h-11"),
+				data.On("click", "$"+dealStageSignal+" = false"), g.Text("Batal")),
+			h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
+				g.Text("Simpan Tahap")),
 		),
 	)
 }

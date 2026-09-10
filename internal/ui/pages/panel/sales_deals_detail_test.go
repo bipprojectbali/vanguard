@@ -192,6 +192,89 @@ func TestDealQuotesCard_ButtonGatedByStage(t *testing.T) {
 	}
 }
 
+// TestDealStepper_Horizontal (BL-123): kartu Tahap Pipeline penuh-lebar di atas →
+// stepper horizontal (steps-horizontal) dalam kontainer overflow-x-auto agar tak
+// meluber di mobile.
+func TestDealStepper_Horizontal(t *testing.T) {
+	out := renderLeads(t, dealStepper(displayStages(pipelineStages, "Demo"), "Demo"))
+	if !strings.Contains(out, "steps-horizontal") {
+		t.Errorf("stepper detail harus steps-horizontal:\n%s", out)
+	}
+	if !strings.Contains(out, "overflow-x-auto") {
+		t.Errorf("stepper horizontal harus dalam kontainer overflow-x-auto:\n%s", out)
+	}
+}
+
+// TestDealDetail_StageModalGatedByWrite (BL-123): aksi ubah tahap = modal dipicu
+// tombol header. CanWrite=true → pemicu + modal (signal dealStageOpen) dirender;
+// CanWrite=false → keduanya absen (pembaca tak boleh mengubah tahap).
+func TestDealDetail_StageModalGatedByWrite(t *testing.T) {
+	base := DealDetailView{Base: "/w/acme", ID: 42, Stage: "Negotiation", Stages: pipelineStages}
+
+	writable := base
+	writable.CanWrite = true
+	out := renderLeads(t, DealDetail(writable))
+	if !strings.Contains(out, "Ubah Tahap") {
+		t.Errorf("CanWrite: pemicu 'Ubah Tahap' harus ADA:\n%s", out)
+	}
+	if !strings.Contains(out, dealStageSignal) {
+		t.Errorf("CanWrite: modal tahap (signal %q) harus dirender:\n%s", dealStageSignal, out)
+	}
+	if !strings.Contains(out, `action="/w/acme/deals/42/stage"`) {
+		t.Errorf("CanWrite: form modal harus native POST ke .../stage:\n%s", out)
+	}
+
+	readonly := base
+	readonly.CanWrite = false
+	out = renderLeads(t, DealDetail(readonly))
+	if strings.Contains(out, "Ubah Tahap") {
+		t.Errorf("read-only: pemicu/modal 'Ubah Tahap' harus ABSEN:\n%s", out)
+	}
+	if strings.Contains(out, dealStageSignal) {
+		t.Errorf("read-only: signal modal tahap tak boleh dirender:\n%s", out)
+	}
+}
+
+// TestDealDetail_TerminalHidesActions: deal terminal (Closed Won/Closed Lost) =
+// terkunci → tombol Sunting/Ubah Tahap/Hapus disembunyikan (dan modal tahap tak
+// dirender), meski CanWrite. Stage terbuka (mis. Negotiation) tetap menampilkan aksi.
+func TestDealDetail_TerminalHidesActions(t *testing.T) {
+	for _, stage := range []string{"Closed Won", "Closed Lost"} {
+		term := DealDetailView{Base: "/w/acme", ID: 42, Stage: stage, Stages: pipelineStages, CanWrite: true}
+		out := renderLeads(t, DealDetail(term))
+		for _, absent := range []string{">Sunting<", "Ubah Tahap", ">Hapus<", dealStageSignal} {
+			if strings.Contains(out, absent) {
+				t.Errorf("%s: aksi %q harus ABSEN:\n%s", stage, absent, out)
+			}
+		}
+	}
+
+	open := DealDetailView{Base: "/w/acme", ID: 42, Stage: "Negotiation", Stages: pipelineStages, CanWrite: true}
+	out := renderLeads(t, DealDetail(open))
+	if !strings.Contains(out, "Ubah Tahap") || !strings.Contains(out, ">Sunting<") {
+		t.Errorf("stage terbuka + CanWrite: aksi harus ADA:\n%s", out)
+	}
+}
+
+// TestDealDetail_SystemAuditCard (BL-123): kartu "Sistem & Audit" merender label
+// pembuat/pengubah + waktu, terisi dari field audit view.
+func TestDealDetail_SystemAuditCard(t *testing.T) {
+	v := DealDetailView{
+		Base: "/w/acme", ID: 42, Stage: "Demo", Stages: pipelineStages,
+		CreatedByName: "Budi", CreatedAt: "01 Jan 2026 10:00",
+		UpdatedByName: "Sari", UpdatedAt: "02 Jan 2026 11:30",
+	}
+	out := renderLeads(t, DealDetail(v))
+	for _, want := range []string{
+		"Sistem &amp; Audit", "Dibuat Oleh", "Budi", "Tanggal Dibuat", "01 Jan 2026 10:00",
+		"Diubah Oleh", "Sari", "Terakhir Diubah", "02 Jan 2026 11:30",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("kartu Sistem & Audit harus memuat %q:\n%s", want, out)
+		}
+	}
+}
+
 // TestDealDetail_FeedbackBanner (BL-99): halaman detail merender banner umpan
 // balik PRG. Kritis untuk tahap terminal — gerbang Closed Won/Lost yang gagal
 // redirect ke DETAIL dgn ?err; tanpa banner, penolakan tampak "tak tersimpan".
