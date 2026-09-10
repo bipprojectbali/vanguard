@@ -33,6 +33,12 @@ func (h *Handler) HealthScoreList(w http.ResponseWriter, r *http.Request) {
 	tab := r.URL.Query().Get("tab")
 	lp.FilterStatus = healthTabToStatus(tab)
 
+	// BL-114: segmen populasi (?segment=active|churned). Default "active" = desa
+	// pelanggan berlangganan hidup; "churned" = eks-pelanggan (punya langganan,
+	// tak ada yang hidup). Prospek tanpa langganan tak muncul di segmen mana pun.
+	segment := healthSegment(r.URL.Query().Get("segment"))
+	lp.Segment = segment
+
 	// Pencarian bebas (BL-6) — menyaring pada nama desa yang tampil.
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	lp.Search = query
@@ -66,6 +72,7 @@ func (h *Handler) HealthScoreList(w http.ResponseWriter, r *http.Request) {
 	h.renderWorkspaceShell(w, r, "Customer Health Score", "/health-scores", panel.HealthScoreList(panel.HealthScoreListView{
 		Base:          wsPath(slug, ""),
 		ActiveTab:     tab,
+		Segment:       segment,
 		Query:         query,
 		NextCursor:    nextCursor,
 		After:         r.URL.Query().Get("after"),
@@ -75,6 +82,16 @@ func (h *Handler) HealthScoreList(w http.ResponseWriter, r *http.Request) {
 		TableSubtitle: healthTableSubtitle(kpis.Total),
 		Rows:          items,
 	}))
+}
+
+// healthSegment menormalkan ?segment= ke nilai SQL sah. Apa pun selain "churned"
+// → "active" (default aman: nilai janggal jatuh ke populasi pelanggan aktif, tak
+// pernah membuka data churned tanpa diminta eksplisit).
+func healthSegment(seg string) string {
+	if seg == "churned" {
+		return "churned"
+	}
+	return "active"
 }
 
 // healthTabToStatus memetakan nilai query-param ?tab= ke health_status DB.

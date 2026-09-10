@@ -46,6 +46,27 @@ WHERE a.deleted_at IS NULL
       OR (sqlc.arg(is_sales)::boolean
           AND a.account_owner = sqlc.arg(uid))
   )
+  -- BL-114: populasi Health Score = desa PELANGGAN (punya langganan), bukan semua
+  -- desa. Churn hidup di subscriptions.status (bukan lifecycle_stage). segment
+  -- 'active' (default) = punya langganan hidup (Trial/Active/Suspended); 'churned'
+  -- = punya langganan tapi TAK ada yang hidup (semua Expired/Cancelled/Churned).
+  -- Prospek (tanpa langganan sama sekali) dikecualikan dari KEDUA segmen.
+  AND (
+      CASE WHEN sqlc.arg(segment)::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
   AND (sqlc.arg(filter_status) = ''
        OR COALESCE(cs.health_status, '') = sqlc.arg(filter_status))
   AND (a.created_at, a.id) < (sqlc.arg(cursor_created_at)::timestamptz,
@@ -88,4 +109,22 @@ WHERE a.deleted_at IS NULL
           AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
       OR (sqlc.arg(is_sales)::boolean
           AND a.account_owner = sqlc.arg(uid))
+  )
+  -- BL-114: KPI dihitung atas populasi yang SAMA dengan ListHealthScores
+  -- (desa pelanggan per segmen), bukan seluruh desa.
+  AND (
+      CASE WHEN sqlc.arg(segment)::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
   );

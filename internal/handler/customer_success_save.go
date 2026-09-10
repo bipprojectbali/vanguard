@@ -38,6 +38,20 @@ func (h *Handler) CustomerSuccessSave(w http.ResponseWriter, r *http.Request) {
 	}
 	accountPath := "/accounts/" + strconv.FormatInt(accountID, 10)
 
+	// BL-114: tegakkan kunci server-side — desa non-pelanggan (tanpa langganan
+	// hidup) tak boleh menulis Customer Success walau form ter-submit langsung.
+	// Kembali ke DETAIL (catatan kunci menjelaskan), bukan ke form edit.
+	hasLiveSub, err := h.q(ctx).AccountHasLiveSubscription(ctx, accountID)
+	if err != nil {
+		h.Log.Error("customer_success: live subscription", "err", err)
+		wsRedirect(w, r, accountPath+"/customer-success/edit", "failed")
+		return
+	}
+	if !hasLiveSub {
+		wsRedirect(w, r, accountPath+"/customer-success", "")
+		return
+	}
+
 	form, errCode := parseCustomerSuccessForm(r.FormValue)
 	if errCode != "" {
 		wsRedirect(w, r, accountPath+"/customer-success/edit", errCode)

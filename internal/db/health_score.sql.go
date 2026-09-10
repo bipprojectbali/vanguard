@@ -40,6 +40,24 @@ WHERE a.deleted_at IS NULL
       OR ($4::boolean
           AND a.account_owner = $3)
   )
+  -- BL-114: KPI dihitung atas populasi yang SAMA dengan ListHealthScores
+  -- (desa pelanggan per segmen), bukan seluruh desa.
+  AND (
+      CASE WHEN $5::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
 `
 
 type CountHealthScoreKPIsParams struct {
@@ -47,6 +65,7 @@ type CountHealthScoreKPIsParams struct {
 	IsCsm    bool   `json:"is_csm"`
 	Uid      *int64 `json:"uid"`
 	IsSales  bool   `json:"is_sales"`
+	Segment  string `json:"segment"`
 }
 
 type CountHealthScoreKPIsRow struct {
@@ -76,6 +95,7 @@ func (q *Queries) CountHealthScoreKPIs(ctx context.Context, arg CountHealthScore
 		arg.IsCsm,
 		arg.Uid,
 		arg.IsSales,
+		arg.Segment,
 	)
 	var i CountHealthScoreKPIsRow
 	err := row.Scan(
@@ -132,14 +152,35 @@ WHERE a.deleted_at IS NULL
       OR ($4::boolean
           AND a.account_owner = $3)
   )
-  AND ($5 = ''
-       OR COALESCE(cs.health_status, '') = $5)
-  AND (a.created_at, a.id) < ($6::timestamptz,
-                               $7::bigint)
-  AND ($8::text = ''
-       OR a.village_name ILIKE '%' || $8 || '%')
+  -- BL-114: populasi Health Score = desa PELANGGAN (punya langganan), bukan semua
+  -- desa. Churn hidup di subscriptions.status (bukan lifecycle_stage). segment
+  -- 'active' (default) = punya langganan hidup (Trial/Active/Suspended); 'churned'
+  -- = punya langganan tapi TAK ada yang hidup (semua Expired/Cancelled/Churned).
+  -- Prospek (tanpa langganan sama sekali) dikecualikan dari KEDUA segmen.
+  AND (
+      CASE WHEN $5::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND ($6 = ''
+       OR COALESCE(cs.health_status, '') = $6)
+  AND (a.created_at, a.id) < ($7::timestamptz,
+                               $8::bigint)
+  AND ($9::text = ''
+       OR a.village_name ILIKE '%' || $9 || '%')
 ORDER BY a.created_at DESC, a.id DESC
-LIMIT $9
+LIMIT $10
 `
 
 type ListHealthScoresParams struct {
@@ -147,6 +188,7 @@ type ListHealthScoresParams struct {
 	IsCsm           bool               `json:"is_csm"`
 	Uid             *int64             `json:"uid"`
 	IsSales         bool               `json:"is_sales"`
+	Segment         string             `json:"segment"`
 	FilterStatus    interface{}        `json:"filter_status"`
 	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
 	CursorID        int64              `json:"cursor_id"`
@@ -188,6 +230,7 @@ func (q *Queries) ListHealthScores(ctx context.Context, arg ListHealthScoresPara
 		arg.IsCsm,
 		arg.Uid,
 		arg.IsSales,
+		arg.Segment,
 		arg.FilterStatus,
 		arg.CursorCreatedAt,
 		arg.CursorID,

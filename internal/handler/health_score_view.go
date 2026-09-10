@@ -48,6 +48,7 @@ func healthScoreKPIParams(p db.ListHealthScoresParams) db.CountHealthScoreKPIsPa
 		IsCsm:    p.IsCsm,
 		IsSales:  p.IsSales,
 		Uid:      p.Uid,
+		Segment:  p.Segment,
 	}
 }
 

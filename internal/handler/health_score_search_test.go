@@ -12,8 +12,10 @@ import (
 
 func TestHealthScoreList_SearchNarrows(t *testing.T) {
 	env, uid := setupAccounts(t)
-	env.seedAccount(t, "Desa Sukamaju", &uid, nil, nil)
-	env.seedAccount(t, "Desa Mekarsari", &uid, nil, nil)
+	suka := env.seedAccount(t, "Desa Sukamaju", &uid, nil, nil)
+	mekar := env.seedAccount(t, "Desa Mekarsari", &uid, nil, nil)
+	env.makeCustomer(t, suka.ID, "Active")
+	env.makeCustomer(t, mekar.ID, "Active")
 
 	req := accountsReq(http.MethodGet, "/w/test/health-scores?q=suka", nil, "")
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.HealthScoreList)
@@ -34,8 +36,10 @@ func TestHealthScoreList_SearchCannotBypassF3(t *testing.T) {
 	other := env.seedMember(t, "lain@x", "member", env.tenantID)
 
 	// Desa binaan AKTOR (assigned_csm = uid) vs desa orang lain.
-	env.seedAccount(t, "Desa RahasiaKu", nil, &uid, nil)
-	env.seedAccount(t, "Desa RahasiaOrang", nil, &other.ID, nil)
+	ku := env.seedAccount(t, "Desa RahasiaKu", nil, &uid, nil)
+	orang := env.seedAccount(t, "Desa RahasiaOrang", nil, &other.ID, nil)
+	env.makeCustomer(t, ku.ID, "Active")
+	env.makeCustomer(t, orang.ID, "Active")
 
 	req := accountsReq(http.MethodGet, "/w/test/health-scores?q=Rahasia", nil, "")
 	rec := env.runAccount(uid, "member", "csm", req, env.h.HealthScoreList)

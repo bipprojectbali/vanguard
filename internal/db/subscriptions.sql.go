@@ -11,6 +11,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const accountHasLiveSubscription = `-- name: AccountHasLiveSubscription :one
+SELECT EXISTS (
+    SELECT 1 FROM subscriptions s
+    WHERE s.account_id = $1
+      AND s.deleted_at IS NULL
+      AND s.status IN ('Trial','Active','Suspended')
+)
+`
+
+// BL-114: apakah desa adalah PELANGGAN aktif — punya ≥1 langganan hidup
+// (Trial/Active/Suspended). Menggerbang tulis Customer Success (A8): desa tanpa
+// langganan hidup (prospek / churned) → Customer Success read-only. Terminal
+// (Expired/Cancelled/Churned) TIDAK dihitung hidup. RLS menyaring tenant.
+func (q *Queries) AccountHasLiveSubscription(ctx context.Context, accountID int64) (bool, error) {
+	row := q.db.QueryRow(ctx, accountHasLiveSubscription, accountID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const addSubscriptionItem = `-- name: AddSubscriptionItem :one
 
 INSERT INTO subscription_items (

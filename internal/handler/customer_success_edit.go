@@ -33,6 +33,20 @@ func (h *Handler) CustomerSuccessEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// BL-114: form sunting hanya untuk PELANGGAN aktif. Prospek/churned (tanpa
+	// langganan hidup) → kembali ke halaman DETAIL yang menampilkan catatan kunci
+	// (bukan galat: penyuntingan memang tak berlaku sebelum desa jadi pelanggan).
+	hasLiveSub, err := h.q(ctx).AccountHasLiveSubscription(ctx, accountID)
+	if err != nil {
+		h.Log.Error("customer_success: live subscription", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !hasLiveSub {
+		wsRedirect(w, r, "/accounts/"+strconv.FormatInt(accountID, 10)+"/customer-success", "")
+		return
+	}
+
 	cs, err := h.q(ctx).GetCustomerSuccessByAccountID(ctx, accountID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		h.Log.Error("customer_success: get", "err", err)

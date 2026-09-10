@@ -207,8 +207,10 @@ func TestCountHealthScoreKPIs_Aggregates(t *testing.T) {
 	// Dua desa terskor dengan komponen & tren diketahui.
 	a1 := env.seedAccount(t, "Desa Agg A", &uid, nil, nil)
 	env.seedHealthScoreFull(t, a1.ID, 80, 70, 60, 50, 40, "Healthy", "Improving")
+	env.makeCustomer(t, a1.ID, "Active")
 	a2 := env.seedAccount(t, "Desa Agg B", &uid, nil, nil)
 	env.seedHealthScoreFull(t, a2.ID, 40, 30, 20, 10, 0, "Critical", "Declining")
+	env.makeCustomer(t, a2.ID, "Active")
 
 	// Filter ke hanya kedua desa ini via ownership CSM tidak praktis (setup
 	// truncate menyisakan akun lain). Pakai scope_all lalu verifikasi via
@@ -290,18 +292,29 @@ func TestListHealthScores_RenewalEndDate(t *testing.T) {
 	}
 }
 
-// TestListHealthScores_NoActiveSub: tanpa langganan aktif, RenewalEndDate NULL
-// (kolom "Jatuh Tempo" akan tampil "—").
+// TestListHealthScores_NoActiveSub: desa PELANGGAN (BL-114 → punya langganan
+// hidup) tapi langganannya BUKAN status 'Active' (mis. Trial) → RenewalEndDate
+// NULL (kolom "Jatuh Tempo" tampil "—"; LATERAL hanya menatap langganan Active).
+// Desa tetap muncul di daftar karena Trial termasuk segmen aktif.
 func TestListHealthScores_NoActiveSub(t *testing.T) {
 	env, uid := setupAccounts(t)
-	acc := env.seedAccount(t, "Desa Tanpa Sub", &uid, nil, nil)
+	acc := env.seedAccount(t, "Desa Trial", &uid, nil, nil)
 	env.seedHealthScore(t, acc.ID, 88, "Healthy")
+	env.makeCustomer(t, acc.ID, "Trial") // hidup, tapi bukan 'Active' → tak ada end_date renewal
 
 	rows := env.allHealthScoreRows(t)
+	var found bool
 	for _, r := range rows {
-		if r.ID == acc.ID && r.RenewalEndDate.Valid {
-			t.Errorf("RenewalEndDate harus NULL tanpa langganan aktif, got %v", r.RenewalEndDate.Time)
+		if r.ID != acc.ID {
+			continue
 		}
+		found = true
+		if r.RenewalEndDate.Valid {
+			t.Errorf("RenewalEndDate harus NULL tanpa langganan Active, got %v", r.RenewalEndDate.Time)
+		}
+	}
+	if !found {
+		t.Fatal("desa pelanggan Trial harus tetap muncul di ListHealthScores (segmen aktif)")
 	}
 }
 
@@ -315,8 +328,10 @@ func TestHealthScore_DashboardRender(t *testing.T) {
 
 	a1 := env.seedAccount(t, "Desa Kritis Render", &uid, nil, nil)
 	env.seedHealthScoreFull(t, a1.ID, 20, 15, 10, 25, 30, "Critical", "Declining")
+	env.makeCustomer(t, a1.ID, "Active")
 	a2 := env.seedAccount(t, "Desa Berisiko Render", &uid, nil, nil)
 	env.seedHealthScoreFull(t, a2.ID, 55, 50, 45, 60, 55, "At-Risk", "Stable")
+	env.makeCustomer(t, a2.ID, "Active")
 
 	req := accountsReq(http.MethodGet, "/w/test/health-scores", nil, "")
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.HealthScoreList)
