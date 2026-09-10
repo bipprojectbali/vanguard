@@ -42,11 +42,9 @@ func (h *Handler) CustomerSuccessEdit(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slugFromRequest(r), "")
 	accountBase := base + "/accounts/" + strconv.FormatInt(accountID, 10)
-	// Status kesehatan = badge read-only (BL-24): precompute label+kelas badge
-	// dari status TERSIMPAN di handler (view murni-data). nil → "—"/ghost.
-	healthLabel, healthBadge := healthScoreStatus(cs.HealthStatus)
-	// Tren skor = badge read-only (BL-25): label panah + kelas dari nilai TERSIMPAN.
-	trendLabel, trendBadge := healthScoreTrend(cs.ScoreTrend), scoreTrendBadge(cs.ScoreTrend)
+	// Status Kesehatan (BL-24) & Tren Skor (BL-25) TAK dirender di form sunting —
+	// tetap turunan skor & dihitung/disimpan backend, hanya tampil di halaman
+	// DETAIL, bukan bagian form edit.
 	// BL-26: peringatan keselarasan (K2/K4) atas baris TERSIMPAN, HANYA bila
 	// aktor berhak menulis Journey (kartu itu memang dirender untuknya).
 	var warnings []string
@@ -65,10 +63,6 @@ func (h *Handler) CustomerSuccessEdit(w http.ResponseWriter, r *http.Request) {
 		CanWriteJourney:  canWriteCSJourney(ctx),
 		CanWriteAdoption: canWriteCSAdoption(ctx),
 
-		HealthStatusLabel:  healthLabel,
-		HealthStatusBadge:  healthBadge,
-		ScoreTrendLabel:    trendLabel,
-		ScoreTrendBadge:    trendBadge,
 		LifecycleStages:    lifecycleStageOptions,
 		OnboardingStatuses: onboardingStatusOptions,
 		LoginFrequencies:   loginFrequencyOptions,
