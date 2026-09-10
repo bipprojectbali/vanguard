@@ -190,6 +190,7 @@ func TestCustomerSuccess_OnboardingProgressNormalizedOnSave(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			env, uid := setupAccounts(t)
 			a := env.seedAccount(t, "Desa Progress", &uid, nil, nil)
+			env.makeCustomer(t, a.ID, "Active") // BL-114: pelanggan agar jalur tulis terbuka
 
 			form := customerSuccessFormValues()
 			form.Set("onboarding_status", c.status)
@@ -244,6 +245,7 @@ func TestCustomerSuccess_ConsistencyGuardRejectsOnSave(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			env, uid := setupAccounts(t)
 			a := env.seedAccount(t, "Desa Guard", &uid, nil, nil)
+			env.makeCustomer(t, a.ID, "Active") // BL-114: lolos gate pelanggan agar guard K1/K3 yang teruji
 
 			form := customerSuccessFormValues()
 			c.mutate(form)
@@ -268,6 +270,7 @@ func TestCustomerSuccess_ConsistencyGuardRejectsOnSave(t *testing.T) {
 func TestCustomerSuccess_ConsistentCombinationSaves(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Selaras", &uid, nil, nil)
+	env.makeCustomer(t, a.ID, "Active") // BL-114: pelanggan agar jalur tulis terbuka
 
 	form := customerSuccessFormValues()
 	form.Set("lifecycle_stage", "Adoption")
@@ -297,6 +300,7 @@ func TestCustomerSuccess_ProgressFieldConditionalMarkup(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Markup", &uid, nil, nil)
 	env.seedCustomerSuccess(t, a.ID)
+	env.makeCustomer(t, a.ID, "Active") // BL-114: pelanggan agar form sunting terbuka
 
 	req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/customer-success/edit", nil, itoa(a.ID))
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.CustomerSuccessEdit)
@@ -324,6 +328,7 @@ func TestCustomerSuccess_ProgressFieldConditionalMarkup(t *testing.T) {
 func TestCustomerSuccess_WarningBannersRendered(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Warn", &uid, nil, nil)
+	env.makeCustomer(t, a.ID, "Active") // BL-114: pelanggan agar jalur tulis & form sunting terbuka
 
 	// Buat keadaan pemicu lewat handler (Onboarding + Completed, tanpa go-live).
 	form := customerSuccessFormValues()

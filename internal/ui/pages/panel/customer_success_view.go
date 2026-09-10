@@ -25,7 +25,11 @@ type CustomerSuccessDetailView struct {
 	ID          int64
 	AccountName string
 	CanWrite    bool
-	Exists      bool
+	// WriteLockNote (BL-114) = penjelasan mengapa penyuntingan dikunci meski aktor
+	// berhak tulis: desa bukan pelanggan aktif (tanpa langganan hidup). Kosong =
+	// tak dikunci atau aktor memang tak berhak tulis (jangan tampilkan info bocor).
+	WriteLockNote string
+	Exists        bool
 	// Warnings = peringatan keselarasan onboarding↔lifecycle LUNAK (BL-26 K2/K4),
 	// sudah dihitung & di-gate F2-baca di handler (view murni-data). Dirender
 	// sebagai banner alert-warning di atas kartu; kosong = tak ada banner.
@@ -121,6 +125,14 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 	// KEDUA cabang render (di bawah nav) supaya konsisten & tak bergantung baris CS.
 	entryLinks := csOnboardingEntryLinks(v)
 
+	// BL-114: catatan kunci penyuntingan (desa bukan pelanggan aktif). Dirender di
+	// KEDUA cabang (empty-state & terisi) — penguncian tak bergantung ada/tidaknya
+	// baris CS. Netral (bukan warning): keadaan wajar, bukan galat.
+	lockNote := g.Node(g.Text(""))
+	if v.WriteLockNote != "" {
+		lockNote = ui.Alert(ui.VariantDefault, "cs-detail-lock", g.Text(v.WriteLockNote))
+	}
+
 	// BL-108 (revisi 9 Sep): penugasan CS lewat MODAL (tombol di header membuka
 	// $assignOpen), bukan kartu inline. Modal disertakan SEKALI di KEDUA cabang —
 	// assign harus tetap bisa dilakukan bahkan sebelum baris CS pernah diisi
@@ -131,7 +143,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 	if !v.Exists {
 		return h.Div(
 			h.Class("grid gap-4 min-w-0"),
-			header, nav, entryLinks,
+			header, nav, entryLinks, lockNote,
 			h.Div(
 				h.Class("card bg-base-100 border border-base-300 min-w-0"),
 				h.Div(
@@ -146,7 +158,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 
 	return h.Div(
 		h.Class("grid gap-4 min-w-0"),
-		header, nav, entryLinks,
+		header, nav, entryLinks, lockNote,
 		onboardingWarningBanners(v.Warnings, "cs-detail-warn"),
 		ui.When(v.CanReadHealth, detailCard("Health Score", []detailField{
 			{"Skor Kesehatan Keseluruhan", v.OverallHealthScore},

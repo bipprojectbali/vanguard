@@ -34,6 +34,7 @@ func TestCustomerSuccess_CreateEmptyState(t *testing.T) {
 func TestCustomerSuccess_CreateThenOverallHealthScore(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Baru", &uid, nil, nil)
+	env.makeCustomer(t, a.ID, "Active") // BL-114: CS hanya bisa ditulis untuk pelanggan
 
 	form := customerSuccessFormValues()
 	req := accountsReq(http.MethodPost, "/w/test/accounts/"+itoa(a.ID)+"/customer-success", form, itoa(a.ID))
@@ -79,6 +80,7 @@ func TestCustomerSuccess_UpdateSuccess(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Ada", &uid, nil, nil)
 	env.seedCustomerSuccess(t, a.ID)
+	env.makeCustomer(t, a.ID, "Active") // BL-114: pelanggan agar jalur tulis terbuka
 
 	form := customerSuccessFormValues()
 	form.Set("health_status", "Critical") // sengaja bertentangan skor — harus diabaikan
@@ -116,6 +118,7 @@ func TestCustomerSuccess_UpdateSuccess(t *testing.T) {
 func TestCustomerSuccess_ScoreTrendDerivedOnSave(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Tren", &uid, nil, nil)
+	env.makeCustomer(t, a.ID, "Active") // BL-114: pelanggan agar jalur tulis terbuka
 
 	save := func(score int64) db.CustomerSuccess {
 		t.Helper()
@@ -255,6 +258,7 @@ func TestCustomerSuccess_EnumInvalidRejected(t *testing.T) {
 		t.Run("field="+c.field, func(t *testing.T) {
 			env, uid := setupAccounts(t)
 			a := env.seedAccount(t, "Desa Invalid", &uid, nil, nil)
+			env.makeCustomer(t, a.ID, "Active") // BL-114: lolos gerbang pelanggan agar validasi enum yang teruji
 
 			form := customerSuccessFormValues()
 			form.Set(c.field, c.value)

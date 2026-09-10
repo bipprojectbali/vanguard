@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -37,6 +38,19 @@ func (e *testEnv) seedHealthScore(t *testing.T, accountID int64, score int16, st
 	if err != nil {
 		t.Fatalf("seed health score for account %d: %v", accountID, err)
 	}
+}
+
+// makeCustomer menandai desa sebagai PELANGGAN untuk BL-114: Health Score kini
+// hanya menampilkan desa yang punya ≥1 langganan (populasi per segmen). status
+// memilih keadaan: "Active"/"Trial"/"Suspended" = HIDUP (segmen active); "Churned"/
+// "Cancelled"/"Expired" = mati (segmen churned). Plan unik per (akun,status) agar
+// lolos idx_subs_one_active. Tes yang menyeed health score & mengharapkan barisnya
+// tampil WAJIB memanggil ini; tanpa langganan desa itu prospek → dikecualikan.
+func (e *testEnv) makeCustomer(t *testing.T, accountID int64, status string) {
+	t.Helper()
+	code := fmt.Sprintf("PKG-%d-%s", accountID, status)
+	planID := e.seedPlan(t, "Paket "+code, code, "100000")
+	e.seedSubscription(t, accountID, planID, nil, status, "100000", "1200000")
 }
 
 // allHealthScoreRows mendaftar seluruh health score workspace (scope_all, tanpa
@@ -108,10 +122,12 @@ func TestHealthScore_OwnershipCSM(t *testing.T) {
 	// Desa A: uid sebagai assigned_csm → harus tampil ke uid sebagai CSM.
 	own := env.seedAccount(t, "Desa Sendiri", nil, &uid, nil)
 	env.seedHealthScore(t, own.ID, 85, "Healthy")
+	env.makeCustomer(t, own.ID, "Active")
 
 	// Desa B: other sebagai assigned_csm → TIDAK tampil ke uid sebagai CSM.
 	otherAcc := env.seedAccount(t, "Desa Orang Lain", nil, &other, nil)
 	env.seedHealthScore(t, otherAcc.ID, 30, "Critical")
+	env.makeCustomer(t, otherAcc.ID, "Active")
 
 	req := accountsReq(http.MethodGet, "/w/test/health-scores", nil, "")
 	// Jalankan sebagai uid dengan business_role=csm (data_scope='own').
@@ -138,9 +154,11 @@ func TestHealthScore_OwnershipAdmin(t *testing.T) {
 	// Seed dua desa dengan pemilik berbeda.
 	a1 := env.seedAccount(t, "Desa Admin A", &uid, nil, nil)
 	env.seedHealthScore(t, a1.ID, 75, "At-Risk")
+	env.makeCustomer(t, a1.ID, "Active")
 
 	a2 := env.seedAccount(t, "Desa Admin B", &other, nil, nil)
 	env.seedHealthScore(t, a2.ID, 90, "Healthy")
+	env.makeCustomer(t, a2.ID, "Active")
 
 	req := accountsReq(http.MethodGet, "/w/test/health-scores", nil, "")
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.HealthScoreList)
@@ -168,12 +186,15 @@ func TestHealthScore_KPISanity(t *testing.T) {
 	// Seed 3 akun dengan health_status berbeda.
 	a1 := env.seedAccount(t, "Desa Sehat", &uid, nil, nil)
 	env.seedHealthScore(t, a1.ID, 85, "Healthy")
+	env.makeCustomer(t, a1.ID, "Active")
 
 	a2 := env.seedAccount(t, "Desa Berisiko", &uid, nil, nil)
 	env.seedHealthScore(t, a2.ID, 55, "At-Risk")
+	env.makeCustomer(t, a2.ID, "Active")
 
 	a3 := env.seedAccount(t, "Desa Kritis", &uid, nil, nil)
 	env.seedHealthScore(t, a3.ID, 20, "Critical")
+	env.makeCustomer(t, a3.ID, "Active")
 
 	// Verifikasi langsung via DB (scope_all, admin view).
 	kpis, err := env.q.CountHealthScoreKPIs(t.Context(), db.CountHealthScoreKPIsParams{
@@ -212,9 +233,11 @@ func TestHealthScore_StatusFilter(t *testing.T) {
 
 	a1 := env.seedAccount(t, "Desa Hijau", &uid, nil, nil)
 	env.seedHealthScore(t, a1.ID, 82, "Healthy")
+	env.makeCustomer(t, a1.ID, "Active")
 
 	a2 := env.seedAccount(t, "Desa Merah", &uid, nil, nil)
 	env.seedHealthScore(t, a2.ID, 25, "Critical")
+	env.makeCustomer(t, a2.ID, "Active")
 
 	req := accountsReq(http.MethodGet, "/w/test/health-scores?tab=sehat", nil, "")
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.HealthScoreList)

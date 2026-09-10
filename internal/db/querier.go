@@ -19,6 +19,11 @@ type Querier interface {
 	// sudah direbut override manual — pola cek-sebelum-INSERT yang sama dgn
 	// VillageCodeExists (tx tak boleh dibatalkan lalu dicoba ulang).
 	AccountEntityCodeExists(ctx context.Context, arg AccountEntityCodeExistsParams) (bool, error)
+	// BL-114: apakah desa adalah PELANGGAN aktif — punya ≥1 langganan hidup
+	// (Trial/Active/Suspended). Menggerbang tulis Customer Success (A8): desa tanpa
+	// langganan hidup (prospek / churned) → Customer Success read-only. Terminal
+	// (Expired/Cancelled/Churned) TIDAK dihitung hidup. RLS menyaring tenant.
+	AccountHasLiveSubscription(ctx context.Context, accountID int64) (bool, error)
 	AddPlatformStaff(ctx context.Context, email string) (PlatformStaff, error)
 	// ── quote_items — baris penawaran (hard-delete, tanpa soft-delete/audit) ──────
 	// Tambah baris item. tenant_id eksplisit (RLS WITH CHECK). unit_price & subtotal =

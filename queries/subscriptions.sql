@@ -467,6 +467,19 @@ ORDER BY s.created_at DESC, s.id DESC
 LIMIT 1;
 
 
+-- name: AccountHasLiveSubscription :one
+-- BL-114: apakah desa adalah PELANGGAN aktif — punya ≥1 langganan hidup
+-- (Trial/Active/Suspended). Menggerbang tulis Customer Success (A8): desa tanpa
+-- langganan hidup (prospek / churned) → Customer Success read-only. Terminal
+-- (Expired/Cancelled/Churned) TIDAK dihitung hidup. RLS menyaring tenant.
+SELECT EXISTS (
+    SELECT 1 FROM subscriptions s
+    WHERE s.account_id = sqlc.arg(account_id)
+      AND s.deleted_at IS NULL
+      AND s.status IN ('Trial','Active','Suspended')
+);
+
+
 -- ── subscription_items — baris langganan (BL-88 PR2a; hard-delete, mirror quote_items) ──
 
 -- name: AddSubscriptionItem :one

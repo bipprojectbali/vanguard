@@ -18,7 +18,7 @@ import (
 // mentahnya TETAP dioper — bukan PII per-baris seperti F4 phone, jadi tak perlu
 // disamar di sini, cukup tak dirender). exists=false → seluruh field kosong ("—").
 func customerSuccessDetailView(
-	ctx context.Context, base string, a db.Account, cs db.CustomerSuccess, exists bool,
+	ctx context.Context, base string, a db.Account, cs db.CustomerSuccess, exists, hasLiveSub bool,
 ) panel.CustomerSuccessDetailView {
 	// BL-26: peringatan keselarasan onboarding↔lifecycle (K2/K4) HANYA bila
 	// aktor berhak membaca section Journey — jangan bocorkan keadaan section
@@ -27,13 +27,24 @@ func customerSuccessDetailView(
 	if exists && canReadCSJourney(ctx) {
 		warnings = onboardingConsistencyWarnings(cs)
 	}
+	// BL-114: Customer Success (Health/Journey/Adoption) hanya dikelola untuk
+	// PELANGGAN — desa dgn ≥1 langganan hidup (Trial/Active/Suspended). Prospek
+	// (tanpa langganan) & churned (langganan mati semua) → penyuntingan dikunci
+	// walau F2 memberi izin tulis. WriteLockNote menjelaskan penguncian HANYA saat
+	// aktor sebenarnya berhak menulis (jangan bocorkan "kau bisa edit" ke read-only).
+	canWriteBase := canWriteCS(ctx) && !IsReadOnly(ctx)
+	var writeLockNote string
+	if canWriteBase && !hasLiveSub {
+		writeLockNote = "Desa ini belum menjadi pelanggan aktif (tidak ada langganan hidup). Health Score & Customer Success hanya dikelola untuk pelanggan — mulai langganan dulu untuk membuka penyuntingan."
+	}
 	return panel.CustomerSuccessDetailView{
-		Base:        base,
-		ID:          a.ID,
-		AccountName: a.VillageName,
-		CanWrite:    canWriteCS(ctx) && !IsReadOnly(ctx),
-		Exists:      exists,
-		Warnings:    warnings,
+		Base:          base,
+		ID:            a.ID,
+		AccountName:   a.VillageName,
+		CanWrite:      canWriteBase && hasLiveSub,
+		WriteLockNote: writeLockNote,
+		Exists:        exists,
+		Warnings:      warnings,
 
 		CanReadHealth:   canReadCSHealth(ctx),
 		CanReadJourney:  canReadCSJourney(ctx),

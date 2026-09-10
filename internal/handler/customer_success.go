@@ -89,8 +89,17 @@ func (h *Handler) CustomerSuccessDetail(w http.ResponseWriter, r *http.Request) 
 		cs = db.CustomerSuccess{AccountID: accountID}
 	}
 
+	// BL-114: apakah desa PELANGGAN aktif (≥1 langganan hidup) — menentukan apakah
+	// penyuntingan Customer Success dibuka (CanWrite) atau dikunci (prospek/churned).
+	hasLiveSub, err := h.q(ctx).AccountHasLiveSubscription(ctx, accountID)
+	if err != nil {
+		h.Log.Error("customer_success: live subscription", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	base := wsPath(slugFromRequest(r), "")
-	v := customerSuccessDetailView(ctx, base, account, cs, exists)
+	v := customerSuccessDetailView(ctx, base, account, cs, exists, hasLiveSub)
 
 	// BL-102: entry point ke daftar onboarding ter-filter desa ini. Gerbang F2
 	// SAMA dgn halaman /impl-tasks & /trainings (objek crm:journey) — tak menambah

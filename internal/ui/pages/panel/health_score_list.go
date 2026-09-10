@@ -44,6 +44,7 @@ type HealthScoreRowView struct {
 type HealthScoreListView struct {
 	Base          string
 	ActiveTab     string
+	Segment       string // BL-114: "active" (default) | "churned"; segmen populasi
 	Query         string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	NextCursor    string
 	After         string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
@@ -57,15 +58,51 @@ type HealthScoreListView struct {
 // HealthScoreList merender body konten halaman workspace-level Health Score (6.1).
 // Dipanggil via renderWorkspaceShell — tidak membungkus AppShell sendiri.
 func HealthScoreList(v HealthScoreListView) g.Node {
+	seg := healthSegKeep(v.Segment)
 	return h.Div(h.Class("space-y-4"),
+		healthScoreSegments(v.Base, v.Segment, v.ActiveTab, v.Query),
 		healthScoreKPICards(v.KPIs),
 		healthDashPanels(v.Panels),
-		tabSearchRow(healthScoreTabs(v.Base, v.ActiveTab, v.Query),
+		tabSearchRow(healthScoreTabs(v.Base, v.ActiveTab, v.Query, seg),
 			searchBoxInline(v.Base+"/health-scores", v.Query,
 				"Cari desa…", "Cari health score",
-				hiddenField{"tab", v.ActiveTab})),
+				hiddenField{"tab", v.ActiveTab}, seg)),
 		healthScoreTable(v),
 	)
+}
+
+// healthSegKeep → hiddenField segment yang HANYA non-kosong untuk "churned"
+// (withQuery/panelListHref mengabaikan value kosong) agar URL segmen default
+// (active) tetap bersih tanpa ?segment=active.
+func healthSegKeep(segment string) hiddenField {
+	if segment == "churned" {
+		return hiddenField{"segment", "churned"}
+	}
+	return hiddenField{"segment", ""}
+}
+
+// healthScoreSegments — pemilih segmen populasi (BL-114): Desa Aktif (pelanggan
+// berlangganan hidup) vs Churned (eks-pelanggan). Prospek tanpa langganan tak
+// muncul di keduanya. Tab status & pencarian dipertahankan saat berganti segmen.
+func healthScoreSegments(base, active, tab, query string) g.Node {
+	segs := []struct{ key, label string }{
+		{"active", "Desa Aktif"},
+		{"churned", "Churned"},
+	}
+	if active == "" {
+		active = "active"
+	}
+	nodes := make([]g.Node, 0, len(segs))
+	for _, s := range segs {
+		href := withQuery(base+"/health-scores", query,
+			hiddenField{"tab", tab}, hiddenField{"segment", s.key})
+		cls := "tab"
+		if s.key == active {
+			cls += " tab-active"
+		}
+		nodes = append(nodes, h.A(h.Class(cls), h.Href(href), g.Text(s.label)))
+	}
+	return h.Div(h.Class("tabs tabs-boxed w-fit"), g.Group(nodes))
 }
 
 // healthScoreKPICards — 4 kartu KPI: Total / Sehat / Berisiko / Kritis. Ambang
@@ -93,8 +130,9 @@ func healthKPICard(label, value, valueClass, sub string) g.Node {
 	)
 }
 
-// healthScoreTabs — filter tab Semua / Sehat / Berisiko / Kritis.
-func healthScoreTabs(base, active, query string) g.Node {
+// healthScoreTabs — filter tab Semua / Sehat / Berisiko / Kritis. seg dibawa agar
+// perpindahan tab mempertahankan segmen populasi aktif (BL-114).
+func healthScoreTabs(base, active, query string, seg hiddenField) g.Node {
 	tabs := []struct{ key, label string }{
 		{"", "Semua"},
 		{"sehat", "Sehat"},
@@ -103,7 +141,7 @@ func healthScoreTabs(base, active, query string) g.Node {
 	}
 	nodes := make([]g.Node, 0, len(tabs))
 	for _, t := range tabs {
-		href := withQuery(base+"/health-scores", query, hiddenField{"tab", t.key})
+		href := withQuery(base+"/health-scores", query, hiddenField{"tab", t.key}, seg)
 		cls := "tab"
 		if t.key == active {
 			cls += " tab-active"
@@ -131,23 +169,26 @@ func healthScoreTable(v HealthScoreListView) g.Node {
 					h.Th(g.Text("Jatuh Tempo")),
 					h.Th(g.Text("")),
 				)),
-				h.TBody(healthScoreRows(v.Rows, v.Base, v.ActiveTab, v.Query)),
+				h.TBody(healthScoreRows(v.Rows, v.Base, v.ActiveTab, v.Query, healthSegKeep(v.Segment))),
 			)),
-			healthScorePager(v.Base, v.ActiveTab, v.NextCursor, v.Query, v.After, v.Trail),
+			healthScorePager(v.Base, v.ActiveTab, v.NextCursor, v.Query, v.After, v.Trail, healthSegKeep(v.Segment)),
 		),
 	)
 }
 
-func healthScoreRows(rows []HealthScoreRowView, base, tab, query string) g.Node {
+func healthScoreRows(rows []HealthScoreRowView, base, tab, query string, seg hiddenField) g.Node {
 	if len(rows) == 0 {
 		msg := "Belum ada data health score di ruang kerja ini."
+		if seg.Value == "churned" {
+			msg = "Belum ada desa churned di ruang kerja ini."
+		}
 		cell := []g.Node{
 			h.ColSpan("9"), h.Class("text-center text-base-content/50 py-8"),
 		}
 		if query != "" {
 			msg = "Belum ada desa yang cocok pencarian."
 			cell = append(cell, h.Div(g.Text(msg)),
-				h.A(h.Href(withQuery(base+"/health-scores", "", hiddenField{"tab", tab})),
+				h.A(h.Href(withQuery(base+"/health-scores", "", hiddenField{"tab", tab}, seg)),
 					h.Class("btn btn-ghost btn-sm min-h-11 mt-2"), g.Text("« Reset pencarian")))
 			return h.Tr(h.Td(cell...))
 		}
@@ -173,12 +214,13 @@ func healthScoreRows(rows []HealthScoreRowView, base, tab, query string) g.Node 
 	return g.Group(nodes)
 }
 
-func healthScorePager(base, tab, nextCursor, query, after, trail string) g.Node {
+func healthScorePager(base, tab, nextCursor, query, after, trail string, seg hiddenField) g.Node {
 	// Ujung daftar pada satu halaman: tanpa footer (perilaku lama dipertahankan).
 	if nextCursor == "" && trail == "" {
 		return nil
 	}
-	href := panelListHref(base+"/health-scores", [2]string{"tab", tab}, [2]string{"q", query})
+	href := panelListHref(base+"/health-scores", [2]string{"tab", tab},
+		[2]string{"q", query}, [2]string{seg.Name, seg.Value})
 	return h.Div(h.Class("p-3 border-t border-base-200"),
 		ui.KeysetPager(href, after, trail, nextCursor))
 }

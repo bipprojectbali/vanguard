@@ -271,6 +271,7 @@ func TestCustomerSuccess_GateWrite(t *testing.T) {
 				owner = &uid
 			}
 			a := env.seedAccount(t, "Desa Tulis", owner, csm, nil)
+			env.makeCustomer(t, a.ID, "Active") // BL-114: pelanggan agar gate F2 write yang teruji (bukan gate pelanggan)
 
 			editReq := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/customer-success/edit", nil, itoa(a.ID))
 			editRec := env.runAccount(uid, "owner", c.role, editReq, env.h.CustomerSuccessEdit)
@@ -337,6 +338,7 @@ func TestCustomerSuccess_F3_AccountDiLuarCakupan404_Edit(t *testing.T) {
 	theirs := env.seedAccount(t, "Desa Binaan B", nil, &csmB, nil)
 	env.seedCustomerSuccess(t, mine.ID)
 	env.seedCustomerSuccess(t, theirs.ID)
+	env.makeCustomer(t, mine.ID, "Active") // BL-114: pelanggan agar F3 (bukan gate pelanggan) yang buka edit binaan sendiri
 
 	eReq := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(theirs.ID)+"/customer-success/edit", nil, itoa(theirs.ID))
 	if rec := env.runAccount(csmA, "member", "csm", eReq, env.h.CustomerSuccessEdit); rec.Code != http.StatusNotFound {
