@@ -70,6 +70,10 @@ type QuoteDetailView struct {
 	Plans []QuotePlanOption
 
 	CanWrite bool
+	// HasItems (BL-148) = quote punya ≥1 line item. Quote tanpa item hanya boleh
+	// tetap Draft — kontrol status membatasi opsi ke Draft (backend penjaga
+	// sesungguhnya di QuoteStatus). Di-precompute handler.
+	HasItems bool
 	// Quotable (BL-13) = deal di jendela quoting (Qualification–Negotiation) →
 	// mutasi diizinkan. Di luar itu builder READ-ONLY (arsip): kontrol tulis
 	// disembunyikan, StageLockMsg jadi banner. Flag di-precompute handler.

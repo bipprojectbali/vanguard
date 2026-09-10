@@ -12,34 +12,49 @@ import (
 // tetap penjaga sesungguhnya).
 
 // quoteStatusControl = kontrol ganti status manual (approval flow ditunda). Native
-// POST; backend memvalidasi terhadap allowlist skema.
+// POST; backend memvalidasi terhadap allowlist skema. BL-148: quote tanpa line item
+// hanya boleh Draft → opsi dibatasi ke Draft saja + catatan (backend QuoteStatus =
+// penjaga sesungguhnya; "Draft" literal = cermin quoteInitialStatus di handler,
+// paket berbeda tak bisa impor const).
 func quoteStatusControl(v QuoteDetailView, quoteBase string) g.Node {
-	opts := selectedOptions(v.Statuses, v.Status)
-	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+	statuses := v.Statuses
+	if !v.HasItems {
+		statuses = []string{"Draft"}
+	}
+	opts := selectedOptions(statuses, v.Status)
+	fields := []g.Node{
 		h.Div(
-			h.Class("card-body min-w-0 gap-3"),
-			h.H2(h.Class("font-semibold"), g.Text("Ubah Status")),
-			h.FormEl(
-				h.Method("post"), h.Action(quoteBase+"/status"),
-				h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
-				h.Div(
-					h.Class("grid gap-1 min-w-0"),
-					labelFor("Status", "f-quote_status", true),
-					h.Select(
-						append([]g.Node{
-							h.ID("f-quote_status"), h.Name("quote_status"), h.Required(),
-							h.Class("select text-base w-full"),
-						}, g.Group(opts))...,
-					),
-				),
-				h.Div(
-					h.Class("flex items-end"),
-					h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
-						g.Text("Simpan Status")),
-				),
+			h.Class("grid gap-1 min-w-0"),
+			labelFor("Status", "f-quote_status", true),
+			h.Select(
+				append([]g.Node{
+					h.ID("f-quote_status"), h.Name("quote_status"), h.Required(),
+					h.Class("select text-base w-full"),
+				}, g.Group(opts))...,
 			),
 		),
+		h.Div(
+			h.Class("flex items-end"),
+			h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
+				g.Text("Simpan Status")),
+		),
+	}
+	body := []g.Node{
+		h.H2(h.Class("font-semibold"), g.Text("Ubah Status")),
+		h.FormEl(
+			append([]g.Node{
+				h.Method("post"), h.Action(quoteBase + "/status"),
+				h.Class("grid gap-3 sm:grid-cols-2 min-w-0"),
+			}, fields...)...,
+		),
+	}
+	if !v.HasItems {
+		body = append(body, h.P(h.Class("text-sm text-base-content/60"),
+			g.Text("Tambahkan minimal satu item sebelum memajukan status dari Draft.")))
+	}
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
+		h.Div(append([]g.Node{h.Class("card-body min-w-0 gap-3")}, body...)...),
 	)
 }
 

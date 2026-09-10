@@ -112,6 +112,7 @@ func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64
 		Items:        itemRows,
 		Plans:        planOpts,
 		CanWrite:     canWriteDeals(ctx),
+		HasItems:     len(items) > 0, // BL-148: gate opsi status non-Draft
 		Quotable:     quotableStage(stage), // BL-13: gate stage (mutasi vs arsip)
 		StageLockMsg: stageLockMsg(stage),
 		Expired:      quoteExpired(q.QuoteStatus, q.ExpirationDate, todayInAppTZ()), // BL-17
