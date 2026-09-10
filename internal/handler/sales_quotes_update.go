@@ -92,6 +92,21 @@ func (h *Handler) QuoteStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// BL-148: quote tanpa line item tak boleh maju dari Draft (belum ada yang
+	// ditawarkan). Backend = penjaga sesungguhnya; view hanya membatasi opsi.
+	if status != quoteInitialStatus {
+		items, err := h.q(ctx).ListQuoteItems(ctx, quoteID)
+		if err != nil {
+			h.Log.Error("quotes: status item-check", "err", err)
+			wsRedirect(w, r, quoteSub(dealID, quoteID), "failed")
+			return
+		}
+		if len(items) == 0 {
+			wsRedirect(w, r, quoteSub(dealID, quoteID), "quote_no_items")
+			return
+		}
+	}
+
 	// BL-88: TEPAT 1 quote Accepted per deal (menghapus "accept terakhir menang").
 	// Bila deal sudah punya quote Accepted LAIN → tolak dgn pesan ramah (index parcial
 	// idx_quotes_one_accepted = jaring keras bila balapan). Guard hanya untuk transisi

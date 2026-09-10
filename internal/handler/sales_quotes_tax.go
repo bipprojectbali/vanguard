@@ -56,7 +56,10 @@ func parseTaxForm(fv func(string) string) (mode string, rate, amount pgtype.Nume
 		}
 		return taxModePercent, r, pgtype.Numeric{Valid: false}, ""
 	case taxModeAmount:
-		a, code := optNumeric(fv("tax_amount"), "tax")
+		// BL-147: Nominal = rupiah BULAT → buang pemisah ribuan ("5.000.000" →
+		// "5000000") sebelum parse, selaras field uang lain. tax_rate TIDAK
+		// dibersihkan (di sana titik = pemisah desimal persen).
+		a, code := optNumeric(cleanThousands(fv("tax_amount")), "tax")
 		if code != "" {
 			return "", pgtype.Numeric{}, pgtype.Numeric{}, code
 		}

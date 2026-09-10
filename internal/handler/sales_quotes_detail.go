@@ -35,8 +35,12 @@ func (h *Handler) QuoteDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := wsPath(slugFromRequest(r), "")
-	h.renderWorkspaceShell(w, r, quoteTitle(q), "/deals",
-		panel.QuoteDetail(h.quoteDetailView(ctx, base, dealID, q, d.Stage)))
+	view := h.quoteDetailView(ctx, base, dealID, q, d.Stage)
+	// BL-149: baca flash PRG (?err=/?ok=) agar tolakan/konfirmasi tampil di detail —
+	// pola sama halaman DAFTAR quote (quotesMsg dipakai bersama untuk ?ok=).
+	view.Err = wsErrMsg(r.URL.Query().Get("err"))
+	view.OK = quotesMsg(r.URL.Query().Get("ok"))
+	h.renderWorkspaceShell(w, r, quoteTitle(q), "/deals", panel.QuoteDetail(view))
 }
 
 // quoteDetailView merakit builder lengkap: header, identitas (deal/account/
@@ -108,6 +112,7 @@ func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64
 		Items:        itemRows,
 		Plans:        planOpts,
 		CanWrite:     canWriteDeals(ctx),
+		HasItems:     len(items) > 0, // BL-148: gate opsi status non-Draft
 		Quotable:     quotableStage(stage), // BL-13: gate stage (mutasi vs arsip)
 		StageLockMsg: stageLockMsg(stage),
 		Expired:      quoteExpired(q.QuoteStatus, q.ExpirationDate, todayInAppTZ()), // BL-17

@@ -47,6 +47,11 @@ func TestQuoteAccept_SecondAcceptRejected(t *testing.T) {
 	env.setDealStage(t, deal.ID, "Qualification")
 	q1 := env.seedQuote(t, deal.ID, acc.ID, "0")
 	q2 := env.seedQuote(t, deal.ID, acc.ID, "0")
+	// BL-148: quote wajib punya ≥1 item sebelum maju dari Draft (guard mendahului
+	// guard BL-88); beri item ke keduanya agar keduanya lolos ke jalur Accept.
+	plan := env.seedPlan(t, "Paket Satu", "PLN-SATU", "1000000")
+	env.addQuoteItem(t, uid, deal.ID, q1.ID, plan, "1")
+	env.addQuoteItem(t, uid, deal.ID, q2.ID, plan, "1")
 
 	env.acceptQuote(t, uid, deal.ID, q1.ID, "Accepted")
 
@@ -116,6 +121,9 @@ func TestDealDetail_TermFromAcceptedQuote(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("harus 1 quote, ada %d", len(rows))
 	}
+	// BL-148: quote butuh ≥1 item sebelum bisa maju dari Draft ke Accepted.
+	plan := env.seedPlan(t, "Paket Termin", "PLN-TERMIN", "1000000")
+	env.addQuoteItem(t, uid, deal.ID, rows[0].ID, plan, "1")
 	env.acceptQuote(t, uid, deal.ID, rows[0].ID, "Accepted")
 
 	// Detail deal harus menampilkan termin dari quote Accepted.

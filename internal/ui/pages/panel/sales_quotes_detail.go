@@ -70,6 +70,10 @@ type QuoteDetailView struct {
 	Plans []QuotePlanOption
 
 	CanWrite bool
+	// HasItems (BL-148) = quote punya ≥1 line item. Quote tanpa item hanya boleh
+	// tetap Draft — kontrol status membatasi opsi ke Draft (backend penjaga
+	// sesungguhnya di QuoteStatus). Di-precompute handler.
+	HasItems bool
 	// Quotable (BL-13) = deal di jendela quoting (Qualification–Negotiation) →
 	// mutasi diizinkan. Di luar itu builder READ-ONLY (arsip): kontrol tulis
 	// disembunyikan, StageLockMsg jadi banner. Flag di-precompute handler.
@@ -79,6 +83,13 @@ type QuoteDetailView struct {
 	// di-precompute handler. Badge muncul di baris "Kedaluwarsa" kartu identitas —
 	// terpisah dari Status (bisa kedaluwarsa walau status belum diubah manual).
 	Expired bool
+
+	// Err/OK (BL-149) = pesan PRG untuk halaman detail quote. Sebelumnya redirect
+	// ?err=/?ok= ke detail (QuoteTax, item, status, tolakan Accept kedua) ditelan
+	// senyap karena view tak punya slot — user tak pernah lihat konfirmasi/kesalahan.
+	// Di-precompute handler (wsErrMsg/quotesMsg), pola sama halaman DAFTAR quote.
+	Err string
+	OK  string
 }
 
 // CanMutate = boleh mengubah quote/item (punya izin tulis DAN deal di jendela
@@ -148,6 +159,13 @@ func QuoteDetail(v QuoteDetailView) g.Node {
 	if v.CanWrite && !v.Quotable && v.StageLockMsg != "" {
 		body = append(body, ui.Alert(ui.VariantDefault, "quote-lock", g.Text(v.StageLockMsg)))
 	}
+	// BL-149: flash PRG di halaman detail (galat lalu sukses, urutan cermin daftar).
+	if v.Err != "" {
+		body = append(body, ui.Alert(ui.VariantDestructive, "quote-err", g.Text(v.Err)))
+	}
+	if v.OK != "" {
+		body = append(body, ui.Alert(ui.VariantDefault, "quote-ok", g.Text(v.OK)))
+	}
 	body = append(body,
 		quoteIdentityCard(v),
 		quoteLineItems(v, quoteBase),
@@ -156,6 +174,9 @@ func QuoteDetail(v QuoteDetailView) g.Node {
 		// Tambah Item & Pajak (BL-70) kini modal di dalam quoteLineItems. Ubah Status
 		// tetap kartu (di luar cakupan BL-70).
 		body = append(body, quoteStatusControl(v, quoteBase))
+		// BL-147: modal Pajak memuat input Nominal (moneyFieldRp, data-numgroup) →
+		// numgroup.js memformat ribuan & menormalkan jadi digit polos saat submit.
+		body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
