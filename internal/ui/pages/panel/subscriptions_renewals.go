@@ -101,7 +101,7 @@ func renewalExportBtn(v RenewalsView) g.Node {
 func renewalKPICards(k RenewalKPIs) g.Node {
 	return h.Div(
 		h.Class("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 min-w-0"),
-		renewalKPICard("Jatuh Tempo 30 Hari", k.Due30, "perlu ditindak", "text-warning"),
+		renewalKPICard("Akan Jatuh Tempo (30 Hari)", k.Due30, "perlu ditindak", "text-warning"),
 		renewalKPICard("Masa Tenggang", k.Grace, "lewat tempo", "text-error"),
 		renewalKPICard("Diperpanjang", k.Renewed, "periode diperbarui", "text-success"),
 		renewalKPICard("Renewal Rate", k.RenewalRate, "12 bln terakhir", "text-primary"),

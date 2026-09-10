@@ -394,8 +394,9 @@ type Querier interface {
 	// agar chart bar x-axis-nya berurutan tanpa re-sort di Go.
 	DashboardPipelineByStage(ctx context.Context, arg DashboardPipelineByStageParams) ([]DashboardPipelineByStageRow, error)
 	// Langganan jatuh tempo 30 hari ke depan (jendela SAMA dgn ListRenewals window
-	// "due": status Active/PendingApproval, end_date antara today..today+30) + ARR
-	// yang mengambang di dalamnya (masking F4 di handler, bukan di sini).
+	// "due": status Active/PendingApproval, end_date antara today..today+30, BELUM
+	// Renewed — BL-152) + ARR yang mengambang di dalamnya (masking F4 di handler,
+	// bukan di sini).
 	DashboardRenewalsDue(ctx context.Context, arg DashboardRenewalsDueParams) (DashboardRenewalsDueRow, error)
 	// KPI ringkas pipeline dalam cakupan ownership (satu round-trip, bukan hitung di
 	// Go atas seluruh baris). COALESCE(...)::bigint/::numeric membungkus agregat agar
@@ -1053,7 +1054,9 @@ type Querier interface {
 	// ownership (F3) dengan flag yang SAMA dgn ListSubscriptions. Empat JENDELA lewat
 	// window_filter (today dioper handler agar mengikuti zona waktu app & bisa
 	// dideterministikkan test):
-	//   • 'due'     : Active/PendingApproval, end_date ∈ [today, today+30] — jatuh tempo.
+	//   • 'due'     : Active/PendingApproval, end_date ∈ [today, today+30], BELUM Renewed
+	//                 — jatuh tempo (BL-152: yang sudah Renewed eksklusif ke tab 'renewed'
+	//                 agar tak dobel-hitung & badge Diperpanjang menang).
 	//   • 'grace'   : Active, end_date < today — lewat tempo tapi masih berjalan.
 	//   • 'renewed' : renewal_status = 'Renewed' — sudah diperpanjang.
 	//   • lainnya   : semua langganan ber-end_date (jendela 'Semua').
@@ -1261,7 +1264,8 @@ type Querier interface {
 	// SAMA dgn ListRenewals/ListSubscriptions: scope_all → semua; is_own →
 	// subscription_owner = uid; keduanya false → NOL, fail-closed). Predikat cacah
 	// MENGIKUTI jendela ListRenewals agar KPI konsisten dgn tab:
-	//   * due_30      : Active/PendingApproval, end_date in [today, today+30] (= window 'due').
+	//   * due_30      : Active/PendingApproval, end_date in [today, today+30], BELUM Renewed
+	//                   (= window 'due'; BL-152: Renewed eksklusif ke renewed_count, tak dobel).
 	//   * grace       : Active, end_date < today (= window 'grace').
 	//   * renewed     : renewal_status = 'Renewed' (= window 'renewed', sudah diperpanjang).
 	//   * Renewal Rate 12 bln (BL-94, definisi SAMA dgn ReportRenewalSummary): renewed_past

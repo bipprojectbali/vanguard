@@ -187,7 +187,7 @@ func subsTable(v SubListView) g.Node {
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Paket")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("MRR")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Status")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Masa Berlaku")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Renewal Date")),
 					h.Th(h.Class("py-2 font-medium"), g.Text("CSM")),
 				)),

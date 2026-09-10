@@ -9,10 +9,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// subscriptions_kpi_test.go — unit murni (tanpa DB) untuk BL-95: Status DERIVASI
-// kolom daftar (subDerivedStatus) di sekitar ambang dueSoonDays + passthrough
-// lifecycle non-Active, dan pemformatan 4 KPI header (subscriptionListKPIView)
-// termasuk delta "MRR baru bln ini" + denominator "dari N desa" + churn rate.
+// subscriptions_kpi_test.go — unit murni (tanpa DB) untuk BL-95/BL-151: kolom
+// "Masa Berlaku" DERIVASI (subDerivedStatus) — 5 band gradasi di sekitar ambang
+// dueSoonMaxDays(7)/attentionMaxDays(14) + passthrough lifecycle non-Active, dan
+// pemformatan 4 KPI header (subscriptionListKPIView) termasuk delta "MRR baru bln
+// ini" + denominator "dari N desa" + churn rate.
 
 func TestSubDerivedStatus(t *testing.T) {
 	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
@@ -26,11 +27,15 @@ func TestSubDerivedStatus(t *testing.T) {
 		wantLabel string
 		wantClass string
 	}{
-		// Active → DERIVASI dari end_date (reuse ambang BL-94).
+		// Active → DERIVASI 5 band (BL-151): d<0 · d==0 · 1..7 · 8..14 · ≥15.
 		{"active lewat tempo → Masa Tenggang", "Active", dateAfter(-1), "Masa Tenggang", "badge badge-error"},
 		{"active hari ini (d=0) → Jatuh Tempo", "Active", dateAfter(0), "Jatuh Tempo", "badge badge-warning"},
-		{"active tepat ambang 30 → Jatuh Tempo", "Active", dateAfter(dueSoonDays), "Jatuh Tempo", "badge badge-warning"},
-		{"active di atas ambang → Aman", "Active", dateAfter(dueSoonDays + 1), "Aman", "badge badge-success"},
+		{"active d=1 → Segera Jatuh Tempo", "Active", dateAfter(1), "Segera Jatuh Tempo", "badge badge-warning badge-outline"},
+		{"active d=7 (batas segera) → Segera Jatuh Tempo", "Active", dateAfter(dueSoonMaxDays), "Segera Jatuh Tempo", "badge badge-warning badge-outline"},
+		{"active d=8 → Perlu Perhatian", "Active", dateAfter(dueSoonMaxDays + 1), "Perlu Perhatian", "badge badge-info"},
+		{"active d=14 (batas perhatian) → Perlu Perhatian", "Active", dateAfter(attentionMaxDays), "Perlu Perhatian", "badge badge-info"},
+		{"active d=15 → Aman", "Active", dateAfter(attentionMaxDays + 1), "Aman", "badge badge-success"},
+		{"active tepat 30 hari (bukan lagi Jatuh Tempo) → Aman", "Active", dateAfter(dueSoonDays), "Aman", "badge badge-success"},
 		{"active end_date invalid → Aman (fail-soft)", "Active", pgtype.Date{}, "Aman", "badge badge-success"},
 		// Non-Active → label lifecycle apa adanya (derivasi tak bermakna).
 		{"trial → passthrough info", "Trial", dateAfter(-100), "Trial", "badge badge-info"},

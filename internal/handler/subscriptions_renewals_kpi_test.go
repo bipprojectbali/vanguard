@@ -38,8 +38,9 @@ func TestRenewalTypeLabel(t *testing.T) {
 	}
 }
 
-// TestRenewalDerivedStatus — derivasi Status renewal (BL-94 + BL-127). Presedennya
-// URGENSI-DULU dan mengikuti PERSIS predikat jendela ListRenewals: badge "Jatuh
+// TestRenewalDerivedStatus — derivasi Status renewal (BL-94 + BL-127 + BL-152).
+// Prioritas: Renewed DULU (BL-152 — sudah diperpanjang menang atas due-window),
+// lalu due/grace mengikuti PERSIS predikat jendela ListRenewals: badge "Akan Jatuh
 // Tempo"/"Masa Tenggang" HANYA muncul untuk baris yang benar-benar masuk tab
 // 'due'/'grace' (status ∈ {Active,PendingApproval} untuk due; status=Active untuk
 // grace). Status non-aktif ber-end_date dekat memakai label LIFECYCLE-nya, bukan
@@ -60,15 +61,19 @@ func TestRenewalDerivedStatus(t *testing.T) {
 	}{
 		// Active — jalur urgensi + aman.
 		{"Active lewat tempo → Masa Tenggang", "Active", dateAfter(-1), nil, "Masa Tenggang", "badge badge-error"},
-		{"Active hari ini (d=0) → Jatuh Tempo", "Active", dateAfter(0), nil, "Jatuh Tempo", "badge badge-warning"},
-		{"Active tepat ambang 30 → Jatuh Tempo", "Active", dateAfter(dueSoonDays), nil, "Jatuh Tempo", "badge badge-warning"},
+		{"Active hari ini (d=0) → Akan Jatuh Tempo", "Active", dateAfter(0), nil, "Akan Jatuh Tempo", "badge badge-warning"},
+		{"Active tepat ambang 30 → Akan Jatuh Tempo", "Active", dateAfter(dueSoonDays), nil, "Akan Jatuh Tempo", "badge badge-warning"},
 		{"Active di atas ambang → Aman", "Active", dateAfter(dueSoonDays + 1), nil, "Aman", "badge badge-success"},
 		{"Active end_date invalid → strip", "Active", pgtype.Date{}, nil, "—", "badge badge-ghost"},
 		// PendingApproval ikut jendela 'due' (upsell menunggu), TAPI tidak 'grace'.
-		{"PendingApproval dekat → Jatuh Tempo", "PendingApproval", dateAfter(5), nil, "Jatuh Tempo", "badge badge-warning"},
+		{"PendingApproval dekat → Akan Jatuh Tempo", "PendingApproval", dateAfter(5), nil, "Akan Jatuh Tempo", "badge badge-warning"},
 		{"PendingApproval lewat tempo → label lifecycle (bukan grace)", "PendingApproval", dateAfter(-1), nil, "PendingApproval", "badge badge-warning"},
 		// Renewed = tab 'renewed'; baris Active hasil renewal end-nya jauh (>30) → Diperpanjang.
 		{"Active + Renewed jauh → Diperpanjang", "Active", dateAfter(365), &renewed, "Diperpanjang", "badge badge-success"},
+		// BL-152: Renewed MENANG atas due-window "apa pun sisa hari" — end dekat (≤30)
+		// & lewat tempo tetap "Diperpanjang", bukan "Akan Jatuh Tempo"/"Masa Tenggang".
+		{"Active + Renewed dekat (≤30) → Diperpanjang (bukan due)", "Active", dateAfter(10), &renewed, "Diperpanjang", "badge badge-success"},
+		{"Active + Renewed lewat tempo → Diperpanjang (bukan grace)", "Active", dateAfter(-3), &renewed, "Diperpanjang", "badge badge-success"},
 		// BL-127 inti: status non-aktif ber-end dekat TIDAK boleh dapat badge urgensi.
 		{"Expired end dekat → label lifecycle, bukan Jatuh Tempo", "Expired", dateAfter(5), nil, "Expired", "badge badge-error"},
 		{"Expired lewat tempo → label lifecycle, bukan Masa Tenggang", "Expired", dateAfter(-10), nil, "Expired", "badge badge-error"},

@@ -47,8 +47,9 @@ END;
 
 -- name: DashboardRenewalsDue :one
 -- Langganan jatuh tempo 30 hari ke depan (jendela SAMA dgn ListRenewals window
--- "due": status Active/PendingApproval, end_date antara today..today+30) + ARR
--- yang mengambang di dalamnya (masking F4 di handler, bukan di sini).
+-- "due": status Active/PendingApproval, end_date antara today..today+30, BELUM
+-- Renewed — BL-152) + ARR yang mengambang di dalamnya (masking F4 di handler,
+-- bukan di sini).
 SELECT
     COUNT(*)::bigint                    AS due_count,
     COALESCE(SUM(arr), 0)::numeric       AS due_arr
@@ -57,6 +58,7 @@ WHERE deleted_at IS NULL
   AND status IN ('Active', 'PendingApproval')
   AND end_date >= sqlc.arg(today)::date
   AND end_date <= sqlc.arg(today)::date + 30
+  AND renewal_status IS DISTINCT FROM 'Renewed'
   AND (
       sqlc.arg(scope_all)::boolean
       OR (sqlc.arg(is_own)::boolean AND subscription_owner = sqlc.arg(uid))

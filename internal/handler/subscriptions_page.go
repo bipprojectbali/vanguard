@@ -152,14 +152,29 @@ func subPlanDisplay(planName *string, itemCount int64) string {
 	return "—"
 }
 
-// subDerivedStatus = Status kolom daftar langganan (BL-95). Untuk langganan
-// Active, DERIVASI dari end_date (reuse logika BL-94 agar konsisten): lewat tempo
-// → "Masa Tenggang" (error), ≤ dueSoonDays (30) → "Jatuh Tempo" (warning), selain
-// itu → "Aman" (success). Status daur hidup NON-Active (Trial/PendingApproval/
-// Expired/Cancelled/Churned) dikembalikan apa adanya dgn badge lifecycle
-// (subStatusLabelClass) — derivasi timing renewal tak bermakna untuk status
-// terminal (mis. Cancelled ber-end_date lampau ≠ "Masa Tenggang"). Mengembalikan
-// label + class badge daisyUI (token semantik).
+// Ambang band derivasi kolom "Masa Berlaku" daftar langganan (BL-151, kolom
+// KHUSUS — SENGAJA TERPISAH dari dueSoonDays=30 yang dipakai jendela Renewals).
+// Dulu satu ambang 30 hari bikin langganan Monthly (termin 30 hari) langsung
+// "Jatuh Tempo" sejak lahir; kini gradasi 5 tingkat, "Jatuh Tempo" dipersempit
+// ke tepat hari-H (d==0). JANGAN reuse dueSoonDays di subDerivedStatus.
+const (
+	dueSoonMaxDays   = 7  // 1..7   → "Segera Jatuh Tempo"
+	attentionMaxDays = 14 // 8..14  → "Perlu Perhatian"
+)
+
+// subDerivedStatus = kolom "Masa Berlaku" daftar langganan (BL-95, band BL-151).
+// Untuk langganan Active, DERIVASI dari sisa hari end_date dgn 5 band gradasi:
+//   - d < 0             → "Masa Tenggang"       (error)          — sudah lewat tempo
+//   - d == 0            → "Jatuh Tempo"         (warning)        — tepat hari-H
+//   - 1 ≤ d ≤ 7         → "Segera Jatuh Tempo"  (warning outline)
+//   - 8 ≤ d ≤ 14        → "Perlu Perhatian"     (info)
+//   - d ≥ 15            → "Aman"                (success)
+//
+// Status daur hidup NON-Active (Trial/PendingApproval/Expired/Cancelled/Churned)
+// dikembalikan apa adanya dgn badge lifecycle (subStatusLifecycleClass) — derivasi
+// timing renewal tak bermakna untuk status terminal (mis. Cancelled ber-end_date
+// lampau ≠ "Masa Tenggang"). Mengembalikan label + class badge daisyUI (token
+// semantik). Ambang di sini TERPISAH dari dueSoonDays (jendela Renewals, 30 hari).
 func subDerivedStatus(status string, end pgtype.Date, now time.Time) (label, badgeClass string) {
 	if status != "Active" {
 		return status, subStatusLifecycleClass(status)
@@ -173,8 +188,12 @@ func subDerivedStatus(status string, end pgtype.Date, now time.Time) (label, bad
 	switch {
 	case d < 0:
 		return "Masa Tenggang", "badge badge-error"
-	case d <= dueSoonDays:
+	case d == 0:
 		return "Jatuh Tempo", "badge badge-warning"
+	case d <= dueSoonMaxDays:
+		return "Segera Jatuh Tempo", "badge badge-warning badge-outline"
+	case d <= attentionMaxDays:
+		return "Perlu Perhatian", "badge badge-info"
 	default:
 		return "Aman", "badge badge-success"
 	}

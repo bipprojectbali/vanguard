@@ -135,6 +135,45 @@ func TestSubscriptionRenewals_Windows(t *testing.T) {
 	}
 }
 
+// TestSubscriptionRenewals_RenewedNearExcludedFromDue (BL-152): langganan yang
+// SUDAH diperpanjang (renewal_status='Renewed') dgn end_date masih ≤30 hari
+// TIDAK boleh muncul di tab 'due' (dulu dobel: due + renewed) dan badge-nya harus
+// "Diperpanjang", bukan "Akan Jatuh Tempo". Tetap muncul di tab 'renewed'.
+func TestSubscriptionRenewals_RenewedNearExcludedFromDue(t *testing.T) {
+	env, uid := setupAccounts(t)
+	now := time.Now()
+	plain := env.seedAccount(t, "Desa DuePlain", &uid, nil, nil)
+	renNear := env.seedAccount(t, "Desa RenewedNear", &uid, nil, nil)
+	pPlain := env.seedPlan(t, "Plan DuePlain", "PL-DP", "1000000")
+	pRenNear := env.seedPlan(t, "Plan RenewedNear", "PL-RN", "1000000")
+	// Keduanya end_date +10 hari (dalam jendela due 30 hari); beda hanya Renewed.
+	env.seedRenewalSub(t, plain.ID, pPlain, &uid, "Active", now.AddDate(0, 0, 10), "", "Manual")
+	env.seedRenewalSub(t, renNear.ID, pRenNear, &uid, "Active", now.AddDate(0, 0, 10), "Renewed", "Manual")
+
+	// Tab 'due': hanya yang belum diperpanjang.
+	due := env.runAccount(uid, "owner", "manager", renewalsReq("due"), env.h.SubscriptionRenewals)
+	if due.Code != http.StatusOK {
+		t.Fatalf("due status = %d, want 200", due.Code)
+	}
+	dueBody := due.Body.String()
+	if !strings.Contains(dueBody, "Desa DuePlain") {
+		t.Error("tab due harus memuat langganan belum-diperpanjang (Desa DuePlain)")
+	}
+	if strings.Contains(dueBody, "Desa RenewedNear") {
+		t.Error("BL-152: tab due TAK boleh memuat langganan Renewed walau end ≤30 hari")
+	}
+
+	// Tab 'renewed': memuat yang diperpanjang, badge "Diperpanjang".
+	ren := env.runAccount(uid, "owner", "manager", renewalsReq("renewed"), env.h.SubscriptionRenewals)
+	renBody := ren.Body.String()
+	if !strings.Contains(renBody, "Desa RenewedNear") {
+		t.Error("tab renewed harus memuat Desa RenewedNear")
+	}
+	if !strings.Contains(renBody, "Diperpanjang") {
+		t.Error("BL-152: baris Renewed harus berbadge Diperpanjang")
+	}
+}
+
 // TestSubscriptionRenewals_DefaultWindowDue: tanpa ?window= → jendela 'due'.
 func TestSubscriptionRenewals_DefaultWindowDue(t *testing.T) {
 	env, uid := setupAccounts(t)
