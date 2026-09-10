@@ -103,13 +103,16 @@ func (h *Handler) CustomerSuccessDetail(w http.ResponseWriter, r *http.Request) 
 
 	// BL-102: entry point ke daftar onboarding ter-filter desa ini. Gerbang F2
 	// SAMA dgn halaman /impl-tasks & /trainings (objek crm:journey) — tak menambah
-	// sumbu izin; F3 di daftar tujuan menyaring baris.
+	// sumbu izin; F3 di daftar tujuan menyaring baris. BL-146: tombol ini adalah
+	// aksi kerja onboarding/adopsi — hanya relevan untuk PELANGGAN aktif (hasLiveSub),
+	// sama seperti CanWrite; desa non-pelanggan (prospek/churned) tak melihatnya
+	// walau berhak baca crm:journey.
 	idStr := strconv.FormatInt(accountID, 10)
-	if canViewImplTasks(ctx) {
+	if canViewImplTasks(ctx) && hasLiveSub {
 		v.CanViewImplTasks = true
 		v.ImplTasksHref = base + "/impl-tasks?account=" + idStr
 	}
-	if canViewTrainings(ctx) {
+	if canViewTrainings(ctx) && hasLiveSub {
 		v.CanViewTrainings = true
 		v.TrainingsHref = base + "/trainings?account=" + idStr
 	}
@@ -119,7 +122,9 @@ func (h *Handler) CustomerSuccessDetail(w http.ResponseWriter, r *http.Request) 
 	// — bukan sumbu izin baru; keempat role ber-tulis-account juga bisa membuka
 	// halaman ini (punya ≥1 section CS read), jadi tak ada yang kehilangan akses.
 	// Kandidat CSM dimuat DI SINI (assignableMembers = query DB) bukan di mapper.
-	if canWriteAccountsPerm(ctx) && !IsReadOnly(ctx) {
+	// BL-146: penugasan CS juga aksi tulis khusus pelanggan aktif — kunci sama dgn
+	// CanWrite (hasLiveSub) di samping gerbang F2/read-only yang sudah ada.
+	if canWriteAccountsPerm(ctx) && !IsReadOnly(ctx) && hasLiveSub {
 		members, err := h.assignableMembers(ctx)
 		if err != nil {
 			h.Log.Error("customer_success: assignable members", "err", err)

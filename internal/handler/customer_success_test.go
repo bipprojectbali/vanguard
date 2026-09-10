@@ -357,9 +357,13 @@ func TestCustomerSuccess_F3_AccountDiLuarCakupan404_Edit(t *testing.T) {
 // /assign) dirender di halaman detail CS bagi aktor ber-tulis-account — bahkan
 // pada EMPTY-STATE (baris CS belum ada), sebab penugasan harus bisa dilakukan
 // sebelum data CS pernah diisi. csm = pemilik binaan (F3) + crm:accounts write.
+// BL-146: penugasan CS kini juga digerbangi hasLiveSub (aksi tulis khusus
+// pelanggan aktif) — desa dibuat pelanggan di sini supaya test tetap menguji
+// niat aslinya (empty-state, bukan status pelanggan).
 func TestCustomerSuccess_AssignCardDitampilkan(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Tugas CS", nil, &uid, nil) // csm = owner binaan
+	env.makeCustomer(t, a.ID, "Active")
 
 	req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/customer-success", nil, itoa(a.ID))
 	rec := env.runAccount(uid, "member", "csm", req, env.h.CustomerSuccessDetail)
