@@ -5,10 +5,10 @@ import (
 	h "maragu.dev/gomponents/html"
 )
 
-// members_roles.go — badge & pemilih peran dua-sumbu (roleBadges, memberRoleSelect,
-// crmRoleOpts/crmRoleOpt, memberIdent, roleOpts/roleOpt), dipisah dari members.go
-// agar tiap file di bawah ambang tipe View/Component (300). Shell daftar anggota +
-// form undang tetap di members.go — satu paket.
+// members_roles.go — badge & pemilih peran anggota (roleBadges, memberRoleSelect,
+// crmRoleOpts/crmRoleOpt, memberIdent), dipisah dari members.go agar tiap file di
+// bawah ambang tipe View/Component (300). Shell daftar anggota + form undang tetap
+// di members.go — satu paket.
 
 // roleBadges = tampilan baca-saja dua sumbu (dipakai saat bukan pengelola): role
 // tenant selalu tampil; peran CRM hanya bila diberikan (kosong = tak diberi).
@@ -76,23 +76,4 @@ func memberIdent(m MemberRow) g.Node {
 		h.Div(h.Class("truncate"), g.Text(m.Name)),
 		h.Div(h.Class("truncate text-xs text-base-content/60"), g.Text(m.Email)),
 	)
-}
-
-// roleOpts merender opsi role yang BOLEH diberikan — daftarnya dioper handler,
-// bukan diputuskan di sini: mode single tak mengenal `owner` (0006 §7), dan view
-// tak boleh menanyakan mode aplikasi (konvensi view murni-data).
-func roleOpts(roles []string, current string) []g.Node {
-	out := make([]g.Node, 0, len(roles))
-	for _, r := range roles {
-		out = append(out, roleOpt(r, current))
-	}
-	return out
-}
-
-func roleOpt(val, current string) g.Node {
-	attrs := []g.Node{h.Value(val)}
-	if val == current {
-		attrs = append(attrs, h.Selected())
-	}
-	return h.Option(append(attrs, g.Text(val))...)
 }
