@@ -28,6 +28,36 @@ type Release struct {
 // Nomor versi teratas menjadi acuan badge "ada pembaruan".
 var Releases = []Release{
 	{
+		Version: "1.3.0",
+		Date:    "2026-09-10",
+		Summary: "Detail lead didesain ulang dengan aksi lewat modal, Kategori Forecast jadi pilihan terkunci, perapian aksi langganan & form Health Score, plus perbaikan tanggal dan label pada daftar perpanjangan.",
+		Sections: []Section{
+			{
+				Title: "Baru",
+				Items: []string{
+					"Kategori Forecast pada deal kini pilihan terkunci — Pipeline / Best Case / Commit / Closed — bukan lagi teks bebas yang mudah salah ketik.",
+				},
+			},
+			{
+				Title: "Diubah",
+				Items: []string{
+					"Detail lead didesain ulang — informasi dikelompokkan jadi kartu (Identitas, Kualifikasi & Status, Sistem & Audit), aksi \"Ubah Status\" dan \"Hapus\" kini tombol yang membuka modal konfirmasi, dan baris \"Alasan Unqualified\" hanya muncul saat status lead memang Unqualified.",
+					"Aksi pada detail langganan (Perpanjang, Approve, Activate, Churn) kini tombol tersendiri di header yang membuka modal — tak lagi menumpuk dalam satu kartu \"Tindakan\".",
+					"Input \"Nilai deal\" pada form konversi lead kini berformat ribuan otomatis, sejajar dengan form lead & deal.",
+					"Keterangan \"nomor disamarkan\" pada form lead dipindah ke ikon info (ⓘ) yang bisa di-tap agar form lebih ringkas.",
+					"Form sunting Health Score desa dirapikan — badge read-only \"Status Kesehatan\" dan \"Tren Skor\" dilepas dari form; keduanya tetap dihitung otomatis dan tampil di halaman detail.",
+				},
+			},
+			{
+				Title: "Diperbaiki",
+				Items: []string{
+					"Langganan hasil perpanjangan/upsell kini mengisi tanggal Mulai & Berakhir dengan benar — sebelumnya kedua tanggal tampil kosong pada detail langganan hasil perpanjangan.",
+					"Badge \"Jatuh Tempo\" pada daftar perpanjangan kini konsisten dengan isi tab \"Jatuh Tempo\": langganan yang sudah tak aktif (mis. Churned/Expired) tak lagi salah berlabel jatuh tempo.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.2.0",
 		Date:    "2026-09-09",
 		Summary: "Langganan multi-paket dengan nilai bersumber dari Quote, keamanan nomor telepon yang bisa diatur per-workspace, plus sejumlah perapian tampilan desa & kontak.",

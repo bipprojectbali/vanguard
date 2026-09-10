@@ -4,6 +4,22 @@ Semua perubahan penting pada go_starter dicatat di sini.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-10
+
+### Added
+- **Kategori Forecast deal jadi picklist enum, bukan teks bebas (BL-124).** Field "Kategori Forecast" pada form sunting Deal dulu `<input type="text">` bebas — rawan salah ketik dan tak selaras dengan istilah forecast standar. Kini `<select>` empat nilai terkunci: Pipeline / Best Case / Commit / Closed (`forecastCategoryOptions` + validasi backend `validForecastCategories`; nilai di luar daftar ditolak). View murni-data (`selectField`), gerbang & jalur SAVE tak berubah.
+
+### Changed
+- **Detail Lead didesain ulang: aksi via modal + pengelompokan kartu (BL-119/120/121).** Aksi "Ubah Status" dan "Hapus" dulu kontrol inline di badan halaman; kini keduanya jadi tombol di header yang membuka modal konfirmasi (`leadStatusTrigger`/`leadStatusModal`, `leadDeleteModal`; signal `$leadStatusOpen`, form NATIVE POST → 303, gotcha #16). Tombol Hapus disembunyikan untuk lead yang sudah dikonversi. Isi detail dikelompokkan ke empat kartu sesuai wireframe (Identitas, Kualifikasi & Status, Sistem & Audit + konversi), dan baris "Alasan Unqualified" hanya dirender kondisional saat `status == Unqualified`. Tanpa DDL.
+- **Aksi detail langganan jadi tombol header + modal (BL-125).** Kartu "Tindakan" yang menumpuk empat aksi (Perpanjang/Approve/Activate/Churn) dilepas; tiap aksi kini tombol tersendiri di header detail langganan yang membuka modalnya masing-masing (`subActions`/`subActionTriggers`/`subActionDialogs`, CSP-safe, form NATIVE POST → 303). Route & gerbang tak berubah.
+- **Format ribuan pada "Nilai deal" di form konversi lead (BL-122).** Input nilai deal pada form Convert Lead kini berformat ribuan otomatis (`moneyField` + `numgroup.js`), sejajar dengan form Lead & Deal.
+- **Keterangan penyamaran nomor jadi ikon info yang bisa di-tap (BL-118).** Teks bantuan "nomor disamarkan" di form Lead dipindah dari label panjang ke ikon info (ⓘ) via `labelWithHint` (`phoneNumField` non-editable), agar form lebih ringkas.
+- **Form sunting Health Score dirapikan (BL-128).** Badge read-only "Status Kesehatan" (BL-24) dan "Tren Skor" (BL-25) dilepas dari form sunting Customer Success — keduanya tetap turunan `overall_health_score`, dihitung/disimpan backend, dan tampil di halaman DETAIL, hanya bukan bagian form edit. Pratinjau skor live (rencana BL-128 (a)) di-descope: input komponen skor tetap field biasa (input `type="number"` kosong pada Datastar terbaca `0` → memicu label "Kritis" palsu). Section Product Adoption dipertahankan di form.
+
+### Fixed
+- **Langganan hasil perpanjangan/upsell tak mengisi tanggal Mulai & Berakhir (BL-126 🐞).** `renewParams` tak menyetel `StartDate`/`EndDate` (juga `BillingCycle`/`AutoRenew`/`ContractTermMonths`), sehingga detail langganan hasil perpanjangan menampilkan tanggal kosong. Diperbaiki dengan mengisi keempat field dari termin langganan sumber; test regresi `TestSubscriptionRenew_FillsDates`.
+- **Badge "Jatuh Tempo" pada daftar perpanjangan tak selaras dengan tab (BL-127 🐞).** `renewalDerivedStatus` menurunkan label berbeda dari predikat window `ListRenewals`, sehingga langganan yang sudah tak aktif (mis. Churned/Expired) bisa salah berlabel "Jatuh Tempo". Diperbaiki agar derivasi badge mengikuti predikat window yang sama; test regresi `TestRenewalDerivedStatus`.
+
 ## [1.2.0] - 2026-09-09
 
 ### ⚠️ Breaking
