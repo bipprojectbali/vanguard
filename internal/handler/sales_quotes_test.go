@@ -367,6 +367,9 @@ func TestQuotes_StatusValidAndRejected(t *testing.T) {
 	deal := env.seedDeal(t, acc.ID, &uid)
 	env.setDealStage(t, deal.ID, "Qualification") // BL-13: masuk jendela quoting
 	q := env.seedQuote(t, deal.ID, acc.ID, "0")
+	// BL-148: quote butuh ≥1 item sebelum maju dari Draft (Sent dst.).
+	plan := env.seedPlan(t, "Paket Q", "PLN-Q", "1000000")
+	env.addQuoteItem(t, uid, deal.ID, q.ID, plan, "1")
 
 	// Valid: Draft → Sent.
 	form := url.Values{"quote_status": {"Sent"}}
