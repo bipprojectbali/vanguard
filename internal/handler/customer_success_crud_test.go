@@ -15,8 +15,10 @@ import (
 
 func TestCustomerSuccess_CreateEmptyState(t *testing.T) {
 	env, uid := setupAccounts(t)
-	a := env.seedAccount(t, "Desa Baru", &uid, nil, nil)
 
+	// Pelanggan aktif tanpa baris CS → empty-state generik apa adanya.
+	a := env.seedAccount(t, "Desa Baru", &uid, nil, nil)
+	env.makeCustomer(t, a.ID, "Active")
 	req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/customer-success", nil, itoa(a.ID))
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.CustomerSuccessDetail)
 	if rec.Code != http.StatusOK {
@@ -24,6 +26,21 @@ func TestCustomerSuccess_CreateEmptyState(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "Belum ada data Customer Success untuk desa ini.") {
 		t.Error("harus menampilkan pesan empty-state persis")
+	}
+
+	// BL-146: non-pelanggan (tanpa langganan hidup) tanpa baris CS → catatan
+	// kunci MENGGANTIKAN pesan empty-state generik (bukan dobel).
+	prospek := env.seedAccount(t, "Desa Prospek Baru", &uid, nil, nil)
+	req2 := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(prospek.ID)+"/customer-success", nil, itoa(prospek.ID))
+	rec2 := env.runAccount(uid, "owner", "admin", req2, env.h.CustomerSuccessDetail)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("prospek tanpa baris CS harus 200 empty-state, got %d", rec2.Code)
+	}
+	if strings.Contains(rec2.Body.String(), "Belum ada data Customer Success untuk desa ini.") {
+		t.Error("non-pelanggan tak boleh menampilkan pesan empty-state generik")
+	}
+	if !strings.Contains(rec2.Body.String(), csWriteLockMarker) {
+		t.Error("non-pelanggan harus menampilkan catatan kunci di kartu, bukan teks generik")
 	}
 }
 

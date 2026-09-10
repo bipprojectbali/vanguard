@@ -125,11 +125,14 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 	// KEDUA cabang render (di bawah nav) supaya konsisten & tak bergantung baris CS.
 	entryLinks := csOnboardingEntryLinks(v)
 
-	// BL-114: catatan kunci penyuntingan (desa bukan pelanggan aktif). Dirender di
-	// KEDUA cabang (empty-state & terisi) — penguncian tak bergantung ada/tidaknya
-	// baris CS. Netral (bukan warning): keadaan wajar, bukan galat.
+	// BL-114/BL-146: catatan kunci penyuntingan (desa bukan pelanggan aktif).
+	// Cabang TERISI (v.Exists): banner terpisah di atas kartu data — kartu detail
+	// tetap merender data asli, jadi catatannya tak bisa masuk ke kartu.
+	// Cabang EMPTY-STATE (!v.Exists): teksnya dipindah ke DALAM kartu (menggantikan
+	// pesan generik, lihat di bawah) — banner terpisah di sini DIHILANGKAN agar
+	// pesan tak dobel.
 	lockNote := g.Node(g.Text(""))
-	if v.WriteLockNote != "" {
+	if v.WriteLockNote != "" && v.Exists {
 		lockNote = ui.Alert(ui.VariantDefault, "cs-detail-lock", g.Text(v.WriteLockNote))
 	}
 
@@ -141,6 +144,13 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 		assignCSModal(v.AssignAction, v.AssignedCSM, v.BackupCSM, v.Members))
 
 	if !v.Exists {
+		// BL-146: desa non-pelanggan (WriteLockNote terisi) → kartu menampilkan
+		// catatan kunci, MENGGANTIKAN pesan empty-state generik (bukan dobel dgn
+		// banner — lockNote di atas sudah dikosongkan untuk cabang ini).
+		emptyText := "Belum ada data Customer Success untuk desa ini."
+		if v.WriteLockNote != "" {
+			emptyText = v.WriteLockNote
+		}
 		return h.Div(
 			h.Class("grid gap-4 min-w-0"),
 			header, nav, entryLinks, lockNote,
@@ -148,8 +158,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 				h.Class("card bg-base-100 border border-base-300 min-w-0"),
 				h.Div(
 					h.Class("card-body min-w-0"),
-					h.P(h.Class("text-base-content/70"),
-						g.Text("Belum ada data Customer Success untuk desa ini.")),
+					h.P(h.Class("text-base-content/70"), g.Text(emptyText)),
 				),
 			),
 			assign,
