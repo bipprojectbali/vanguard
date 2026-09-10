@@ -74,14 +74,9 @@ type CustomerSuccessFormView struct {
 	CanWriteJourney  bool
 	CanWriteAdoption bool
 
-	// HealthStatusLabel/Badge = status kesehatan TERSIMPAN sudah diformat di
-	// handler (BL-24: badge read-only, bukan dropdown — status turunan skor).
-	HealthStatusLabel string
-	HealthStatusBadge string
-	// ScoreTrendLabel/Badge = tren skor TERSIMPAN sudah diformat di handler
-	// (BL-25: badge read-only, bukan dropdown — tren turunan riwayat skor).
-	ScoreTrendLabel    string
-	ScoreTrendBadge    string
+	// Status Kesehatan (BL-24) sengaja TAK dirender di form sunting: tetap turunan
+	// overall_health_score & tampil di halaman DETAIL, tapi bukan bagian form edit.
+	// Tren Skor (BL-25) juga TAK dirender di form (BL-128 (b)) — alasan sama.
 	LifecycleStages    []string
 	OnboardingStatuses []string
 	LoginFrequencies   []string
@@ -106,12 +101,10 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 
 	fields := []g.Node{
 		ui.When(v.CanWriteHealth, formCard("Health Score",
-			healthStatusReadOnly(v.HealthStatusLabel, v.HealthStatusBadge),
 			field("Skor Adopsi (0–100)", "adoption_score", v.Fields.AdoptionScore, false, "number"),
 			field("Skor Engagement (0–100)", "engagement_score", v.Fields.EngagementScore, false, "number"),
 			field("Skor Support (0–100)", "support_score", v.Fields.SupportScore, false, "number"),
 			field("Skor Sentimen (0–100)", "sentiment_score", v.Fields.SentimentScore, false, "number"),
-			scoreTrendReadOnly(v.ScoreTrendLabel, v.ScoreTrendBadge),
 		)),
 		ui.When(v.CanWriteJourney, formCard("Journey & Onboarding",
 			selectField("Tahap Siklus Hidup", "lifecycle_stage", v.Fields.LifecycleStage, v.LifecycleStages, false),
@@ -139,13 +132,15 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 		)),
 	}
 
-	// Signal $onbstatus menggerakkan tampil/sembunyi field progres (data-show di
-	// onboardingStatusSelect + showWhen). Diinisialisasi dari nilai TERSIMPAN agar
-	// no-FOUC saat prefill. Ephemeral (state form), bukan data dikirim ke server.
+	// Signal ephemeral (state form, tak dikirim ke server), diinisialisasi dari
+	// nilai TERSIMPAN agar no-FOUC saat prefill:
+	//   - $onbstatus → tampil/sembunyi field progres (onboardingStatusSelect + showWhen).
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),
 		h.Class("grid gap-4 min-w-0"),
-		data.Signals(map[string]any{"onbstatus": v.Fields.OnboardingStatus}),
+		data.Signals(map[string]any{
+			"onbstatus": v.Fields.OnboardingStatus,
+		}),
 		g.Group(fields),
 		h.Div(
 			h.Class("flex flex-wrap items-center gap-2"),
@@ -155,42 +150,6 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 	))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
-}
-
-// healthStatusReadOnly — "Status Kesehatan" sebagai badge READ-ONLY, bukan
-// dropdown (BL-24): status turunan overall_health_score, operator tak bisa
-// menyetelnya. Tak ada <input>/<select> → tak pernah terkirim POST; label
-// menjelaskan asal-nilai agar tak dikira field yang rusak. Badge selaras skor
-// aktual saat baris berikutnya disimpan (label = status TERSIMPAN saat ini).
-func healthStatusReadOnly(label, badge string) g.Node {
-	return h.Div(
-		h.Class("grid gap-1 min-w-0"),
-		h.Span(h.Class("text-sm font-medium"), g.Text("Status Kesehatan")),
-		h.Div(
-			h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("badge "+badge), g.Text(label)),
-		),
-		h.P(h.Class("text-xs text-base-content/60"),
-			g.Text("Otomatis dari skor kesehatan keseluruhan — tak dapat disetel manual.")),
-	)
-}
-
-// scoreTrendReadOnly — "Tren Skor" sebagai badge READ-ONLY, bukan dropdown
-// (BL-25): tren turunan riwayat skor (deriveScoreTrend membandingkan skor lama
-// vs sekarang), operator tak bisa menyetelnya. Tak ada <select> → tak pernah
-// terkirim POST. Label = tren TERSIMPAN saat ini; badge selaras arah saat baris
-// berikutnya disimpan. "—" bila belum ada pembanding (snapshot pertama).
-func scoreTrendReadOnly(label, badge string) g.Node {
-	return h.Div(
-		h.Class("grid gap-1 min-w-0"),
-		h.Span(h.Class("text-sm font-medium"), g.Text("Tren Skor")),
-		h.Div(
-			h.Class("flex flex-wrap items-center gap-2"),
-			h.Span(h.Class("badge "+badge), g.Text(label)),
-		),
-		h.P(h.Class("text-xs text-base-content/60"),
-			g.Text("Otomatis dari perubahan skor kesehatan — tak dapat disetel manual.")),
-	)
 }
 
 // onboardingStatusSelect — dropdown "Status Onboarding" yang di-bind ke signal
