@@ -41,6 +41,42 @@ func (e *testEnv) doCodePost(uid int64, role string, form url.Values, fn http.Ha
 	return rec
 }
 
+// doCodeGet menjalankan GET /codes ber-role tertentu + Queries ber-scope + chi
+// param slug, mengembalikan recorder utuh (status + body dirender).
+func (e *testEnv) doCodeGet(uid int64, role string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, "/w/test/codes", nil)
+	req = withChiParam(req, slugURLParam, "test")
+	rec := httptest.NewRecorder()
+	wrapped := e.sm.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session.SetIdentity(r.Context(), uid, "test@local", role, false, e.tenantID, "Test", "test", "")
+		e.h.WorkspaceCodeFormats(w, r.WithContext(withQueries(r.Context(), e.q)))
+	}))
+	wrapped.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestCodeFormats_SembunyikanAccount (BL-137): kartu "Desa (Akun)" (EntityAccount)
+// TAK dirender di /codes — desa kini beridentitas kode wilayah Kemendagri, bukan
+// format DESA-xxx internal. Entitas lain tetap tampil. Ini penyembunyian UI saja;
+// alokasi kode account di backend tak tersentuh.
+func TestCodeFormats_SembunyikanAccount(t *testing.T) {
+	env, uid := setupTest(t)
+	rec := env.doCodeGet(uid, "owner")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body:\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "Desa (Akun)") {
+		t.Error("kartu 'Desa (Akun)' (EntityAccount) tak boleh dirender di /codes")
+	}
+	// Entitas lain tetap ada — pastikan bukan halaman kosong.
+	for _, label := range []string{"Prospek (Lead)", "Kesepakatan (Deal)", "Penawaran (Quote)", "Tiket", "Langganan"} {
+		if !strings.Contains(body, label) {
+			t.Errorf("entitas %q harus tetap dirender", label)
+		}
+	}
+}
+
 // codeForm merakit form values untuk satu entitas.
 func codeForm(entity, prefix, separator, padding string) url.Values {
 	return url.Values{

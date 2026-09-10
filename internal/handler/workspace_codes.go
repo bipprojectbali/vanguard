@@ -40,8 +40,15 @@ func (h *Handler) WorkspaceCodeFormats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Urutan tampil = urutan AllEntities (stabil), bukan urutan baris DB.
+	// EntityAccount (Desa) sengaja TAK dirender: desa kini beridentitas kode
+	// wilayah Kemendagri, bukan format DESA-xxx internal, jadi konfiguratornya
+	// tak relevan. Kode account masih dialokasikan di backend (accounts_codes.go)
+	// — ini hanya menyembunyikan kartu konfigurasi, bukan menghentikan alokasi.
 	items := make([]panel.CodeFormatItem, 0, len(codes.AllEntities()))
 	for _, e := range codes.AllEntities() {
+		if e == codes.EntityAccount {
+			continue
+		}
 		f := codes.DefaultFormat(e)
 		isDefault := true
 		if row, ok := saved[string(e)]; ok {
