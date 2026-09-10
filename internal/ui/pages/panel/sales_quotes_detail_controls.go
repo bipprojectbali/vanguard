@@ -97,8 +97,12 @@ func quoteTaxBody(v QuoteDetailView, quoteBase string) g.Node {
 			),
 			showWhen("$taxmode == 'percent'", "min-w-0",
 				field("Tarif Pajak (%)", "tax_rate", v.TaxRateInput, false, "number")),
+			// BL-147: Nominal Pajak = uang rupiah bulat → moneyFieldRp (afiks "Rp" +
+			// data-numgroup) selaras Nilai Deal/Estimasi Lead, bukan type="number"
+			// telanjang. numgroup.js mengelompokkan ribuan & menormalkan jadi digit
+			// polos saat submit; backend cleanThousands penjaga bila JS mati.
 			showWhen("$taxmode == 'amount'", "min-w-0",
-				field("Nominal Pajak (Rp)", "tax_amount", v.TaxAmountInput, false, "number")),
+				moneyFieldRp("Nominal Pajak", "tax_amount", v.TaxAmountInput)),
 			h.Div(
 				h.Class("sm:col-span-2"),
 				h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),

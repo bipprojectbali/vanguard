@@ -174,6 +174,9 @@ func QuoteDetail(v QuoteDetailView) g.Node {
 		// Tambah Item & Pajak (BL-70) kini modal di dalam quoteLineItems. Ubah Status
 		// tetap kartu (di luar cakupan BL-70).
 		body = append(body, quoteStatusControl(v, quoteBase))
+		// BL-147: modal Pajak memuat input Nominal (moneyFieldRp, data-numgroup) →
+		// numgroup.js memformat ribuan & menormalkan jadi digit polos saat submit.
+		body = append(body, h.Script(h.Src("/static/numgroup.js"), h.Defer()))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
