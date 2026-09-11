@@ -65,6 +65,11 @@ type ContactDetailView struct {
 
 	CanWrite bool
 
+	// Err/Msg = umpan balik aksi (BL-156b) dari redirect PRG create/update/
+	// primary (`?err=`/`?ok=`) yang mendarat di halaman ini, bukan di daftar.
+	Err string
+	Msg string
+
 	// Activities = timeline aktivitas kontak ini (M7-A). Diisi handler via
 	// activitiesTimelineFor (dibatasi activityTimelineLimit baris terbaru).
 	Activities ActivityTimelineView
@@ -116,13 +121,15 @@ func ContactDetail(v ContactDetailView) g.Node {
 		)),
 	)
 
-	return h.Div(
-		h.Class("grid gap-4 min-w-0"),
-		crumb,
-		header,
-		contactDetailCards(v),
-		ActivityTimeline(v.Activities),
-	)
+	body := []g.Node{crumb, header}
+	if v.Err != "" {
+		body = append(body, ui.Toast(ui.VariantDestructive, "contact-detail-err", g.Text(v.Err)))
+	}
+	if v.Msg != "" {
+		body = append(body, ui.Toast(ui.VariantSuccess, "contact-detail-ok", g.Text(v.Msg)))
+	}
+	body = append(body, contactDetailCards(v), ActivityTimeline(v.Activities))
+	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
 // contactSubtitle merangkai subjudul "Jabatan · Desa" dari bagian yang terisi saja

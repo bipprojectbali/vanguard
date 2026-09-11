@@ -69,3 +69,24 @@ func TestContactForm_ToastNotAlert(t *testing.T) {
 		}
 	}
 }
+
+// TestAccountDetail_ToastNotAlert dan TestContactDetail_ToastNotAlert: BL-156b
+// — gap ditemukan saat verifikasi manual: create/update kontak redirect PRG ke
+// halaman DETAIL (bukan daftar), tapi ContactDetailView sebelumnya tak punya
+// slot Err/Msg sama sekali. Toast harus muncul di detail juga.
+func TestContactDetail_ToastNotAlert(t *testing.T) {
+	var errOut, okOut strings.Builder
+	ContactDetail(ContactDetailView{Err: "Gagal menyimpan."}).Render(&errOut)
+	ContactDetail(ContactDetailView{Msg: "Kontak ditambahkan."}).Render(&okOut)
+
+	for _, want := range []string{"fixed", "pointer-events:none", "toast-flash", "alert-error", "Gagal menyimpan."} {
+		if !strings.Contains(errOut.String(), want) {
+			t.Errorf("toast err (detail) kurang %q:\n%s", want, errOut.String())
+		}
+	}
+	for _, want := range []string{"fixed", "pointer-events:none", "toast-flash", "alert-success", "Kontak ditambahkan."} {
+		if !strings.Contains(okOut.String(), want) {
+			t.Errorf("toast ok (detail) kurang %q:\n%s", want, okOut.String())
+		}
+	}
+}

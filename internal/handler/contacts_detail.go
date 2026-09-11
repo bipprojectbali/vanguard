@@ -49,8 +49,10 @@ func (h *Handler) ContactDetail(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slugFromRequest(r), "")
 	accountBase := base + "/accounts/" + strconv.FormatInt(accountID, 10)
-	h.renderWorkspaceShell(w, r, c.FirstName, "/accounts",
-		panel.ContactDetail(h.contactDetailView(ctx, base, accountBase, account.VillageName, c, names, reportsToName)))
+	v := h.contactDetailView(ctx, base, accountBase, account.VillageName, c, names, reportsToName)
+	v.Err = wsErrMsg(r.URL.Query().Get("err"))
+	v.Msg = contactsMsg(r.URL.Query().Get("ok"))
+	h.renderWorkspaceShell(w, r, c.FirstName, "/accounts", panel.ContactDetail(v))
 }
 
 // reportsToName meresolusi nama atasan (reports_to_id → nama kontak). nil → "".
