@@ -68,6 +68,10 @@ func HealthScoreList(v HealthScoreListView) g.Node {
 				"Cari desa…", "Cari health score",
 				hiddenField{"tab", v.ActiveTab}, seg)),
 		healthScoreTable(v),
+		// Runtime ECharts (vendored) + init untuk pie BL-138/139 — same-origin,
+		// CSP-safe (gotcha #12), pola sama DashboardBody (panel/dashboard.go).
+		h.Script(h.Src("/static/echarts.min.js")),
+		h.Script(h.Src("/static/charts.js"), h.Defer()),
 	)
 }
 

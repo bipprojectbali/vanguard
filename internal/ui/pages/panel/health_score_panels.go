@@ -25,38 +25,56 @@ type HealthBarView struct {
 
 // HealthDashPanels — data dua panel atas. Empty (Scored=0) → placeholder.
 type HealthDashPanels struct {
-	Scored       bool            // ada minimal satu desa terskor
-	Distribution []HealthBarView // Sebaran: Sehat/Berisiko/Kritis
-	Composition  []HealthBarView // Komposisi: Adopsi/Engagement/Support/Sentimen
-	Movement     []HealthBarView // Arah Pergerakan: Improving/Stable/Declining
+	Scored bool // ada minimal satu desa terskor
+	// DistributionChart — BL-139: JSON option ECharts pie "Sebaran Kesehatan"
+	// (Sehat/Berisiko/Kritis), pola dashboardChartCard.
+	DistributionChart string
+	Composition       []HealthBarView // Komposisi: Adopsi/Engagement/Support/Sentimen
+	// MovementChart — BL-138: JSON option ECharts pie "Arah Pergerakan"
+	// (Membaik/Stabil/Menurun). Kosong bila MovementEmpty.
+	MovementChart string
+	MovementEmpty bool // trendBase==0 (tak ada desa dgn tren) → placeholder, bukan pie kosong
 }
 
 // healthDashPanels merender dua kartu berdampingan (1 kolom di mobile).
 func healthDashPanels(p HealthDashPanels) g.Node {
 	return h.Div(h.Class("grid grid-cols-1 lg:grid-cols-2 gap-3"),
-		healthPanelCard("Sebaran Kesehatan", p.Scored, p.Distribution, nil),
-		healthPanelCard("Komposisi Skor", p.Scored, p.Composition,
-			healthMovementBlock(p.Movement)),
+		healthPanelCard("Sebaran Kesehatan", p.Scored,
+			healthChartBlock("chart-distribution", p.DistributionChart), nil),
+		healthPanelCard("Komposisi Skor", p.Scored, healthBars(p.Composition),
+			healthMovementBlock(p.MovementChart, p.MovementEmpty)),
 	)
 }
 
-// healthPanelCard — kartu berisi judul + daftar bar; extra dirender di bawah bar
-// (dipakai panel Komposisi untuk blok Arah Pergerakan). Placeholder bila !scored.
-func healthPanelCard(title string, scored bool, bars []HealthBarView, extra g.Node) g.Node {
-	body := []g.Node{
+// healthPanelCard — kartu berisi judul + body (bar atau chart); extra dirender
+// di bawah body (dipakai panel Komposisi untuk blok Arah Pergerakan).
+// Placeholder bila !scored.
+func healthPanelCard(title string, scored bool, body g.Node, extra g.Node) g.Node {
+	content := []g.Node{
 		h.H3(h.Class("text-sm font-semibold text-base-content/70 mb-3"), g.Text(title)),
 	}
 	if !scored {
-		body = append(body, h.P(h.Class("text-sm text-base-content/50 py-4"),
+		content = append(content, h.P(h.Class("text-sm text-base-content/50 py-4"),
 			g.Text("Belum ada skor kesehatan untuk dihitung.")))
 	} else {
-		body = append(body, healthBars(bars))
+		content = append(content, body)
 		if extra != nil {
-			body = append(body, extra)
+			content = append(content, extra)
 		}
 	}
 	return h.Div(h.Class("card bg-base-100 shadow-sm min-w-0"),
-		h.Div(h.Class("card-body p-4"), g.Group(body)),
+		h.Div(h.Class("card-body p-4"), g.Group(content)),
+	)
+}
+
+// healthChartBlock — kontainer chart ECharts + data JSON, pola SAMA dgn
+// dashboardChartCard (panel/dashboard.go): <div id=chartID> + <script
+// type="application/json" id=chartID+"-data"> (CSP-safe, charts.js
+// auto-discover). Tinggi tetap agar mobile-first nol-overflow.
+func healthChartBlock(chartID, chartJSON string) g.Node {
+	return h.Div(h.Class("min-w-0"),
+		h.Div(h.ID(chartID), h.Class("min-w-0"), h.Style("height:240px")),
+		h.Script(h.Type("application/json"), h.ID(chartID+"-data"), g.Raw(chartJSON)),
 	)
 }
 
@@ -79,14 +97,20 @@ func healthBars(bars []HealthBarView) g.Node {
 	return h.Div(h.Class("space-y-3"), g.Group(nodes))
 }
 
-// healthMovementBlock — sub-blok "Arah Pergerakan" di dalam panel Komposisi.
-func healthMovementBlock(bars []HealthBarView) g.Node {
-	if len(bars) == 0 {
-		return nil
+// healthMovementBlock — sub-blok "Arah Pergerakan" di dalam panel Komposisi
+// (BL-138: pie, bukan bar). empty=true (trendBase==0, tak ada desa dgn tren)
+// → placeholder teks, JANGAN render pie kosong.
+func healthMovementBlock(chartJSON string, empty bool) g.Node {
+	var body g.Node
+	if empty {
+		body = h.P(h.Class("text-sm text-base-content/50 py-2"),
+			g.Text("Belum ada data tren."))
+	} else {
+		body = healthChartBlock("chart-movement", chartJSON)
 	}
 	return h.Div(h.Class("mt-4 pt-4 border-t border-base-200"),
 		h.H4(h.Class("text-xs font-semibold uppercase text-base-content/50 mb-3"),
 			g.Text("Arah Pergerakan")),
-		healthBars(bars),
+		body,
 	)
 }

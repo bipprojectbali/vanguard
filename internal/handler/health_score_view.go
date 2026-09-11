@@ -108,7 +108,7 @@ func healthRowToView(r db.ListHealthScoresRow, slug string, tz *time.Location, _
 // dan dua panel dasbor BL-96 (Sebaran + Komposisi/Arah). Semua persen & lebar
 // bar dihitung DI SINI (view murni-data). Panel dikosongkan (placeholder) bila
 // belum ada desa terskor (Scored=0) agar bar 0% dari COALESCE tak menyesatkan.
-func healthKPIsToView(k db.CountHealthScoreKPIsRow) (panel.HealthScoreKPIs, panel.HealthDashPanels) {
+func (h *Handler) healthKPIsToView(k db.CountHealthScoreKPIsRow) (panel.HealthScoreKPIs, panel.HealthDashPanels) {
 	kpi := panel.HealthScoreKPIs{
 		Total:      k.Total,
 		Healthy:    k.Healthy,
@@ -124,38 +124,25 @@ func healthKPIsToView(k db.CountHealthScoreKPIsRow) (panel.HealthScoreKPIs, pane
 
 	panels := panel.HealthDashPanels{Scored: k.Scored > 0}
 	if panels.Scored {
-		panels.Distribution = []panel.HealthBarView{
-			healthDistBar("Sehat", k.Healthy, k.Total, "bg-success"),
-			healthDistBar("Berisiko", k.AtRisk, k.Total, "bg-warning"),
-			healthDistBar("Kritis", k.Critical, k.Total, "bg-error"),
-		}
+		// BL-139: pie "Sebaran Kesehatan" — reuse option donut Beranda apa
+		// adanya (healthChartOption, dashboard_charts.go) agar satu sumber.
+		panels.DistributionChart = h.marshalChart(healthChartOption(k))
 		panels.Composition = []panel.HealthBarView{
 			healthCompBar("Adopsi", k.AvgAdoption),
 			healthCompBar("Engagement", k.AvgEngagement),
 			healthCompBar("Support", k.AvgSupport),
 			healthCompBar("Sentimen", k.AvgSentiment),
 		}
-		// Arah Pergerakan: porsi relatif terhadap desa yang PUNYA tren (bukan
-		// total) — desa tanpa tren (snapshot pertama, BL-25) tak ikut basis.
+		// BL-138: pie "Arah Pergerakan" — porsi relatif terhadap desa yang
+		// PUNYA tren (bukan total); desa tanpa tren (snapshot pertama, BL-25)
+		// tak ikut basis. trendBase==0 → jangan render pie kosong.
 		trendBase := k.TrendImproving + k.TrendStable + k.TrendDeclining
-		panels.Movement = []panel.HealthBarView{
-			healthDistBar("Membaik", k.TrendImproving, trendBase, "bg-success"),
-			healthDistBar("Stabil", k.TrendStable, trendBase, "bg-base-300"),
-			healthDistBar("Menurun", k.TrendDeclining, trendBase, "bg-error"),
+		panels.MovementEmpty = trendBase == 0
+		if !panels.MovementEmpty {
+			panels.MovementChart = h.marshalChart(healthMovementChartOption(k))
 		}
 	}
 	return kpi, panels
-}
-
-// healthDistBar — bar distribusi/tren: lebar = porsi count/total, nilai "N · P%".
-func healthDistBar(label string, count, total int64, color string) panel.HealthBarView {
-	p := pctOf(count, total)
-	return panel.HealthBarView{
-		Label: label,
-		Value: strconv.FormatInt(count, 10) + " · " + strconv.Itoa(p) + "%",
-		Pct:   p,
-		Color: color,
-	}
 }
 
 // healthCompBar — bar komposisi: lebar & nilai = rata komponen (skala 0–100),
