@@ -64,10 +64,10 @@ func RoleEdit(base string, rc RoleCard, scopes []ScopeOption, canEdit bool, errM
 		),
 	}
 	if errMsg != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "role-err", g.Text(errMsg)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "role-err", g.Text(errMsg)))
 	}
 	if okMsg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "role-ok", g.Text(okMsg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "role-ok", g.Text(okMsg)))
 	}
 
 	if rc.IsSystem {

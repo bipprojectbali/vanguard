@@ -49,10 +49,10 @@ func Roles(base string, rows []RoleRow, scopes []ScopeOption, canEdit bool, errM
 				"otomatis boleh membuat & menyunting Quote di bawahnya.")),
 	}
 	if errMsg != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "roles-err", g.Text(errMsg)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "roles-err", g.Text(errMsg)))
 	}
 	if okMsg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "roles-ok", g.Text(okMsg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "roles-ok", g.Text(okMsg)))
 	}
 	if canEdit {
 		body = append(body, roleCreateForm(base, scopes))

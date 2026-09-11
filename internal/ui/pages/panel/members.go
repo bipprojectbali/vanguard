@@ -62,10 +62,10 @@ func Members(base string, crmRoles []CRMRoleOption, members []MemberRow, invites
 			g.Text("Kelola siapa saja yang punya akses ke workspace ini.")),
 	}
 	if errMsg != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "members-err", g.Text(errMsg)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "members-err", g.Text(errMsg)))
 	}
 	if okMsg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "members-ok", g.Text(okMsg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "members-ok", g.Text(okMsg)))
 	}
 	if canManage {
 		body = append(body, inviteForm(base))
