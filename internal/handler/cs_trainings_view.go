@@ -66,6 +66,8 @@ func csTrainingsErrMsg(code string) string {
 		return "Desa tidak ditemukan atau tidak dalam cakupan Anda."
 	case "attendance":
 		return "Nilai attendance tidak valid."
+	case "datetime":
+		return "Format tanggal training tidak valid."
 	case "failed":
 		return "Gagal menyimpan jadwal training. Coba lagi."
 	default:

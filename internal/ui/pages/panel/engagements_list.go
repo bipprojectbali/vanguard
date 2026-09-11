@@ -107,10 +107,10 @@ func EngagementsList(v EngagementsListView) g.Node {
 				hiddenField{"tab", v.Tab})),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "engagements-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "engagements-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "engagements-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "engagements-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptyEngagements(v))

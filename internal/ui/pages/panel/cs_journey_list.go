@@ -105,10 +105,10 @@ func CSJourneyList(v CSJourneyListView) g.Node {
 		csJourneyKPICards(v.KPIs),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "cs-journey-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "cs-journey-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "cs-journey-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "cs-journey-ok", g.Text(v.Msg)))
 	}
 	body = append(body, csJourneyPhasesCard(v))
 	if len(v.Onboarding) > 0 {

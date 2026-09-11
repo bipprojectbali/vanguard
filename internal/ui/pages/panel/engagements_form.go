@@ -36,7 +36,7 @@ func EngagementForm(v EngagementFormView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "engagement-form-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "engagement-form-err", g.Text(v.Err)))
 	}
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),

@@ -64,6 +64,8 @@ func engagementsErrMsg(code string) string {
 		return "Status tidak valid."
 	case "account":
 		return "Desa tidak ditemukan atau tidak dalam cakupan Anda."
+	case "datetime":
+		return "Format tanggal jadwal tidak valid."
 	case "failed":
 		return "Gagal menyimpan engagement. Coba lagi."
 	default:

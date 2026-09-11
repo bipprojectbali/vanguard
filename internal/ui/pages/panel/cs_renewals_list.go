@@ -68,10 +68,10 @@ func csRenewalsHeader(v CSRenewalsListView) g.Node {
 
 func csRenewalsAlert(msg, errMsg string) g.Node {
 	if msg != "" {
-		return h.Div(h.Class("alert alert-success"), g.Text(msg))
+		return ui.Toast(ui.VariantSuccess, "cs-renewals-ok", g.Text(msg))
 	}
 	if errMsg != "" {
-		return h.Div(h.Class("alert alert-error"), g.Text(errMsg))
+		return ui.Toast(ui.VariantDestructive, "cs-renewals-err", g.Text(errMsg))
 	}
 	return nil
 }

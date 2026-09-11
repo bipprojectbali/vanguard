@@ -34,7 +34,7 @@ func CSTrainingForm(v CSTrainingFormView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "cs-training-form-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "cs-training-form-err", g.Text(v.Err)))
 	}
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),
