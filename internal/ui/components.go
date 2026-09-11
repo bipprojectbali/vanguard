@@ -80,6 +80,8 @@ const (
 	VariantOutline
 	VariantGhost
 	VariantWarning
+	VariantSuccess
+	VariantInfo
 )
 
 // btnVariant memetakan varian ke class modifier daisyUI. daisyUI memakai class
@@ -93,6 +95,8 @@ var btnVariant = [...]string{
 	VariantOutline:     "btn-outline",
 	VariantGhost:       "btn-ghost",
 	VariantWarning:     "btn-warning",
+	VariantSuccess:     "btn-success",
+	VariantInfo:        "btn-info",
 }
 
 // Button merender tombol daisyUI: class "btn" + modifier varian. Atribut
@@ -160,19 +164,64 @@ func AlertSlot(id string) g.Node {
 	return h.Div(h.ID(id))
 }
 
+// alertClass memetakan varian ke class daisyUI "alert ...", dipakai bersama
+// oleh Alert (inline) dan Toast (mengambang) agar warna per-varian konsisten.
+func alertClass(variant Variant) string {
+	switch variant {
+	case VariantDestructive:
+		return "alert alert-error"
+	case VariantWarning:
+		return "alert alert-warning"
+	case VariantSuccess:
+		return "alert alert-success"
+	case VariantInfo:
+		return "alert alert-info"
+	default:
+		return "alert"
+	}
+}
+
 // Alert menampilkan pesan (mis. error validasi, atau peringatan non-blocking
-// spt kandidat desa duplikat). daisyUI: class "alert" + modifier warna
-// (alert-error untuk destructive, alert-warning untuk peringatan lunak). Punya
+// spt kandidat desa duplikat). daisyUI: class "alert" + modifier warna. Punya
 // id (sama dengan slot) agar patch outer menggantikan slot kosong dgn alert
 // berisi.
 func Alert(variant Variant, id string, children ...g.Node) g.Node {
-	cls := "alert"
-	switch variant {
-	case VariantDestructive:
-		cls = "alert alert-error"
-	case VariantWarning:
-		cls = "alert alert-warning"
-	}
-	attrs := []g.Node{h.ID(id), h.Class(cls), h.Role("alert")}
+	attrs := []g.Node{h.ID(id), h.Class(alertClass(variant)), h.Role("alert")}
 	return h.Div(append(attrs, g.Group(children))...)
+}
+
+// ToastSlot merender wadah KOSONG untuk Toast yang diisi belakangan lewat
+// SSE-morph atau JS (dev/users, dev/health) — hanya positioning, TANPA class
+// .alert/.toast-flash. Wajib dipakai (bukan Toast langsung) untuk toast yang
+// tak diisi saat render awal: Toast selalu menyertakan class .toast-flash,
+// yang akan langsung memicu animasi fade kosong saat halaman dimuat bila
+// dipasang dari awal tanpa isi.
+func ToastSlot(id string) g.Node {
+	return h.Div(
+		h.ID(id),
+		h.Class("fixed bottom-4 right-4 z-50 max-w-sm"),
+		g.Attr("style", "pointer-events:none"),
+	)
+}
+
+// Toast merender notifikasi mengambang (kanan-bawah), auto-hilang lewat
+// animasi CSS .toast-flash (3.2s, static/input.css) — TANPA JS untuk PRG
+// (server merender ulang query param ?ok=/?err= tiap load; toast lama hilang
+// begitu saja saat halaman baru dirender tanpa parameter itu).
+//
+// Struktur dua lapis SAMA dengan pola dev.Flash yang sudah terbukti jalan di
+// /dev/users: div luar fixed+pointer-events:none (gotcha #7 — opacity:0 pun
+// tetap menangkap klik) membungkus div .alert bervarian. id ditaruh di DIV
+// LUAR agar tetap bisa jadi target morph SSE bila suatu jalur (spt dev/users)
+// memicunya lewat patch, bukan lewat reload halaman.
+func Toast(variant Variant, id string, children ...g.Node) g.Node {
+	return h.Div(
+		h.ID(id),
+		h.Class("fixed bottom-4 right-4 z-50 max-w-sm"),
+		g.Attr("style", "pointer-events:none"),
+		h.Div(append([]g.Node{
+			h.Class(alertClass(variant) + " toast-flash shadow-lg"),
+			h.Role("status"),
+		}, children...)...),
+	)
 }

@@ -55,3 +55,41 @@ func TestConfirmTrigger(t *testing.T) {
 		t.Errorf("trigger tak boleh langsung @post:\n%s", out)
 	}
 }
+
+func TestToast(t *testing.T) {
+	out := renderNode(t, Toast(VariantSuccess, "accounts-ok", g.Text("Desa ditambahkan.")))
+
+	// Div luar: posisi mengambang + wajib pointer-events:none (gotcha #7 —
+	// opacity:0 pun tetap menangkap klik).
+	for _, want := range []string{`id="accounts-ok"`, "fixed", "bottom-4", "right-4", "z-50", "pointer-events:none"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("Toast kurang %q di wadah luar:\n%s", want, out)
+		}
+	}
+	// Div dalam: warna varian + animasi auto-fade CSS (bukan JS).
+	for _, want := range []string{"alert-success", "toast-flash", "Desa ditambahkan."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("Toast kurang %q di isi:\n%s", want, out)
+		}
+	}
+}
+
+func TestToastVariantError(t *testing.T) {
+	out := renderNode(t, Toast(VariantDestructive, "accounts-err", g.Text("Gagal.")))
+	if !strings.Contains(out, "alert-error") {
+		t.Errorf("Toast VariantDestructive harus alert-error:\n%s", out)
+	}
+}
+
+func TestToastSlot(t *testing.T) {
+	out := renderNode(t, ToastSlot("flash"))
+
+	if !strings.Contains(out, `id="flash"`) || !strings.Contains(out, "pointer-events:none") {
+		t.Errorf("ToastSlot harus wadah posisi ber-id:\n%s", out)
+	}
+	// Slot kosong TAK BOLEH bawa .toast-flash — dipasang dari awal (bukan
+	// diisi Toast()) akan memicu animasi fade kosong saat halaman dimuat.
+	if strings.Contains(out, "toast-flash") || strings.Contains(out, "alert") {
+		t.Errorf("ToastSlot harus kosong (tanpa .alert/.toast-flash):\n%s", out)
+	}
+}

@@ -97,10 +97,10 @@ func AccountsList(v AccountsListView) g.Node {
 		body = append(body, accountsSearch(v))
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "accounts-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "accounts-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "accounts-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "accounts-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptyAccounts(v))

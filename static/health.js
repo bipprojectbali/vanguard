@@ -29,7 +29,11 @@
     var selAll = root.querySelector("#health-select-all");
     var copySel = root.querySelector("#health-copy-selected");
     var copyBad = root.querySelector("#health-copy-unhealthy");
-    var toast = root.querySelector("#health-toast");
+    // #health-toast (ui.ToastSlot) = wadah posisi luar, kosong saat render
+    // awal — lihat internal/ui/components.go. flash() mengisi elemen .alert
+    // anak dari nol tiap panggil (bukan reuse node), agar animasi CSS
+    // .toast-flash (static/input.css) selalu terpicu ulang secara alami.
+    var toastBox = root.querySelector("#health-toast");
 
     var page = 0;
     var filtered = rows;
@@ -114,10 +118,13 @@
     }
 
     function flash(msg) {
-      if (!toast) return;
-      toast.textContent = msg;
-      toast.style.opacity = "1";
-      setTimeout(function () { toast.style.opacity = "0"; }, 2000);
+      if (!toastBox) return;
+      var el = document.createElement("div");
+      el.className = "alert alert-success toast-flash shadow-lg";
+      el.setAttribute("role", "status");
+      el.textContent = msg;
+      toastBox.innerHTML = "";
+      toastBox.appendChild(el);
     }
 
     function copyPaths(paths) {

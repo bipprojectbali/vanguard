@@ -50,15 +50,11 @@ func HealthPage(res health.Result) g.Node {
 			),
 		),
 		healthPagination(),
-		// Toast copy (client-side, fade via inline style transition).
-		// pointer-events:none — notifikasi tak boleh menangkap klik (opacity:0
-		// pun tetap memblokir elemen di bawahnya, mis. tombol pagination).
-		h.Div(
-			h.ID("health-toast"),
-			h.Class("fixed bottom-4 right-4 z-50 alert alert-success shadow-lg"),
-			g.Attr("style", "opacity:0; transition:opacity .2s; pointer-events:none"),
-			h.Role("status"),
-		),
+		// Slot toast copy (kanan-bawah) — komponen bersama BL-156a. Kosong
+		// saat render awal (ToastSlot, BUKAN Toast — cegah animasi fade
+		// kosong terpicu tanpa isi); health.js mengisi elemen .alert saat
+		// copy path terjadi (lihat flash() di static/health.js).
+		ui.ToastSlot("health-toast"),
 		// Logika filter/pagination/copy (same-origin, patuh CSP script-src 'self').
 		h.Script(h.Src("/static/health.js"), h.Defer()),
 	)

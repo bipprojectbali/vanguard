@@ -58,10 +58,9 @@ type UsersView struct {
 func UsersPage(v UsersView) g.Node {
 	return h.Div(
 		h.H1(h.Class("text-xl font-semibold mb-4"), g.Text("Users")),
-		// Slot toast (kanan-bawah), diisi via SSE patch (id "flash").
-		// pointer-events:none agar toast tak memblokir klik elemen di bawahnya.
-		h.Div(h.ID("flash"), h.Class("fixed bottom-4 right-4 z-50"),
-			g.Attr("style", "pointer-events:none")),
+		// Slot toast (kanan-bawah), diisi via SSE patch (id "flash") — lihat
+		// Flash() di bawah, dipatch dari internal/handler/dev_users_flash.go.
+		ui.ToastSlot("flash"),
 		h.Div(
 			h.Class("card bg-base-100 border border-base-300 min-w-0"),
 			h.Div(
@@ -138,26 +137,15 @@ func userIdent(u UserRow) g.Node {
 	)
 }
 
-// Flash merender toast notifikasi (id "flash", target SSE patch). Auto-hilang
-// via animasi CSS (.toast-flash, fade-out) — TANPA inline script (patuh CSP
-// script-src 'self'). ok=true → hijau (alert-success), false → merah (alert-error).
-// Catatan: class fade kustom bernama .toast-flash (BUKAN .toast) — daisyUI punya
-// .toast sendiri (kontainer posisi) yang akan bentrok.
+// Flash merender toast notifikasi (id "flash", target SSE patch) lewat
+// ui.Toast — komponen bersama BL-156a. ok=true → hijau (VariantSuccess),
+// false → merah (VariantDestructive).
 func Flash(ok bool, msg string) g.Node {
-	cls := "alert alert-success toast-flash shadow-lg"
+	variant := ui.VariantSuccess
 	if !ok {
-		cls = "alert alert-error toast-flash shadow-lg"
+		variant = ui.VariantDestructive
 	}
-	return h.Div(
-		h.ID("flash"),
-		h.Class("fixed bottom-4 right-4 z-50"),
-		g.Attr("style", "pointer-events:none"), // toast tak boleh blokir klik
-		h.Div(
-			h.Class(cls),
-			h.Role("status"),
-			g.Text(msg),
-		),
-	)
+	return ui.Toast(variant, "flash", g.Text(msg))
 }
 
 func th(label string) g.Node {
