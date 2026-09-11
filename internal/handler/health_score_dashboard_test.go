@@ -113,6 +113,7 @@ func TestRoundToInt(t *testing.T) {
 // --- unit: healthKPIsToView (Scored>0) ------------------------------------
 
 func TestHealthKPIsToView_Scored(t *testing.T) {
+	env, _ := setupAccounts(t)
 	k := db.CountHealthScoreKPIsRow{
 		Total: 10, Healthy: 4, AtRisk: 3, Critical: 2, Scored: 9,
 		AvgScore:       78.5,
@@ -122,7 +123,7 @@ func TestHealthKPIsToView_Scored(t *testing.T) {
 		AvgSentiment:   40,
 		TrendImproving: 3, TrendStable: 4, TrendDeclining: 1,
 	}
-	kpi, panels := healthKPIsToView(k)
+	kpi, panels := env.h.healthKPIsToView(k)
 
 	if kpi.AvgScoreSub != "rata skor 79" {
 		t.Errorf("AvgScoreSub = %q, want %q", kpi.AvgScoreSub, "rata skor 79")
@@ -135,18 +136,11 @@ func TestHealthKPIsToView_Scored(t *testing.T) {
 		t.Fatal("panels.Scored harus true saat Scored>0")
 	}
 
-	// Sebaran: 3 bar dengan persen count/total.
-	if len(panels.Distribution) != 3 {
-		t.Fatalf("Distribution harus 3 bar, got %d", len(panels.Distribution))
-	}
-	if panels.Distribution[0].Label != "Sehat" || panels.Distribution[0].Pct != 40 {
-		t.Errorf("Distribution[0] = %+v, want Sehat 40%%", panels.Distribution[0])
-	}
-	if panels.Distribution[0].Value != "4 · 40%" {
-		t.Errorf("Distribution[0].Value = %q, want %q", panels.Distribution[0].Value, "4 · 40%")
-	}
-	if panels.Distribution[0].Color != "bg-success" {
-		t.Errorf("Distribution[0].Color = %q, want bg-success", panels.Distribution[0].Color)
+	// Sebaran: pie BL-139, reuse healthChartOption (Sehat/Berisiko/Kritis).
+	for _, want := range []string{`"name":"Sehat","value":4`, `"name":"Berisiko","value":3`, `"name":"Kritis","value":2`} {
+		if !strings.Contains(panels.DistributionChart, want) {
+			t.Errorf("DistributionChart harus memuat %q, got %s", want, panels.DistributionChart)
+		}
 	}
 
 	// Komposisi: 4 bar, Support dijepit ke 100.
@@ -163,17 +157,31 @@ func TestHealthKPIsToView_Scored(t *testing.T) {
 		t.Errorf("Composition[3].Label = %q, want Sentimen", panels.Composition[3].Label)
 	}
 
-	// Arah Pergerakan: basis = improving+stable+declining = 8 (BUKAN total 10).
-	if len(panels.Movement) != 3 {
-		t.Fatalf("Movement harus 3 bar, got %d", len(panels.Movement))
+	// Arah Pergerakan: pie BL-138, basis = improving+stable+declining = 8
+	// (BUKAN total 10) — dihitung ECharts sendiri via {d}%, jadi cukup cek nilai.
+	if panels.MovementEmpty {
+		t.Fatal("MovementEmpty harus false saat trendBase>0")
 	}
-	// 3/8 = 37.5 → 38
-	if panels.Movement[0].Label != "Membaik" || panels.Movement[0].Pct != 38 {
-		t.Errorf("Movement[0] = %+v, want Membaik 38%% (3/8)", panels.Movement[0])
+	for _, want := range []string{`"name":"Membaik","value":3`, `"name":"Stabil","value":4`, `"name":"Menurun","value":1`} {
+		if !strings.Contains(panels.MovementChart, want) {
+			t.Errorf("MovementChart harus memuat %q, got %s", want, panels.MovementChart)
+		}
 	}
-	// 1/8 = 12.5 → 13
-	if panels.Movement[2].Label != "Menurun" || panels.Movement[2].Pct != 13 {
-		t.Errorf("Movement[2] = %+v, want Menurun 13%% (1/8)", panels.Movement[2])
+}
+
+// TestHealthKPIsToView_MovementEmpty: Scored>0 tapi tak ada desa dgn tren
+// (trendBase=0, mis. semua snapshot pertama BL-25) → placeholder, BUKAN pie
+// kosong (item 5 BL-138).
+func TestHealthKPIsToView_MovementEmpty(t *testing.T) {
+	env, _ := setupAccounts(t)
+	k := db.CountHealthScoreKPIsRow{Total: 5, Healthy: 5, Scored: 5, AvgScore: 80}
+	_, panels := env.h.healthKPIsToView(k)
+
+	if !panels.MovementEmpty {
+		t.Error("MovementEmpty harus true saat trendBase=0")
+	}
+	if panels.MovementChart != "" {
+		t.Errorf("MovementChart harus kosong saat trendBase=0, got %q", panels.MovementChart)
 	}
 }
 
@@ -182,8 +190,9 @@ func TestHealthKPIsToView_Scored(t *testing.T) {
 func TestHealthKPIsToView_NoScore(t *testing.T) {
 	// Mis. Support scope=none, atau semua desa belum dinilai: COALESCE membuat
 	// AvgScore=0, tapi Scored=0 → sub "belum ada skor" & panel kosong.
+	env, _ := setupAccounts(t)
 	k := db.CountHealthScoreKPIsRow{Total: 5, Scored: 0}
-	kpi, panels := healthKPIsToView(k)
+	kpi, panels := env.h.healthKPIsToView(k)
 
 	if kpi.AvgScoreSub != "belum ada skor" {
 		t.Errorf("AvgScoreSub = %q, want %q", kpi.AvgScoreSub, "belum ada skor")
@@ -194,8 +203,8 @@ func TestHealthKPIsToView_NoScore(t *testing.T) {
 	if panels.Scored {
 		t.Error("panels.Scored harus false saat Scored=0")
 	}
-	if panels.Distribution != nil || panels.Composition != nil || panels.Movement != nil {
-		t.Error("panel harus kosong (nil) saat Scored=0 agar bar 0% tak menyesatkan")
+	if panels.DistributionChart != "" || panels.Composition != nil || panels.MovementChart != "" {
+		t.Error("panel harus kosong saat Scored=0 agar bar 0% tak menyesatkan")
 	}
 }
 
@@ -365,6 +374,17 @@ func TestHealthScore_DashboardRender(t *testing.T) {
 	}
 	if !strings.Contains(body, "Arah Pergerakan") {
 		t.Error("blok 'Arah Pergerakan' harus terrender")
+	}
+
+	// BL-138/139: kontainer pie + runtime ECharts terrender.
+	if !strings.Contains(body, `id="chart-distribution"`) {
+		t.Error("kontainer 'chart-distribution' harus terrender")
+	}
+	if !strings.Contains(body, `id="chart-movement"`) {
+		t.Error("kontainer 'chart-movement' harus terrender")
+	}
+	if !strings.Contains(body, "/static/echarts.min.js") || !strings.Contains(body, "/static/charts.js") {
+		t.Error("runtime chart (echarts.min.js/charts.js) harus dimuat di halaman ini")
 	}
 
 	// Sub-teks KPI.

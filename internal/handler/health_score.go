@@ -67,7 +67,7 @@ func (h *Handler) HealthScoreList(w http.ResponseWriter, r *http.Request) {
 		items = append(items, healthRowToView(row, slug, appTZ, uid))
 	}
 
-	kpiView, panels := healthKPIsToView(kpis)
+	kpiView, panels := h.healthKPIsToView(kpis)
 
 	h.renderWorkspaceShell(w, r, "Customer Health Score", "/health-scores", panel.HealthScoreList(panel.HealthScoreListView{
 		Base:          wsPath(slug, ""),
