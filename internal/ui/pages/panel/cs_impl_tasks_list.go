@@ -118,10 +118,10 @@ func CSImplTasksList(v CSImplTasksListView) g.Node {
 		body = append(body, csImplTaskAccountChip(v))
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "cs-impl-tasks-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "cs-impl-tasks-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "cs-impl-tasks-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "cs-impl-tasks-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptyCSImplTasks(v))

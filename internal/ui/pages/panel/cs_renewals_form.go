@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"go_starter/internal/ui"
+
 	g "maragu.dev/gomponents"
 	h "maragu.dev/gomponents/html"
 )
@@ -67,7 +69,7 @@ func csRenewalFormAlert(errMsg string) g.Node {
 	if errMsg == "" {
 		return nil
 	}
-	return h.Div(h.Class("alert alert-error"), g.Text(errMsg))
+	return ui.Toast(ui.VariantDestructive, "cs-renewal-form-err", g.Text(errMsg))
 }
 
 func csRenewalFormBody(v CSRenewalFormView) g.Node {

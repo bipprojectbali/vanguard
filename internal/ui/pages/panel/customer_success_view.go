@@ -29,7 +29,10 @@ type CustomerSuccessDetailView struct {
 	// berhak tulis: desa bukan pelanggan aktif (tanpa langganan hidup). Kosong =
 	// tak dikunci atau aktor memang tak berhak tulis (jangan tampilkan info bocor).
 	WriteLockNote string
-	Exists        bool
+	// Msg = pesan sukses PRG (?ok=, dipetakan customerSuccessMsg) dari SAVE yang
+	// redirect balik ke halaman ini ("created"/"saved"). Kosong = tak ada pesan.
+	Msg    string
+	Exists bool
 	// Warnings = peringatan keselarasan onboarding↔lifecycle LUNAK (BL-26 K2/K4),
 	// sudah dihitung & di-gate F2-baca di handler (view murni-data). Dirender
 	// sebagai banner alert-warning di atas kartu; kosong = tak ada banner.
@@ -136,6 +139,11 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 		lockNote = ui.Alert(ui.VariantDefault, "cs-detail-lock", g.Text(v.WriteLockNote))
 	}
 
+	msg := g.Node(g.Text(""))
+	if v.Msg != "" {
+		msg = ui.Toast(ui.VariantSuccess, "cs-detail-ok", g.Text(v.Msg))
+	}
+
 	// BL-108 (revisi 9 Sep): penugasan CS lewat MODAL (tombol di header membuka
 	// $assignOpen), bukan kartu inline. Modal disertakan SEKALI di KEDUA cabang —
 	// assign harus tetap bisa dilakukan bahkan sebelum baris CS pernah diisi
@@ -153,7 +161,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 		}
 		return h.Div(
 			h.Class("grid gap-4 min-w-0"),
-			header, nav, entryLinks, lockNote,
+			header, nav, entryLinks, lockNote, msg,
 			h.Div(
 				h.Class("card bg-base-100 border border-base-300 min-w-0"),
 				h.Div(
@@ -167,7 +175,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 
 	return h.Div(
 		h.Class("grid gap-4 min-w-0"),
-		header, nav, entryLinks, lockNote,
+		header, nav, entryLinks, lockNote, msg,
 		onboardingWarningBanners(v.Warnings, "cs-detail-warn"),
 		ui.When(v.CanReadHealth, detailCard("Health Score", []detailField{
 			{"Skor Kesehatan Keseluruhan", v.OverallHealthScore},
