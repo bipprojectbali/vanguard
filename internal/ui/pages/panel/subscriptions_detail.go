@@ -117,8 +117,8 @@ func SubDetail(v SubDetailView) g.Node {
 		header,
 		h.A(h.Href(v.Base+"/subscriptions"), h.Class("text-sm text-base-content/60"),
 			g.Text("« Kembali ke daftar langganan")),
-		ui.When(v.Msg != "", ui.Alert(ui.VariantDefault, "subs-ok", g.Text(v.Msg))),
-		ui.When(v.Err != "", ui.Alert(ui.VariantDestructive, "subs-err", g.Text(v.Err))),
+		ui.When(v.Msg != "", ui.Toast(ui.VariantSuccess, "subs-ok", g.Text(v.Msg))),
+		ui.When(v.Err != "", ui.Toast(ui.VariantDestructive, "subs-err", g.Text(v.Err))),
 		subIdentityCard(v, villageLink),
 		detailCard("Nilai & Masa Berlaku", []detailField{
 			{"MRR", v.MRR},

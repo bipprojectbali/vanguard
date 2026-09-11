@@ -73,7 +73,7 @@ func ChurnList(v ChurnView) g.Node {
 		churnTypeTabsView(v),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "churn-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "churn-err", g.Text(v.Err)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptyChurn())

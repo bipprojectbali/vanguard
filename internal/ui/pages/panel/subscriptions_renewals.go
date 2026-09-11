@@ -76,7 +76,7 @@ func RenewalsList(v RenewalsView) g.Node {
 		renewalWindowTabs(v),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "renewals-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "renewals-err", g.Text(v.Err)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptyRenewals())
