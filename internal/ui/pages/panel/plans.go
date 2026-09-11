@@ -72,10 +72,10 @@ func PlanList(v PlanListView) g.Node {
 		planKPICards(v.KPI),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "plans-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "plans-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "plans-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "plans-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptyPlans())
@@ -272,7 +272,7 @@ func PlanForm(v PlanFormView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "plan-form-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "plan-form-err", g.Text(v.Err)))
 	}
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),

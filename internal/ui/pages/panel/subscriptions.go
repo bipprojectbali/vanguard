@@ -86,7 +86,7 @@ func SubList(v SubListView) g.Node {
 				hiddenField{"status", v.StatusFilter})),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "subs-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "subs-err", g.Text(v.Err)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptySubs(v))

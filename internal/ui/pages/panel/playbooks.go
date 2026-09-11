@@ -64,10 +64,10 @@ func PlaybookList(v PlaybookListView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "playbooks-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "playbooks-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "playbooks-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "playbooks-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptyPlaybooks())
@@ -228,7 +228,7 @@ func PlaybookForm(v PlaybookFormView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "playbook-form-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "playbook-form-err", g.Text(v.Err)))
 	}
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),
