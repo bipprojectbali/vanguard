@@ -94,6 +94,12 @@ func wsErrMsg(code string) string {
 		return "Peran bawaan sistem tak bisa disunting atau dihapus."
 	case "role_notfound":
 		return "Peran tidak ditemukan."
+	case "role":
+		return "Role tidak valid."
+	case "lastowner":
+		return "Tak bisa menurunkan atau mengeluarkan owner terakhir workspace."
+	case "email":
+		return "Email wajib diisi dan berformat valid."
 	case "crm_role":
 		return "Peran CRM yang dipilih tidak ada di workspace ini."
 	case "notfound":
