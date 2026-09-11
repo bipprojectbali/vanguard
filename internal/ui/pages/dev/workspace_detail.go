@@ -46,7 +46,7 @@ func WorkspaceDetail(v WorkspaceDetailView) g.Node {
 		),
 	}
 	if v.ErrMsg != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "ws-detail-err", g.Text(v.ErrMsg)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "ws-detail-err", g.Text(v.ErrMsg)))
 	}
 	body = append(body, renameCard(base, v), detailDangerZone(base, v))
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))

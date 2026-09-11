@@ -33,7 +33,7 @@ func Workspaces(rows []WorkspaceRow, page int, total int64, size int, errMsg str
 		h.H1(h.Class("text-xl font-semibold mb-4"), g.Text("Workspaces")),
 	}
 	if errMsg != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "ws-err", g.Text(errMsg)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "ws-err", g.Text(errMsg)))
 	}
 	body = append(body,
 		h.Div(

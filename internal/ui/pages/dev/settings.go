@@ -44,10 +44,10 @@ func Settings(v SettingsView) g.Node {
 			g.Text("Aturan yang berlaku untuk seluruh platform. Perubahan langsung aktif tanpa restart.")),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "settings-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "settings-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "settings-msg", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "settings-msg", g.Text(v.Msg)))
 	}
 	body = append(body, tenancyCard(v), quotaCard(v), retentionCard(v))
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))

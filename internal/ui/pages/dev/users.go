@@ -52,12 +52,22 @@ type UsersView struct {
 	// mundur SATU halaman sungguhan (bukan lagi lompat ke awal) + label "Hal N".
 	After string
 	Trail string
+	// Err = pesan galat dari redirect PRG (?err=CODE) — jalur kuota per-user
+	// (DevUserQuota/DevUserQuotaReset) memakai redirect native biasa, BUKAN
+	// SSE flash seperti aksi role/status/hapus di halaman yang sama, jadi
+	// butuh slot terpisah dari ToastSlot("flash") di bawah.
+	Err string
 }
 
 // UsersPage merender tabel user + kontrol role/status/hapus.
 func UsersPage(v UsersView) g.Node {
+	var errToast g.Node
+	if v.Err != "" {
+		errToast = ui.Toast(ui.VariantDestructive, "users-err", g.Text(v.Err))
+	}
 	return h.Div(
 		h.H1(h.Class("text-xl font-semibold mb-4"), g.Text("Users")),
+		errToast,
 		// Slot toast (kanan-bawah), diisi via SSE patch (id "flash") — lihat
 		// Flash() di bawah, dipatch dari internal/handler/dev_users_flash.go.
 		ui.ToastSlot("flash"),
