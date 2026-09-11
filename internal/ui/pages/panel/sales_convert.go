@@ -166,9 +166,9 @@ func LeadConvert(v LeadConvertView) g.Node {
 // menebak. Galat lain (atau dup tanpa akun termuat) → alert pesan polos.
 func convertErrAlert(v LeadConvertView) g.Node {
 	if v.DupAccountID == 0 {
-		return ui.Alert(ui.VariantDestructive, "convert-err", g.Text(v.Err))
+		return ui.Toast(ui.VariantDestructive, "convert-err", g.Text(v.Err))
 	}
-	return ui.Alert(ui.VariantDestructive, "convert-err",
+	return ui.Toast(ui.VariantDestructive, "convert-err",
 		h.Div(
 			h.P(g.Text(v.Err)),
 			h.P(h.Class("mt-1"),

@@ -174,8 +174,8 @@ func DealDetail(v DealDetailView) g.Node {
 			g.Text("« Kembali ke pipeline")),
 		// BL-99: banner umpan balik PRG (pola sama halaman pipeline). Ditaruh dekat
 		// atas agar alasan penolakan tahap terminal langsung terlihat.
-		ui.When(v.Err != "", ui.Alert(ui.VariantDestructive, "deal-err", g.Text(v.Err))),
-		ui.When(v.Msg != "", ui.Alert(ui.VariantDefault, "deal-ok", g.Text(v.Msg))),
+		ui.When(v.Err != "", ui.Toast(ui.VariantDestructive, "deal-err", g.Text(v.Err))),
+		ui.When(v.Msg != "", ui.Toast(ui.VariantSuccess, "deal-ok", g.Text(v.Msg))),
 		// Kartu Tahap Pipeline penuh-lebar di atas (stepper horizontal), lalu grid.
 		dealPipelineCard(v),
 		grid,

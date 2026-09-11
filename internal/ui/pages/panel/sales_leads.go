@@ -81,10 +81,10 @@ func LeadsList(v LeadsListView) g.Node {
 				hiddenField{"tab", v.Tab})),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "leads-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "leads-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "leads-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "leads-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptyLeads(v))

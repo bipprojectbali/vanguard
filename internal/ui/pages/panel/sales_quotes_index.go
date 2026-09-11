@@ -59,10 +59,10 @@ func QuotesIndex(v QuotesIndexView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "quotes-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "quotes-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "quotes-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "quotes-ok", g.Text(v.Msg)))
 	}
 
 	if len(v.Items) == 0 {

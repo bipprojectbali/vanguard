@@ -38,9 +38,9 @@ type DealFormFields struct {
 // handler). BL-88: Termin Langganan pindah ke form quote (quote otoritatif) → tak
 // ada opsi termin / preview MRR di form deal.
 type DealFormView struct {
-	Base     string
-	Action   string
-	IsEdit   bool
+	Base   string
+	Action string
+	IsEdit bool
 	Err    string
 	Fields DealFormFields
 	Types  []string
@@ -67,7 +67,7 @@ func DealForm(v DealFormView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "deal-form-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "deal-form-err", g.Text(v.Err)))
 	}
 
 	body = append(body, h.FormEl(

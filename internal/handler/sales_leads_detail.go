@@ -54,6 +54,9 @@ func (h *Handler) LeadDetail(w http.ResponseWriter, r *http.Request) {
 	dv := h.leadDetailView(ctx, base, l, names)
 	// BL-83: galat PRG kontrol status (?err=CODE) → pesan; kosong bila tak ada.
 	dv.Err = wsErrMsg(r.URL.Query().Get("err"))
+	// BL-156c: sukses PRG (?ok=CODE, mis. ubah status) → pesan; sebelumnya ditelan
+	// senyap karena view tak punya slot Msg (gap sama halaman detail lain).
+	dv.Msg = leadsMsg(r.URL.Query().Get("ok"))
 	h.renderWorkspaceShell(w, r, l.LeadName, "/leads", panel.LeadDetail(dv))
 }
 

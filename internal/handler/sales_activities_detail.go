@@ -40,8 +40,10 @@ func (h *Handler) ActivityDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := wsPath(slugFromRequest(r), "")
-	h.renderWorkspaceShell(w, r, a.Subject, "/activities",
-		panel.ActivityDetail(h.activityDetailView(ctx, base, a, names)))
+	v := h.activityDetailView(ctx, base, a, names)
+	v.Err = wsErrMsg(r.URL.Query().Get("err"))
+	v.Msg = activitiesMsg(r.URL.Query().Get("ok"))
+	h.renderWorkspaceShell(w, r, a.Subject, "/activities", panel.ActivityDetail(v))
 }
 
 // activityDetailView merakit detail lengkap. Nama target (& kontak untuk Call)

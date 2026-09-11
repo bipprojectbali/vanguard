@@ -74,7 +74,7 @@ func LeadForm(v LeadFormView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "lead-form-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "lead-form-err", g.Text(v.Err)))
 	}
 
 	body = append(body, h.FormEl(
