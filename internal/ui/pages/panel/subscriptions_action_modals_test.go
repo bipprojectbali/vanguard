@@ -54,6 +54,19 @@ func TestSubActions_ChurnOpensModal(t *testing.T) {
 	if !strings.Contains(out, `action="/w/desa/subscriptions/9/churn"`) {
 		t.Errorf("form modal harus POST ke /churn:\n%s", out)
 	}
+	// BL-153: alasan/tipe churn stack 1 kolom penuh — bukan lagi 2 kolom sempit.
+	if strings.Contains(out, "sm:grid-cols-2") {
+		t.Errorf("modal churn tak boleh lagi pakai sm:grid-cols-2 (BL-153):\n%s", out)
+	}
+	// BL-153: label Alasan/Tipe churn harus punya tap-info ⓘ (pola BL-65/BL-69).
+	for _, want := range []string{
+		`class="hint-reveal`,
+		`class="hint-summary`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("modal churn harus memakai pola ikon ⓘ tap (%s, BL-153):\n%s", want, out)
+		}
+	}
 }
 
 // TestSubActions_HiddenActionNoTriggerNoModal: aksi yang tak diizinkan tak
