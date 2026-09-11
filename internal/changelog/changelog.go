@@ -28,6 +28,20 @@ type Release struct {
 // Nomor versi teratas menjadi acuan badge "ada pembaruan".
 var Releases = []Release{
 	{
+		Version: "1.4.0",
+		Date:    "2026-09-11",
+		Summary: "Grafik Health Score kini pie/donut agar lebih mudah dibaca sekilas, dan form Tandai Churn dirapikan dengan penjelasan tiap pilihan.",
+		Sections: []Section{
+			{
+				Title: "Diubah",
+				Items: []string{
+					"Kartu \"Sebaran Kesehatan\" dan \"Arah Pergerakan\" pada halaman Health Score kini tampil sebagai pie/donut chart, bukan lagi bar horizontal — lebih mudah dibaca proporsinya sekilas.",
+					"Form \"Tandai Churn\" pada detail langganan kini menumpuk Alasan churn & Tipe churn dalam satu kolom penuh, masing-masing dengan ikon info (ⓘ) yang bisa di-tap untuk melihat penjelasan singkat tiap pilihan.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.3.0",
 		Date:    "2026-09-10",
 		Summary: "Detail lead didesain ulang dengan aksi lewat modal, Kategori Forecast jadi pilihan terkunci, perapian aksi langganan & form Health Score, plus perbaikan tanggal dan label pada daftar perpanjangan.",

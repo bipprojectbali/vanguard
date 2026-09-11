@@ -4,6 +4,12 @@ Semua perubahan penting pada go_starter dicatat di sini.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-11
+
+### Changed
+- **Kartu "Sebaran Kesehatan" & "Arah Pergerakan" jadi pie/donut chart, bukan bar horizontal (BL-138/139).** Halaman Health Score (`healthDashPanels`) sebelumnya merender kedua distribusi sebagai bar horizontal (`healthDistBar`); kini keduanya ECharts pie/donut (gotcha #12: vendored + `charts.js`, option via `<script type="application/json">`). "Sebaran Kesehatan" reuse `healthChartOption` (fungsi yang sama dipakai donut Beranda) — tak ada duplikasi warna/logika. "Arah Pergerakan" dapat fungsi baru `healthMovementChartOption`, basis persen tetap `trendBase` (jumlah desa bertren, bukan total), empty state (`trendBase==0`) tetap placeholder teks, bukan pie kosong. `healthKPIsToView` jadi method `(h *Handler)` agar bisa memanggil `h.marshalChart`. `HealthScoreList` kini memuat `echarts.min.js`/`charts.js` (belum pernah dimuat sebelumnya di halaman ini).
+- **Form "Tandai Churn" distack 1 kolom penuh + tap-info pada tiap pilihan (BL-153).** Wrapper `sm:grid-cols-2` pada select Alasan churn & Tipe churn dilepas — keduanya kini menumpuk satu kolom penuh, sejalan dgn field lain di form yang sama. Label kedua select memakai `labelWithLegend` (pola tap-info ⓘ bubble, BL-65/BL-69/BL-129) dengan penjelasan ringkas tiap opsi (`churnReasonLegend`/`churnTypeLegend`, var statis di package `panel` — nilai disalin literal dari label ID handler karena panel tak boleh depend handler). Backend (domain & validasi churn) tak berubah.
+
 ## [1.3.0] - 2026-09-10
 
 ### Added
