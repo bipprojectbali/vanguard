@@ -126,18 +126,36 @@ func subActivateBody(v SubDetailView) g.Node {
 	)
 }
 
+// churnReasonLegend = makna ringkas tiap opsi alasan churn (BL-153), cermin label
+// ID singkat churnReasonLabelID (handler/reports_subscriptions_panels.go) — disalin
+// literal krn panel tak boleh depend handler.
+var churnReasonLegend = [][2]string{
+	{"Budget", "Anggaran tidak lanjut"},
+	{"No Adoption", "Adopsi rendah"},
+	{"Change of Leadership", "Pergantian pimpinan"},
+	{"Competitor", "Pindah vendor"},
+	{"Dissatisfaction", "Ketidakpuasan"},
+	{"Feature Gap", "Fitur kurang"},
+}
+
+// churnTypeLegend = makna 2 opsi tipe churn (BL-153).
+var churnTypeLegend = [][2]string{
+	{"Voluntary", "Pelanggan berhenti atas keputusan sendiri."},
+	{"Involuntary", "Berhenti bukan atas kehendak pelanggan (mis. gagal bayar)."},
+}
+
 // subChurnBody = isi modal churn: alasan & tipe (dropdown domain), catatan, layak
 // win-back. lost_value_mrr dihitung backend (MRR saat ini), bukan input.
+// BL-153: alasan/tipe di-stack 1 kolom penuh (bukan sm:grid-cols-2 — opsi cukup
+// pendek tapi makna tak jelas tanpa penjelasan, jadi ruang dipakai tap-info ⓘ
+// (labelWithLegend) ketimbang 2 kolom sempit).
 func subChurnBody(v SubDetailView) g.Node {
 	base := v.Base + "/subscriptions/" + strconv.FormatInt(v.ID, 10)
 	return h.FormEl(
 		h.Method("post"), h.Action(base+"/churn"),
 		h.Class("grid gap-3"),
-		h.Div(
-			h.Class("grid gap-2 sm:grid-cols-2"),
-			subSelect("churn_reason", "Alasan churn", v.ChurnReasons),
-			subSelect("churn_type", "Tipe churn", v.ChurnTypes),
-		),
+		subSelect("churn_reason", "Alasan churn", v.ChurnReasons, churnReasonLegend),
+		subSelect("churn_type", "Tipe churn", v.ChurnTypes, churnTypeLegend),
 		h.Label(h.Class("form-control w-full"),
 			h.Span(h.Class("label-text text-sm mb-1"), g.Text("Catatan (opsional)")),
 			h.Textarea(h.Name("churn_notes"), h.Class("textarea textarea-bordered text-base w-full"),
@@ -155,15 +173,16 @@ func subChurnBody(v SubDetailView) g.Node {
 }
 
 // subSelect = dropdown domain sederhana dgn opsi kosong "—" (nilai NULL). Opsi
-// datang dari handler (satu sumber dgn validasi backend).
-func subSelect(name, label string, opts []string) g.Node {
+// datang dari handler (satu sumber dgn validasi backend). legend (BL-153) → label
+// via labelWithLegend (tap-info ⓘ); kosong → label biasa (labelFor, di dalamnya).
+func subSelect(name, label string, opts []string, legend [][2]string) g.Node {
 	nodes := []g.Node{h.Option(h.Value(""), g.Text("—"))}
 	for _, o := range opts {
 		nodes = append(nodes, h.Option(h.Value(o), g.Text(o)))
 	}
-	return h.Label(h.Class("form-control w-full"),
-		h.Span(h.Class("label-text text-sm mb-1"), g.Text(label)),
-		h.Select(append([]g.Node{h.Name(name),
+	return h.Div(h.Class("grid gap-1 min-w-0"),
+		labelWithLegend(label, "f-"+name, false, legend),
+		h.Select(append([]g.Node{h.ID("f-" + name), h.Name(name),
 			h.Class("select select-bordered text-base w-full")}, nodes...)...),
 	)
 }
