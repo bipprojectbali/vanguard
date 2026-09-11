@@ -30,13 +30,30 @@ var Releases = []Release{
 	{
 		Version: "1.4.0",
 		Date:    "2026-09-11",
-		Summary: "Grafik Health Score kini pie/donut agar lebih mudah dibaca sekilas, dan form Tandai Churn dirapikan dengan penjelasan tiap pilihan.",
+		Summary: "Health Score & Customer Success kini scoped ke desa pelanggan, detail Deal didesain ulang, tap-info jadi bubble, grafik Health Score jadi pie chart, dan sejumlah perapian & perbaikan pada Quote, Langganan, dan Anggota.",
 		Sections: []Section{
 			{
 				Title: "Diubah",
 				Items: []string{
+					"Halaman Health Score & Customer Success kini hanya menampilkan desa yang pernah/sedang berlangganan — dua tampilan \"Aktif\" (langganan hidup) dan \"Churned\" (mantan pelanggan); desa yang masih sebatas prospek (belum pernah berlangganan) tak lagi muncul di sini.",
+					"Detail Customer Success untuk desa yang belum atau tak lagi berlangganan kini hanya bisa dilihat (tak bisa disunting), dengan penjelasan langsung di kartu; tombol Penugasan CS, Implementation Tracker, dan Training Schedule ikut disembunyikan untuk desa tersebut.",
+					"Detail Deal didesain ulang mengikuti wireframe terbaru — tahap pipeline kini langkah horizontal di bagian atas, kartu-kartu dirapikan sejajar, dan aksi Sunting/Ubah Tahap/Hapus disembunyikan begitu deal mencapai tahap akhir (Won/Lost).",
+					"Seluruh ikon info (ⓘ) di form kini muncul sebagai bubble/popover mengambang, bukan lagi teks yang mengalir di bawah label — tetap dibuka dengan tap, bukan hover.",
+					"Halaman Anggota kini hanya menampilkan pilihan \"Peran CRM\" per baris; pengaturan role tenant (Admin/Anggota) dipindah sepenuhnya ke panel developer.",
+					"Notifikasi belum dibaca kini tetap terlihat sebagai titik kecil di ikon lonceng saat sidebar diciutkan, tak hanya saat sidebar terbuka penuh.",
+					"Kartu format kode untuk Desa dihapus dari halaman Format Kode — desa kini memakai kode wilayah resmi, bukan format kode internal.",
+					"Input \"Nominal Pajak (Rp)\" pada form Edit Pajak Quote kini berformat ribuan otomatis saat mengetik.",
+					"Status Quote tak bisa dinaikkan dari Draft selama belum ada minimal satu item/paket di dalamnya.",
+					"Kolom \"Status\" pada Daftar Langganan berganti nama jadi \"Masa Berlaku\" (agar tak rancu dengan status daur hidup langganan), dengan tingkatan yang lebih halus: Aman, Perlu Perhatian, Segera Jatuh Tempo, Jatuh Tempo (tepat hari-H), dan Masa Tenggang. Label \"Jatuh Tempo\" pada halaman Perpanjangan diganti jadi \"Akan Jatuh Tempo\" agar tak tertukar makna dengan kolom Masa Berlaku.",
 					"Kartu \"Sebaran Kesehatan\" dan \"Arah Pergerakan\" pada halaman Health Score kini tampil sebagai pie/donut chart, bukan lagi bar horizontal — lebih mudah dibaca proporsinya sekilas.",
 					"Form \"Tandai Churn\" pada detail langganan kini menumpuk Alasan churn & Tipe churn dalam satu kolom penuh, masing-masing dengan ikon info (ⓘ) yang bisa di-tap untuk melihat penjelasan singkat tiap pilihan.",
+				},
+			},
+			{
+				Title: "Diperbaiki",
+				Items: []string{
+					"Halaman detail Quote kini menampilkan pesan sukses/gagal (mis. saat mencoba meng-Accept quote kedua pada deal yang sudah punya quote diterima) — sebelumnya pesan ini senyap tanpa penjelasan apa pun.",
+					"Badge \"Diperpanjang\" pada halaman Perpanjangan tak lagi salah tertulis \"Jatuh Tempo\", dan langganan yang sudah diperpanjang tak lagi terhitung dua kali pada KPI.",
 				},
 			},
 		},
