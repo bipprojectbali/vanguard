@@ -103,10 +103,10 @@ func ContactsList(v ContactsListView) g.Node {
 			g.Text("« Kembali ke desa")),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "contacts-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "contacts-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "contacts-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "contacts-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptyContacts(v.AccountBase, v.NextCursor,
@@ -155,10 +155,10 @@ func ContactsAll(v ContactsAllView) g.Node {
 			"Cari kontak — nama atau desa…", "Cari kontak", hiddenField{"view", viewKeep}))
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "contacts-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "contacts-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "contacts-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "contacts-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
 		// backHref MEMBUANG q: tanpa tombol Reset, ini satu-satunya jalan keluar

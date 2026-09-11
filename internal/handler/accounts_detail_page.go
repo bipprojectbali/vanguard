@@ -52,6 +52,8 @@ func (h *Handler) AccountDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	base := wsPath(slugFromRequest(r), "")
-	h.renderWorkspaceShell(w, r, a.VillageName, "/accounts",
-		panel.AccountDetail(h.accountDetailView(ctx, base, a)))
+	v := h.accountDetailView(ctx, base, a)
+	v.Err = wsErrMsg(r.URL.Query().Get("err"))
+	v.Msg = accountsMsg(r.URL.Query().Get("ok"))
+	h.renderWorkspaceShell(w, r, a.VillageName, "/accounts", panel.AccountDetail(v))
 }

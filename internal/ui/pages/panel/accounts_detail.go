@@ -58,6 +58,11 @@ type AccountDetailView struct {
 
 	CanWrite bool
 
+	// Err/Msg = umpan balik aksi (BL-156b) dari redirect PRG create/update
+	// (`?err=`/`?ok=`) yang mendarat di halaman ini, bukan di daftar.
+	Err string
+	Msg string
+
 	// Subscription/CustomerSuccess/Audit = kartu ringkasan lintas-modul (M2-8),
 	// satu layout utk semua role — F2/F3/F4 di handler yang memutuskan isinya,
 	// bukan tampilan terpisah per POV. Diisi handler via accounts_rollups.go.
@@ -149,9 +154,16 @@ func AccountDetail(v AccountDetailView) g.Node {
 		{"Diperbarui pada", v.Audit.UpdatedAt},
 	})
 
-	return h.Div(
-		h.Class("grid gap-4 min-w-0"),
+	body := []g.Node{
 		header,
+	}
+	if v.Err != "" {
+		body = append(body, ui.Toast(ui.VariantDestructive, "account-detail-err", g.Text(v.Err)))
+	}
+	if v.Msg != "" {
+		body = append(body, ui.Toast(ui.VariantSuccess, "account-detail-ok", g.Text(v.Msg)))
+	}
+	body = append(body,
 		h.Div(
 			h.Class("flex flex-wrap items-center justify-between gap-2"),
 			h.A(h.Href(v.Base+"/accounts"), h.Class("text-sm text-base-content/60"),
@@ -179,6 +191,7 @@ func AccountDetail(v AccountDetailView) g.Node {
 		RelatedRecords(v.Related),
 		ActivityTimeline(v.Activities),
 	)
+	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
 type detailField struct {
