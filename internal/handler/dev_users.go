@@ -56,6 +56,7 @@ func (h *Handler) DevUsersList(w http.ResponseWriter, r *http.Request) {
 			NextCursor:     next,
 			After:          r.URL.Query().Get("after"),
 			Trail:          pageTrail(r),
+			Err:            devUsersErrMsg(r.URL.Query().Get("err")),
 		}))
 }
 
