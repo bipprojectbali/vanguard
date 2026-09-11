@@ -100,6 +100,8 @@ func (h *Handler) CustomerSuccessDetail(w http.ResponseWriter, r *http.Request) 
 
 	base := wsPath(slugFromRequest(r), "")
 	v := customerSuccessDetailView(ctx, base, account, cs, exists, hasLiveSub)
+	v.Err = wsErrMsg(r.URL.Query().Get("err"))
+	v.Msg = accountsMsg(r.URL.Query().Get("ok"))
 
 	// BL-102: entry point ke daftar onboarding ter-filter desa ini. Gerbang F2
 	// SAMA dgn halaman /impl-tasks & /trainings (objek crm:journey) — tak menambah

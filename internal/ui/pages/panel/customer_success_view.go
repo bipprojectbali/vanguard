@@ -30,6 +30,11 @@ type CustomerSuccessDetailView struct {
 	// tak dikunci atau aktor memang tak berhak tulis (jangan tampilkan info bocor).
 	WriteLockNote string
 	Exists        bool
+
+	// Err/Msg = umpan balik aksi (BL-156b) dari redirect PRG penugasan CSM
+	// (`?err=`/`?ok=`, AccountAssign) yang mendarat di halaman ini.
+	Err string
+	Msg string
 	// Warnings = peringatan keselarasan onboarding↔lifecycle LUNAK (BL-26 K2/K4),
 	// sudah dihitung & di-gate F2-baca di handler (view murni-data). Dirender
 	// sebagai banner alert-warning di atas kartu; kosong = tak ada banner.
@@ -143,6 +148,14 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 	assign := ui.When(v.CanAssign,
 		assignCSModal(v.AssignAction, v.AssignedCSM, v.BackupCSM, v.Members))
 
+	toasts := []g.Node{}
+	if v.Err != "" {
+		toasts = append(toasts, ui.Toast(ui.VariantDestructive, "cs-detail-err", g.Text(v.Err)))
+	}
+	if v.Msg != "" {
+		toasts = append(toasts, ui.Toast(ui.VariantSuccess, "cs-detail-ok", g.Text(v.Msg)))
+	}
+
 	if !v.Exists {
 		// BL-146: desa non-pelanggan (WriteLockNote terisi) → kartu menampilkan
 		// catatan kunci, MENGGANTIKAN pesan empty-state generik (bukan dobel dgn
@@ -151,9 +164,8 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 		if v.WriteLockNote != "" {
 			emptyText = v.WriteLockNote
 		}
-		return h.Div(
-			h.Class("grid gap-4 min-w-0"),
-			header, nav, entryLinks, lockNote,
+		body := append([]g.Node{header, nav, entryLinks, lockNote}, toasts...)
+		body = append(body,
 			h.Div(
 				h.Class("card bg-base-100 border border-base-300 min-w-0"),
 				h.Div(
@@ -163,11 +175,11 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 			),
 			assign,
 		)
+		return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 	}
 
-	return h.Div(
-		h.Class("grid gap-4 min-w-0"),
-		header, nav, entryLinks, lockNote,
+	body := append([]g.Node{header, nav, entryLinks, lockNote}, toasts...)
+	body = append(body,
 		onboardingWarningBanners(v.Warnings, "cs-detail-warn"),
 		ui.When(v.CanReadHealth, detailCard("Health Score", []detailField{
 			{"Skor Kesehatan Keseluruhan", v.OverallHealthScore},
@@ -200,6 +212,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 		})),
 		assign,
 	)
+	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
 // csOnboardingEntryLinks (BL-102) = baris tombol tautan ke daftar Implementation
