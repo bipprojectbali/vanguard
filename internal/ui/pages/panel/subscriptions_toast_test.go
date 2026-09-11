@@ -9,18 +9,7 @@ import (
 // Subscriptions/Plans/Playbooks harus toast mengambang (ui.Toast:
 // fixed+pointer-events:none+toast-flash), bukan lagi ui.Alert inline statis.
 
-func assertToast(t *testing.T, out, kind, msg string) {
-	t.Helper()
-	alertClass := "alert-error"
-	if kind == "ok" {
-		alertClass = "alert-success"
-	}
-	for _, want := range []string{"fixed", "pointer-events:none", "toast-flash", alertClass, msg} {
-		if !strings.Contains(out, want) {
-			t.Errorf("toast %s kurang %q:\n%s", kind, want, out)
-		}
-	}
-}
+// assertToast: lihat toast_assert_test.go (helper bersama paket ini).
 
 func TestSubList_ToastNotAlert(t *testing.T) {
 	var errOut strings.Builder

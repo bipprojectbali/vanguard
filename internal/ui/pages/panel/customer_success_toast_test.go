@@ -12,31 +12,22 @@ import (
 // ui.Alert inline statis maupun div mentah. Meniru pola accounts_toast_test.go
 // (BL-156a) / roles_members_toast_test.go (BL-156f).
 
-// assertToast didefinisikan LOKAL (bukan diimpor): tiap branch rollout lepas
-// dari main sendiri-sendiri, jadi tak ada helper bersama antar branch.
-func assertToast(t *testing.T, out, wantText, wantAlertClass string) {
-	t.Helper()
-	for _, want := range []string{"fixed", "pointer-events:none", "toast-flash", wantAlertClass, wantText} {
-		if !strings.Contains(out, want) {
-			t.Errorf("toast kurang %q:\n%s", want, out)
-		}
-	}
-}
+// assertToast: lihat toast_assert_test.go (helper bersama paket ini).
 
 func TestCSImplTasksList_ToastNotAlert(t *testing.T) {
 	var errOut, okOut strings.Builder
 	CSImplTasksList(CSImplTasksListView{Err: "Desa tidak ditemukan atau tidak dalam cakupan Anda."}).Render(&errOut)
 	CSImplTasksList(CSImplTasksListView{Msg: "Task berhasil dibuat."}).Render(&okOut)
 
-	assertToast(t, errOut.String(), "Desa tidak ditemukan atau tidak dalam cakupan Anda.", "alert-error")
-	assertToast(t, okOut.String(), "Task berhasil dibuat.", "alert-success")
+	assertToast(t, errOut.String(), "err", "Desa tidak ditemukan atau tidak dalam cakupan Anda.")
+	assertToast(t, okOut.String(), "ok", "Task berhasil dibuat.")
 }
 
 func TestCSImplTaskForm_ToastNotAlert(t *testing.T) {
 	var errOut strings.Builder
 	CSImplTaskForm(CSImplTaskFormView{Err: "Desa dan nama task wajib diisi."}).Render(&errOut)
 
-	assertToast(t, errOut.String(), "Desa dan nama task wajib diisi.", "alert-error")
+	assertToast(t, errOut.String(), "err", "Desa dan nama task wajib diisi.")
 }
 
 func TestCSRenewalsList_ToastNotAlert(t *testing.T) {
@@ -44,15 +35,15 @@ func TestCSRenewalsList_ToastNotAlert(t *testing.T) {
 	CSRenewalsList(CSRenewalsListView{Err: "Stage renewal tidak valid."}).Render(&errOut)
 	CSRenewalsList(CSRenewalsListView{Msg: "Aksi renewal diperbarui."}).Render(&okOut)
 
-	assertToast(t, errOut.String(), "Stage renewal tidak valid.", "alert-error")
-	assertToast(t, okOut.String(), "Aksi renewal diperbarui.", "alert-success")
+	assertToast(t, errOut.String(), "err", "Stage renewal tidak valid.")
+	assertToast(t, okOut.String(), "ok", "Aksi renewal diperbarui.")
 }
 
 func TestCSRenewalForm_ToastNotAlert(t *testing.T) {
 	var errOut strings.Builder
 	CSRenewalForm(CSRenewalFormView{Err: "Anggota tidak ditemukan."}).Render(&errOut)
 
-	assertToast(t, errOut.String(), "Anggota tidak ditemukan.", "alert-error")
+	assertToast(t, errOut.String(), "err", "Anggota tidak ditemukan.")
 }
 
 func TestCSTrainingsList_ToastNotAlert(t *testing.T) {
@@ -60,15 +51,15 @@ func TestCSTrainingsList_ToastNotAlert(t *testing.T) {
 	CSTrainingsList(CSTrainingsListView{Err: "Format tanggal training tidak valid."}).Render(&errOut)
 	CSTrainingsList(CSTrainingsListView{Msg: "Jadwal training berhasil dibuat."}).Render(&okOut)
 
-	assertToast(t, errOut.String(), "Format tanggal training tidak valid.", "alert-error")
-	assertToast(t, okOut.String(), "Jadwal training berhasil dibuat.", "alert-success")
+	assertToast(t, errOut.String(), "err", "Format tanggal training tidak valid.")
+	assertToast(t, okOut.String(), "ok", "Jadwal training berhasil dibuat.")
 }
 
 func TestCSTrainingForm_ToastNotAlert(t *testing.T) {
 	var errOut strings.Builder
 	CSTrainingForm(CSTrainingFormView{Err: "Status tidak valid."}).Render(&errOut)
 
-	assertToast(t, errOut.String(), "Status tidak valid.", "alert-error")
+	assertToast(t, errOut.String(), "err", "Status tidak valid.")
 }
 
 func TestEngagementsList_ToastNotAlert(t *testing.T) {
@@ -76,32 +67,36 @@ func TestEngagementsList_ToastNotAlert(t *testing.T) {
 	EngagementsList(EngagementsListView{Err: "Format tanggal jadwal tidak valid."}).Render(&errOut)
 	EngagementsList(EngagementsListView{Msg: "Engagement berhasil dibuat."}).Render(&okOut)
 
-	assertToast(t, errOut.String(), "Format tanggal jadwal tidak valid.", "alert-error")
-	assertToast(t, okOut.String(), "Engagement berhasil dibuat.", "alert-success")
+	assertToast(t, errOut.String(), "err", "Format tanggal jadwal tidak valid.")
+	assertToast(t, okOut.String(), "ok", "Engagement berhasil dibuat.")
 }
 
 func TestEngagementForm_ToastNotAlert(t *testing.T) {
 	var errOut strings.Builder
 	EngagementForm(EngagementFormView{Err: "Tipe engagement tidak valid."}).Render(&errOut)
 
-	assertToast(t, errOut.String(), "Tipe engagement tidak valid.", "alert-error")
+	assertToast(t, errOut.String(), "err", "Tipe engagement tidak valid.")
 }
 
-func TestCustomerSuccessDetail_ToastNotAlert(t *testing.T) {
+// TestCustomerSuccessDetail_SavedMsg_ToastNotAlert: pesan sukses SAVE
+// (customerSuccessMsg "saved") — beda dari TestCustomerSuccessDetail_ToastNotAlert
+// di accounts_toast_test.go (BL-156b) yang menguji jalur AccountAssign
+// (accountsMsg "assigned"). Dua sumber ?ok= berbeda, mendarat di halaman sama.
+func TestCustomerSuccessDetail_SavedMsg_ToastNotAlert(t *testing.T) {
 	var okOut strings.Builder
 	CustomerSuccessDetail(CustomerSuccessDetailView{
 		Base: "/w/acme", ID: 1, AccountName: "Desa Contoh", Exists: true,
 		Msg: "Perubahan Customer Success disimpan.",
 	}).Render(&okOut)
 
-	assertToast(t, okOut.String(), "Perubahan Customer Success disimpan.", "alert-success")
+	assertToast(t, okOut.String(), "ok", "Perubahan Customer Success disimpan.")
 }
 
 func TestCustomerSuccessForm_ToastNotAlert(t *testing.T) {
 	var errOut strings.Builder
 	CustomerSuccessForm(CustomerSuccessFormView{Err: "Skor harus bilangan bulat 0–100."}).Render(&errOut)
 
-	assertToast(t, errOut.String(), "Skor harus bilangan bulat 0–100.", "alert-error")
+	assertToast(t, errOut.String(), "err", "Skor harus bilangan bulat 0–100.")
 }
 
 func TestCSJourneyList_ToastNotAlert(t *testing.T) {
@@ -109,6 +104,6 @@ func TestCSJourneyList_ToastNotAlert(t *testing.T) {
 	CSJourneyList(CSJourneyListView{Err: "Galat contoh."}).Render(&errOut)
 	CSJourneyList(CSJourneyListView{Msg: "Sukses contoh."}).Render(&okOut)
 
-	assertToast(t, errOut.String(), "Galat contoh.", "alert-error")
-	assertToast(t, okOut.String(), "Sukses contoh.", "alert-success")
+	assertToast(t, errOut.String(), "err", "Galat contoh.")
+	assertToast(t, okOut.String(), "ok", "Sukses contoh.")
 }

@@ -8,21 +8,7 @@ import (
 // tickets_toast_test.go — BL-156e: feedback err/ok modul Tickets/Cases + KB
 // Articles + SLA Policies harus toast mengambang (ui.Toast:
 // fixed+pointer-events:none+toast-flash), bukan lagi ui.Alert inline statis.
-// assertToast didefinisikan LOKAL (bukan berbagi lintas branch — tiap branch
-// rollout BL-156 independen dari main, lihat memori bl-156-toast-floating.md).
-
-func assertToast(t *testing.T, out, kind, msg string) {
-	t.Helper()
-	alertClass := "alert-error"
-	if kind == "ok" {
-		alertClass = "alert-success"
-	}
-	for _, want := range []string{"fixed", "pointer-events:none", "toast-flash", alertClass, msg} {
-		if !strings.Contains(out, want) {
-			t.Errorf("toast %s kurang %q:\n%s", kind, want, out)
-		}
-	}
-}
+// assertToast: lihat toast_assert_test.go (helper bersama paket ini).
 
 func TestTicketsList_ToastNotAlert(t *testing.T) {
 	var errOut, okOut strings.Builder

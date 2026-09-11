@@ -10,19 +10,7 @@ import (
 // fixed+pointer-events:none+toast-flash), bukan lagi ui.Alert inline statis.
 // Juga mengunci dua celah yang ditemukan (ActivityDetailView & LeadDetailView
 // sebelumnya tak punya slot Err/Msg lengkap) agar tak regresi.
-
-func assertToast(t *testing.T, out, kind, msg string) {
-	t.Helper()
-	alertClass := "alert-error"
-	if kind == "ok" {
-		alertClass = "alert-success"
-	}
-	for _, want := range []string{"fixed", "pointer-events:none", "toast-flash", alertClass, msg} {
-		if !strings.Contains(out, want) {
-			t.Errorf("toast %s kurang %q:\n%s", kind, want, out)
-		}
-	}
-}
+// assertToast: lihat toast_assert_test.go (helper bersama paket ini).
 
 func TestActivitiesList_ToastNotAlert(t *testing.T) {
 	var errOut, okOut strings.Builder
