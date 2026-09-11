@@ -54,7 +54,7 @@ func TicketForm(v TicketFormView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "ticket-form-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "ticket-form-err", g.Text(v.Err)))
 	}
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),

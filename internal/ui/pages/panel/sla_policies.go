@@ -63,10 +63,10 @@ func SLAPolicyList(v SLAPolicyListView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "sla-policies-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "sla-policies-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "sla-policies-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "sla-policies-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptySLAPolicies())
@@ -231,7 +231,7 @@ func SLAPolicyForm(v SLAPolicyFormView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "sla-policy-form-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "sla-policy-form-err", g.Text(v.Err)))
 	}
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),

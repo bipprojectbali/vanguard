@@ -106,10 +106,10 @@ func TicketsList(v TicketsListView) g.Node {
 				hiddenField{"tab", v.Tab})),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "tickets-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "tickets-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "tickets-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "tickets-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptyTickets(v))

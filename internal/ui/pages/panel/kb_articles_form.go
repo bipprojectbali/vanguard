@@ -50,7 +50,7 @@ func KBArticleForm(v KBArticleFormView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "kb-article-form-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "kb-article-form-err", g.Text(v.Err)))
 	}
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),

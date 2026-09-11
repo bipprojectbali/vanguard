@@ -79,10 +79,10 @@ func KBArticleList(v KBArticleListView) g.Node {
 				hiddenField{"tab", kbTabParam(v.Tab)})),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "kb-articles-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "kb-articles-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "kb-articles-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "kb-articles-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
 		body = append(body, emptyKBArticles(v))
