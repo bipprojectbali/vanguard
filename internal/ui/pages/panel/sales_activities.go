@@ -96,10 +96,10 @@ func ActivitiesList(v ActivitiesListView) g.Node {
 			hiddenField{"target", v.TargetFilter}),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "act-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "act-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "act-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "act-ok", g.Text(v.Msg)))
 	}
 
 	if len(v.Items) == 0 {

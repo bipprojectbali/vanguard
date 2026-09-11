@@ -161,10 +161,10 @@ func QuoteDetail(v QuoteDetailView) g.Node {
 	}
 	// BL-149: flash PRG di halaman detail (galat lalu sukses, urutan cermin daftar).
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "quote-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "quote-err", g.Text(v.Err)))
 	}
 	if v.OK != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "quote-ok", g.Text(v.OK)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "quote-ok", g.Text(v.OK)))
 	}
 	body = append(body,
 		quoteIdentityCard(v),

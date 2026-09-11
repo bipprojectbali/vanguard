@@ -50,6 +50,11 @@ type ActivityDetailView struct {
 	Notes string
 
 	CanWrite bool
+
+	// Err/Msg = umpan balik aksi (BL-156c) dari redirect PRG ubah-status/simpan
+	// aktivitas (`?err=`/`?ok=`) yang mendarat di halaman ini, bukan di daftar.
+	Err string
+	Msg string
 }
 
 // ActivityDetail merender hub detail: header (subjek + jenis + status + aksi),
@@ -81,9 +86,17 @@ func ActivityDetail(v ActivityDetailView) g.Node {
 		header,
 		h.A(h.Href(v.Base+"/activities"), h.Class("text-sm text-base-content/60"),
 			g.Text("« Kembali ke daftar aktivitas")),
+	}
+	if v.Err != "" {
+		body = append(body, ui.Toast(ui.VariantDestructive, "activity-detail-err", g.Text(v.Err)))
+	}
+	if v.Msg != "" {
+		body = append(body, ui.Toast(ui.VariantSuccess, "activity-detail-ok", g.Text(v.Msg)))
+	}
+	body = append(body,
 		ui.When(v.CanWrite && v.Kind == "task", activityStatusControl(v, base)),
 		activityIdentityCard(v),
-	}
+	)
 	body = append(body, activityKindCard(v))
 
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))

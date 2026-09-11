@@ -44,6 +44,9 @@ type LeadDetailView struct {
 	Statuses []string
 	// Err = pesan galat PRG (?err=CODE) utk kontrol status; kosong = tak ada.
 	Err string
+	// Msg = pesan sukses PRG (?ok=CODE, BL-156c) mis. simpan status — sebelumnya
+	// halaman ini hanya punya slot Err, sukses ubah status tak pernah tampil.
+	Msg string
 
 	Province    string
 	Regency     string
@@ -77,7 +80,8 @@ func LeadDetail(v LeadDetailView) g.Node {
 		h.A(h.Href(v.Base+"/leads"), h.Class("text-sm text-base-content/60"),
 			g.Text("« Kembali ke daftar lead")),
 		// BL-83: galat PRG kontrol status (?err=CODE) disurfacing di sini.
-		ui.When(v.Err != "", ui.Alert(ui.VariantDestructive, "lead-status-err", g.Text(v.Err))),
+		ui.When(v.Err != "", ui.Toast(ui.VariantDestructive, "lead-status-err", g.Text(v.Err))),
+		ui.When(v.Msg != "", ui.Toast(ui.VariantSuccess, "lead-status-ok", g.Text(v.Msg))),
 		// Grid dua-kolom (mobile: satu kolom). Urutan mengisi baris: Identitas |
 		// Kualifikasi, lalu Lokasi | Sistem&Audit (wireframe 4.1).
 		h.Div(

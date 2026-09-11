@@ -104,7 +104,7 @@ func ActivityForm(v ActivityFormView) g.Node {
 		),
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "activity-form-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "activity-form-err", g.Text(v.Err)))
 	}
 
 	form := []g.Node{

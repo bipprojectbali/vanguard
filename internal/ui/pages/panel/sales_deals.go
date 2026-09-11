@@ -100,10 +100,10 @@ func DealPipeline(v DealPipelineView) g.Node {
 		body = append(body, dealMineToggle(v))
 	}
 	if v.Err != "" {
-		body = append(body, ui.Alert(ui.VariantDestructive, "deals-err", g.Text(v.Err)))
+		body = append(body, ui.Toast(ui.VariantDestructive, "deals-err", g.Text(v.Err)))
 	}
 	if v.Msg != "" {
-		body = append(body, ui.Alert(ui.VariantDefault, "deals-ok", g.Text(v.Msg)))
+		body = append(body, ui.Toast(ui.VariantSuccess, "deals-ok", g.Text(v.Msg)))
 	}
 
 	if tableView {

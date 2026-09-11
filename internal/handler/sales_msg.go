@@ -32,6 +32,12 @@ func dealsMsg(code string) string {
 		return "Tahap deal diperbarui."
 	case "deleted":
 		return "Deal dihapus."
+	// BL-156c: konversi lead (sales_convert_action.go) redirect PRG SUKSES ke
+	// halaman detail DEAL (bukan lead) dengan kode ini — sebelumnya tak terpetakan
+	// di sini (hanya ada di leadsMsg, dipakai halaman lead), jadi pesan tak pernah
+	// tampil di halaman deal hasil konversi walau DealDetailView sudah punya slot Msg.
+	case "converted":
+		return "Deal dibuat dari konversi lead."
 	default:
 		return ""
 	}
