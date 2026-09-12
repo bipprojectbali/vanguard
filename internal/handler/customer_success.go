@@ -1,62 +1,26 @@
 package handler
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strconv"
 
-	"go_starter/internal/authz"
 	"go_starter/internal/db"
 	"go_starter/internal/ui/pages/panel"
 
 	"github.com/jackc/pgx/v5"
 )
 
-// customer_success.go — gerbang F2 per-section (Health/Journey+Onboarding/
-// Adoption, Modul 6 slice B1) + halaman BACA. SATU baris `customer_success`
-// per desa tapi TIGA objek Casbin berbeda (crm:health/crm:journey/crm:adoption)
-// — section yang aktor tak berhak baca disembunyikan di view (di sini), section
-// yang tak berhak tulis di-mask saat SAVE (customer_success_save.go), bukan di
-// gerbang GET.
+// customer_success.go — halaman BACA Customer Success (Modul 6 slice B1). SATU
+// baris `customer_success` per desa tapi TIGA objek Casbin berbeda
+// (crm:health/crm:journey/crm:adoption) — section yang aktor tak berhak baca
+// disembunyikan di view (di sini), section yang tak berhak tulis di-mask saat
+// SAVE (customer_success_save.go), bukan di gerbang GET. Gerbang F2 per-section
+// + 403 di customer_success_gates.go.
 //
 // F3 diwarisi desa induk (loadOwnedAccount) — CS TANPA ownership sendiri, sama
 // seperti kb_articles/playbooks/sla_policies TANPA F3, tapi di sini lewat account
 // bukan lewat RLS/workspace polos (mirip contacts.go).
-
-func canReadCSHealth(ctx context.Context) bool  { return authz.CanBusiness(ctx, "crm:health", "read") }
-func canWriteCSHealth(ctx context.Context) bool { return authz.CanBusiness(ctx, "crm:health", "write") }
-
-func canReadCSJourney(ctx context.Context) bool { return authz.CanBusiness(ctx, "crm:journey", "read") }
-func canWriteCSJourney(ctx context.Context) bool {
-	return authz.CanBusiness(ctx, "crm:journey", "write")
-}
-
-func canReadCSAdoption(ctx context.Context) bool {
-	return authz.CanBusiness(ctx, "crm:adoption", "read")
-}
-func canWriteCSAdoption(ctx context.Context) bool {
-	return authz.CanBusiness(ctx, "crm:adoption", "write")
-}
-
-// canReadCS = boleh membuka halaman DETAIL bila berhak membaca MINIMAL satu
-// section (mis. Support hanya Health) — section yang tak berhak disembunyikan
-// di view, bukan seluruh halaman ditolak.
-func canReadCS(ctx context.Context) bool {
-	return canReadCSHealth(ctx) || canReadCSJourney(ctx) || canReadCSAdoption(ctx)
-}
-
-// canWriteCS = boleh membuka form SUNTING bila berhak menulis MINIMAL satu
-// section — masking per-section terjadi saat SAVE, bukan saat gerbang GET ini.
-func canWriteCS(ctx context.Context) bool {
-	return canWriteCSHealth(ctx) || canWriteCSJourney(ctx) || canWriteCSAdoption(ctx)
-}
-
-// renderCSForbidden — 403 + penjelasan; mirror renderAccountsForbidden.
-func (h *Handler) renderCSForbidden(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusForbidden)
-	h.renderWorkspaceShell(w, r, "Customer Success", "/accounts", panel.CustomerSuccessForbidden())
-}
 
 // CustomerSuccessDetail — GET /w/{workspace}/accounts/{id}/customer-success.
 // F3 via loadOwnedAccount; F2 minimal-satu-section via canReadCS. Baris CS

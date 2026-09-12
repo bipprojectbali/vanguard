@@ -1,12 +1,8 @@
 package handler
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
-	"strings"
-
-	"github.com/jackc/pgx/v5"
 
 	"go_starter/internal/codes"
 	"go_starter/internal/db"
@@ -20,6 +16,9 @@ import (
 // commit (Scope.run balik nil — tak ada sinyal rollback dari handler), jadi "atomik"
 // (keputusan d) dicapai lewat URUTAN: create dulu; gagal → return lebih awal →
 // UpdateDealStage tak pernah dipanggil → deal tetap stage lama.
+//
+// Validasi & pengumpulan input (quote+termin, status, item quote, plan induk,
+// cek one-active) di sales_deals_won_subscription_input.go.
 
 // multiYearContractMonths = asumsi durasi kontrak "Multi-year" (3 tahun). Termin tak
 // memuat jumlah tahun konkret; diekstrak agar bila bisnis mengonkretkan durasi (mis.
@@ -62,73 +61,11 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 	if deal.CreatedSubscriptionID != nil {
 		return nil, true
 	}
-	// BL-88: quote otoritatif → langganan lahir dari quote Accepted, bukan field deal
-	// manual. Tanpa quote Accepted, nilai & termin tak punya sumber sah → tolak (bukan
-	// diam-diam) agar user meng-Accept quote dulu. Index idx_quotes_one_accepted menjamin
-	// ≤1 → :one; ErrNoRows = belum ada quote Accepted.
-	quote, err := h.q(ctx).GetAcceptedQuoteForDeal(ctx, &deal.ID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			wsRedirect(w, r, "/deals/"+idStr, "quote_required")
-			return nil, false
-		}
-		h.Log.Error("deals: won accepted-quote", "deal_id", deal.ID, "err", err)
-		wsRedirect(w, r, "/deals/"+idStr, "failed")
+	in, ok := h.resolveWonSubscriptionInputs(w, r, deal)
+	if !ok {
 		return nil, false
 	}
-	// Termin dari QUOTE (BL-88), bukan deal. subscription_term = billing cycle (harus
-	// enum valid Monthly/Annual/Multi-year) + fallback bulan-kontrak; contract_term_months
-	// (opsional) MENIMPA durasi numerik (mis. Multi-year = 24). Quote tanpa termin valid →
-	// tolak (quote_required) agar user set termin di quote dulu.
-	term := deref(quote.SubscriptionTerm)
-	months, termOK := termContractMonths[term]
-	if !termOK {
-		wsRedirect(w, r, "/deals/"+idStr, "quote_required")
-		return nil, false
-	}
-	if quote.ContractTermMonths != nil && *quote.ContractTermMonths > 0 {
-		months = *quote.ContractTermMonths
-	}
-	// Status awal dari form (keputusan a). Wajib Trial/Active.
-	status := strings.TrimSpace(r.FormValue("subscription_status"))
-	if _, ok := validInitialSubStatuses[status]; !ok {
-		wsRedirect(w, r, "/deals/"+idStr, "sub_status")
-		return nil, false
-	}
-	// BL-88 PR2b: identitas paket ada di subscription_items (mirror quote_items). Ambil
-	// baris quote LEBIH DULU: darinya diturunkan (a) plan_id parent — SATU paket distinct →
-	// paket itu (kenyamanan single-plan agar label/JOIN lama tetap berguna); >1 → NULL
-	// (identitas di item); (b) pre-check one-active lintas SEMUA paket quote. Quote tanpa
-	// baris berpaket tak bisa jadi langganan bermakna → tolak (plan_required).
-	items, err := h.q(ctx).ListQuoteItems(ctx, quote.ID)
-	if err != nil {
-		h.Log.Error("deals: won quote items", "deal_id", deal.ID, "quote_id", quote.ID, "err", err)
-		wsRedirect(w, r, "/deals/"+idStr, "failed")
-		return nil, false
-	}
-	parentPlan, hasPlan := singleQuotePlan(items)
-	if !hasPlan {
-		wsRedirect(w, r, "/deals/"+idStr, "plan_required")
-		return nil, false
-	}
-	// Konflik one-active (keputusan c: TOLAK) — hanya menggigit bila status Active
-	// (parent_active); Trial boleh koeksis. Pre-check lintas SEMUA paket quote beri pesan
-	// ramah; idx_subscription_items_one_active tetap penjaga keras bila balapan.
-	if status == "Active" {
-		exists, err := h.q(ctx).HasActiveItemForQuotePlans(ctx, db.HasActiveItemForQuotePlansParams{
-			AccountID: deal.AccountID,
-			QuoteID:   quote.ID,
-		})
-		if err != nil {
-			h.Log.Error("deals: won sub active-check", "deal_id", deal.ID, "err", err)
-			wsRedirect(w, r, "/deals/"+idStr, "failed")
-			return nil, false
-		}
-		if exists {
-			wsRedirect(w, r, "/deals/"+idStr, "sub_active_exists")
-			return nil, false
-		}
-	}
+	months := in.months
 
 	// Nilai: amount = nilai per termin → MRR = amount / bulan-kontrak; ARR = MRR × 12.
 	mrr := divNumericInt(deal.Amount, int64(months))
@@ -147,16 +84,16 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 		return nil, false
 	}
 
-	billing := term
+	billing := in.term
 	termMonths := months
 	sub, err := h.q(ctx).CreateSubscription(ctx, db.CreateSubscriptionParams{
 		TenantID:           tenantID,
 		EntityCode:         &code,
 		SubscriptionOwner:  deal.DealOwner,
 		AccountID:          deal.AccountID,
-		PlanID:             parentPlan,
+		PlanID:             in.parentPlan,
 		SourceDealID:       &deal.ID,
-		Status:             status,
+		Status:             in.status,
 		StartDate:          startDate,
 		EndDate:            endDate,
 		BillingCycle:       &billing,
@@ -177,8 +114,9 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 	// diturunkan dari subtotal item (bukan grand_total) — Σ item.mrr bisa selisih tipis
 	// dari parent.mrr bila quote punya diskon/pembulatan, item mengikuti subtotalnya.
 	// FAIL-SOFT: parent langganan sudah lahir; gagal buat item TAK menggagalkan Won
-	// (hanya di-log). items sudah diambil di atas (dipakai turunkan plan_id parent).
-	for _, it := range items {
+	// (hanya di-log). items sudah diambil resolveWonSubscriptionInputs (dipakai turunkan
+	// plan_id parent).
+	for _, it := range in.items {
 		imrr := divNumericInt(it.Subtotal, int64(months))
 		iarr := mulNumericInt(imrr, monthsPerYear)
 		if _, err := h.q(ctx).AddSubscriptionItem(ctx, db.AddSubscriptionItemParams{
@@ -197,27 +135,4 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 		}
 	}
 	return &sub, true
-}
-
-// singleQuotePlan menurunkan plan_id PARENT langganan dari baris quote (BL-88 PR2b):
-// bila SEMUA baris berpaket menunjuk SATU paket distinct → (&paket, true) (kenyamanan
-// single-plan agar label & JOIN plans lama tetap berguna); >1 paket distinct → (nil,
-// true) (identitas ada di subscription_items, parent plan_id NULL); tak ada baris
-// berpaket sama sekali → (nil, false) (quote tak bisa jadi langganan bermakna).
-func singleQuotePlan(items []db.QuoteItem) (*int64, bool) {
-	var seen *int64
-	for _, it := range items {
-		if it.PlanID == nil {
-			continue
-		}
-		if seen == nil {
-			p := *it.PlanID
-			seen = &p
-			continue
-		}
-		if *seen != *it.PlanID {
-			return nil, true // >1 paket distinct → parent NULL
-		}
-	}
-	return seen, seen != nil
 }

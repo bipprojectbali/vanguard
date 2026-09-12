@@ -25,8 +25,8 @@ import (
 // chrome shell lain).
 
 const (
-	devNavMarker       = "/dev/logs"      // hanya devNav
-	workspaceNavMarker = "Subscriptions"  // grup nav workspace (selalu dirender)
+	devNavMarker       = "/dev/logs"     // hanya devNav
+	workspaceNavMarker = "Subscriptions" // grup nav workspace (selalu dirender)
 )
 
 // initAuthz memasang engine Casbin global — dibutuhkan navFor/workspaceNavCtx yang

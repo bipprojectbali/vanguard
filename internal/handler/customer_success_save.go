@@ -4,13 +4,11 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // customer_success_save.go — POST simpan Customer Success (get-then-branch, F2
@@ -93,45 +91,12 @@ func (h *Handler) CustomerSuccessSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// overall_health_score DIHITUNG, bukan dari form (tak ada field submit-nya):
-	// rata-rata komponen non-NULL, dibulatkan. health_last_calculated hanya maju
-	// ke sekarang bila section Health BENAR-BENAR ditulis kali ini (bukan di-mask
-	// ke nilai lama) — kolom berarti "kapan terakhir dihitung ulang".
-	overallScore := computeOverallHealthScore(form.AdoptionScore, form.EngagementScore, form.SupportScore, form.SentimentScore)
-	// health_status kini TURUNAN skor, bukan input operator (BL-24): apa pun
-	// yang dikirim form diabaikan, status mengikuti overall_health_score. Karena
-	// overallScore sudah dihitung dari komponen yang TER-MASK ke nilai lama saat
-	// section Health tak berhak ditulis, status ikut nilai lama tanpa special-case.
-	form.HealthStatus = deriveHealthStatus(overallScore)
-
-	// score_trend TURUNAN riwayat skor (BL-25): saat section Health ditulis kali
-	// ini, geser overall_health_score LAMA → previous_* SEBELUM menyimpan nilai
-	// baru, lalu deriveScoreTrend(previous, sekarang) mengisi arah (Improving/
-	// Stable/Declining, dead-band healthTrendDeadband). Bila Health TAK ditulis
-	// (di-mask ke nilai lama) pertahankan trend & previous_* existing — tak ada
-	// perubahan skor untuk dibandingkan. Manual dari form DIABAIKAN (tak lagi
-	// diparse; badge read-only, pola BL-24 untuk health_status). Snapshot pertama
-	// (existing.OverallHealthScore NULL) → trend NULL ("—", belum ada dasar).
-	healthLastCalculated := existing.HealthLastCalculated
-	previousScore := existing.PreviousHealthScore
-	previousCalculatedAt := existing.PreviousHealthCalculatedAt
-	if writeHealth {
-		form.ScoreTrend = deriveScoreTrend(existing.OverallHealthScore, overallScore, healthTrendDeadband)
-		previousScore = existing.OverallHealthScore
-		previousCalculatedAt = existing.HealthLastCalculated
-		healthLastCalculated = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
-	} else {
-		form.ScoreTrend = existing.ScoreTrend
-	}
+	// Skor kesehatan (overall/status turunan BL-24, trend+snapshot previous_*
+	// turunan BL-25) dihitung di computeHealthSnapshot (customer_success_persist.go).
+	form, hc := computeHealthSnapshot(form, existing, writeHealth)
 
 	uid := session.UserID(ctx)
 	tenantID := session.TenantID(ctx)
-	hc := csHealthComputed{
-		overallScore:         overallScore,
-		healthLastCalculated: healthLastCalculated,
-		previousScore:        previousScore,
-		previousCalculatedAt: previousCalculatedAt,
-	}
 	okCode := "saved"
 	if !exists {
 		if err := h.createCustomerSuccessRow(ctx, tenantID, accountID, uid, form, hc); err != nil {
