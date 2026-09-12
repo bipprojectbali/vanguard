@@ -25,9 +25,9 @@ func TestQuoteDetail_TaxAmountUsesMoneyField(t *testing.T) {
 	out := renderQuoteNode(t, QuoteDetail(v))
 
 	for _, want := range []string{
-		`name="tax_amount"`,     // field pajak tetap terkirim
-		`data-numgroup`,         // kait pengelompokan ribuan (moneyFieldRp)
-		`/static/numgroup.js`,   // skrip format+normalisasi dimuat
+		`name="tax_amount"`,   // field pajak tetap terkirim
+		`data-numgroup`,       // kait pengelompokan ribuan (moneyFieldRp)
+		`/static/numgroup.js`, // skrip format+normalisasi dimuat
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("BL-147: modal Pajak harus memuat %q:\n%s", want, out)

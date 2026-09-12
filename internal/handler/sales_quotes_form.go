@@ -1,12 +1,8 @@
 package handler
 
 import (
-	"strconv"
 	"strings"
 	"time"
-
-	"go_starter/internal/db"
-	"go_starter/internal/ui/pages/panel"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -21,35 +17,15 @@ import (
 // penolakan terjadi di sini SEBELUM DB; CHECK jaring terakhir. Pajak TIDAK lagi di
 // header (BL-14) — dipindah ke builder item (QuoteTax) tempat subtotal sudah hidup;
 // header hanya identitas quote (nama, tanggal, termin, penyusun).
+//
+// Enum status (quoteInitialStatus/validQuoteStatuses/quoteStatusOptions) di
+// sales_quotes_status.go. Prefill balik & quoteExpired di
+// sales_quotes_form_view.go.
 
 const (
 	maxQuoteNameLen  = 200  // quote_name (nullable)
 	maxQuoteTermsLen = 2000 // payment_terms / notes_terms — teks bebas, guard luapan
 )
-
-// quoteInitialStatus = status setiap quote baru. Transisi berikutnya = aksi manual
-// tersendiri (UpdateQuoteStatus); approval flow ditunda (keputusan scope).
-const quoteInitialStatus = "Draft"
-
-// validQuoteStatuses = himpunan status legal (cermin quotes_status_chk 00010).
-// Approval flow ditunda → semua status boleh diset manual dari kontrol status.
-var validQuoteStatuses = map[string]struct{}{
-	"Draft": {}, "Sent": {}, "Under Review": {},
-	"Accepted": {}, "Rejected": {}, "Expired": {},
-}
-
-// quoteStatusOptions = status untuk dropdown, BERURUT (map validasi tak berurut).
-// Harus himpunan yang sama dengan validQuoteStatuses & CHECK 00010.
-var quoteStatusOptions = []string{"Draft", "Sent", "Under Review", "Accepted", "Rejected", "Expired"}
-
-// compile-time: opsi & map validasi sepakat (panjang sama). Berbeda = dropdown
-// menawarkan nilai yang ditolak backend, atau sebaliknya.
-var _ = func() struct{} {
-	if len(quoteStatusOptions) != len(validQuoteStatuses) {
-		panic("quotes: opsi status tak sinkron dengan map validasi")
-	}
-	return struct{}{}
-}()
 
 // quoteForm = nilai form HEADER quote yang SUDAH divalidasi. Semua kolom opsional
 // (quote menempel ke deal induk untuk account/deal_id). PreparedBy *int64 (nil = tak
@@ -131,33 +107,4 @@ func parseQuoteForm(fv func(string) string, today time.Time) (quoteForm, string)
 	}
 
 	return f, ""
-}
-
-// quoteFormFields memetakan quote termuat → prefill form header (semua string).
-func quoteFormFields(q db.Quote) panel.QuoteFormFields {
-	preparedBy := ""
-	if q.PreparedBy != nil {
-		preparedBy = strconv.FormatInt(*q.PreparedBy, 10)
-	}
-	return panel.QuoteFormFields{
-		QuoteName:        deref(q.QuoteName),
-		ExpirationDate:   dateStr(q.ExpirationDate),
-		PaymentTerms:     deref(q.PaymentTerms),
-		NotesTerms:       deref(q.NotesTerms),
-		PreparedBy:       preparedBy,
-		SubscriptionTerm: deref(q.SubscriptionTerm),
-	}
-}
-
-// quoteExpired = penanda kedaluwarsa computed-on-read (BL-17), di-precompute di
-// handler (view murni-data). Draft SELALU dikecualikan (masih WIP, belum
-// ditawarkan). True hanya bila status non-Draft, expiration_date terisi, DAN
-// tanggalnya SEBELUM hari ini (banding date-only). Karena parseQuoteForm memblok
-// simpan tanggal lampau, sebuah quote hanya bisa menjadi kedaluwarsa akibat waktu
-// berjalan setelah disimpan dengan tanggal depan.
-func quoteExpired(status string, exp pgtype.Date, today time.Time) bool {
-	if status == "Draft" || !exp.Valid {
-		return false
-	}
-	return dateBefore(exp.Time, today)
 }

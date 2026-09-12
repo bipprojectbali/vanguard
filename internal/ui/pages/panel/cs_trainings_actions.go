@@ -9,6 +9,15 @@ import (
 // cs_trainings_actions.go — tombol & panel aksi inline daftar Training,
 // dipisah dari cs_trainings_list.go (ukuran file). Murni-data; render identik.
 
+// csTrainingStatusForm = aksi ganti status per baris (canWrite). Transisi:
+// scheduled → completed/rescheduled/cancelled; rescheduled →
+// completed/cancelled; completed/cancelled → bisa dibuka ke scheduled.
+//
+// BL-28: "✓ Selesai" & "Jadwal Ulang" TAK langsung submit — mereka membuka
+// panel inline (Datastar data-show, state form efemeral; pola BL-19/BL-26
+// showWhen, BUKAN mekanisme baru) untuk menampung attendance/peserta/catatan
+// (Selesai) atau tanggal-baru/catatan (Jadwal Ulang). "Batal"/"Buka Ulang"
+// tetap submit langsung — hanya kirim status; query COALESCE menjaga field
 func csTrainingStatusForm(base, id, currentStatusLabel, notes string) g.Node {
 	switch currentStatusLabel {
 	case "Scheduled":
