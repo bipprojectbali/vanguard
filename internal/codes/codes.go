@@ -27,13 +27,14 @@ const (
 	EntityQuote        Entity = "quote"        // QUO-xxx  (M4)
 	EntityTicket       Entity = "ticket"       // TIKET-xxx (M6)
 	EntitySubscription Entity = "subscription" // SUB-xxx  (M5)
+	EntityContact      Entity = "contact"      // KON-xxx (BL-132)
 )
 
 // allEntities = sumber tunggal daftar entitas valid. Dipakai Valid() dan bisa
 // dipakai UI untuk merender daftar format. Urutannya = urutan tampil.
 var allEntities = []Entity{
 	EntityAccount, EntityLead, EntityDeal,
-	EntityQuote, EntityTicket, EntitySubscription,
+	EntityQuote, EntityTicket, EntitySubscription, EntityContact,
 }
 
 // AllEntities mengembalikan salinan daftar entitas berkode (untuk UI pengaturan).
@@ -83,6 +84,7 @@ var defaults = map[Entity]Format{
 	EntityQuote:        {Prefix: "QUO", Separator: "-", Padding: 3},
 	EntityTicket:       {Prefix: "TIKET", Separator: "-", Padding: 4},
 	EntitySubscription: {Prefix: "SUB", Separator: "-", Padding: 4},
+	EntityContact:      {Prefix: "KON", Separator: "-", Padding: 3},
 }
 
 // DefaultFormat mengembalikan format bawaan untuk e. Entitas tak dikenal jatuh ke

@@ -47,7 +47,7 @@ func (q *Queries) CountContactsByAccount(ctx context.Context, accountID int64) (
 const createContact = `-- name: CreateContact :one
 
 INSERT INTO contacts (
-    tenant_id, account_id, contact_owner, reports_to_id,
+    tenant_id, account_id, contact_owner, reports_to_id, entity_code,
     first_name, last_name, salutation, job_title, position_category, contact_role,
     is_primary_contact, is_technical_contact, term_period,
     mobile_phone, whatsapp_number, office_phone, email, preferred_channel,
@@ -55,17 +55,17 @@ INSERT INTO contacts (
     email_opt_out, do_not_contact,
     created_by
 ) VALUES (
-    $1, $2, $3, $4,
-    $5, $6, $7,
-    $8, $9, $10,
-    $11, $12, $13,
-    $14, $15, $16,
-    $17, $18,
-    $19, $20, $21,
-    $22, $23,
-    $24
+    $1, $2, $3, $4, $5,
+    $6, $7, $8,
+    $9, $10, $11,
+    $12, $13, $14,
+    $15, $16, $17,
+    $18, $19,
+    $20, $21, $22,
+    $23, $24,
+    $25
 )
-RETURNING id, tenant_id, account_id, contact_owner, reports_to_id, first_name, last_name, salutation, job_title, position_category, contact_role, is_primary_contact, is_technical_contact, term_period, mobile_phone, whatsapp_number, office_phone, email, preferred_channel, mailing_address, city, postal_code, email_opt_out, do_not_contact, deleted_at, created_by, created_at, updated_by, updated_at
+RETURNING id, tenant_id, account_id, contact_owner, reports_to_id, first_name, last_name, salutation, job_title, position_category, contact_role, is_primary_contact, is_technical_contact, term_period, mobile_phone, whatsapp_number, office_phone, email, preferred_channel, mailing_address, city, postal_code, email_opt_out, do_not_contact, deleted_at, created_by, created_at, updated_by, updated_at, entity_code
 `
 
 type CreateContactParams struct {
@@ -73,6 +73,7 @@ type CreateContactParams struct {
 	AccountID          int64   `json:"account_id"`
 	ContactOwner       *int64  `json:"contact_owner"`
 	ReportsToID        *int64  `json:"reports_to_id"`
+	EntityCode         *string `json:"entity_code"`
 	FirstName          string  `json:"first_name"`
 	LastName           *string `json:"last_name"`
 	Salutation         *string `json:"salutation"`
@@ -113,12 +114,15 @@ type CreateContactParams struct {
 // Buat kontak. account_id mengikat ke desa induk (RLS memverifikasi tenant_id =
 // GUC lewat FK + WITH CHECK). is_primary_contact di-set pemanggil SETELAH
 // mengosongkan primary lama (ClearAccountPrimaryContact) agar tak melanggar index.
+// entity_code sudah dirakit pemanggil (GenerateEntityCode, BL-132) — narg karena
+// seed/test lama boleh membuat kontak tanpa kode (kolom nullable, tak di-backfill).
 func (q *Queries) CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error) {
 	row := q.db.QueryRow(ctx, createContact,
 		arg.TenantID,
 		arg.AccountID,
 		arg.ContactOwner,
 		arg.ReportsToID,
+		arg.EntityCode,
 		arg.FirstName,
 		arg.LastName,
 		arg.Salutation,
@@ -171,12 +175,13 @@ func (q *Queries) CreateContact(ctx context.Context, arg CreateContactParams) (C
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.EntityCode,
 	)
 	return i, err
 }
 
 const getContact = `-- name: GetContact :one
-SELECT id, tenant_id, account_id, contact_owner, reports_to_id, first_name, last_name, salutation, job_title, position_category, contact_role, is_primary_contact, is_technical_contact, term_period, mobile_phone, whatsapp_number, office_phone, email, preferred_channel, mailing_address, city, postal_code, email_opt_out, do_not_contact, deleted_at, created_by, created_at, updated_by, updated_at FROM contacts
+SELECT id, tenant_id, account_id, contact_owner, reports_to_id, first_name, last_name, salutation, job_title, position_category, contact_role, is_primary_contact, is_technical_contact, term_period, mobile_phone, whatsapp_number, office_phone, email, preferred_channel, mailing_address, city, postal_code, email_opt_out, do_not_contact, deleted_at, created_by, created_at, updated_by, updated_at, entity_code FROM contacts
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -216,12 +221,13 @@ func (q *Queries) GetContact(ctx context.Context, id int64) (Contact, error) {
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.EntityCode,
 	)
 	return i, err
 }
 
 const listContacts = `-- name: ListContacts :many
-SELECT c.id, c.tenant_id, c.account_id, c.contact_owner, c.reports_to_id, c.first_name, c.last_name, c.salutation, c.job_title, c.position_category, c.contact_role, c.is_primary_contact, c.is_technical_contact, c.term_period, c.mobile_phone, c.whatsapp_number, c.office_phone, c.email, c.preferred_channel, c.mailing_address, c.city, c.postal_code, c.email_opt_out, c.do_not_contact, c.deleted_at, c.created_by, c.created_at, c.updated_by, c.updated_at, a.village_name FROM contacts c
+SELECT c.id, c.tenant_id, c.account_id, c.contact_owner, c.reports_to_id, c.first_name, c.last_name, c.salutation, c.job_title, c.position_category, c.contact_role, c.is_primary_contact, c.is_technical_contact, c.term_period, c.mobile_phone, c.whatsapp_number, c.office_phone, c.email, c.preferred_channel, c.mailing_address, c.city, c.postal_code, c.email_opt_out, c.do_not_contact, c.deleted_at, c.created_by, c.created_at, c.updated_by, c.updated_at, c.entity_code, a.village_name FROM contacts c
 JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
 WHERE c.deleted_at IS NULL
   AND (c.created_at, c.id) < ($1::timestamptz, $2::bigint)
@@ -280,6 +286,7 @@ type ListContactsRow struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedBy          *int64             `json:"updated_by"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	EntityCode         *string            `json:"entity_code"`
 	VillageName        string             `json:"village_name"`
 }
 
@@ -345,6 +352,7 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]L
 			&i.CreatedAt,
 			&i.UpdatedBy,
 			&i.UpdatedAt,
+			&i.EntityCode,
 			&i.VillageName,
 		); err != nil {
 			return nil, err
@@ -358,7 +366,7 @@ func (q *Queries) ListContacts(ctx context.Context, arg ListContactsParams) ([]L
 }
 
 const listContactsByAccount = `-- name: ListContactsByAccount :many
-SELECT id, tenant_id, account_id, contact_owner, reports_to_id, first_name, last_name, salutation, job_title, position_category, contact_role, is_primary_contact, is_technical_contact, term_period, mobile_phone, whatsapp_number, office_phone, email, preferred_channel, mailing_address, city, postal_code, email_opt_out, do_not_contact, deleted_at, created_by, created_at, updated_by, updated_at FROM contacts
+SELECT id, tenant_id, account_id, contact_owner, reports_to_id, first_name, last_name, salutation, job_title, position_category, contact_role, is_primary_contact, is_technical_contact, term_period, mobile_phone, whatsapp_number, office_phone, email, preferred_channel, mailing_address, city, postal_code, email_opt_out, do_not_contact, deleted_at, created_by, created_at, updated_by, updated_at, entity_code FROM contacts
 WHERE account_id = $1
   AND deleted_at IS NULL
   AND (created_at, id) < ($2::timestamptz, $3::bigint)
@@ -421,6 +429,7 @@ func (q *Queries) ListContactsByAccount(ctx context.Context, arg ListContactsByA
 			&i.CreatedAt,
 			&i.UpdatedBy,
 			&i.UpdatedAt,
+			&i.EntityCode,
 		); err != nil {
 			return nil, err
 		}
@@ -495,7 +504,7 @@ UPDATE contacts SET
     updated_by           = $22,
     updated_at           = now()
 WHERE id = $23 AND deleted_at IS NULL
-RETURNING id, tenant_id, account_id, contact_owner, reports_to_id, first_name, last_name, salutation, job_title, position_category, contact_role, is_primary_contact, is_technical_contact, term_period, mobile_phone, whatsapp_number, office_phone, email, preferred_channel, mailing_address, city, postal_code, email_opt_out, do_not_contact, deleted_at, created_by, created_at, updated_by, updated_at
+RETURNING id, tenant_id, account_id, contact_owner, reports_to_id, first_name, last_name, salutation, job_title, position_category, contact_role, is_primary_contact, is_technical_contact, term_period, mobile_phone, whatsapp_number, office_phone, email, preferred_channel, mailing_address, city, postal_code, email_opt_out, do_not_contact, deleted_at, created_by, created_at, updated_by, updated_at, entity_code
 `
 
 type UpdateContactParams struct {
@@ -584,6 +593,7 @@ func (q *Queries) UpdateContact(ctx context.Context, arg UpdateContactParams) (C
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.EntityCode,
 	)
 	return i, err
 }

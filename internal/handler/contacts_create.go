@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"go_starter/internal/codes"
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 )
@@ -61,10 +62,18 @@ func (h *Handler) insertContact(ctx context.Context, accountID int64, form conta
 		}
 	}
 
+	// entity_code dialokasikan DALAM tx ber-tenant yang sama (h.q) → atomik: nomor
+	// tak terbakar untuk baris gagal (BL-132, pola sama LeadCreate).
+	code, err := h.q(ctx).GenerateEntityCode(ctx, tenantID, codes.EntityContact)
+	if err != nil {
+		return db.Contact{}, err
+	}
+
 	c, err := h.q(ctx).CreateContact(ctx, db.CreateContactParams{
 		TenantID:           tenantID,
 		AccountID:          accountID,
 		ContactOwner:       &uid, // pembuat = pemilik awal kontak
+		EntityCode:         &code,
 		FirstName:          form.FirstName,
 		LastName:           form.LastName,
 		Salutation:         form.Salutation,

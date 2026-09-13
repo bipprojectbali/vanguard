@@ -122,6 +122,31 @@ func TestGenerateEntityCode_PerEntitasTerpisah(t *testing.T) {
 	}
 }
 
+// TestGenerateEntityCode_ContactDefault: entitas 'contact' (BL-132) menghasilkan
+// KON-001 berurutan lewat default bawaan — membuktikan CHECK code_formats/
+// code_sequences (00045) sudah melebar menerima 'contact', bukan cuma internal/codes.
+func TestGenerateEntityCode_ContactDefault(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	truncateCodes(t, ctx)
+	tid := seedTenant(t, ctx, "epsilon")
+
+	want := []string{"KON-001", "KON-002"}
+	for i, w := range want {
+		var got string
+		if err := WithTenant(ctx, pool, tid, func(q *Queries) error {
+			var e error
+			got, e = q.GenerateEntityCode(ctx, tid, codes.EntityContact)
+			return e
+		}); err != nil {
+			t.Fatalf("generate #%d: %v", i+1, err)
+		}
+		if got != w {
+			t.Errorf("kode #%d = %q, want %q", i+1, got, w)
+		}
+	}
+}
+
 // TestGenerateEntityCode_FormatTersimpan: sesudah UpsertCodeFormat, kode memakai
 // prefix/separator/padding yang disimpan, bukan default.
 func TestGenerateEntityCode_FormatTersimpan(t *testing.T) {

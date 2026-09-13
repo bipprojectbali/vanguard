@@ -69,8 +69,9 @@ func TestCodeFormats_SembunyikanAccount(t *testing.T) {
 	if strings.Contains(body, "Desa (Akun)") {
 		t.Error("kartu 'Desa (Akun)' (EntityAccount) tak boleh dirender di /codes")
 	}
-	// Entitas lain tetap ada — pastikan bukan halaman kosong.
-	for _, label := range []string{"Prospek (Lead)", "Kesepakatan (Deal)", "Penawaran (Quote)", "Tiket", "Langganan"} {
+	// Entitas lain tetap ada — pastikan bukan halaman kosong. Kontak (BL-132)
+	// ikut tampil sejak EntityContact masuk codes.AllEntities.
+	for _, label := range []string{"Prospek (Lead)", "Kesepakatan (Deal)", "Penawaran (Quote)", "Tiket", "Langganan", "Kontak"} {
 		if !strings.Contains(body, label) {
 			t.Errorf("entitas %q harus tetap dirender", label)
 		}
@@ -167,6 +168,34 @@ func TestCodeFormatUpdate_TolakInvalid(t *testing.T) {
 	rows, _ := env.q.ListCodeFormats(t.Context(), env.tenantID)
 	if len(rows) != 0 {
 		t.Errorf("input invalid tak boleh menyimpan apa pun, ada %d baris", len(rows))
+	}
+}
+
+// TestCodeFormatUpdate_ContactCustomFormatDipakaiSaatCreate (BL-132): owner
+// menyimpan format kontak kustom via /codes → kontak yang dibuat SESUDAHNYA
+// memakai format itu, bukan default KON-xxx. Membuktikan kustomisasi tenant
+// benar-benar mengalir ke ContactCreate (bukan cuma tersimpan di DB tanpa efek).
+func TestCodeFormatUpdate_ContactCustomFormatDipakaiSaatCreate(t *testing.T) {
+	env, uid := setupAccounts(t)
+	rec := env.doCodePost(uid, "owner",
+		codeForm(string(codes.EntityContact), "NARA", "/", "4"), env.h.WorkspaceCodeFormatUpdate)
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=saved") {
+		t.Fatalf("simpan format kontak gagal: %q (status %d)", loc, rec.Code)
+	}
+
+	a := env.seedAccount(t, "Desa Format", &uid, nil, nil)
+	req := contactsReq(http.MethodPost, "/w/test/accounts/"+itoa(a.ID)+"/contacts",
+		contactFormValues("Budi"), itoa(a.ID), "")
+	if crec := env.runAccount(uid, "owner", "sales", req, env.h.ContactCreate); crec.Code != http.StatusSeeOther {
+		t.Fatalf("create kontak gagal: %d\n%s", crec.Code, crec.Body.String())
+	}
+
+	rows := env.liveContacts(t, a.ID)
+	if len(rows) != 1 {
+		t.Fatalf("harus 1 kontak, ada %d", len(rows))
+	}
+	if got := deref(rows[0].EntityCode); got != "NARA/0001" {
+		t.Errorf("entity_code = %q, want NARA/0001 (format kustom tersimpan)", got)
 	}
 }
 

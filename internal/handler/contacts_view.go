@@ -23,6 +23,7 @@ func contactRowView(ctx context.Context, c db.Contact) panel.ContactRow {
 	return panel.ContactRow{
 		ID:               c.ID,
 		AccountID:        c.AccountID,
+		EntityCode:       deref(c.EntityCode),
 		Name:             contactFullName(c),
 		PositionCategory: deref(c.PositionCategory),
 		ContactRole:      deref(c.ContactRole),
@@ -42,6 +43,7 @@ func contactRowViewGlobal(ctx context.Context, r db.ListContactsRow) panel.Conta
 	return panel.ContactRow{
 		ID:               r.ID,
 		AccountID:        r.AccountID,
+		EntityCode:       deref(r.EntityCode),
 		Name:             fullName(r.FirstName, r.LastName),
 		Village:          r.VillageName,
 		PositionCategory: deref(r.PositionCategory),
@@ -67,6 +69,7 @@ func (h *Handler) contactDetailView(ctx context.Context, base, accountBase, vill
 		AccountBase: accountBase,
 		ID:          c.ID,
 		AccountID:   c.AccountID,
+		EntityCode:  deref(c.EntityCode),
 		Name:        contactFullName(c),
 		FirstName:   c.FirstName,
 		LastName:    deref(c.LastName),

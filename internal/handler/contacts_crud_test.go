@@ -88,6 +88,42 @@ func TestContacts_UpdateSuccess(t *testing.T) {
 	env.assertAudited(t, "contact.update")
 }
 
+// TestContacts_CreateEntityCodeSequential: entity_code (BL-132, KON-xxx) DISUSUN
+// OTOMATIS saat create — tanpa field form (kontak tak punya override manual
+// seperti account). Deret ber-TENANT, bukan per-desa: kontak kedua di desa
+// KEDUA tetap KON-002 (bukan mulai ulang dari 001), sama seperti LeadCreate.
+func TestContacts_CreateEntityCodeSequential(t *testing.T) {
+	env, uid := setupAccounts(t)
+	a1 := env.seedAccount(t, "Desa Satu", &uid, nil, nil)
+	a2 := env.seedAccount(t, "Desa Dua", &uid, nil, nil)
+
+	req1 := contactsReq(http.MethodPost, "/w/test/accounts/"+itoa(a1.ID)+"/contacts",
+		contactFormValues("Budi"), itoa(a1.ID), "")
+	if rec := env.runAccount(uid, "owner", "sales", req1, env.h.ContactCreate); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create #1 gagal: %d\n%s", rec.Code, rec.Body.String())
+	}
+	req2 := contactsReq(http.MethodPost, "/w/test/accounts/"+itoa(a2.ID)+"/contacts",
+		contactFormValues("Wati"), itoa(a2.ID), "")
+	if rec := env.runAccount(uid, "owner", "sales", req2, env.h.ContactCreate); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create #2 gagal: %d\n%s", rec.Code, rec.Body.String())
+	}
+
+	rows1 := env.liveContacts(t, a1.ID)
+	if len(rows1) != 1 {
+		t.Fatalf("desa 1 harus 1 kontak, ada %d", len(rows1))
+	}
+	if got := deref(rows1[0].EntityCode); got != "KON-001" {
+		t.Errorf("entity_code kontak #1 = %q, want KON-001", got)
+	}
+	rows2 := env.liveContacts(t, a2.ID)
+	if len(rows2) != 1 {
+		t.Fatalf("desa 2 harus 1 kontak, ada %d", len(rows2))
+	}
+	if got := deref(rows2[0].EntityCode); got != "KON-002" {
+		t.Errorf("entity_code kontak #2 = %q, want KON-002 (deret TENANT, bukan per-desa)", got)
+	}
+}
+
 // TestContacts_SoftDelete: delete → hilang dari GetContact, ok=deleted, audit.
 func TestContacts_SoftDelete(t *testing.T) {
 	env, uid := setupAccounts(t)

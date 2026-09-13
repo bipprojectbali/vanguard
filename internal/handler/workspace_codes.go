@@ -99,6 +99,8 @@ func entityLabel(e codes.Entity) string {
 		return "Tiket"
 	case codes.EntitySubscription:
 		return "Langganan"
+	case codes.EntityContact:
+		return "Kontak"
 	default:
 		return string(e)
 	}

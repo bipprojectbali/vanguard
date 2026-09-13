@@ -176,6 +176,7 @@ type Contact struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedBy          *int64             `json:"updated_by"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	EntityCode         *string            `json:"entity_code"`
 }
 
 type CsImplTask struct {
