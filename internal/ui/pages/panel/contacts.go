@@ -22,6 +22,7 @@ import (
 type ContactRow struct {
 	ID               int64
 	AccountID        int64
+	EntityCode       string
 	Name             string
 	Village          string
 	PositionCategory string

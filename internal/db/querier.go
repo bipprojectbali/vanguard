@@ -233,6 +233,8 @@ type Querier interface {
 	// Buat kontak. account_id mengikat ke desa induk (RLS memverifikasi tenant_id =
 	// GUC lewat FK + WITH CHECK). is_primary_contact di-set pemanggil SETELAH
 	// mengosongkan primary lama (ClearAccountPrimaryContact) agar tak melanggar index.
+	// entity_code sudah dirakit pemanggil (GenerateEntityCode, BL-132) — narg karena
+	// seed/test lama boleh membuat kontak tanpa kode (kolom nullable, tak di-backfill).
 	CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error)
 	// Buat baris pertama kali desa ini disimpan. tenant_id eksplisit (RLS WITH
 	// CHECK memverifikasinya = GUC). usage_data_source TAK dioper (default

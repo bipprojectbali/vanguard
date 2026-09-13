@@ -51,6 +51,9 @@ func TestDefaultFormat(t *testing.T) {
 	if got := DefaultFormat(EntityTicket); got.Padding != 4 {
 		t.Errorf("default ticket padding = %d, want 4", got.Padding)
 	}
+	if got := DefaultFormat(EntityContact); got.Prefix != "KON" {
+		t.Errorf("default contact prefix = %q, want KON", got.Prefix)
+	}
 	// Entitas tak dikenal → bentuk netral, BUKAN kosong/panik (create tak boleh
 	// gagal total hanya karena default belum terdaftar).
 	got := DefaultFormat(Entity("belum_ada"))
@@ -63,7 +66,7 @@ func TestDefaultFormat(t *testing.T) {
 }
 
 func TestValid(t *testing.T) {
-	for _, e := range []Entity{EntityAccount, EntityLead, EntityDeal, EntityQuote, EntityTicket, EntitySubscription} {
+	for _, e := range []Entity{EntityAccount, EntityLead, EntityDeal, EntityQuote, EntityTicket, EntitySubscription, EntityContact} {
 		if !Valid(e) {
 			t.Errorf("entity %q harus valid", e)
 		}
@@ -107,8 +110,8 @@ func TestValidFormat(t *testing.T) {
 
 func TestAllEntities_Salinan(t *testing.T) {
 	a := AllEntities()
-	if len(a) != 6 {
-		t.Fatalf("harus 6 entitas, got %d", len(a))
+	if len(a) != 7 {
+		t.Fatalf("harus 7 entitas, got %d", len(a))
 	}
 	// Mutasi hasil tak boleh merusak daftar internal.
 	a[0] = "diretas"

@@ -40,7 +40,10 @@ func contactsGlobalTable(wsBase string, items []ContactRow) g.Node {
 // (showVillage) hanya di daftar global; "Terakhir" = ringkasan aktivitas (DITUNDA
 // modul Activities, kini "—").
 func contactsTableCard(showVillage bool, rows []g.Node) g.Node {
-	headers := []g.Node{h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Nama"))}
+	headers := []g.Node{
+		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Kode")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Nama")),
+	}
 	headers = append(headers, h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Peran")))
 	if showVillage {
 		headers = append(headers, h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")))
@@ -76,6 +79,7 @@ func contactRow(accountBase string, c ContactRow, showVillage bool) g.Node {
 	}
 	cells := []g.Node{
 		h.Class("border-b border-base-300/50 hover:bg-base-200/50"),
+		link(orDash(c.EntityCode), "py-2 pr-4 font-mono text-xs"),
 		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), h.Class("block min-w-0"),
 			h.Div(h.Class("truncate font-medium"), g.Text(c.Name)),
 			ui.When(c.PositionCategory != "", h.Div(

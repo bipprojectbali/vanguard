@@ -18,8 +18,10 @@
 -- Buat kontak. account_id mengikat ke desa induk (RLS memverifikasi tenant_id =
 -- GUC lewat FK + WITH CHECK). is_primary_contact di-set pemanggil SETELAH
 -- mengosongkan primary lama (ClearAccountPrimaryContact) agar tak melanggar index.
+-- entity_code sudah dirakit pemanggil (GenerateEntityCode, BL-132) — narg karena
+-- seed/test lama boleh membuat kontak tanpa kode (kolom nullable, tak di-backfill).
 INSERT INTO contacts (
-    tenant_id, account_id, contact_owner, reports_to_id,
+    tenant_id, account_id, contact_owner, reports_to_id, entity_code,
     first_name, last_name, salutation, job_title, position_category, contact_role,
     is_primary_contact, is_technical_contact, term_period,
     mobile_phone, whatsapp_number, office_phone, email, preferred_channel,
@@ -27,7 +29,7 @@ INSERT INTO contacts (
     email_opt_out, do_not_contact,
     created_by
 ) VALUES (
-    sqlc.arg(tenant_id), sqlc.arg(account_id), sqlc.narg(contact_owner), sqlc.narg(reports_to_id),
+    sqlc.arg(tenant_id), sqlc.arg(account_id), sqlc.narg(contact_owner), sqlc.narg(reports_to_id), sqlc.narg(entity_code),
     sqlc.arg(first_name), sqlc.narg(last_name), sqlc.narg(salutation),
     sqlc.narg(job_title), sqlc.narg(position_category), sqlc.narg(contact_role),
     sqlc.arg(is_primary_contact), sqlc.arg(is_technical_contact), sqlc.narg(term_period),

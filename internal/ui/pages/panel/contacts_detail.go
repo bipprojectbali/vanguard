@@ -27,6 +27,7 @@ type ContactDetailView struct {
 	AccountBase string
 	ID          int64
 	AccountID   int64
+	EntityCode  string
 	Name        string
 	FirstName   string
 	LastName    string
@@ -103,6 +104,8 @@ func ContactDetail(v ContactDetailView) g.Node {
 				h.Class("text-base-content/70 truncate"), g.Text(contactSubtitle(v)))),
 			h.Div(
 				h.Class("flex flex-wrap items-center gap-2 mt-1"),
+				ui.When(v.EntityCode != "", h.Span(
+					h.Class("badge badge-neutral font-mono"), g.Text(v.EntityCode))),
 				ui.When(v.IsPrimary, h.Span(
 					h.Class("badge badge-primary"), g.Text("Kontak Utama"))),
 				ui.When(v.IsTechnical, h.Span(
