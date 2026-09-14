@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -74,6 +75,17 @@ func (h *Handler) loadOwnedLead(w http.ResponseWriter, r *http.Request, id int64
 		return db.Lead{}, false
 	}
 	return l, true
+}
+
+// leadLabel meresolusi nama lead untuk label target Activity (BL-160). Gagal →
+// "Lead #<id>" cadangan (bukan 500) — pola sama accountLabel/contactLabel
+// (sales_deals_labels.go).
+func (h *Handler) leadLabel(ctx context.Context, id int64) string {
+	l, err := h.q(ctx).GetLead(ctx, id)
+	if err != nil {
+		return "Lead #" + strconv.FormatInt(id, 10)
+	}
+	return l.LeadName
 }
 
 // leadFormFields memetakan Lead → nilai prefill form (semua string; nil → "").

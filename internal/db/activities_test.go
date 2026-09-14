@@ -248,3 +248,32 @@ func TestSoftDeleteActivity(t *testing.T) {
 		t.Errorf("soft-delete kedua harus idempotent, got %v", e)
 	}
 }
+
+// TestCreateActivity_TargetTypeLeadAccepted (BL-160): migrasi 00046 menambah
+// 'lead' ke activities_target_type_chk — regresi memastikan target_type='lead'
+// DITERIMA (bukan hanya "tidak ditolak" tapi baris benar-benar roundtrip),
+// kembaran TestCreateActivity_KindCheckMenolakLiar (yang membuktikan sisi tolak).
+func TestCreateActivity_TargetTypeLeadAccepted(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	truncateCRM(t, ctx)
+
+	q := New(pool)
+	ten, _ := q.CreateTenant(ctx, CreateTenantParams{Name: "T", Slug: "t"})
+
+	var act Activity
+	err := WithTenant(ctx, pool, ten.ID, func(q *Queries) error {
+		var e error
+		act, e = q.CreateActivity(ctx, CreateActivityParams{
+			TenantID: ten.ID, Kind: "note", Subject: "Catatan Lead",
+			TargetType: "lead", TargetID: 999, ActivityContext: strPtr("sales"),
+		})
+		return e
+	})
+	if err != nil {
+		t.Fatalf("target_type 'lead' harus diterima activities_target_type_chk, got %v", err)
+	}
+	if act.TargetType != "lead" || act.TargetID != 999 {
+		t.Errorf("roundtrip target lead salah: got type=%q id=%d", act.TargetType, act.TargetID)
+	}
+}
