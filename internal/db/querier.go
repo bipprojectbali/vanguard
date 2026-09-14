@@ -636,6 +636,40 @@ type Querier interface {
 	// dipaginasi: dipakai untuk MEMILIH satu desa, bukan menelusuri — RLS sudah
 	// mengurung ke satu workspace.
 	ListAccountsForSelect(ctx context.Context, arg ListAccountsForSelectParams) ([]ListAccountsForSelectRow, error)
+	// BL-157c: sort by CS (assigned_csm — HANYA CSM utama, PERSIS kolom yang
+	// ditampilkan accountRowView; backup_csm tak ikut ditampilkan di daftar jadi
+	// tak ikut kunci sort). Pola PERSIS ListAccountsSortByOwner, kolom join beda.
+	ListAccountsSortByCsm(ctx context.Context, arg ListAccountsSortByCsmParams) ([]Account, error)
+	// BL-157c: sort by Owner (account_owner). Kunci sort HARUS
+	// COALESCE(NULLIF(u.name,''), u.email) — PERSIS logika tampil memberName
+	// (accounts_list.go: nama bila terisi, else email) — agar urutan tak
+	// menyimpang dari yang ditampilkan. NULLABLE (account_owner ON DELETE SET
+	// NULL). LEFT JOIN users: baris tanpa owner ATAU owner yang keluar workspace →
+	// owner_key NULL, masuk kelompok NULL. Mirror PERSIS ListLeadsSortByOwner,
+	// beda hanya filter ownership tiga-flag + unowned (bukan dua-flag+mine_only).
+	ListAccountsSortByOwner(ctx context.Context, arg ListAccountsSortByOwnerParams) ([]Account, error)
+	// BL-157c: sort by Provinsi. Sama pola ListAccountsSortByRegency, tapi satu
+	// tingkat lebih jauh (Kecamatan → Kabupaten/Kota → Provinsi) — self-join
+	// regions 3x, cermin GetRegionAncestry tapi LEFT JOIN (nullable).
+	ListAccountsSortByProvince(ctx context.Context, arg ListAccountsSortByProvinceParams) ([]Account, error)
+	// BL-157c: sort by Kab/Kota (Regency), diturunkan district_id via self-join
+	// regions (Kecamatan → Kabupaten/Kota) — PERSIS resolusi regionNames
+	// (accounts_view.go): baris tanpa district_id ATAU district yang sudah tak ada
+	// di master wilayah → regency NULL, masuk kelompok NULL (default Postgres).
+	// LEFT JOIN (bukan JOIN): district_id nullable & region hilang tak boleh
+	// menjatuhkan baris account dari daftar (beda dari GetRegionAncestry yang inner
+	// join, sebab itu dipakai SETELAH district_id dipastikan ada).
+	ListAccountsSortByRegency(ctx context.Context, arg ListAccountsSortByRegencyParams) ([]Account, error)
+	// BL-157c: sort by account_type ("Tipe" — RAW enum customer/former_customer/
+	// prospect, alfabetis; tak menduplikasi urutan tampil ke SQL, mirror keputusan
+	// "Status" Leads BL-157b). account_type NOT NULL → kloning PERSIS pola
+	// ListAccountsSortByVillage, kolom beda.
+	ListAccountsSortByType(ctx context.Context, arg ListAccountsSortByTypeParams) ([]Account, error)
+	// BL-157c (fondasi sort per kolom Accounts): SAMA PERSIS filter ListAccounts
+	// (ownership F3 tiga-flag + unowned + search) — hanya ORDER BY/keyset yang
+	// beda, diurut village_name (bukan created_at). village_name TIDAK NULLABLE →
+	// kloning pola ListLeadsSortByName (tanpa kerumitan NULL).
+	ListAccountsSortByVillage(ctx context.Context, arg ListAccountsSortByVillageParams) ([]Account, error)
 	// Daftar aktivitas (tampilan Tabel), keyset (created_at DESC, id DESC) + filter
 	// ownership F3 + filter context. Dua flag ownership (sumber SATU dengan
 	// ActivitiesListFilter): scope_all → semua; is_own → owner_id = uid; keduanya

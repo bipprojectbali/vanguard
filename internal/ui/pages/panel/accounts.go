@@ -62,6 +62,8 @@ type AccountsListView struct {
 	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 	Err        string
 	Msg        string
+	Sort       string // BL-157c: kolom sort aktif ("" = default created_at DESC)
+	Dir        string // BL-157c: "asc"/"desc", hanya bermakna bila Sort != ""
 }
 
 // AccountsList merender daftar desa: header + aksi tambah, alert, tabel keyset.
@@ -129,7 +131,7 @@ func accountsTablist(v AccountsListView) g.Node {
 		if v.ActiveView == view {
 			cls += " tab-active"
 		}
-		return h.A(h.Href(accountsListHref(v.Base, view, v.Query)), h.Class(cls), g.Text(label))
+		return h.A(h.Href(accountsListHref(v.Base, view, v.Query, v.Sort, v.Dir)), h.Class(cls), g.Text(label))
 	}
 	return h.Div(
 		h.Role("tablist"),
@@ -154,17 +156,27 @@ func accountsTabDesc(view string) string {
 	}
 }
 
-// accountsListHref merakit URL daftar untuk sebuah view + pencarian. all/"" =
-// tanpa param view (URL kanonik daftar). q di-QueryEscape (bisa berisi spasi/
-// karakter khusus); view aman (enum internal). Param after SENGAJA tak ikut:
-// tautan tab/reset selalu mulai dari halaman pertama.
-func accountsListHref(base, view, query string) string {
-	parts := make([]string, 0, 2)
+// accountsListHref merakit URL daftar untuk sebuah view + pencarian + sort
+// (BL-157c). all/"" = tanpa param view (URL kanonik daftar). q di-QueryEscape
+// (bisa berisi spasi/karakter khusus); view & sort aman (enum internal, tak
+// pernah dari input bebas). dir hanya disertakan bila sort != "" (mirror
+// LeadsListView: Dir cuma bermakna saat Sort aktif). Param after SENGAJA tak
+// ikut: tautan tab/reset/sort selalu mulai dari halaman pertama.
+func accountsListHref(base, view, query, sort, dir string) string {
+	parts := make([]string, 0, 4)
 	if view != "" && view != AccViewAll {
 		parts = append(parts, "view="+view)
 	}
 	if query != "" {
 		parts = append(parts, "q="+url.QueryEscape(query))
+	}
+	if sort != "" {
+		parts = append(parts, "sort="+sort)
+		if dir == "desc" {
+			parts = append(parts, "dir=desc")
+		} else {
+			parts = append(parts, "dir=asc")
+		}
 	}
 	if len(parts) == 0 {
 		return base + "/accounts"
@@ -193,6 +205,12 @@ func accountsSearch(v AccountsListView) g.Node {
 	if v.ActiveView != "" && v.ActiveView != AccViewAll {
 		fields = append(fields, h.Input(h.Type("hidden"), h.Name("view"), h.Value(v.ActiveView)))
 	}
+	// Sort/dir aktif dipertahankan lintas submit pencarian (mencari lalu ganti
+	// halaman tak menghapus sort aktif) — mirror leadSortHeader/searchBoxInline.
+	if v.Sort != "" {
+		fields = append(fields, h.Input(h.Type("hidden"), h.Name("sort"), h.Value(v.Sort)))
+		fields = append(fields, h.Input(h.Type("hidden"), h.Name("dir"), h.Value(v.Dir)))
+	}
 	fields = append(fields, h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"), g.Text("Cari")))
 	// Tanpa tombol "Reset": ikon X bawaan input type=search sudah mengosongkan
 	// kata kunci; kosongkan lalu tekan "Cari" → daftar kembali tak tersaring.
@@ -208,7 +226,9 @@ func accountsSearch(v AccountsListView) g.Node {
 // jalan kembali alih-alih "belum ada desa" yang berbohong. reset selalu menuju
 // halaman pertama view aktif (tanpa pencarian).
 func emptyAccounts(v AccountsListView) g.Node {
-	reset := accountsListHref(v.Base, v.ActiveView, "")
+	// Reset ke keadaan dasar view aktif: pencarian DAN sort/dir dibuang (bukan
+	// sekadar pencarian) — "kembali ke awal" berarti benar-benar awal.
+	reset := accountsListHref(v.Base, v.ActiveView, "", "", "")
 	if v.Query != "" {
 		// Pencarian tak berhasil: bukan "belum ada desa" (yang berbohong), tapi
 		// "tak ada yang cocok" + jalan keluar menghapus pencarian.
