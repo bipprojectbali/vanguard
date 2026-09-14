@@ -91,9 +91,10 @@ func (h *Handler) activityDetailView(ctx context.Context, base string, a db.Acti
 	return v
 }
 
-// targetLabel meresolusi nama target polimorfik (deal/account/contact) untuk
-// tampilan detail. Reuse accountLabel/contactLabel (sales_deals_detail.go). Gagal
-// / tipe tak dikenal → label cadangan berbasis id (bukan 500).
+// targetLabel meresolusi nama target polimorfik (deal/account/contact/lead)
+// untuk tampilan detail. Reuse accountLabel/contactLabel (sales_deals_labels.go)
+// & leadLabel (sales_leads_helpers.go). Gagal / tipe tak dikenal → label
+// cadangan berbasis id (bukan 500).
 func (h *Handler) targetLabel(ctx context.Context, targetType string, id int64) string {
 	idStr := strconv.FormatInt(id, 10)
 	switch targetType {
@@ -107,6 +108,8 @@ func (h *Handler) targetLabel(ctx context.Context, targetType string, id int64) 
 		return h.accountLabel(ctx, id)
 	case "contact":
 		return h.contactLabel(ctx, id)
+	case "lead":
+		return h.leadLabel(ctx, id)
 	default:
 		return targetType + " #" + idStr
 	}

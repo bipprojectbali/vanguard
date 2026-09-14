@@ -2,6 +2,7 @@ package panel
 
 import (
 	"fmt"
+	"strconv"
 
 	"go_starter/internal/ui"
 
@@ -109,7 +110,7 @@ func activityTimelineBody(v ActivityTimelineView, allLink string) g.Node {
 	}
 	rows := make([]g.Node, 0, len(v.Items)+1)
 	for _, item := range v.Items {
-		rows = append(rows, activityTimelineRow(item))
+		rows = append(rows, activityTimelineRow(v.Base, item))
 	}
 	if v.NextCursor != "" {
 		rows = append(rows, h.Div(
@@ -128,7 +129,13 @@ func activityTimelineBody(v ActivityTimelineView, allLink string) g.Node {
 // Baris activity (Source="") tampil persis seperti semula. Baris terpadu BL-31
 // (Source terisi) menambah chip sumber Sales/CS di meta; baris CS (TypeLabel
 // terisi) memakai badge jenis engagement + status badge dari StatusBadgeClass.
-func activityTimelineRow(item ActivityTimelineItem) g.Node {
+//
+// Seluruh baris ditautkan ke halaman detail aktivitas (base+"/activities/{id}")
+// — sebelumnya baris timeline di kartu detail entitas (Deal/Contact/Lead/Account)
+// tak bisa diklik sama sekali (permintaan user 14 Sep). Baris SUMBER CS (BL-31,
+// item dari engagements, bukan activities) TETAP tak ditautkan — id-nya bukan
+// id activity, jadi "/activities/{id}" akan salah sasaran/404.
+func activityTimelineRow(base string, item ActivityTimelineItem) g.Node {
 	// meta = [chip sumber] tanggal · [jenis engagement] · owner.
 	meta := item.Date
 	if item.TypeLabel != "" {
@@ -152,8 +159,9 @@ func activityTimelineRow(item ActivityTimelineItem) g.Node {
 		statusBadge = h.Span(h.Class(item.StatusBadgeClass), g.Text(item.Status))
 	}
 
-	return h.Div(
-		h.Class("flex flex-wrap items-start gap-2 py-2 border-b border-base-300/50 last:border-0 min-w-0"),
+	// content = anak baris (tanpa Class — ditambahkan per-varian di bawah karena
+	// baris bertaut (<a>) butuh kelas hover tambahan, baris CS tidak).
+	content := []g.Node{
 		// Badge kiri — shrink-0 agar tidak menyusut saat subject panjang.
 		h.Div(h.Class("shrink-0 pt-0.5"), leftBadge),
 		// Subject + meta (chip sumber · tanggal · jenis · owner).
@@ -168,7 +176,16 @@ func activityTimelineRow(item ActivityTimelineItem) g.Node {
 		),
 		// Status badge — shrink-0.
 		h.Div(h.Class("shrink-0"), statusBadge),
-	)
+	}
+	rowCls := "flex flex-wrap items-start gap-2 py-2 border-b border-base-300/50 last:border-0 min-w-0"
+
+	// Baris CS (engagement) TIDAK ditautkan — item.ID adalah id engagement,
+	// bukan id activity, jadi "/activities/{id}" akan salah sasaran.
+	if item.Source == "cs" {
+		return h.Div(append([]g.Node{h.Class(rowCls)}, content...)...)
+	}
+	href := base + "/activities/" + strconv.FormatInt(item.ID, 10)
+	return h.A(append([]g.Node{h.Href(href), h.Class(rowCls + " hover:bg-base-200/50")}, content...)...)
 }
 
 // timelineSourceChip merender chip sumber Sales/CS untuk linimasa terpadu

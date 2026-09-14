@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -74,6 +75,31 @@ func (h *Handler) loadOwnedLead(w http.ResponseWriter, r *http.Request, id int64
 		return db.Lead{}, false
 	}
 	return l, true
+}
+
+// leadLabel meresolusi nama lead untuk label target Activity (BL-160). Gagal →
+// "Lead #<id>" cadangan (bukan 500) — pola sama accountLabel/contactLabel
+// (sales_deals_labels.go).
+func (h *Handler) leadLabel(ctx context.Context, id int64) string {
+	l, err := h.q(ctx).GetLead(ctx, id)
+	if err != nil {
+		return "Lead #" + strconv.FormatInt(id, 10)
+	}
+	return l.LeadName
+}
+
+// leadPickerLabel format label picker Lead: "{entity_code} — {nama}" bila
+// berkode, atau nama saja bila nil. BUKAN accountPickerLabel (village_code) —
+// beda semantik: BL-61 SENGAJA menyembunyikan entity_code dari detail Account,
+// tapi Lead tak pernah punya BL setara (badge EntityCode tetap tampil di
+// LeadDetail). Kode di depan agar bisa dicari via kode (native <datalist>
+// mencocokkan teks opsi apa adanya) — permintaan user 14 Sep: picker aktivitas
+// harus bisa dicari by kode, bukan cuma nama.
+func leadPickerLabel(entityCode *string, name string) string {
+	if entityCode != nil && *entityCode != "" {
+		return *entityCode + " — " + name
+	}
+	return name
 }
 
 // leadFormFields memetakan Lead → nilai prefill form (semua string; nil → "").

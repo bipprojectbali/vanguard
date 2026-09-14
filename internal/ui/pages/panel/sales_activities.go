@@ -252,6 +252,8 @@ func activityTargetParts(targetType string, id int64) (seg, label string) {
 		return "accounts", "Desa #" + idStr
 	case "contact":
 		return "contacts", "Kontak #" + idStr
+	case "lead":
+		return "leads", "Lead #" + idStr
 	default:
 		return "", ""
 	}
