@@ -11,7 +11,7 @@ import (
 // currentPath="/activities" hardcode; baris feed lintas-context /activity-log
 // menautkan ke URL detail yang SAMA, jadi sidebar tiba-tiba pindah menyala
 // "Sales Activities" walau user datang dari "Activities". Perbaikan via penanda
-// "?from=log" (all_activities.go) dibaca activityDetailCurrentPath (helper).
+// "?from=log" (all_activities.go) dibaca activityCurrentPathFromQuery (helper).
 
 // TestActivityDetail_SidebarActive_DefaultStaysSalesActivities: klik dari daftar
 // Sales Activities sendiri (tanpa "?from=log") → regresi, perilaku lama tetap

@@ -43,8 +43,9 @@ func AllActivitiesList(v AllActivitiesListView) g.Node {
 			// BL-42: satu tombol "Tambah Aktivitas" (jenis dipilih di form) alih-alih
 			// 3 tombol per-kind — seragam dgn Sales Activities (BL-19) & menjangkau
 			// SEMUA kind (termasuk meeting/chat). Tanpa targetFilter (feed global tak
-			// pre-seleksi target).
-			ui.When(v.CanWrite, activityNewButton(v.Base, "")),
+			// pre-seleksi target). fromLog=true (BL-161 lanjutan): tautan bawa
+			// "?from=log" agar sidebar form tetap menyala "Activities".
+			ui.When(v.CanWrite, activityNewButton(v.Base, "", true)),
 		),
 		searchBox(v.Base+"/activity-log", v.Query, "Cari aktivitas — subjek…", "Cari aktivitas"),
 	}

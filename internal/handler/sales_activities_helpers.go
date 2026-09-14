@@ -15,14 +15,17 @@ import (
 // polimorfik (targetInScope) dipakai lintas aksi Activity. Dipecah dari
 // sales_activities.go untuk file health.
 
-// activityDetailCurrentPath (BL-161) menurunkan currentPath sidebar untuk halaman
-// detail satu Activity SESUAI ASAL KLIK, bukan hardcode "/activities". Baris di
-// feed lintas-context /activity-log (all_activities.go) menautkan ke URL detail
-// ini dengan "?from=log" — bila ada, currentPath ikut menyala "Activities"
+// activityCurrentPathFromQuery (BL-161) menurunkan currentPath sidebar untuk
+// halaman terkait satu/beberapa Activity SESUAI ASAL KLIK, bukan hardcode
+// "/activities". Dipakai ActivityDetail+renderActivitiesForbidden (baris feed
+// lintas-context /activity-log, all_activities.go, menautkan "?from=log") DAN
+// ActivityNew (tombol "Tambah Aktivitas" di AllActivitiesList mengirim penanda
+// sama, lanjutan BL-161 — sumber: user 14 Sep, "tambah aktiviti dari menu
+// aktiviti" salah menyalakan "Sales Activities"). Bila ada → "Activities"
 // (bukan "Sales Activities", yang bisa Disabled untuk role tanpa
 // crm:sales_activity mis. CS). Tanpa penanda (masuk dari /activities sendiri,
 // atau akses URL langsung) → "/activities" seperti semula.
-func activityDetailCurrentPath(r *http.Request) string {
+func activityCurrentPathFromQuery(r *http.Request) string {
 	if r.URL.Query().Get("from") == "log" {
 		return "/activity-log"
 	}
