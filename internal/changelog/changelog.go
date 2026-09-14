@@ -28,6 +28,26 @@ type Release struct {
 // Nomor versi teratas menjadi acuan badge "ada pembaruan".
 var Releases = []Release{
 	{
+		Version: "1.5.0",
+		Date:    "2026-09-14",
+		Summary: "Toast notifikasi mengambang menyeragamkan seluruh pesan aksi CRM, Kontak kini punya kode sistem sendiri, dan Daftar Langganan serta Leads bisa diurutkan lewat klik header kolom.",
+		Sections: []Section{
+			{
+				Title: "Baru",
+				Items: []string{
+					"Kontak kini punya kode entitas sistem sendiri (format KON-001, KON-002, …), tampil di tabel & detail kontak — sebelumnya hanya Lead dan Desa yang punya kode semacam ini.",
+					"Header kolom pada Daftar Langganan dan Leads kini bisa diklik untuk mengurutkan data naik/turun per kolom — Desa, Paket, MRR, Masa Berlaku, Renewal Date, CSM untuk Langganan; Kode, Lead, Sumber, Status, Rating, Estimasi, Pemilik untuk Leads — lengkap dengan indikator arah panah.",
+				},
+			},
+			{
+				Title: "Diubah",
+				Items: []string{
+					"Seluruh notifikasi hasil aksi (tambah/ubah/hapus/approve) di semua modul kini tampil sebagai notifikasi mengambang seragam, menggantikan pesan sebaris yang polanya berbeda-beda di tiap modul; beberapa modul yang sebelumnya sama sekali tak punya pesan sukses (Desa, Kontak, Langganan, Kebijakan SLA, Knowledge Base) kini ikut mendapat notifikasi.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.4.0",
 		Date:    "2026-09-11",
 		Summary: "Health Score & Customer Success kini scoped ke desa pelanggan, detail Deal didesain ulang, tap-info jadi bubble, grafik Health Score jadi pie chart, dan sejumlah perapian & perbaikan pada Quote, Langganan, dan Anggota.",

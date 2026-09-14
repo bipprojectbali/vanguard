@@ -4,6 +4,15 @@ Semua perubahan penting pada go_starter dicatat di sini.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-14
+
+### Added
+- **Kontak: kode entitas sistem KON-xxx (BL-132).** Migrasi `00045_crm_contact_entity_code.sql` menambah `'contact'` ke CHECK `code_formats`/`code_sequences` + `contacts.entity_code TEXT` + index unik parsial per-tenant (mirror `idx_accounts_entity_code`). `EntityContact` (`internal/codes/codes.go`) default format `{Prefix:"KON",Separator:"-",Padding:3}`, dialokasikan di `ContactCreate` via `GenerateEntityCode` (pola sama `sales_leads.go`). Tampil di tabel & detail kontak; format bisa dikustomisasi via `/w/{slug}/codes` (label "Kontak" ditambah ke `entityLabel`). Data lama nullable, tak di-backfill.
+- **Sort per kolom pada Daftar Langganan (BL-157a) dan Leads (BL-157b).** Fondasi arsitektur sort-per-kolom (BL-157 backlog, dipecah per modul): header `<Th>` jadi tautan `<a href>` native (bookmarkable, gotcha #16) yang meng-encode `?sort=<col>&dir=asc|desc`; klik pertama = asc, klik saat aktif = toggle arah. Ganti kolom sort MERESET cursor keyset (`?after=` di-drop) — sumbu urut berubah, cursor lama invalid. 6 kolom Subscriptions (Desa/Paket/MRR/Masa Berlaku/Renewal Date/CSM) dan 7 kolom Leads (Kode/Lead/Sumber/Status/Rating/Estimasi/Pemilik) masing-masing dapat query sqlc terpisah (`ListSubscriptionsSortBy*`/`ListLeadsSortBy*`); tiap query KLON filter F3 (scope_all/is_own)/mine_only/status_filter/search dari query default — hanya `ORDER BY`/keyset `WHERE` yang beda. Kolom nullable pakai `pageCursorTextNullable`/`splitPageTextNullable` (`internal/handler/sortcursor.go`, generik, reuse tanpa perubahan); kolom numerik (MRR, Estimasi) & kolom lewat JOIN (CSM, Pemilik via `LEFT JOIN users`) mengikuti pola null-aware yang sama. `sort`/`dir` dipertahankan lintas ganti tab/status filter, search, dan pager; sort berdampingan (bukan menggantikan) filter existing.
+
+### Changed
+- **Toast floating global menggantikan pola pesan per-modul yang tersebar (BL-156a-h).** Komponen baru `ui.Toast`/`ui.ToastSlot` (`internal/ui/components.go`, `Variant` diperluas `VariantSuccess`/`VariantInfo`) dirender `fixed`+`pointer-events:none` (gotcha #7), animasi murni CSS (`.toast-flash`, `static/input.css`, fade 3.2s tanpa JS baru). Rollout bertahap 156b-h: Accounts+Contacts, Sales (Leads/Deals/Quotes/Activities), Subscriptions, Tickets/KB/SLA, Roles+Members, Customer Success, dev/platform — seluruh flash `?err=`/`?ok=` PRG existing kini dirender sebagai toast (bukan `ui.Alert` inline), termasuk 5 modul yang sebelumnya TAK PUNYA pesan sukses sama sekali (Accounts, Contacts, Subscriptions, SLA Policies, KB Articles). Dua prototipe dev-only lama (`dev/users.go`, `dev/health.go`) dimigrasi ke komponen bersama ini.
+
 ## [1.4.0] - 2026-09-11
 
 ### Changed
