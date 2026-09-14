@@ -27,3 +27,18 @@ func (h *Handler) contactLabel(ctx context.Context, id int64) string {
 	}
 	return contactFullName(c)
 }
+
+// dealLabel meresolusi label deal sumber (kode — nama), dipakai kartu System &
+// Audit langganan (BL-154, "Source: Converted from DEAL-xxxx"). Gagal (di luar
+// tenant/terhapus) → "Deal #<id>" cadangan, bukan 500.
+func (h *Handler) dealLabel(ctx context.Context, id int64) string {
+	d, err := h.q(ctx).GetDeal(ctx, id)
+	if err != nil {
+		return "Deal #" + strconv.FormatInt(id, 10)
+	}
+	code := deref(d.EntityCode)
+	if code == "" {
+		return d.DealName
+	}
+	return code + " — " + d.DealName
+}
