@@ -90,6 +90,195 @@ WHERE q.deleted_at IS NULL
 ORDER BY q.created_at DESC, q.id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListQuotesSortByCode :many
+-- BL-157f (klon persis pola ListDealsSortByCode/ListLeadsSortByCode): SAMA
+-- PERSIS filter ListQuotes (ownership F3 warisan deal + search) — hanya
+-- ORDER BY/keyset yang beda, diurut entity_code (bukan created_at).
+-- entity_code NULLABLE. NULLS default Postgres (ASC=LAST, DESC=FIRST).
+SELECT q.*, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (q.entity_code IS NULL OR (q.entity_code, q.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND q.entity_code IS NULL AND q.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (q.entity_code IS NOT NULL OR q.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND q.entity_code IS NOT NULL
+              AND (q.entity_code, q.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND d.deal_owner = sqlc.arg(uid))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR q.quote_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR q.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+      OR d.deal_name ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN q.entity_code END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN q.entity_code END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN q.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN q.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListQuotesSortByName :many
+-- BL-157f: sort by quote_name ("Nama"). NULLABLE (skema: TEXT tanpa NOT NULL,
+-- beda dari deal_name) → kloning pola null-aware ListQuotesSortByCode, bukan
+-- pola non-null ListDealsSortByName.
+SELECT q.*, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (q.quote_name IS NULL OR (q.quote_name, q.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND q.quote_name IS NULL AND q.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (q.quote_name IS NOT NULL OR q.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND q.quote_name IS NOT NULL
+              AND (q.quote_name, q.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND d.deal_owner = sqlc.arg(uid))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR q.quote_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR q.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+      OR d.deal_name ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN q.quote_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN q.quote_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN q.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN q.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListQuotesSortByDeal :many
+-- BL-157f: sort by d.deal_name ("Deal"). deal_name NOT NULL (deals selalu
+-- punya nama) → kloning pola non-null ListDealsSortByName, kunci di kolom
+-- tabel JOIN (bukan tabel utama quotes).
+SELECT q.*, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (d.deal_name, q.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (d.deal_name, q.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND d.deal_owner = sqlc.arg(uid))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR q.quote_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR q.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+      OR d.deal_name ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN d.deal_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN d.deal_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN q.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN q.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListQuotesSortByStatus :many
+-- BL-157f: sort by quote_status ("Status" — RAW enum Draft/Sent/Under
+-- Review/Accepted/Rejected/Expired, alfabetis; mirror keputusan Status Leads/
+-- Tahap Deals, tak menduplikasi urutan lifecycle ke SQL). NOT NULL → kloning
+-- pola non-null ListQuotesSortByDeal.
+SELECT q.*, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (q.quote_status, q.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (q.quote_status, q.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND d.deal_owner = sqlc.arg(uid))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR q.quote_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR q.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+      OR d.deal_name ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN q.quote_status END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN q.quote_status END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN q.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN q.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListQuotesSortByTotal :many
+-- BL-157f: sort by grand_total ("Grand Total"). NULLABLE numeric (snapshot
+-- dihitung ulang dari quote_items — quote baru tanpa item = NULL). Kunci sort
+-- memakai nilai ASLI (kolom ini tak pernah disamarkan F4 di manapun, beda dari
+-- amount Deals) → kloning pola null-aware ListDealsSortByAmount.
+SELECT q.*, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (q.grand_total IS NULL OR (q.grand_total, q.id) > (sqlc.arg(cursor_val)::numeric, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND q.grand_total IS NULL AND q.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (q.grand_total IS NOT NULL OR q.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND q.grand_total IS NOT NULL
+              AND (q.grand_total, q.id) < (sqlc.arg(cursor_val)::numeric, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND d.deal_owner = sqlc.arg(uid))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR q.quote_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR q.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+      OR d.deal_name ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN q.grand_total END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN q.grand_total END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN q.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN q.id END DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: UpdateQuote :one
 -- Sunting profil quote. quote_status punya jalur khusus (UpdateQuoteStatus) dan
 -- total punya jalur khusus (UpdateQuoteTotals) — keduanya TAK di sini agar

@@ -1169,6 +1169,29 @@ type Querier interface {
 	// (created_at DESC, id DESC). Deal sudah ter-scope ownership di handler; di sini
 	// cukup filter deal_id + baris hidup. First page: cursor = (now(), max bigint).
 	ListQuotesForDeal(ctx context.Context, arg ListQuotesForDealParams) ([]Quote, error)
+	// BL-157f (klon persis pola ListDealsSortByCode/ListLeadsSortByCode): SAMA
+	// PERSIS filter ListQuotes (ownership F3 warisan deal + search) — hanya
+	// ORDER BY/keyset yang beda, diurut entity_code (bukan created_at).
+	// entity_code NULLABLE. NULLS default Postgres (ASC=LAST, DESC=FIRST).
+	ListQuotesSortByCode(ctx context.Context, arg ListQuotesSortByCodeParams) ([]ListQuotesSortByCodeRow, error)
+	// BL-157f: sort by d.deal_name ("Deal"). deal_name NOT NULL (deals selalu
+	// punya nama) → kloning pola non-null ListDealsSortByName, kunci di kolom
+	// tabel JOIN (bukan tabel utama quotes).
+	ListQuotesSortByDeal(ctx context.Context, arg ListQuotesSortByDealParams) ([]ListQuotesSortByDealRow, error)
+	// BL-157f: sort by quote_name ("Nama"). NULLABLE (skema: TEXT tanpa NOT NULL,
+	// beda dari deal_name) → kloning pola null-aware ListQuotesSortByCode, bukan
+	// pola non-null ListDealsSortByName.
+	ListQuotesSortByName(ctx context.Context, arg ListQuotesSortByNameParams) ([]ListQuotesSortByNameRow, error)
+	// BL-157f: sort by quote_status ("Status" — RAW enum Draft/Sent/Under
+	// Review/Accepted/Rejected/Expired, alfabetis; mirror keputusan Status Leads/
+	// Tahap Deals, tak menduplikasi urutan lifecycle ke SQL). NOT NULL → kloning
+	// pola non-null ListQuotesSortByDeal.
+	ListQuotesSortByStatus(ctx context.Context, arg ListQuotesSortByStatusParams) ([]ListQuotesSortByStatusRow, error)
+	// BL-157f: sort by grand_total ("Grand Total"). NULLABLE numeric (snapshot
+	// dihitung ulang dari quote_items — quote baru tanpa item = NULL). Kunci sort
+	// memakai nilai ASLI (kolom ini tak pernah disamarkan F4 di manapun, beda dari
+	// amount Deals) → kloning pola null-aware ListDealsSortByAmount.
+	ListQuotesSortByTotal(ctx context.Context, arg ListQuotesSortByTotalParams) ([]ListQuotesSortByTotalRow, error)
 	// Level 2 (Kabupaten/Kota) di bawah satu provinsi. Tak dipakai cascading di JS
 	// (dataset penuh sudah di-embed via ListAllRegions), tapi berguna utk validasi
 	// server-side / API lain di masa depan.
