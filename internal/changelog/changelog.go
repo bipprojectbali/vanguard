@@ -28,6 +28,35 @@ type Release struct {
 // Nomor versi teratas menjadi acuan badge "ada pembaruan".
 var Releases = []Release{
 	{
+		Version: "1.6.0",
+		Date:    "2026-09-14",
+		Summary: "Sort kolom kini tersedia di hampir semua tabel CRM, Lead bisa dicatat aktivitasnya, Beranda dapat grafik ringkas per-modul, perubahan tahap Deal jadi berurutan, detail Langganan didesain ulang, dan badge Perpanjangan diperbaiki.",
+		Sections: []Section{
+			{
+				Title: "Baru",
+				Items: []string{
+					"Sort kolom (klik header untuk urutkan naik/turun) kini tersedia di tabel Desa (Akun), Kontak, Deal, Quote, Perpanjangan, Tiket, dan Health Score — melengkapi Langganan dan Leads yang sudah bisa diurutkan sebelumnya.",
+					"Lead kini bisa dicatat riwayat aktivitasnya (telepon, pertemuan, dll) seperti Deal dan Kontak, lengkap dengan pencarian lead lewat kode saat memilih target aktivitas.",
+					"Halaman Beranda kini menampilkan grafik ringkas di bawah kartu KPI untuk Sales, Langganan, Customer Success, dan Support — menyesuaikan peran pengguna yang login.",
+				},
+			},
+			{
+				Title: "Diubah",
+				Items: []string{
+					"Halaman detail Langganan didesain ulang mengikuti pola kartu 2-kolom — Identitas & Langganan, Status & Lifecycle, Financials, Renewal, serta System & Audit — kini juga menampilkan ringkasan Health Score/Onboarding dan tautan ke deal sumbernya.",
+					"Ubah tahap Deal kini hanya bisa maju satu langkah berurutan, tak bisa lompat tahap — mencegah kesalahan input dan menjaga jejak proses penjualan tetap rapi.",
+				},
+			},
+			{
+				Title: "Diperbaiki",
+				Items: []string{
+					"Badge \"Diperpanjang\" serta KPI terkait pada halaman Perpanjangan tak lagi salah tampil untuk langganan yang sudah churn/berhenti — status daur hidup kini diprioritaskan atas riwayat perpanjangan lama.",
+					"Menambah aktivitas dari halaman Lead kini mengarahkan tombol kembali & sorotan menu sidebar dengan benar — sebelumnya salah mengarah ke menu lain.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.5.0",
 		Date:    "2026-09-14",
 		Summary: "Toast notifikasi mengambang menyeragamkan seluruh pesan aksi CRM, Kontak kini punya kode sistem sendiri, dan Daftar Langganan serta Leads bisa diurutkan lewat klik header kolom.",

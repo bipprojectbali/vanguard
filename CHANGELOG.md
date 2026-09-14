@@ -4,6 +4,21 @@ Semua perubahan penting pada go_starter dicatat di sini.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-14
+
+### Added
+- **Rollout sort per kolom tuntas ke 7 modul lagi (BL-157c-i).** Melanjutkan fondasi BL-157a/b (Subscriptions, Leads, sudah di 1.5.0), pola sort-per-kolom (header `<Th>` jadi tautan native `?sort=<col>&dir=asc|desc`, query sqlc terpisah per kolom yang mengklon filter F3/status/search dari query default, cursor keyset direset saat ganti kolom) kini diterapkan lengkap ke Accounts (BL-157c), Kontak (BL-157d), Deals (BL-157e), Quotes (BL-157f), Renewals 5 kolom (BL-157g), Tickets 6 kolom (BL-157h), dan Health Score 7 kolom (BL-157i).
+- **Activities kini bisa dicatat pada Lead, bukan hanya Deal/Contact (BL-160).** Reuse komponen timeline yang sama (`ActivityTimeline`/`activitiesTimelineFor`); migrasi `00046` menambah `'lead'` ke CHECK `activities_target_type_chk` (00011). `validActivityTargetTypes`/`targetInScope` terima target lead (F3 via `LeadsListFilterFor`, pola sama deal); picker target Activity bisa mencari Lead by kode; baris timeline bisa diklik ke detail.
+- **Beranda dapat grafik ringkas per-domain (BL-140..144).** Grid chart inline di bawah strip KPI Beranda — 3 untuk Sales, 2 untuk Subscription, 2 untuk Customer Success, 2 untuk Support — hanya tampil bila `DashDomain.Charts` terisi (role-gated mengikuti kapabilitas modul masing-masing), membalik penghapusan chart era BL-98 khusus untuk Beranda. Helper generik `pieOption`/`barOption` (`dashboard_charts.go`) menggantikan pola satu-fungsi-per-chart lama.
+
+### Changed
+- **Detail Langganan didesain ulang kartu 2-kolom (BL-154).** Grid mobile-first (`grid-cols-1 md:grid-cols-2`): Identitas & Langganan, Status & Lifecycle, Financials, Renewal, System & Audit. Status & Lifecycle menambah lookup lintas-modul `customer_success` (Health Score + Onboarding + Activated At, best-effort via `customerSuccessSummaryFor`). Renewal reuse `renewalDerivedStatus` + Days to Renewal + Prev→Current (F4 masked). System & Audit menambah Created/Modified by-nama (`ownerName`/`memberNameMap`) + tautan Source deal (`dealLabel` baru). Setup Fee/Payment Method/Last Invoice sengaja DI-DROP dari v1 (tanpa migrasi, diuji negatif). Split file: `subscriptions_detail_view.go` (view-builder) + `panel/subscriptions_detail_cards.go` (3 kartu baru).
+- **Perubahan tahap Deal kini hanya boleh berurutan, tak bisa lompat (BL-159).** `nextDealStages`/`isValidDealStageTransition` (single source of truth, `sales_deals_stage_sequence.go`) membatasi dropdown ubah tahap ke tahap berikutnya saja, ditegakkan UI DAN backend (defense in depth). Dari tahap aktif terakhir (Negotiation) tersedia 2 opsi (Closed Won/Closed Lost) — Closed Lost hanya sah dari Negotiation, tak dari tahap manapun. Stage terminal tetap dead-end. Reopen dari tahap terminal (termasuk re-POST Won idempotent) sengaja dikecualikan dari aturan sequential agar tak meregresi perilaku reopen existing.
+
+### Fixed
+- **Renewals: badge/KPI "Diperpanjang" salah tampil untuk langganan churned (BL-155 🐞).** Lanjutan BL-152 — `ChurnSubscription` sengaja hanya menulis kolom status+churn, tak pernah membersihkan `renewal_status`, sehingga langganan yang pernah diperpanjang lalu churn tetap `renewal_status='Renewed'` selamanya dan badge "Diperpanjang" terus muncul. Perbaikan dua bagian tanpa migrasi (mask saat baca, bukan tulis kolom baru): (a) `renewalDerivedStatus` cabang "Renewed" kini mensyaratkan status masih hidup (Active/PendingApproval) sebelum menang atas label lifecycle — status terminal (Churned/Expired/Cancelled/…) jatuh ke badge lifecycle-nya sendiri; (b) window `ListRenewals` `'renewed'` + `RenewalKPIs.renewed_count` menambah guard `status IN ('Active','PendingApproval')` yang sama agar akun churned/expired keluar dari tab/KPI "Diperpanjang" namun tetap tampil di "Semua" dengan badge lifecycle sebenarnya.
+- **Aktivitas: link "kembali" & highlight sidebar salah saat Tambah Aktivitas dari Lead (BL-161 🐞).** `currentPath` detail activity sebelumnya hardcode, kini ikut halaman asal klik; sidebar tak lagi salah menyorot menu lain saat menambah aktivitas dari halaman Lead.
+
 ## [1.5.0] - 2026-09-14
 
 ### Added
