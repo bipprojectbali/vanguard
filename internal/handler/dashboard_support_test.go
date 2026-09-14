@@ -9,7 +9,8 @@ import (
 )
 
 // dashboard_support_test.go — section "Support" Beranda (Modul 1, BL-59d +
-// BL-98). Dipisah dari dashboard_test.go (ukuran file). Tiga sumbu dijaga:
+// BL-98 + BL-144). Dipisah dari dashboard_test.go (ukuran file). Tiga sumbu
+// dijaga:
 //
 //   - Visibilitas per-kapabilitas: role dgn kapabilitas Support (admin/manager/
 //     csm/support) melihat heading "Support" + KPI inti; role KUSTOM tanpa
@@ -19,9 +20,13 @@ import (
 //   - F3 kepemilikan: "Tiket Terbuka" menghormati data_scope (own vs all) via
 //     TicketsListFilterFor — sama dgn daftar /tickets.
 //
-// BL-98: section kini MAKS 2 KPI (Tiket Terbuka · Kepatuhan SLA) TANPA chart
-// domain; KPI Terlambat/Langgar & Rata Waktu, chart Tiket-per-Prioritas & Beban-
-// Agen dipindah ke Support Report.
+// BL-98: section kini MAKS 2 KPI (Tiket Terbuka · Kepatuhan SLA); KPI
+// Terlambat/Langgar & Rata Waktu Penyelesaian tetap di Support Report, TAK
+// dikembalikan. BL-144 (membalik KHUSUS Beranda) mengembalikan chart Volume
+// Tiket per Bulan (id BARU "chart-support-volume") + SLA per Prioritas (id BARU
+// "chart-support-sla") — id LAMA "chart-tickets-priority"/"chart-agent-workload"
+// (di bawah) tak pernah kembali, lihat dashboard_support_charts_test.go untuk
+// assertion chart BL-144.
 //
 // Setup/helper reuse dashboard_test.go (dashboardBody, dashboardKPIValue),
 // accounts_test.go (setupAccounts, seedAccount, seedMember), tickets_test.go
@@ -54,9 +59,12 @@ func TestDashboardSupport_DomainVisibleByCapability(t *testing.T) {
 					t.Errorf("role %q: KPI %q sudah dipindah ke Report", role, dropped)
 				}
 			}
+			// Id chart LAMA pre-BL-98 — TAK PERNAH kembali; BL-144 memakai id BARU
+			// (chart-support-volume/chart-support-sla, lihat
+			// dashboard_support_charts_test.go), bukan menghidupkan fungsi lama ini.
 			for _, chart := range []string{"chart-tickets-priority", "chart-agent-workload"} {
 				if strings.Contains(body, chart) {
-					t.Errorf("role %q: panel %q sudah dipindah ke Report (BL-98)", role, chart)
+					t.Errorf("role %q: id chart LAMA %q (pre-BL-98) tak boleh muncul lagi", role, chart)
 				}
 			}
 		})
