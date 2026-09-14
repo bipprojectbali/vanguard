@@ -23,8 +23,9 @@ var (
 		"task": {}, "meeting": {}, "call": {}, "chat": {}, "note": {},
 	}
 	// validActivityTargetTypes = tipe target yang ber-picker v1 (Deal/Account/
-	// Contact). Cermin subset target_type_chk (ticket/subscription belum ber-UI).
-	validActivityTargetTypes = map[string]struct{}{"deal": {}, "account": {}, "contact": {}}
+	// Contact/Lead). Cermin subset target_type_chk (ticket/subscription belum
+	// ber-UI). Lead ditambah BL-160 (timeline aktivitas di detail Lead).
+	validActivityTargetTypes = map[string]struct{}{"deal": {}, "account": {}, "contact": {}, "lead": {}}
 	// validActivityPriorities = prioritas Task. Cermin priority_chk.
 	validActivityPriorities = map[string]struct{}{"Low": {}, "Normal": {}, "High": {}}
 	// validTaskStatuses = daur hidup Task (subset status_chk yang relevan untuk

@@ -171,6 +171,61 @@ func TestActivityCreate_RejectsTargetOutOfScope(t *testing.T) {
 	}
 }
 
+// TestActivityCreate_Lead_ParsesTargetAndPersists (BL-160): POST create dengan
+// target=lead:<id> tersimpan & tampil di daftar — pola sama target account, kini
+// membuktikan "lead" diterima validActivityTargetTypes + targetInScope.
+func TestActivityCreate_Lead_ParsesTargetAndPersists(t *testing.T) {
+	env, uid := setupAccounts(t)
+	l := env.seedLeadStatus(t, "Lead Target", uid, "New")
+
+	form := url.Values{}
+	form.Set("kind", "note")
+	form.Set("target", "lead:"+itoa(l.ID))
+	form.Set("subject", "Aktivitas Lead Baru")
+	form.Set("body", "isi catatan lead")
+
+	req := accountsReq(http.MethodPost, "/activities", form, "")
+	rec := env.runAccount(uid, "member", "sales", req, env.h.ActivityCreate)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create harus 303, got %d\n%s", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=created") {
+		t.Fatalf("create sukses harus redirect ok=created, got %q", loc)
+	}
+
+	body := env.activitiesListBody(t, uid, "member", "sales")
+	if !strings.Contains(body, "Aktivitas Lead Baru") {
+		t.Errorf("aktivitas baru (target lead) harus tampil di daftar")
+	}
+}
+
+// TestActivityCreate_Lead_RejectsTargetOutOfScope (BL-160): lead milik owner lain
+// di luar cakupan aktor (sales IsOwn) → tolak (redirect ?err), tak tersimpan —
+// kembaran TestActivityCreate_RejectsTargetOutOfScope untuk target account.
+func TestActivityCreate_Lead_RejectsTargetOutOfScope(t *testing.T) {
+	env, actor := setupAccounts(t)
+	ownerB := env.seedMember(t, "leadownerb@local", "member", 0).ID
+	leadB := env.seedLeadStatus(t, "Lead Orang Lain", ownerB, "New")
+
+	form := url.Values{}
+	form.Set("kind", "note")
+	form.Set("target", "lead:"+itoa(leadB.ID))
+	form.Set("subject", "Curi Target Lead")
+
+	req := accountsReq(http.MethodPost, "/activities", form, "")
+	rec := env.runAccount(actor, "member", "sales", req, env.h.ActivityCreate)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("harus redirect (303), got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=activity_target") {
+		t.Errorf("target lead di luar cakupan harus err=activity_target, got %q", loc)
+	}
+	body := env.activitiesListBody(t, actor, "member", "sales")
+	if strings.Contains(body, "Curi Target Lead") {
+		t.Errorf("aktivitas dengan target lead di luar cakupan tak boleh tersimpan")
+	}
+}
+
 // ── M7-B: Target filter ──────────────────────────────────────────────────────
 
 // TestActivitiesList_TargetFilter: ?target=account:<id> memfilter daftar ke
@@ -238,6 +293,34 @@ func TestActivityNew_PreFillsTarget(t *testing.T) {
 	}
 }
 
+// TestActivityNew_TargetOptionsIncludeLeadSearchableByCode: picker target di
+// GET /activities/new memuat opsi Lead berlabel "{entity_code} — {nama}" —
+// bukan cuma nama — sehingga bisa dicari via kode Lead (native <datalist>
+// mencocokkan teks opsi apa adanya). Permintaan user 14 Sep: form aktivitas
+// perlu opsi lead + bisa dicari by kode, bukan cuma nama (kembaran
+// TestActivityNew_PreFillsTarget, membuktikan opsi + label, bukan hanya prefill).
+func TestActivityNew_TargetOptionsIncludeLeadSearchableByCode(t *testing.T) {
+	env, uid := setupAccounts(t)
+	l := env.seedLeadStatus(t, "Lead Dicari", uid, "New")
+	if l.EntityCode == nil || *l.EntityCode == "" {
+		t.Fatalf("seedLeadStatus harus menghasilkan entity_code")
+	}
+
+	req := accountsReq(http.MethodGet, "/activities/new", nil, "")
+	rec := env.runAccount(uid, "member", "sales", req, env.h.ActivityNew)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ActivityNew status %d\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "lead:"+itoa(l.ID)) {
+		t.Errorf("picker target harus memuat opsi lead:%d", l.ID)
+	}
+	wantLabel := *l.EntityCode + " — Lead Dicari"
+	if !strings.Contains(body, wantLabel) {
+		t.Errorf("label opsi lead harus diawali kode (%q) agar bisa dicari by kode, body tak mengandungnya", wantLabel)
+	}
+}
+
 // ── Unit (tanpa DB) ─────────────────────────────────────────────────────────
 
 // TestParseActivityTarget: picker "type:id" diurai & divalidasi bentuk+enum di
@@ -252,11 +335,12 @@ func TestParseActivityTarget(t *testing.T) {
 		{"deal:123", "deal", 123, true},
 		{"account:7", "account", 7, true},
 		{"contact:9", "contact", 9, true},
-		{"deal:0", "", 0, false},   // id harus > 0
-		{"ticket:5", "", 0, false}, // tipe di luar picker v1
-		{"deal", "", 0, false},     // tanpa ":"
-		{"deal:abc", "", 0, false}, // id bukan angka
-		{"", "", 0, false},         // kosong
+		{"lead:4", "lead", 4, true}, // BL-160
+		{"deal:0", "", 0, false},    // id harus > 0
+		{"ticket:5", "", 0, false},  // tipe di luar picker v1
+		{"deal", "", 0, false},      // tanpa ":"
+		{"deal:abc", "", 0, false},  // id bukan angka
+		{"", "", 0, false},          // kosong
 	}
 	for _, c := range cases {
 		gt, gid, gok := parseActivityTarget(c.in)

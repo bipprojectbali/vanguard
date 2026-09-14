@@ -37,6 +37,8 @@ func wsErrMsgCRM(code string) string {
 		return "Nama deal wajib diisi (maks 200 karakter)."
 	case "stage":
 		return "Tahap deal tidak valid."
+	case "stage_sequence":
+		return "Tahap tidak boleh dilompati — pilih tahap berikutnya sesuai urutan pipeline (Closed Lost hanya dari Negotiation)."
 	case "deal_type":
 		return "Tipe deal tidak valid."
 	case "deal_term":

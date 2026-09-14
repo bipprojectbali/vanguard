@@ -9,7 +9,7 @@ import (
 )
 
 // dashboard_cs_test.go — section "Customer Success" Beranda (Modul 1, BL-59c +
-// BL-98). Dipisah dari dashboard_test.go (ukuran file). Tiga sumbu dijaga:
+// BL-98 + BL-143). Dipisah dari dashboard_test.go (ukuran file). Tiga sumbu dijaga:
 //
 //   - Visibilitas per-kapabilitas: role dgn kapabilitas CS (admin/manager/csm)
 //     melihat heading "Customer Success" + KPI inti; role KUSTOM tanpa kapabilitas
@@ -21,6 +21,9 @@ import (
 //
 // BL-98: section kini MAKS 2 KPI (Desa Berisiko · Adoption Rate) TANPA chart
 // domain; KPI Engagement Jatuh Tempo & panel Onboarding dipindah ke CS Report.
+// BL-143 (membalik KHUSUS Beranda) mengembalikan chart Progres Onboarding
+// (id BARU "chart-cs-onboarding", bukan id lama "chart-onboarding" pre-BL-98)
+// + chart baru Engagement per CSM — lihat dashboard_cs_charts_test.go.
 //
 // Setup/helper reuse dashboard_test.go (dashboardBody, dashboardKPIValue),
 // accounts_test.go (setupAccounts, seedAccount, seedMember), health_score_test.go
@@ -46,12 +49,11 @@ func TestDashboardCS_DomainVisibleByCapability(t *testing.T) {
 					t.Errorf("role %q harus melihat KPI %q di section Customer Success", role, kpi)
 				}
 			}
-			// BL-98: butir yang dipindah ke Report tak boleh muncul di Beranda.
+			// BL-98: KPI Engagement Jatuh Tempo tetap di Report, TAK dikembalikan
+			// BL-143 (hanya chart Onboarding & Engagement per CSM yang kembali —
+			// lihat dashboard_cs_charts_test.go untuk assertion chart tsb).
 			if strings.Contains(body, ">Engagement Jatuh Tempo (7 hari)</p>") {
 				t.Errorf("role %q: KPI Engagement Jatuh Tempo sudah dipindah ke Report", role)
-			}
-			if strings.Contains(body, "chart-onboarding") {
-				t.Errorf("role %q: panel Onboarding sudah dipindah ke Report (BL-98)", role)
 			}
 		})
 	}

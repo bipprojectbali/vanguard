@@ -32,6 +32,12 @@ type DealDetailView struct {
 	PrimaryContact string
 	Stage          string
 	Stages         []string
+	// NextStages (BL-159) = tahap SAH berikutnya dari Stage saat ini — sequential-
+	// only, satu opsi untuk tahap aktif biasa, dua (Closed Won/Closed Lost) khusus
+	// dari tahap aktif terakhir (Negotiation). Sumber opsi <select> ganti tahap
+	// (BUKAN Stages, yang tetap seluruh pipeline untuk stepper). Kosong hanya bila
+	// Stage sudah terminal — tapi form ganti tahap tak dirender saat itu (canAct).
+	NextStages []string
 	// WonSubStatuses (BL-21) = pilihan status langganan awal (Active/Trial) untuk
 	// dropdown yang muncul saat memilih Closed Won; diisi handler dari enum
 	// autoritatif (validInitialSubStatuses). Kosong → dropdown tak dirender.

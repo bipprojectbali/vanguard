@@ -15,6 +15,23 @@ import (
 // polimorfik (targetInScope) dipakai lintas aksi Activity. Dipecah dari
 // sales_activities.go untuk file health.
 
+// activityCurrentPathFromQuery (BL-161) menurunkan currentPath sidebar untuk
+// halaman terkait satu/beberapa Activity SESUAI ASAL KLIK, bukan hardcode
+// "/activities". Dipakai ActivityDetail+renderActivitiesForbidden (baris feed
+// lintas-context /activity-log, all_activities.go, menautkan "?from=log") DAN
+// ActivityNew (tombol "Tambah Aktivitas" di AllActivitiesList mengirim penanda
+// sama, lanjutan BL-161 — sumber: user 14 Sep, "tambah aktiviti dari menu
+// aktiviti" salah menyalakan "Sales Activities"). Bila ada → "Activities"
+// (bukan "Sales Activities", yang bisa Disabled untuk role tanpa
+// crm:sales_activity mis. CS). Tanpa penanda (masuk dari /activities sendiri,
+// atau akses URL langsung) → "/activities" seperti semula.
+func activityCurrentPathFromQuery(r *http.Request) string {
+	if r.URL.Query().Get("from") == "log" {
+		return "/activity-log"
+	}
+	return "/activities"
+}
+
 // loadOwnedActivity memuat satu aktivitas & menegakkan F3 (owner_id): di luar
 // cakupan aktor → 404 (kembaran ActivityDetail). (activity, true) bila boleh.
 func (h *Handler) loadOwnedActivity(w http.ResponseWriter, r *http.Request, id int64) (db.Activity, bool) {
@@ -37,8 +54,8 @@ func (h *Handler) loadOwnedActivity(w http.ResponseWriter, r *http.Request, id i
 	return a, true
 }
 
-// targetInScope memverifikasi target polimorfik (deal/account/contact) ADA &
-// dalam cakupan F3 aktor — target_id bukan FK, jadi integritas ditegakkan di
+// targetInScope memverifikasi target polimorfik (deal/account/contact/lead) ADA
+// & dalam cakupan F3 aktor — target_id bukan FK, jadi integritas ditegakkan di
 // sini sebelum insert. (false, nil) = tak ada / di luar cakupan (tolak form);
 // (false, err) = galat query (500-worthy). Contact memakai cakupan AKUN induk
 // (tak ada ContactsListFilter tersendiri — visibilitas kontak ikut akunnya).
@@ -55,6 +72,15 @@ func (h *Handler) targetInScope(ctx context.Context, targetType string, id int64
 			return false, err
 		}
 		return db.DealsListFilterFor(scope).Allows(uid, d.DealOwner), nil
+	case "lead":
+		l, err := h.q(ctx).GetLead(ctx, id)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return false, nil
+			}
+			return false, err
+		}
+		return db.LeadsListFilterFor(scope).Allows(uid, l.LeadOwner), nil
 	case "account":
 		a, err := h.q(ctx).GetAccount(ctx, id)
 		if err != nil {

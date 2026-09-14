@@ -153,10 +153,19 @@ func dealStageModal(v DealDetailView, base string) g.Node {
 // Kekalahan" HANYA saat Closed Lost (selaras backend: loss_notes cuma relevan
 // saat kalah). Toggle klien murni UX — validasi & pembersihan tetap di handler.
 func dealStageControl(v DealDetailView, base string) g.Node {
-	opts := selectedOptions(v.Stages, v.Stage)
+	// BL-159: opsi HANYA tahap sah berikutnya (NextStages), bukan v.Stage sendiri
+	// (stage sekarang tak pernah jadi pilihan "ganti ke"). Signal awal = opsi
+	// pertama — v.Stage sengaja TAK dipakai di sini karena tak lagi ada di daftar
+	// opsi (data-bind akan mismatch bila signal awal bukan salah satu <option>).
+	next := v.NextStages
+	initial := v.Stage
+	if len(next) > 0 {
+		initial = next[0]
+	}
+	opts := selectedOptions(next, initial)
 	return h.FormEl(
 		h.Method("post"), h.Action(base+"/stage"),
-		data.Signals(map[string]any{"stage": v.Stage}),
+		data.Signals(map[string]any{"stage": initial}),
 		h.Class("grid gap-3 min-w-0"),
 		h.Div(
 			h.Class("grid gap-1 min-w-0"),

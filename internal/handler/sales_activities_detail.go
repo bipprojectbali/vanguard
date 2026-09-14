@@ -19,6 +19,12 @@ import (
 // diputuskan di sini (loadOwnedActivity: filter.Allows) — di luar cakupan → 404.
 // Nama target & kontak diresolusi best-effort (satu query masing-masing, bukan
 // N+1); gagal → label cadangan berbasis id, bukan 500.
+//
+// currentPath sidebar (BL-161): DULU hardcode "/activities" apa pun jalur
+// masuknya — baris di feed lintas-context /activity-log menautkan ke URL yang
+// sama, jadi sidebar tiba-tiba pindah menyala "Sales Activities" walau user
+// datang dari "Activities". Sekarang via activityCurrentPathFromQuery (helper),
+// digerakkan penanda "?from=log" yang disisipkan all_activities.go.
 func (h *Handler) ActivityDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !canViewSalesActivity(ctx) {
@@ -43,7 +49,7 @@ func (h *Handler) ActivityDetail(w http.ResponseWriter, r *http.Request) {
 	v := h.activityDetailView(ctx, base, a, names)
 	v.Err = wsErrMsg(r.URL.Query().Get("err"))
 	v.Msg = activitiesMsg(r.URL.Query().Get("ok"))
-	h.renderWorkspaceShell(w, r, a.Subject, "/activities", panel.ActivityDetail(v))
+	h.renderWorkspaceShell(w, r, a.Subject, activityCurrentPathFromQuery(r), panel.ActivityDetail(v))
 }
 
 // activityDetailView merakit detail lengkap. Nama target (& kontak untuk Call)
@@ -91,9 +97,10 @@ func (h *Handler) activityDetailView(ctx context.Context, base string, a db.Acti
 	return v
 }
 
-// targetLabel meresolusi nama target polimorfik (deal/account/contact) untuk
-// tampilan detail. Reuse accountLabel/contactLabel (sales_deals_detail.go). Gagal
-// / tipe tak dikenal → label cadangan berbasis id (bukan 500).
+// targetLabel meresolusi nama target polimorfik (deal/account/contact/lead)
+// untuk tampilan detail. Reuse accountLabel/contactLabel (sales_deals_labels.go)
+// & leadLabel (sales_leads_helpers.go). Gagal / tipe tak dikenal → label
+// cadangan berbasis id (bukan 500).
 func (h *Handler) targetLabel(ctx context.Context, targetType string, id int64) string {
 	idStr := strconv.FormatInt(id, 10)
 	switch targetType {
@@ -107,6 +114,8 @@ func (h *Handler) targetLabel(ctx context.Context, targetType string, id int64) 
 		return h.accountLabel(ctx, id)
 	case "contact":
 		return h.contactLabel(ctx, id)
+	case "lead":
+		return h.leadLabel(ctx, id)
 	default:
 		return targetType + " #" + idStr
 	}

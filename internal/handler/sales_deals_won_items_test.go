@@ -32,7 +32,9 @@ func TestWonCreatesSubscriptionItems(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Multiline", &uid, nil, nil)
 	deal := env.seedDeal(t, acc.ID, &uid)
-	env.setDealStage(t, deal.ID, "Qualification") // BL-13: jendela quoting
+	// BL-13: jendela quoting; BL-159: Negotiation (bukan Qualification) — Closed
+	// Won di bawah kini hanya sah dari tahap aktif TERAKHIR (sequential-only).
+	env.setDealStage(t, deal.ID, "Negotiation")
 	q := env.seedQuote(t, deal.ID, acc.ID, "0")
 	planA := env.seedPlan(t, "Paket Inti", "PLN-ITM-A", "1000000")
 	planB := env.seedPlan(t, "Paket Tambahan", "PLN-ITM-B", "1000000")

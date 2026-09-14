@@ -14,6 +14,9 @@ import (
 
 // TestAllActivitiesList_SingleAddButton: satu tombol "Tambah Aktivitas" → tautan
 // /activities/new tanpa ?kind=, dan TIDAK ada lagi tombol per-kind lama.
+// "?from=log" (BL-161 lanjutan): penanda asal klik feed /activity-log, dibaca
+// activityCurrentPathFromQuery (handler) agar sidebar form ActivityNew tetap
+// menyala "Activities" — lihat sales_activities_new_test.go.
 func TestAllActivitiesList_SingleAddButton(t *testing.T) {
 	out := renderLeads(t, AllActivitiesList(AllActivitiesListView{
 		Base:     "/w/desa",
@@ -23,8 +26,8 @@ func TestAllActivitiesList_SingleAddButton(t *testing.T) {
 	if !strings.Contains(out, "Tambah Aktivitas") {
 		t.Errorf("harus ada satu tombol \"Tambah Aktivitas\":\n%s", out)
 	}
-	if !strings.Contains(out, `href="/w/desa/activities/new"`) {
-		t.Errorf("tombol harus menautkan ke /activities/new (jenis dipilih di form):\n%s", out)
+	if !strings.Contains(out, `href="/w/desa/activities/new?from=log"`) {
+		t.Errorf("tombol harus menautkan ke /activities/new?from=log (jenis dipilih di form, BL-161):\n%s", out)
 	}
 	// Pola LAMA 3-tombol per-kind harus HILANG (§17 dead code + inkonsistensi UX).
 	if strings.Contains(out, "?kind=") {

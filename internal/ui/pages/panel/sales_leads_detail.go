@@ -67,6 +67,10 @@ type LeadDetailView struct {
 
 	CanWrite   bool
 	CanConvert bool
+
+	// Activities = timeline aktivitas lead ini (BL-160). Diisi handler via
+	// activitiesTimelineFor(ctx, base, "lead", id, CanWrite) — pola sama Deal/Contact.
+	Activities ActivityTimelineView
 }
 
 // LeadDetail merender hub detail: header (nama + badge + baris meta + aksi), grid
@@ -91,6 +95,7 @@ func LeadDetail(v LeadDetailView) g.Node {
 			leadLocationCard(v),
 			leadSystemAuditCard(v),
 		),
+		ActivityTimeline(v.Activities),
 		leadConvertNote(v),
 	}
 	// Modal kontrol status: hanya untuk aktor boleh-tulis atas lead BELUM

@@ -141,12 +141,31 @@ func TestActivityForm_TargetPrefillOnCreate(t *testing.T) {
 	}
 }
 
-// TestActivityForm_ExplicitHelpKept: BL-85 membuang fallback bantuan default
-// GLOBAL, tapi picker yang MENYETEL Help eksplisit (mis. target aktivitas) tetap
-// menampilkannya — opt-in tak ikut terhapus.
-func TestActivityForm_ExplicitHelpKept(t *testing.T) {
+// TestTypeaheadPickerField_ExplicitHelpKept: BL-85 membuang fallback bantuan
+// default GLOBAL, tapi picker yang MENYETEL Help eksplisit tetap menampilkannya
+// — opt-in tak ikut terhapus. Diuji langsung atas typeaheadPickerField (bukan
+// lagi lewat picker target aktivitas — teks bantuannya dihapus 14 Sep atas
+// permintaan user, tak ada lagi picker nyata yang menyetel Help; mekanisme
+// opt-in-nya sendiri tetap tersedia utk picker mendatang).
+func TestTypeaheadPickerField_ExplicitHelpKept(t *testing.T) {
+	out := renderLeads(t, typeaheadPickerField(typeaheadPickerConfig{
+		Name:    "target",
+		Label:   "Target",
+		ListID:  "target-options",
+		Options: []TypeaheadOption{{Value: "deal:5", Label: "Deal · Langganan 2026"}},
+		Help:    "Teks bantuan eksplisit.",
+	}))
+	if !strings.Contains(out, "Teks bantuan eksplisit.") {
+		t.Errorf("Help eksplisit harus tetap dirender (BL-85):\n%s", out)
+	}
+}
+
+// TestActivityForm_TargetHasNoHelpText: picker target aktivitas TIDAK lagi
+// menampilkan baris bantuan (dihapus 14 Sep atas permintaan user) — hanya
+// placeholder pada input pencarian.
+func TestActivityForm_TargetHasNoHelpText(t *testing.T) {
 	out := renderLeads(t, ActivityForm(activityCreateFixture()))
-	if !strings.Contains(out, "Ketik untuk mencari, lalu pilih target dari daftar yang muncul.") {
-		t.Errorf("Help eksplisit picker target harus tetap dirender (BL-85):\n%s", out)
+	if strings.Contains(out, "Ketik untuk mencari, lalu pilih target dari daftar yang muncul.") {
+		t.Errorf("picker target tak boleh lagi menampilkan baris bantuan:\n%s", out)
 	}
 }

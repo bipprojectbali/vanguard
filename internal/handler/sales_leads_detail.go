@@ -104,6 +104,8 @@ func (h *Handler) leadDetailView(ctx context.Context, base string, l db.Lead, na
 		CreatedAt:     fmtDateTime(l.CreatedAt),
 		UpdatedByName: ownerName(l.UpdatedBy, names),
 		UpdatedAt:     fmtDateTime(l.UpdatedAt),
+		// BL-160: timeline aktivitas lead ini — reuse loader sama Deal/Contact.
+		Activities: h.activitiesTimelineFor(ctx, base, "lead", l.ID, canWrite),
 	}
 }
 

@@ -24,10 +24,16 @@ import (
 // dapat section sesuai modulnya. Tiga sumbu diuji: visibilitas per-role bawaan,
 // role kustom (union parsial), dan F3 (angka section menghormati data_scope).
 //
-// BL-98 (arah A): tiap section domain maksimum 2 KPI penting (tetap digate
-// per-kapabilitas), TANPA chart domain (satu-satunya chart Beranda = donut health
-// GLOBAL), + tautan "Lihat Laporan →" ke halaman Report domain — dirender HANYA
-// bila role ber-crm:reports (jangan pernah menautkan halaman yang akan 403).
+// BL-98 (arah A): tiap section domain maksimum 2 KPI penting (saat itu TANPA
+// chart domain — satu-satunya chart Beranda = donut health GLOBAL), + tautan
+// "Lihat Laporan →" ke halaman Report domain — dirender HANYA bila role
+// ber-crm:reports (jangan pernah menautkan halaman yang akan 403).
+//
+// BL-141 (membalik BL-98 KHUSUS Sales): 3 chart inline (pipeline/leads/
+// win-loss, id BARU chart-sales-*) ditambah kembali di bawah crm:deals — lihat
+// dashboard_sales_charts_test.go. Test di bawah HANYA memeriksa id chart era
+// pre-BL-98 (chart-pipeline dst, TANPA "-sales-") yang sengaja tak pernah
+// dipakai lagi — bukan klaim "nol chart" secara umum.
 
 // seedClosingDeal menaruh satu deal TERBUKA yang expected_close_date-nya jatuh
 // di bulan kalender berjalan — untuk KPI section Sales "Deal Tutup Bulan Ini".
@@ -56,8 +62,9 @@ func (e *testEnv) seedClosingDeal(t *testing.T, accountID int64, owner *int64) d
 // TestDashboardSales_DomainVisibleByCapability: role dgn kapabilitas Sales inti
 // (admin/manager/sales punya crm:deals) melihat heading section "Sales" + KPI
 // Win Rate; role tanpanya (csm/support) TAK melihat section Sales sama sekali
-// (heading tak berdiri kosong). BL-98: section domain kini TANPA chart apa pun
-// (chart-pipeline dipindah ke Sales Report) — hanya KPI + tautan Report.
+// (heading tak berdiri kosong). Chart BL-141 (chart-sales-*) diuji terpisah di
+// dashboard_sales_charts_test.go; di sini hanya memastikan id LAMA era
+// pre-BL-98 (chart-pipeline, tanpa "-sales-") tak pernah muncul lagi.
 func TestDashboardSales_DomainVisibleByCapability(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Sales Dom", &uid, nil, nil)
@@ -146,8 +153,11 @@ func TestDashboardSales_DealsClosingScopedByOwnership(t *testing.T) {
 }
 
 // TestDashboardBL98_AdminSlimSectionsAndLinks: admin (semua kapabilitas) melihat
-// keempat section ramping — tepat 2 KPI terpilih per-domain, tautan Report tiap
-// domain, dan NOL chart domain (hanya chart-health global bertahan).
+// keempat section ramping — tepat 2 KPI terpilih per-domain + tautan Report
+// tiap domain. Chart di sini HANYA memeriksa id LAMA era pre-BL-98 tak pernah
+// kembali (chart-pipeline dst, tanpa "-sales-"/"-sub-"/"-cs-") — chart BARU
+// BL-140..143 (chart-sales-*, dst.) sengaja TIDAK dicek di sini, diuji di file
+// _charts_test.go masing-masing domain.
 func TestDashboardBL98_AdminSlimSectionsAndLinks(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa BL98", &uid, nil, nil)
@@ -193,17 +203,20 @@ func TestDashboardBL98_AdminSlimSectionsAndLinks(t *testing.T) {
 		}
 	}
 
-	// NOL chart domain — hanya donut health global bertahan.
+	// Donut health global tetap ada.
 	if !strings.Contains(body, "chart-health") {
 		t.Errorf("donut health global harus tetap ada, body:\n%s", body)
 	}
+	// Id chart LAMA era pre-BL-98 (tanpa "-sales-"/"-sub-"/"-cs-") tak pernah
+	// kembali — BL-140..143 sengaja pakai id BARU (chart-sales-pipeline dst.),
+	// bukan menghidupkan kembali fungsi *ChartOption satu-satu lama.
 	for _, chart := range []string{
 		"chart-pipeline", "chart-leads", "chart-mrr-movement",
 		"chart-revenue-plan", "chart-onboarding", "chart-tickets-priority",
 		"chart-agent-workload",
 	} {
 		if strings.Contains(body, chart) {
-			t.Errorf("chart domain %q sudah dibuang dari Beranda (BL-98)", chart)
+			t.Errorf("id chart LAMA %q (pre-BL-98) tak boleh muncul lagi", chart)
 		}
 	}
 }
