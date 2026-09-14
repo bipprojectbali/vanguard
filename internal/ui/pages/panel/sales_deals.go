@@ -60,6 +60,11 @@ type DealPipelineView struct {
 	NextCursor  string
 	After       string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
 	Trail       string // BL-7: jejak cursor halaman sebelumnya (?trail=)
+
+	// Sort/Dir (BL-157e): kolom & arah sort aktif tampilan Tabel. Sort=""
+	// (default) = created_at DESC, tak ditandai di header mana pun.
+	Sort string
+	Dir  string
 }
 
 // dealMineParam = "1" bila toggle "Deal Saya" aktif, "" bila tidak — dipakai
@@ -118,12 +123,14 @@ func DealPipeline(v DealPipelineView) g.Node {
 				searchBoxInline(v.Base+"/deals", v.Query,
 					"Cari deal — nama atau kode…", "Cari deal",
 					hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
-					hiddenField{"mine", dealMineParam(v.Mine)})))
+					hiddenField{"mine", dealMineParam(v.Mine)},
+					hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir})))
 		} else {
 			body = append(body, searchBox(v.Base+"/deals", v.Query,
 				"Cari deal — nama atau kode…", "Cari deal",
 				hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
-				hiddenField{"mine", dealMineParam(v.Mine)}))
+				hiddenField{"mine", dealMineParam(v.Mine)},
+				hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir}))
 		}
 		if len(v.Items) == 0 {
 			body = append(body, emptyDeals(v))
@@ -168,7 +175,11 @@ func dealViewToggle(v DealPipelineView) g.Node {
 // HANYA saat ShowMineToggle (cakupan 'all'); gate diputuskan handler.
 func dealMineToggle(v DealPipelineView) g.Node {
 	link := func(label string, mine bool) g.Node {
-		keep := []hiddenField{{"view", v.View}, {"stage", v.StageFilter}}
+		// sort/dir dibawa lintas toggle (mengganti sumbu kepemilikan tak
+		// mereset sort aktif di view Tabel; kosong di view Pipeline — tak
+		// bermakna di sana, mirror keputusan dealViewToggle).
+		keep := []hiddenField{{"view", v.View}, {"stage", v.StageFilter},
+			{"sort", v.Sort}, {"dir", v.Dir}}
 		if mine {
 			keep = append(keep, hiddenField{"mine", "1"})
 		}
@@ -211,9 +222,10 @@ func emptyDeals(v DealPipelineView) g.Node {
 				h.P(h.Class("text-base-content/70"), g.Text("Belum ada deal."))),
 		)
 	}
-	// Kembali ke awal mempertahankan view=table + stage + mine, tapi MEMBUANG q:
-	// tanpa tombol Reset, tautan ini satu-satunya jalan keluar dari pencarian
-	// tanpa hasil, jadi ia harus mengosongkan kata kunci (bukan mengulanginya).
+	// Kembali ke awal mempertahankan view=table + stage + mine, tapi MEMBUANG
+	// q DAN sort/dir: tanpa tombol Reset, tautan ini satu-satunya jalan keluar
+	// dari pencarian tanpa hasil — mirror keputusan emptyLeads (reset sort ke
+	// default created_at DESC, bukan sekadar kata kunci).
 	back := withQuery(v.Base+"/deals", "",
 		hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
 		hiddenField{"mine", dealMineParam(v.Mine)})
@@ -228,11 +240,38 @@ func emptyDeals(v DealPipelineView) g.Node {
 	)
 }
 
+// dealSortHeader = header <Th> tabel Deal yang sortable (BL-157e): tautan <a>
+// native (bookmarkable, lolos gotcha #16), bukan Datastar. Klik kolom aktif
+// membalik arah; klik kolom lain mulai dari asc. Mengganti sumbu sort SELALU
+// mereset cursor (halaman pertama) — tak membawa ?after=, mirror ganti tab.
+func dealSortHeader(v DealPipelineView, col, label string) g.Node {
+	active := v.Sort == col
+	nextDir := "asc"
+	if active && v.Dir == "asc" {
+		nextDir = "desc"
+	}
+	href := withQuery(v.Base+"/deals", v.Query,
+		hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
+		hiddenField{"mine", dealMineParam(v.Mine)},
+		hiddenField{"sort", col}, hiddenField{"dir", nextDir})
+	text := label
+	if active {
+		arrow := "▲"
+		if v.Dir == "desc" {
+			arrow = "▼"
+		}
+		text = label + " " + arrow
+	}
+	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
+}
+
 func dealsPager(v DealPipelineView) g.Node {
 	mine := ""
 	if v.Mine {
 		mine = "1"
 	}
-	base := panelListHref(v.Base+"/deals?view=table", [2]string{"stage", v.StageFilter}, [2]string{"mine", mine}, [2]string{"q", v.Query})
+	base := panelListHref(v.Base+"/deals?view=table",
+		[2]string{"stage", v.StageFilter}, [2]string{"mine", mine}, [2]string{"q", v.Query},
+		[2]string{"sort", v.Sort}, [2]string{"dir", v.Dir})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }
