@@ -1364,6 +1364,33 @@ type Querier interface {
 	//   filter_sla_breached → deadline < now() DAN status bukan selesai.
 	//   filter_sla_at_risk  → deadline dalam 4 jam ke depan DAN status bukan selesai.
 	ListTickets(ctx context.Context, arg ListTicketsParams) ([]ListTicketsRow, error)
+	// BL-157h: sort by u.name ("Agen" — assigned_to_name). NULLABLE (assigned_to
+	// NULL = belum ditugaskan). Kunci sort PLAIN u.name (bukan COALESCE dgn
+	// email seperti ListSubscriptionsSortByCsm) — ticketRowView menampilkan
+	// AssignedToName apa adanya tanpa fallback email, jadi urutan harus sama
+	// dgn yang ditampilkan. Pola null-aware sama ListSubscriptionsSortByPlan.
+	ListTicketsSortByAgent(ctx context.Context, arg ListTicketsSortByAgentParams) ([]ListTicketsSortByAgentRow, error)
+	// BL-157h: sort by t.priority ("Prioritas" — RAW rendah/sedang/tinggi,
+	// alfabetis; bukan bobot urgensi). NOT NULL, pola sama SortByVillage.
+	ListTicketsSortByPriority(ctx context.Context, arg ListTicketsSortByPriorityParams) ([]ListTicketsSortByPriorityRow, error)
+	// BL-157h: sort by t.sla_deadline_at ("SLA" — RAW deadline, bukan label
+	// turunan Terpenuhi/Terlanggar/"Nj Mm lagi" — sama prinsip dgn SortByStatus
+	// Subscriptions: sortir sumbu mentah, jangan duplikasi derivasi ke SQL).
+	// NULLABLE (tiket belum bersla_policy). Pola null-aware sama SortByMrr,
+	// tipe timestamptz bukan numeric.
+	ListTicketsSortBySla(ctx context.Context, arg ListTicketsSortBySlaParams) ([]ListTicketsSortBySlaRow, error)
+	// BL-157h: sort by t.status ("Status" — RAW baru/diproses/menunggu/selesai).
+	// Berbeda dari Renewals (BL-157g, Status dikecualikan krn derivasi penuh):
+	// di sini status ADALAH kolom mentah, bukan turunan, jadi aman disortir
+	// langsung. NOT NULL, pola sama SortByVillage.
+	ListTicketsSortByStatus(ctx context.Context, arg ListTicketsSortByStatusParams) ([]ListTicketsSortByStatusRow, error)
+	// BL-157h: sort by t.subject ("Subjek"). NOT NULL, pola sama SortByVillage.
+	ListTicketsSortBySubject(ctx context.Context, arg ListTicketsSortBySubjectParams) ([]ListTicketsSortBySubjectRow, error)
+	// BL-157h: sort by a.village_name ("Desa"). SAMA PERSIS filter ListTickets
+	// (ownership F3 + tab filter + search) — hanya ORDER BY/keyset beda. NOT NULL
+	// (INNER JOIN accounts + deleted_at IS NULL), pola non-nullable text sama
+	// ListSubscriptionsSortByVillage (BL-157a).
+	ListTicketsSortByVillage(ctx context.Context, arg ListTicketsSortByVillageParams) ([]ListTicketsSortByVillageRow, error)
 	// Panel /dev: keyset pagination, hanya user aktif (belum soft-delete).
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// Daftar Desa/Kelurahan (level 4) di bawah SATU Kecamatan (level 3) — dipakai

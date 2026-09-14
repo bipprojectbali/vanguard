@@ -100,6 +100,287 @@ WHERE (t.created_at, t.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg
 ORDER BY t.created_at DESC, t.id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListTicketsSortByVillage :many
+-- BL-157h: sort by a.village_name ("Desa"). SAMA PERSIS filter ListTickets
+-- (ownership F3 + tab filter + search) — hanya ORDER BY/keyset beda. NOT NULL
+-- (INNER JOIN accounts + deleted_at IS NULL), pola non-nullable text sama
+-- ListSubscriptionsSortByVillage (BL-157a).
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (a.village_name, t.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (a.village_name, t.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(filter_status) = '' OR t.status = sqlc.arg(filter_status))
+  AND (NOT sqlc.arg(filter_sla_breached)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT sqlc.arg(filter_sla_at_risk)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND (sqlc.arg(search)::text = ''
+       OR t.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.village_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.village_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN t.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTicketsSortBySubject :many
+-- BL-157h: sort by t.subject ("Subjek"). NOT NULL, pola sama SortByVillage.
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (t.subject, t.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (t.subject, t.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(filter_status) = '' OR t.status = sqlc.arg(filter_status))
+  AND (NOT sqlc.arg(filter_sla_breached)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT sqlc.arg(filter_sla_at_risk)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND (sqlc.arg(search)::text = ''
+       OR t.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN t.subject END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN t.subject END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN t.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTicketsSortByPriority :many
+-- BL-157h: sort by t.priority ("Prioritas" — RAW rendah/sedang/tinggi,
+-- alfabetis; bukan bobot urgensi). NOT NULL, pola sama SortByVillage.
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (t.priority, t.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (t.priority, t.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(filter_status) = '' OR t.status = sqlc.arg(filter_status))
+  AND (NOT sqlc.arg(filter_sla_breached)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT sqlc.arg(filter_sla_at_risk)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND (sqlc.arg(search)::text = ''
+       OR t.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN t.priority END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN t.priority END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN t.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTicketsSortByStatus :many
+-- BL-157h: sort by t.status ("Status" — RAW baru/diproses/menunggu/selesai).
+-- Berbeda dari Renewals (BL-157g, Status dikecualikan krn derivasi penuh):
+-- di sini status ADALAH kolom mentah, bukan turunan, jadi aman disortir
+-- langsung. NOT NULL, pola sama SortByVillage.
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (t.status, t.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (t.status, t.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(filter_status) = '' OR t.status = sqlc.arg(filter_status))
+  AND (NOT sqlc.arg(filter_sla_breached)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT sqlc.arg(filter_sla_at_risk)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND (sqlc.arg(search)::text = ''
+       OR t.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN t.status END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN t.status END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN t.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTicketsSortByAgent :many
+-- BL-157h: sort by u.name ("Agen" — assigned_to_name). NULLABLE (assigned_to
+-- NULL = belum ditugaskan). Kunci sort PLAIN u.name (bukan COALESCE dgn
+-- email seperti ListSubscriptionsSortByCsm) — ticketRowView menampilkan
+-- AssignedToName apa adanya tanpa fallback email, jadi urutan harus sama
+-- dgn yang ditampilkan. Pola null-aware sama ListSubscriptionsSortByPlan.
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (u.name IS NULL OR (u.name, t.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND u.name IS NULL AND t.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (u.name IS NOT NULL OR t.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND u.name IS NOT NULL
+              AND (u.name, t.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(filter_status) = '' OR t.status = sqlc.arg(filter_status))
+  AND (NOT sqlc.arg(filter_sla_breached)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT sqlc.arg(filter_sla_at_risk)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND (sqlc.arg(search)::text = ''
+       OR t.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN u.name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN u.name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN t.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTicketsSortBySla :many
+-- BL-157h: sort by t.sla_deadline_at ("SLA" — RAW deadline, bukan label
+-- turunan Terpenuhi/Terlanggar/"Nj Mm lagi" — sama prinsip dgn SortByStatus
+-- Subscriptions: sortir sumbu mentah, jangan duplikasi derivasi ke SQL).
+-- NULLABLE (tiket belum bersla_policy). Pola null-aware sama SortByMrr,
+-- tipe timestamptz bukan numeric.
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (t.sla_deadline_at IS NULL OR (t.sla_deadline_at, t.id) > (sqlc.arg(cursor_val)::timestamptz, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND t.sla_deadline_at IS NULL AND t.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (t.sla_deadline_at IS NOT NULL OR t.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND t.sla_deadline_at IS NOT NULL
+              AND (t.sla_deadline_at, t.id) < (sqlc.arg(cursor_val)::timestamptz, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(filter_status) = '' OR t.status = sqlc.arg(filter_status))
+  AND (NOT sqlc.arg(filter_sla_breached)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT sqlc.arg(filter_sla_at_risk)::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND (sqlc.arg(search)::text = ''
+       OR t.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN t.sla_deadline_at END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN t.sla_deadline_at END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN t.id END DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: CountTicketKPIs :one
 -- Agregat KPI header halaman /tickets. Cakupan scope sama persis ListTickets.
 -- COUNT ... FILTER = PostgreSQL aggregate filter clause (SQL:2003, native pg).

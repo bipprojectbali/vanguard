@@ -78,6 +78,8 @@ type TicketsListView struct {
 	NextCursor string
 	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
 	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
+	Sort       string // BL-157h: kolom aktif (village/subject/priority/sla/agent/status); "" = default created_at DESC
+	Dir        string // BL-157h: "asc"/"desc" — arah kolom aktif
 	Err        string
 	Msg        string
 }
@@ -103,7 +105,7 @@ func TicketsList(v TicketsListView) g.Node {
 		tabSearchRow(ticketTabsNav(v),
 			searchBoxInline(v.Base+"/tickets", v.Query,
 				"Cari tiket — subjek atau desa…", "Cari tiket",
-				hiddenField{"tab", v.Tab})),
+				hiddenField{"tab", v.Tab}, hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir})),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Toast(ui.VariantDestructive, "tickets-err", g.Text(v.Err)))
@@ -156,7 +158,10 @@ func ticketKPICard(label, value, href, colorCls string) g.Node {
 func ticketTabsNav(v TicketsListView) g.Node {
 	tabs := make([]g.Node, 0, len(ticketTabs))
 	for _, t := range ticketTabs {
-		href := withQuery(v.Base+"/tickets", v.Query, hiddenField{"tab", t.key})
+		// q + sort/dir dibawa lintas tab (mencari/sort lalu ganti tab tak
+		// menghapus pencarian/sort aktif — pola sama subStatusFilter).
+		href := withQuery(v.Base+"/tickets", v.Query,
+			hiddenField{"tab", t.key}, hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir})
 		cls := "tab"
 		if t.key == v.Tab {
 			cls += " tab-active font-medium"
@@ -199,6 +204,30 @@ func emptyTickets(v TicketsListView) g.Node {
 }
 
 func ticketsPager(v TicketsListView) g.Node {
-	base := panelListHref(v.Base+"/tickets", [2]string{"tab", v.Tab}, [2]string{"q", v.Query})
+	base := panelListHref(v.Base+"/tickets",
+		[2]string{"tab", v.Tab}, [2]string{"q", v.Query},
+		[2]string{"sort", v.Sort}, [2]string{"dir", v.Dir})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
+}
+
+// ticketSortHeader = header kolom bisa-diklik (BL-157h), cermin subSortHeader
+// (subscriptions.go): klik toggle arah, ganti sumbu sort reset ke halaman
+// pertama (href tanpa ?after=). tab/q dipertahankan lintas klik header.
+func ticketSortHeader(v TicketsListView, col, label string) g.Node {
+	active := v.Sort == col
+	nextDir := "asc"
+	if active && v.Dir == "asc" {
+		nextDir = "desc"
+	}
+	href := withQuery(v.Base+"/tickets", v.Query,
+		hiddenField{"tab", v.Tab}, hiddenField{"sort", col}, hiddenField{"dir", nextDir})
+	text := label
+	if active {
+		arrow := "▲"
+		if v.Dir == "desc" {
+			arrow = "▼"
+		}
+		text = label + " " + arrow
+	}
+	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
 }
