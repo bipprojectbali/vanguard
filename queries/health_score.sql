@@ -76,6 +76,548 @@ WHERE a.deleted_at IS NULL
 ORDER BY a.created_at DESC, a.id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListHealthScoresSortByVillage :many
+-- BL-157i: SAMA PERSIS filter ListHealthScores (ownership F3, segment BL-114,
+-- filter_status, search) — hanya ORDER BY/keyset beda, diurut a.village_name
+-- (Desa). Tak-nullable (village_name NOT NULL) → pola sederhana, tanpa
+-- cursor_is_null (mirror ListRenewalsSortByVillage).
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (a.village_name, a.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (a.village_name, a.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_csm)::boolean
+          AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+      OR (sqlc.arg(is_sales)::boolean
+          AND a.account_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE WHEN sqlc.arg(segment)::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND (sqlc.arg(filter_status)::text = ''
+       OR COALESCE(cs.health_status, '') = sqlc.arg(filter_status)::text)
+  AND (sqlc.arg(search)::text = ''
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.village_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.village_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListHealthScoresSortByScore :many
+-- BL-157i: sort by cs.overall_health_score ("Skor"). NULLABLE smallint (akun
+-- belum diskor CSM) — pola null-aware mirror ListDealsSortByProbability.
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (cs.overall_health_score IS NULL OR (cs.overall_health_score, a.id) > (sqlc.arg(cursor_val)::smallint, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND cs.overall_health_score IS NULL AND a.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (cs.overall_health_score IS NOT NULL OR a.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND cs.overall_health_score IS NOT NULL
+              AND (cs.overall_health_score, a.id) < (sqlc.arg(cursor_val)::smallint, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_csm)::boolean
+          AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+      OR (sqlc.arg(is_sales)::boolean
+          AND a.account_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE WHEN sqlc.arg(segment)::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND (sqlc.arg(filter_status)::text = ''
+       OR COALESCE(cs.health_status, '') = sqlc.arg(filter_status)::text)
+  AND (sqlc.arg(search)::text = ''
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN cs.overall_health_score END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN cs.overall_health_score END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListHealthScoresSortByAdoption :many
+-- BL-157i: sort by cs.adoption_score ("Adopsi"). NULLABLE smallint — pola
+-- null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (cs.adoption_score IS NULL OR (cs.adoption_score, a.id) > (sqlc.arg(cursor_val)::smallint, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND cs.adoption_score IS NULL AND a.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (cs.adoption_score IS NOT NULL OR a.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND cs.adoption_score IS NOT NULL
+              AND (cs.adoption_score, a.id) < (sqlc.arg(cursor_val)::smallint, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_csm)::boolean
+          AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+      OR (sqlc.arg(is_sales)::boolean
+          AND a.account_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE WHEN sqlc.arg(segment)::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND (sqlc.arg(filter_status)::text = ''
+       OR COALESCE(cs.health_status, '') = sqlc.arg(filter_status)::text)
+  AND (sqlc.arg(search)::text = ''
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN cs.adoption_score END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN cs.adoption_score END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListHealthScoresSortByEngagement :many
+-- BL-157i: sort by cs.engagement_score ("Engagement"). NULLABLE smallint —
+-- pola null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (cs.engagement_score IS NULL OR (cs.engagement_score, a.id) > (sqlc.arg(cursor_val)::smallint, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND cs.engagement_score IS NULL AND a.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (cs.engagement_score IS NOT NULL OR a.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND cs.engagement_score IS NOT NULL
+              AND (cs.engagement_score, a.id) < (sqlc.arg(cursor_val)::smallint, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_csm)::boolean
+          AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+      OR (sqlc.arg(is_sales)::boolean
+          AND a.account_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE WHEN sqlc.arg(segment)::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND (sqlc.arg(filter_status)::text = ''
+       OR COALESCE(cs.health_status, '') = sqlc.arg(filter_status)::text)
+  AND (sqlc.arg(search)::text = ''
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN cs.engagement_score END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN cs.engagement_score END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListHealthScoresSortBySupport :many
+-- BL-157i: sort by cs.support_score ("Support"). NULLABLE smallint — pola
+-- null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (cs.support_score IS NULL OR (cs.support_score, a.id) > (sqlc.arg(cursor_val)::smallint, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND cs.support_score IS NULL AND a.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (cs.support_score IS NOT NULL OR a.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND cs.support_score IS NOT NULL
+              AND (cs.support_score, a.id) < (sqlc.arg(cursor_val)::smallint, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_csm)::boolean
+          AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+      OR (sqlc.arg(is_sales)::boolean
+          AND a.account_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE WHEN sqlc.arg(segment)::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND (sqlc.arg(filter_status)::text = ''
+       OR COALESCE(cs.health_status, '') = sqlc.arg(filter_status)::text)
+  AND (sqlc.arg(search)::text = ''
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN cs.support_score END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN cs.support_score END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListHealthScoresSortByTrend :many
+-- BL-157i: sort by cs.score_trend ("Tren"). NULLABLE text — pola null-aware
+-- mirror ListRenewalsSortByPlan.
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (cs.score_trend IS NULL OR (cs.score_trend, a.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND cs.score_trend IS NULL AND a.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (cs.score_trend IS NOT NULL OR a.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND cs.score_trend IS NOT NULL
+              AND (cs.score_trend, a.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_csm)::boolean
+          AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+      OR (sqlc.arg(is_sales)::boolean
+          AND a.account_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE WHEN sqlc.arg(segment)::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND (sqlc.arg(filter_status)::text = ''
+       OR COALESCE(cs.health_status, '') = sqlc.arg(filter_status)::text)
+  AND (sqlc.arg(search)::text = ''
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN cs.score_trend END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN cs.score_trend END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListHealthScoresSortByRenewal :many
+-- BL-157i: sort by sub.end_date ("Jatuh Tempo"). NULLABLE — LATERAL bisa
+-- kosong (akun tanpa langganan Active ber-end_date) — pola null-aware mirror
+-- ListDealsSortByCloseDate, tipe kolom date.
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (sub.end_date IS NULL OR (sub.end_date, a.id) > (sqlc.arg(cursor_val)::date, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND sub.end_date IS NULL AND a.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (sub.end_date IS NOT NULL OR a.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND sub.end_date IS NOT NULL
+              AND (sub.end_date, a.id) < (sqlc.arg(cursor_val)::date, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_csm)::boolean
+          AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+      OR (sqlc.arg(is_sales)::boolean
+          AND a.account_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE WHEN sqlc.arg(segment)::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND (sqlc.arg(filter_status)::text = ''
+       OR COALESCE(cs.health_status, '') = sqlc.arg(filter_status)::text)
+  AND (sqlc.arg(search)::text = ''
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN sub.end_date END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN sub.end_date END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.id END DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: CountHealthScoreKPIs :one
 -- KPI agregat untuk header + panel dasbor (BL-96): total desa (dalam scope),
 -- sehat/berisiko/kritis, rata-rata skor (NULL bila semua skor belum diisi),

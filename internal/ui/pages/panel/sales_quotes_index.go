@@ -37,6 +37,11 @@ type QuotesIndexView struct {
 	NextCursor string
 	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
 	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
+
+	// Sort/Dir (BL-157f): kolom & arah sort aktif. Sort="" = default
+	// (created_at DESC, tanpa header ter-highlight).
+	Sort string
+	Dir  string
 }
 
 // QuotesIndex merender header + alert + tabel quote lintas-deal (atau state kosong)
@@ -55,7 +60,8 @@ func QuotesIndex(v QuotesIndexView) g.Node {
 					g.Text("Semua penawaran dalam cakupan Anda. Buat quote dari detail deal.")),
 			),
 			searchBoxInline(v.Base+"/quotes", v.Query,
-				"Cari quote — nama, kode, atau deal…", "Cari quote"),
+				"Cari quote — nama, kode, atau deal…", "Cari quote",
+				hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir}),
 		),
 	}
 	if v.Err != "" {
@@ -68,17 +74,17 @@ func QuotesIndex(v QuotesIndexView) g.Node {
 	if len(v.Items) == 0 {
 		body = append(body, emptyQuotesIndex(v))
 	} else {
-		body = append(body, quotesIndexTable(v.Base, v.Items), quotesIndexPager(v))
+		body = append(body, quotesIndexTable(v), quotesIndexPager(v))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
 
 // quotesIndexTable = tabel quote global, dibungkus ui.TableScroll (scroll terkurung,
 // mobile-first) — kolom "Deal" tak ada di daftar per-deal.
-func quotesIndexTable(base string, items []QuoteIndexRow) g.Node {
-	rows := make([]g.Node, 0, len(items))
-	for _, q := range items {
-		rows = append(rows, quotesIndexRow(base, q))
+func quotesIndexTable(v QuotesIndexView) g.Node {
+	rows := make([]g.Node, 0, len(v.Items))
+	for _, q := range v.Items {
+		rows = append(rows, quotesIndexRow(v.Base, q))
 	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
@@ -88,16 +94,39 @@ func quotesIndexTable(base string, items []QuoteIndexRow) g.Node {
 				h.Class("w-full text-sm"),
 				h.THead(h.Tr(
 					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Kode")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Nama")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Deal")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Status")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("Grand Total")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), quoteSortHeader(v, "code", "Kode")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), quoteSortHeader(v, "name", "Nama")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), quoteSortHeader(v, "deal", "Deal")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), quoteSortHeader(v, "status", "Status")),
+					h.Th(h.Class("py-2 font-medium"), quoteSortHeader(v, "total", "Grand Total")),
 				)),
 				h.TBody(g.Group(rows)),
 			)),
 		),
 	)
+}
+
+// quoteSortHeader = header <Th> tabel Quote yang sortable (BL-157f), mirror
+// dealSortHeader: tautan <a> native (bookmarkable, lolos gotcha #16), bukan
+// Datastar. Klik kolom aktif membalik arah; klik kolom lain mulai dari asc.
+// Mengganti sumbu sort SELALU mereset cursor (halaman pertama).
+func quoteSortHeader(v QuotesIndexView, col, label string) g.Node {
+	active := v.Sort == col
+	nextDir := "asc"
+	if active && v.Dir == "asc" {
+		nextDir = "desc"
+	}
+	href := withQuery(v.Base+"/quotes", v.Query,
+		hiddenField{"sort", col}, hiddenField{"dir", nextDir})
+	text := label
+	if active {
+		arrow := "▲"
+		if v.Dir == "desc" {
+			arrow = "▼"
+		}
+		text = label + " " + arrow
+	}
+	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
 }
 
 func quotesIndexRow(base string, q QuoteIndexRow) g.Node {
@@ -138,13 +167,14 @@ func emptyQuotesIndex(v QuotesIndexView) g.Node {
 		h.Div(h.Class("card-body items-start"),
 			h.P(h.Class("text-base-content/70"),
 				g.Text("Belum ada quote yang cocok pada tampilan ini.")),
-			h.A(h.Href(withQuery(v.Base+"/quotes", "")),
+			h.A(h.Href(v.Base+"/quotes"),
 				h.Class("btn btn-ghost btn-sm min-h-11"), g.Text("« Kembali ke awal")),
 		),
 	)
 }
 
 func quotesIndexPager(v QuotesIndexView) g.Node {
-	base := panelListHref(v.Base+"/quotes", [2]string{"q", v.Query})
+	base := panelListHref(v.Base+"/quotes",
+		[2]string{"q", v.Query}, [2]string{"sort", v.Sort}, [2]string{"dir", v.Dir})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

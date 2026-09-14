@@ -53,6 +53,11 @@ type HealthScoreListView struct {
 	Panels        HealthDashPanels // BL-96: panel Sebaran + Komposisi/Arah
 	TableSubtitle string           // BL-96: mis. "Diurutkan dari terbaru · 42 desa binaan"
 	Rows          []HealthScoreRowView
+
+	// Sort/Dir (BL-157i): kolom & arah sort aktif. Sort="" = default
+	// (created_at DESC, tanpa header ter-highlight).
+	Sort string
+	Dir  string
 }
 
 // HealthScoreList merender body konten halaman workspace-level Health Score (6.1).
@@ -163,19 +168,19 @@ func healthScoreTable(v HealthScoreListView) g.Node {
 				h.P(h.Class("text-xs text-base-content/50 px-4 pt-3"), g.Text(v.TableSubtitle))),
 			ui.TableScroll(h.Table(h.Class("table table-sm"),
 				h.THead(h.Tr(
-					h.Th(g.Text("Desa")),
-					h.Th(h.Class("text-center"), g.Text("Skor")),
+					h.Th(healthScoreSortHeader(v, "village", "Desa")),
+					h.Th(h.Class("text-center"), healthScoreSortHeader(v, "score", "Skor")),
 					h.Th(g.Text("Status")),
-					h.Th(h.Class("text-center"), g.Text("Adopsi")),
-					h.Th(h.Class("text-center"), g.Text("Engagement")),
-					h.Th(h.Class("text-center"), g.Text("Support")),
-					h.Th(g.Text("Tren")),
-					h.Th(g.Text("Jatuh Tempo")),
+					h.Th(h.Class("text-center"), healthScoreSortHeader(v, "adoption", "Adopsi")),
+					h.Th(h.Class("text-center"), healthScoreSortHeader(v, "engagement", "Engagement")),
+					h.Th(h.Class("text-center"), healthScoreSortHeader(v, "support", "Support")),
+					h.Th(healthScoreSortHeader(v, "trend", "Tren")),
+					h.Th(healthScoreSortHeader(v, "renewal", "Jatuh Tempo")),
 					h.Th(g.Text("")),
 				)),
 				h.TBody(healthScoreRows(v.Rows, v.Base, v.ActiveTab, v.Query, healthSegKeep(v.Segment))),
 			)),
-			healthScorePager(v.Base, v.ActiveTab, v.NextCursor, v.Query, v.After, v.Trail, healthSegKeep(v.Segment)),
+			healthScorePager(v),
 		),
 	)
 }
@@ -218,13 +223,40 @@ func healthScoreRows(rows []HealthScoreRowView, base, tab, query string, seg hid
 	return g.Group(nodes)
 }
 
-func healthScorePager(base, tab, nextCursor, query, after, trail string, seg hiddenField) g.Node {
+// healthScoreSortHeader = header <Th> tabel Health Score yang sortable
+// (BL-157i), mirror renewalSortHeader: tautan <a> native (bookmarkable, lolos
+// gotcha #16), bukan Datastar. Klik kolom aktif membalik arah; klik kolom lain
+// mulai dari asc. Mengganti sumbu sort SELALU mereset cursor (halaman pertama,
+// ?after= tak dibawa); tab/segment/q dipertahankan.
+func healthScoreSortHeader(v HealthScoreListView, col, label string) g.Node {
+	active := v.Sort == col
+	nextDir := "asc"
+	if active && v.Dir == "asc" {
+		nextDir = "desc"
+	}
+	href := withQuery(v.Base+"/health-scores", v.Query,
+		hiddenField{"tab", v.ActiveTab}, healthSegKeep(v.Segment),
+		hiddenField{"sort", col}, hiddenField{"dir", nextDir})
+	text := label
+	if active {
+		arrow := "▲"
+		if v.Dir == "desc" {
+			arrow = "▼"
+		}
+		text = label + " " + arrow
+	}
+	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
+}
+
+func healthScorePager(v HealthScoreListView) g.Node {
 	// Ujung daftar pada satu halaman: tanpa footer (perilaku lama dipertahankan).
-	if nextCursor == "" && trail == "" {
+	if v.NextCursor == "" && v.Trail == "" {
 		return nil
 	}
-	href := panelListHref(base+"/health-scores", [2]string{"tab", tab},
-		[2]string{"q", query}, [2]string{seg.Name, seg.Value})
+	seg := healthSegKeep(v.Segment)
+	href := panelListHref(v.Base+"/health-scores", [2]string{"tab", v.ActiveTab},
+		[2]string{"q", v.Query}, [2]string{seg.Name, seg.Value},
+		[2]string{"sort", v.Sort}, [2]string{"dir", v.Dir})
 	return h.Div(h.Class("p-3 border-t border-base-200"),
-		ui.KeysetPager(href, after, trail, nextCursor))
+		ui.KeysetPager(href, v.After, v.Trail, v.NextCursor))
 }

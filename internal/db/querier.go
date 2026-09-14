@@ -636,6 +636,40 @@ type Querier interface {
 	// dipaginasi: dipakai untuk MEMILIH satu desa, bukan menelusuri — RLS sudah
 	// mengurung ke satu workspace.
 	ListAccountsForSelect(ctx context.Context, arg ListAccountsForSelectParams) ([]ListAccountsForSelectRow, error)
+	// BL-157c: sort by CS (assigned_csm — HANYA CSM utama, PERSIS kolom yang
+	// ditampilkan accountRowView; backup_csm tak ikut ditampilkan di daftar jadi
+	// tak ikut kunci sort). Pola PERSIS ListAccountsSortByOwner, kolom join beda.
+	ListAccountsSortByCsm(ctx context.Context, arg ListAccountsSortByCsmParams) ([]Account, error)
+	// BL-157c: sort by Owner (account_owner). Kunci sort HARUS
+	// COALESCE(NULLIF(u.name,''), u.email) — PERSIS logika tampil memberName
+	// (accounts_list.go: nama bila terisi, else email) — agar urutan tak
+	// menyimpang dari yang ditampilkan. NULLABLE (account_owner ON DELETE SET
+	// NULL). LEFT JOIN users: baris tanpa owner ATAU owner yang keluar workspace →
+	// owner_key NULL, masuk kelompok NULL. Mirror PERSIS ListLeadsSortByOwner,
+	// beda hanya filter ownership tiga-flag + unowned (bukan dua-flag+mine_only).
+	ListAccountsSortByOwner(ctx context.Context, arg ListAccountsSortByOwnerParams) ([]Account, error)
+	// BL-157c: sort by Provinsi. Sama pola ListAccountsSortByRegency, tapi satu
+	// tingkat lebih jauh (Kecamatan → Kabupaten/Kota → Provinsi) — self-join
+	// regions 3x, cermin GetRegionAncestry tapi LEFT JOIN (nullable).
+	ListAccountsSortByProvince(ctx context.Context, arg ListAccountsSortByProvinceParams) ([]Account, error)
+	// BL-157c: sort by Kab/Kota (Regency), diturunkan district_id via self-join
+	// regions (Kecamatan → Kabupaten/Kota) — PERSIS resolusi regionNames
+	// (accounts_view.go): baris tanpa district_id ATAU district yang sudah tak ada
+	// di master wilayah → regency NULL, masuk kelompok NULL (default Postgres).
+	// LEFT JOIN (bukan JOIN): district_id nullable & region hilang tak boleh
+	// menjatuhkan baris account dari daftar (beda dari GetRegionAncestry yang inner
+	// join, sebab itu dipakai SETELAH district_id dipastikan ada).
+	ListAccountsSortByRegency(ctx context.Context, arg ListAccountsSortByRegencyParams) ([]Account, error)
+	// BL-157c: sort by account_type ("Tipe" — RAW enum customer/former_customer/
+	// prospect, alfabetis; tak menduplikasi urutan tampil ke SQL, mirror keputusan
+	// "Status" Leads BL-157b). account_type NOT NULL → kloning PERSIS pola
+	// ListAccountsSortByVillage, kolom beda.
+	ListAccountsSortByType(ctx context.Context, arg ListAccountsSortByTypeParams) ([]Account, error)
+	// BL-157c (fondasi sort per kolom Accounts): SAMA PERSIS filter ListAccounts
+	// (ownership F3 tiga-flag + unowned + search) — hanya ORDER BY/keyset yang
+	// beda, diurut village_name (bukan created_at). village_name TIDAK NULLABLE →
+	// kloning pola ListLeadsSortByName (tanpa kerumitan NULL).
+	ListAccountsSortByVillage(ctx context.Context, arg ListAccountsSortByVillageParams) ([]Account, error)
 	// Daftar aktivitas (tampilan Tabel), keyset (created_at DESC, id DESC) + filter
 	// ownership F3 + filter context. Dua flag ownership (sumber SATU dengan
 	// ActivitiesListFilter): scope_all → semua; is_own → owner_id = uid; keduanya
@@ -798,6 +832,26 @@ type Querier interface {
 	// memanggil ini). Kontak utama diangkat ke atas agar penanda primary langsung
 	// terlihat tanpa menggeser urutan kronologis baris lainnya.
 	ListContactsByAccount(ctx context.Context, arg ListContactsByAccountParams) ([]Contact, error)
+	// BL-157d (fondasi sort per kolom Kontak global): SAMA PERSIS filter
+	// ListContacts (JOIN desa induk + ownership F3 tiga-flag + search) — hanya
+	// ORDER BY/keyset yang beda, diurut entity_code ("Kode"). entity_code
+	// NULLABLE (BL-132, kolom lama tak di-backfill) → pola null-aware SAMA dgn
+	// ListLeadsSortByCode: cursor_is_null menandai kelompok NULL/non-NULL, NULLS
+	// default Postgres (ASC=LAST, DESC=FIRST).
+	ListContactsSortByCode(ctx context.Context, arg ListContactsSortByCodeParams) ([]ListContactsSortByCodeRow, error)
+	// BL-157d: sort by nama kontak (first_name + last_name, PERSIS ekspresi yang
+	// dipakai search ListContacts). Ekspresi ini SELALU NOT NULL (first_name
+	// NOT NULL, coalesce menutup last_name) → kloning pola sederhana
+	// ListLeadsSortByName (tanpa kerumitan NULL), kolom expr bukan kolom polos.
+	ListContactsSortByName(ctx context.Context, arg ListContactsSortByNameParams) ([]ListContactsSortByNameRow, error)
+	// BL-157d: sort by contact_role ("Peran" — RAW enum alfabetis, mirror
+	// keputusan "Status" Leads/"Tipe" Accounts: tak menduplikasi urutan tampil ke
+	// SQL). NULLABLE → pola null-aware SAMA dgn ListContactsSortByCode, kolom beda.
+	ListContactsSortByRole(ctx context.Context, arg ListContactsSortByRoleParams) ([]ListContactsSortByRoleRow, error)
+	// BL-157d: sort by Desa (a.village_name, desa induk). village_name TIDAK
+	// NULLABLE (00005_crm_foundation.sql) → kloning pola sederhana
+	// ListContactsSortByName (tanpa kerumitan NULL), kolom beda + dari JOIN.
+	ListContactsSortByVillage(ctx context.Context, arg ListContactsSortByVillageParams) ([]ListContactsSortByVillageRow, error)
 	// Daftar deal (tampilan Tabel), keyset (created_at DESC, id DESC) + filter
 	// ownership F3 + filter stage opsional. Dua flag ownership (sumber SATU dengan
 	// DealsListFilter): scope_all → semua; is_own → deal_owner = uid; keduanya false
@@ -819,6 +873,41 @@ type Querier interface {
 	// mine_only (BL-10) menyaring papan ke deal_owner = uid saat toggle "Deal Saya"
 	// aktif — KPI (DealPipelineStats) ikut tersaring agar papan & ringkasan seiring.
 	ListDealsForPipeline(ctx context.Context, arg ListDealsForPipelineParams) ([]Deal, error)
+	// BL-157e: sort by amount ("Nilai"). NULLABLE numeric. Kunci sort memakai
+	// nilai ASLI (tak ter-mask) — F4 (maskARR) hanya menyamarkan TAMPILAN di
+	// handler, mirror presedan Estimasi Leads (ListLeadsSortByValue). Pola
+	// null-aware SAMA dgn ListDealsSortByCode, tipe kolom numeric bukan text.
+	ListDealsSortByAmount(ctx context.Context, arg ListDealsSortByAmountParams) ([]Deal, error)
+	// BL-157e: sort by expected_close_date ("Perkiraan Tutup"). NULLABLE date
+	// (belum tentu diisi saat deal dibuat). Pola null-aware SAMA dgn
+	// ListDealsSortByCode, tipe kolom date — kloning PERSIS
+	// ListSubscriptionsSortByRenewal.
+	ListDealsSortByCloseDate(ctx context.Context, arg ListDealsSortByCloseDateParams) ([]Deal, error)
+	// BL-157e (fondasi sort per kolom Deals): SAMA PERSIS filter ListDeals
+	// (ownership F3 + mine_only + stage_filter + search) — hanya ORDER BY/keyset
+	// yang beda, diurut entity_code (bukan created_at). entity_code NULLABLE
+	// (diisi GenerateEntityCode saat create, tapi kolom tetap nullable di skema)
+	// → kloning PERSIS pola ListLeadsSortByCode. NULLS default Postgres
+	// (ASC=LAST, DESC=FIRST).
+	ListDealsSortByCode(ctx context.Context, arg ListDealsSortByCodeParams) ([]Deal, error)
+	// BL-157e: sort by deal_name ("Deal"). deal_name TIDAK NULLABLE → kloning pola
+	// ListLeadsSortByName (tanpa kerumitan NULL).
+	ListDealsSortByName(ctx context.Context, arg ListDealsSortByNameParams) ([]Deal, error)
+	// BL-157e: sort by Pemilik (deal_owner). Kunci sort HARUS
+	// COALESCE(NULLIF(u.name,''), u.email) — PERSIS logika tampil ownerName/
+	// memberNameMap (nama bila terisi, else email) — agar urutan tak menyimpang
+	// dari yang ditampilkan. NULLABLE (deal_owner ON DELETE SET NULL). LEFT JOIN
+	// users: baris tanpa owner ATAU owner terhapus → owner_key NULL, masuk
+	// kelompok NULL (default Postgres). Mirror PERSIS ListLeadsSortByOwner.
+	ListDealsSortByOwner(ctx context.Context, arg ListDealsSortByOwnerParams) ([]Deal, error)
+	// BL-157e: sort by probability ("Peluang", %). NULLABLE smallint. Pola
+	// null-aware SAMA dgn ListDealsSortByAmount, tipe kolom smallint.
+	ListDealsSortByProbability(ctx context.Context, arg ListDealsSortByProbabilityParams) ([]Deal, error)
+	// BL-157e: sort by stage ("Tahap" — RAW enum Prospecting/Qualification/…,
+	// alfabetis; tak menduplikasi urutan pipeline ke SQL, mirror keputusan
+	// "Status" Leads BL-157b). stage NOT NULL → kloning PERSIS pola
+	// ListDealsSortByName.
+	ListDealsSortByStage(ctx context.Context, arg ListDealsSortByStageParams) ([]Deal, error)
 	// Level 3 (Kecamatan) di bawah satu kabupaten/kota. Sama alasannya dgn
 	// ListRegenciesByProvince — bukan jalur utama (JS-side), cadangan validasi.
 	ListDistrictsByRegency(ctx context.Context, parentRegionID *int64) ([]Region, error)
@@ -876,6 +965,30 @@ type Querier interface {
 	// DEKAT (ASC) dari langganan Active belum-terhapus. LATERAL LIMIT 1 memakai
 	// idx_subs_one_active-adjacent (tenant_id, end_date) WHERE status='Active'.
 	ListHealthScores(ctx context.Context, arg ListHealthScoresParams) ([]ListHealthScoresRow, error)
+	// BL-157i: sort by cs.adoption_score ("Adopsi"). NULLABLE smallint — pola
+	// null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+	ListHealthScoresSortByAdoption(ctx context.Context, arg ListHealthScoresSortByAdoptionParams) ([]ListHealthScoresSortByAdoptionRow, error)
+	// BL-157i: sort by cs.engagement_score ("Engagement"). NULLABLE smallint —
+	// pola null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+	ListHealthScoresSortByEngagement(ctx context.Context, arg ListHealthScoresSortByEngagementParams) ([]ListHealthScoresSortByEngagementRow, error)
+	// BL-157i: sort by sub.end_date ("Jatuh Tempo"). NULLABLE — LATERAL bisa
+	// kosong (akun tanpa langganan Active ber-end_date) — pola null-aware mirror
+	// ListDealsSortByCloseDate, tipe kolom date.
+	ListHealthScoresSortByRenewal(ctx context.Context, arg ListHealthScoresSortByRenewalParams) ([]ListHealthScoresSortByRenewalRow, error)
+	// BL-157i: sort by cs.overall_health_score ("Skor"). NULLABLE smallint (akun
+	// belum diskor CSM) — pola null-aware mirror ListDealsSortByProbability.
+	ListHealthScoresSortByScore(ctx context.Context, arg ListHealthScoresSortByScoreParams) ([]ListHealthScoresSortByScoreRow, error)
+	// BL-157i: sort by cs.support_score ("Support"). NULLABLE smallint — pola
+	// null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+	ListHealthScoresSortBySupport(ctx context.Context, arg ListHealthScoresSortBySupportParams) ([]ListHealthScoresSortBySupportRow, error)
+	// BL-157i: sort by cs.score_trend ("Tren"). NULLABLE text — pola null-aware
+	// mirror ListRenewalsSortByPlan.
+	ListHealthScoresSortByTrend(ctx context.Context, arg ListHealthScoresSortByTrendParams) ([]ListHealthScoresSortByTrendRow, error)
+	// BL-157i: SAMA PERSIS filter ListHealthScores (ownership F3, segment BL-114,
+	// filter_status, search) — hanya ORDER BY/keyset beda, diurut a.village_name
+	// (Desa). Tak-nullable (village_name NOT NULL) → pola sederhana, tanpa
+	// cursor_is_null (mirror ListRenewalsSortByVillage).
+	ListHealthScoresSortByVillage(ctx context.Context, arg ListHealthScoresSortByVillageParams) ([]ListHealthScoresSortByVillageRow, error)
 	// Undangan PENDING satu workspace (panel anggota) — yang sudah diterima disaring.
 	ListInvitesByTenant(ctx context.Context, tenantID int64) ([]Invite, error)
 	// kb_articles.sql — katalog master (Knowledge Base), Modul 6 Customer
@@ -1080,6 +1193,29 @@ type Querier interface {
 	// (created_at DESC, id DESC). Deal sudah ter-scope ownership di handler; di sini
 	// cukup filter deal_id + baris hidup. First page: cursor = (now(), max bigint).
 	ListQuotesForDeal(ctx context.Context, arg ListQuotesForDealParams) ([]Quote, error)
+	// BL-157f (klon persis pola ListDealsSortByCode/ListLeadsSortByCode): SAMA
+	// PERSIS filter ListQuotes (ownership F3 warisan deal + search) — hanya
+	// ORDER BY/keyset yang beda, diurut entity_code (bukan created_at).
+	// entity_code NULLABLE. NULLS default Postgres (ASC=LAST, DESC=FIRST).
+	ListQuotesSortByCode(ctx context.Context, arg ListQuotesSortByCodeParams) ([]ListQuotesSortByCodeRow, error)
+	// BL-157f: sort by d.deal_name ("Deal"). deal_name NOT NULL (deals selalu
+	// punya nama) → kloning pola non-null ListDealsSortByName, kunci di kolom
+	// tabel JOIN (bukan tabel utama quotes).
+	ListQuotesSortByDeal(ctx context.Context, arg ListQuotesSortByDealParams) ([]ListQuotesSortByDealRow, error)
+	// BL-157f: sort by quote_name ("Nama"). NULLABLE (skema: TEXT tanpa NOT NULL,
+	// beda dari deal_name) → kloning pola null-aware ListQuotesSortByCode, bukan
+	// pola non-null ListDealsSortByName.
+	ListQuotesSortByName(ctx context.Context, arg ListQuotesSortByNameParams) ([]ListQuotesSortByNameRow, error)
+	// BL-157f: sort by quote_status ("Status" — RAW enum Draft/Sent/Under
+	// Review/Accepted/Rejected/Expired, alfabetis; mirror keputusan Status Leads/
+	// Tahap Deals, tak menduplikasi urutan lifecycle ke SQL). NOT NULL → kloning
+	// pola non-null ListQuotesSortByDeal.
+	ListQuotesSortByStatus(ctx context.Context, arg ListQuotesSortByStatusParams) ([]ListQuotesSortByStatusRow, error)
+	// BL-157f: sort by grand_total ("Grand Total"). NULLABLE numeric (snapshot
+	// dihitung ulang dari quote_items — quote baru tanpa item = NULL). Kunci sort
+	// memakai nilai ASLI (kolom ini tak pernah disamarkan F4 di manapun, beda dari
+	// amount Deals) → kloning pola null-aware ListDealsSortByAmount.
+	ListQuotesSortByTotal(ctx context.Context, arg ListQuotesSortByTotalParams) ([]ListQuotesSortByTotalRow, error)
 	// Level 2 (Kabupaten/Kota) di bawah satu provinsi. Tak dipakai cascading di JS
 	// (dataset penuh sudah di-embed via ListAllRegions), tapi berguna utk validasi
 	// server-side / API lain di masa depan.
@@ -1105,6 +1241,33 @@ type Querier interface {
 	// splitPage); pengurutan "paling dekat jatuh tempo" ditunda ke slice KPI/agregasi.
 	// previous_value dibawa di s.* untuk kolom "Prev→Current" (tanpa JOIN tambahan).
 	ListRenewals(ctx context.Context, arg ListRenewalsParams) ([]ListRenewalsRow, error)
+	// BL-157g: sort by s.end_date ("Tgl Perpanjang"). Berbeda dari
+	// ListSubscriptionsSortByRenewal (yang harus null-aware, karena ListSubscriptions
+	// mencakup langganan TANPA dimensi renewal): dasbor Renewals SUDAH memfilter
+	// s.end_date IS NOT NULL, jadi kolom ini DIJAMIN terisi di sini → pola
+	// non-nullable sederhana (mirror SortByVillage), tanpa cursor_is_null.
+	ListRenewalsSortByDate(ctx context.Context, arg ListRenewalsSortByDateParams) ([]ListRenewalsSortByDateRow, error)
+	// BL-157g: sort by s.mrr ("Kini" / Prev→Current). NULLABLE — pola null-aware
+	// mirror ListSubscriptionsSortByMrr. Sort atas nilai F4-masked SUDAH preseden
+	// diterima (BL-157a ListSubscriptionsSortByMrr) — masking hanya di tampilan,
+	// bukan di query.
+	ListRenewalsSortByMrr(ctx context.Context, arg ListRenewalsSortByMrrParams) ([]ListRenewalsSortByMrrRow, error)
+	// BL-157g: sort by p.plan_name ("Paket"). NULLABLE (BL-88 PR2b: langganan
+	// multi-paket → plan_id parent NULL) — pola null-aware mirror
+	// ListSubscriptionsSortByPlan (cursor_is_null, NULLS default Postgres).
+	ListRenewalsSortByPlan(ctx context.Context, arg ListRenewalsSortByPlanParams) ([]ListRenewalsSortByPlanRow, error)
+	// BL-157g: sort by "Jenis" — COALESCE(NULLIF(s.renewal_type,''), CASE WHEN
+	// s.auto_renew THEN 'Auto' ELSE 'Manual' END), PERSIS logika tampil
+	// renewalTypeLabel (subscriptions_renewals_row.go) agar urutan tak menyimpang
+	// dari yang ditampilkan. Ekspresi ini TAK PERNAH NULL (auto_renew NOT NULL
+	// DEFAULT false) → pola non-nullable sederhana walau nilainya computed,
+	// tanpa cursor_is_null.
+	ListRenewalsSortByType(ctx context.Context, arg ListRenewalsSortByTypeParams) ([]ListRenewalsSortByTypeRow, error)
+	// BL-157g: SAMA PERSIS filter ListRenewals (end_date IS NOT NULL, ownership F3,
+	// window_filter) — hanya ORDER BY/keyset beda, diurut a.village_name (Desa).
+	// Tak-nullable (INNER JOIN accounts, deleted_at IS NULL) → pola sederhana
+	// (mirror ListSubscriptionsSortByVillage), tanpa cursor_is_null.
+	ListRenewalsSortByVillage(ctx context.Context, arg ListRenewalsSortByVillageParams) ([]ListRenewalsSortByVillageRow, error)
 	// sla_policies.sql — katalog master (SLA Policies), Modul 6 Customer Success
 	// slice A1. Isolasi WORKSPACE ditegakkan RLS (GUC app.tenant_id di WithTenant);
 	// tak ada filter tenant_id manual. sla_policies TANPA soft-delete: is_active=
@@ -1225,6 +1388,33 @@ type Querier interface {
 	//   filter_sla_breached → deadline < now() DAN status bukan selesai.
 	//   filter_sla_at_risk  → deadline dalam 4 jam ke depan DAN status bukan selesai.
 	ListTickets(ctx context.Context, arg ListTicketsParams) ([]ListTicketsRow, error)
+	// BL-157h: sort by u.name ("Agen" — assigned_to_name). NULLABLE (assigned_to
+	// NULL = belum ditugaskan). Kunci sort PLAIN u.name (bukan COALESCE dgn
+	// email seperti ListSubscriptionsSortByCsm) — ticketRowView menampilkan
+	// AssignedToName apa adanya tanpa fallback email, jadi urutan harus sama
+	// dgn yang ditampilkan. Pola null-aware sama ListSubscriptionsSortByPlan.
+	ListTicketsSortByAgent(ctx context.Context, arg ListTicketsSortByAgentParams) ([]ListTicketsSortByAgentRow, error)
+	// BL-157h: sort by t.priority ("Prioritas" — RAW rendah/sedang/tinggi,
+	// alfabetis; bukan bobot urgensi). NOT NULL, pola sama SortByVillage.
+	ListTicketsSortByPriority(ctx context.Context, arg ListTicketsSortByPriorityParams) ([]ListTicketsSortByPriorityRow, error)
+	// BL-157h: sort by t.sla_deadline_at ("SLA" — RAW deadline, bukan label
+	// turunan Terpenuhi/Terlanggar/"Nj Mm lagi" — sama prinsip dgn SortByStatus
+	// Subscriptions: sortir sumbu mentah, jangan duplikasi derivasi ke SQL).
+	// NULLABLE (tiket belum bersla_policy). Pola null-aware sama SortByMrr,
+	// tipe timestamptz bukan numeric.
+	ListTicketsSortBySla(ctx context.Context, arg ListTicketsSortBySlaParams) ([]ListTicketsSortBySlaRow, error)
+	// BL-157h: sort by t.status ("Status" — RAW baru/diproses/menunggu/selesai).
+	// Berbeda dari Renewals (BL-157g, Status dikecualikan krn derivasi penuh):
+	// di sini status ADALAH kolom mentah, bukan turunan, jadi aman disortir
+	// langsung. NOT NULL, pola sama SortByVillage.
+	ListTicketsSortByStatus(ctx context.Context, arg ListTicketsSortByStatusParams) ([]ListTicketsSortByStatusRow, error)
+	// BL-157h: sort by t.subject ("Subjek"). NOT NULL, pola sama SortByVillage.
+	ListTicketsSortBySubject(ctx context.Context, arg ListTicketsSortBySubjectParams) ([]ListTicketsSortBySubjectRow, error)
+	// BL-157h: sort by a.village_name ("Desa"). SAMA PERSIS filter ListTickets
+	// (ownership F3 + tab filter + search) — hanya ORDER BY/keyset beda. NOT NULL
+	// (INNER JOIN accounts + deleted_at IS NULL), pola non-nullable text sama
+	// ListSubscriptionsSortByVillage (BL-157a).
+	ListTicketsSortByVillage(ctx context.Context, arg ListTicketsSortByVillageParams) ([]ListTicketsSortByVillageRow, error)
 	// Panel /dev: keyset pagination, hanya user aktif (belum soft-delete).
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// Daftar Desa/Kelurahan (level 4) di bawah SATU Kecamatan (level 3) — dipakai

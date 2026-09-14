@@ -62,7 +62,7 @@ func TestRenewalRowView_MRRMasked(t *testing.T) {
 	now := time.Now()
 	const wantMRR, wantPrev = "Rp 5.000.000", "Rp 4.500.000"
 
-	v := renewalRowView(row, now, "support")
+	v := renewalRowView(renewalListRowFromDefault(row), now, "support")
 	if v.CurrentMRR != flsHidden {
 		t.Errorf("support: CurrentMRR harus tersamar (%s), got %q", flsHidden, v.CurrentMRR)
 	}
@@ -71,7 +71,7 @@ func TestRenewalRowView_MRRMasked(t *testing.T) {
 	}
 
 	for _, role := range []string{"admin", "manager", "sales", "csm"} {
-		v := renewalRowView(row, now, role)
+		v := renewalRowView(renewalListRowFromDefault(row), now, role)
 		if v.CurrentMRR != wantMRR {
 			t.Errorf("role %q: CurrentMRR harus %q, got %q", role, wantMRR, v.CurrentMRR)
 		}
