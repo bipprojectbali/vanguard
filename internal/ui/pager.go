@@ -133,15 +133,21 @@ func joinTrail(entries []string) string {
 }
 
 // validTrailToken menerima sentinel halaman-pertama atau bentuk cursor
-// (`<digit..>_<digit..>`). Divalidasi lokal (tanpa impor handler) agar paket ui
+// (`<nilai..>_<digit..>`). Divalidasi lokal (tanpa impor handler) agar paket ui
 // tak bergantung ke handler; cukup memastikan token tak menyuntik karakter aneh
-// ke URL.
+// ke URL. Bagian nilai (`at`) longgar HEX (0-9a-f), bukan cuma digit: cursor
+// timestamp (pagecursor.go) SELALU desimal (subset hex, tetap lolos), tapi
+// cursor teks per-kolom (BL-157a, sortcursor.go) meng-hex-encode nilai kolom —
+// tanpa relaksasi ini, jejak yang memuat huruf a-f (mis. hasil hex nama desa)
+// ditolak `isDigits` lalu splitTrail membuang SELURUH jejak → tombol
+// "Sebelumnya" diam-diam hilang sejak halaman kedua saat sort aktif. Bagian id
+// tetap desimal murni (selalu bigint).
 func validTrailToken(s string) bool {
 	if s == pagerFirstToken {
 		return true
 	}
 	at, id, ok := strings.Cut(s, "_")
-	return ok && isDigits(at) && isDigits(id)
+	return ok && isHexDigits(at) && isDigits(id)
 }
 
 func isDigits(s string) bool {
@@ -150,6 +156,18 @@ func isDigits(s string) bool {
 	}
 	for _, r := range s {
 		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func isHexDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
 			return false
 		}
 	}

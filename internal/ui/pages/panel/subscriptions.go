@@ -66,6 +66,8 @@ type SubListView struct {
 	NextCursor   string
 	After        string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
 	Trail        string // BL-7: jejak cursor halaman sebelumnya (?trail=)
+	Sort         string // BL-157a: kolom sort aktif ("" = default created_at DESC)
+	Dir          string // BL-157a: "asc"/"desc", hanya bermakna bila Sort != ""
 }
 
 // SubList merender halaman daftar: header + filter status + alert + tabel + pager.
@@ -83,7 +85,7 @@ func SubList(v SubListView) g.Node {
 		tabSearchRow(subStatusFilter(v),
 			searchBoxInline(v.Base+"/subscriptions", v.Query,
 				"Cari langganan — desa, paket, atau kode…", "Cari langganan",
-				hiddenField{"status", v.StatusFilter})),
+				hiddenField{"status", v.StatusFilter}, hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir})),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Toast(ui.VariantDestructive, "subs-err", g.Text(v.Err)))
@@ -128,8 +130,10 @@ func subKPICard(label, value, sub, colorCls string) g.Node {
 // bookmarkable (gotcha #16); flex-wrap agar tak mendorong lebar di mobile.
 func subStatusFilter(v SubListView) g.Node {
 	tab := func(label, status string) g.Node {
-		// q dibawa lintas tab (mencari lalu ganti status tak menghapus pencarian).
-		href := withQuery(v.Base+"/subscriptions", v.Query, hiddenField{"status", status})
+		// q + sort/dir dibawa lintas tab (mencari/sort lalu ganti status tak
+		// menghapus pencarian/sort aktif — BL-157a keputusan #2 berdampingan).
+		href := withQuery(v.Base+"/subscriptions", v.Query,
+			hiddenField{"status", status}, hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir})
 		cls := "tab"
 		if v.StatusFilter == status {
 			cls += " tab-active font-medium"
@@ -184,17 +188,43 @@ func subsTable(v SubListView) g.Node {
 				h.Class("w-full text-sm"),
 				h.THead(h.Tr(
 					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Paket")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("MRR")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Masa Berlaku")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Renewal Date")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("CSM")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), subSortHeader(v, "village", "Desa")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), subSortHeader(v, "plan", "Paket")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), subSortHeader(v, "mrr", "MRR")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), subSortHeader(v, "status", "Masa Berlaku")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), subSortHeader(v, "renewal", "Renewal Date")),
+					h.Th(h.Class("py-2 font-medium"), subSortHeader(v, "csm", "CSM")),
 				)),
 				h.TBody(g.Group(rows)),
 			)),
 		),
 	)
+}
+
+// subSortHeader = header kolom jadi tautan sort (BL-157a fondasi "village" +
+// lanjutan 5 kolom lain — SEMUA kolom tabel Subscription Lists kini sortable).
+// Native <a href> (bookmarkable, lolos gotcha #16), BUKAN Datastar. Klik saat
+// non-aktif → sort=col&dir=asc; klik saat aktif → toggle arah. Tautan sort
+// SENDIRI tak membawa after/trail (konsisten pola withQuery existing "submit
+// baru reset ke hal 1" — mewujudkan keputusan #3 tanpa logika reset eksplisit).
+// q/status dipertahankan (keputusan #2, berdampingan).
+func subSortHeader(v SubListView, col, label string) g.Node {
+	active := v.Sort == col
+	nextDir := "asc"
+	if active && v.Dir == "asc" {
+		nextDir = "desc"
+	}
+	href := withQuery(v.Base+"/subscriptions", v.Query,
+		hiddenField{"status", v.StatusFilter}, hiddenField{"sort", col}, hiddenField{"dir", nextDir})
+	text := label
+	if active {
+		arrow := "▲"
+		if v.Dir == "desc" {
+			arrow = "▼"
+		}
+		text = label + " " + arrow
+	}
+	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
 }
 
 func subTableRow(base string, s SubRow) g.Node {
@@ -240,6 +270,8 @@ func subStatusBadge(status string) g.Node {
 }
 
 func subsPager(v SubListView) g.Node {
-	base := panelListHref(v.Base+"/subscriptions", [2]string{"status", v.StatusFilter}, [2]string{"q", v.Query})
+	base := panelListHref(v.Base+"/subscriptions",
+		[2]string{"status", v.StatusFilter}, [2]string{"q", v.Query},
+		[2]string{"sort", v.Sort}, [2]string{"dir", v.Dir})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

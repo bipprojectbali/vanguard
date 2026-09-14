@@ -45,14 +45,15 @@ func TestSubList_SlimColumns(t *testing.T) {
 			Renewal: "2026-12-01", CSM: "Budi",
 		}},
 	}))
-	// Header baru hadir (anchor </th> agar tak bentrok dgn label kartu KPI).
-	for _, want := range []string{"Renewal Date</th>", "CSM</th>", "MRR</th>", "Masa Berlaku</th>"} {
+	// Header baru hadir (BL-157a: label kini dibungkus <a> sort header, jadi
+	// anchor label</a></th> — bukan lagi label</th> polos).
+	for _, want := range []string{"Renewal Date</a></th>", "CSM</a></th>", "MRR</a></th>", "Masa Berlaku</a></th>"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("header %q harus hadir:\n%s", want, out)
 		}
 	}
 	// Kolom lama yang dibuang TAK muncul sebagai header tabel.
-	for _, gone := range []string{"ARR</th>", "Mulai</th>", "Berakhir</th>", "Pemilik</th>"} {
+	for _, gone := range []string{"ARR</a></th>", "Mulai</a></th>", "Berakhir</a></th>", "Pemilik</a></th>"} {
 		if strings.Contains(out, gone) {
 			t.Errorf("header %q harus DIBUANG (BL-95):\n%s", gone, out)
 		}

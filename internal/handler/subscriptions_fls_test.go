@@ -37,13 +37,13 @@ func TestSubRowView_MRRMasked(t *testing.T) {
 	const wantMRR = "Rp 5.000.000"
 	now := time.Now() // uji sumbu role (MRR), bukan derivasi status → now bebas
 
-	v := subRowView(row, nil, "support", now)
+	v := subRowView(subListRowFromDefault(row), nil, "support", now)
 	if v.MRR != flsHidden {
 		t.Errorf("support: MRR harus tersamar (%s), got %q", flsHidden, v.MRR)
 	}
 
 	for _, role := range []string{"admin", "manager", "sales", "csm"} {
-		v := subRowView(row, nil, role, now)
+		v := subRowView(subListRowFromDefault(row), nil, role, now)
 		if v.MRR != wantMRR {
 			t.Errorf("role %q: MRR harus %q, got %q", role, wantMRR, v.MRR)
 		}

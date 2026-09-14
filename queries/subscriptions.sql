@@ -120,6 +120,274 @@ WHERE s.deleted_at IS NULL
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListSubscriptionsSortByVillage :many
+-- BL-157a (fondasi sort per kolom): SAMA PERSIS filter ListSubscriptions
+-- (ownership F3 + status + search) — hanya ORDER BY/keyset yang beda, diurut
+-- village_name (bukan created_at). village_name dipilih sebagai kolom
+-- percontohan karena TIDAK NULLABLE (INNER JOIN accounts, deleted_at IS NULL);
+-- kolom nullable (plan_name, end_date) ditunda ke fase berikut — NULLS
+-- FIRST/LAST harus konsisten antara ORDER BY & predikat keyset, kompleksitas
+-- tersendiri di luar cakupan fondasi.
+--
+-- dir diparameterkan (bukan query terpisah per asc/desc) via pola CASE-NULL:
+-- arah non-aktif menghasilkan NULL di semua baris → tak berpengaruh ke urutan,
+-- tie-breaker id ikut arah yang sama agar selaras predikat keyset di bawah.
+-- has_cursor membedakan "halaman pertama" (predikat keyset dilewati total)
+-- dari "halaman lanjutan" — bukan sentinel nilai minimum/maksimum string, yang
+-- mustahil digeneralisasi untuk tipe teks.
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (a.village_name, s.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (a.village_name, s.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(status_filter)::text = '' OR s.status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR p.plan_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR s.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.village_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.village_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListSubscriptionsSortByStatus :many
+-- BL-157a (fase lanjutan): sort by s.status ("Masa Berlaku" — RAW status
+-- Trial/Active/Suspended/PendingApproval/Expired/Cancelled/Churned, alfabetis;
+-- keputusan user: BUKAN band urgensi derivasi subDerivedStatus, agar tak
+-- menduplikasi logika derivasi ke SQL). status NOT NULL → kloning PERSIS pola
+-- ListSubscriptionsSortByVillage (tanpa kerumitan NULL).
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (s.status, s.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (s.status, s.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(status_filter)::text = '' OR s.status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR p.plan_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR s.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.status END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.status END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListSubscriptionsSortByPlan :many
+-- BL-157a (fase lanjutan): sort by p.plan_name ("Paket"). NULLABLE (BL-88 PR2b:
+-- langganan multi-paket → plan_id parent NULL, identitas di subscription_items).
+-- ORDER BY tetap pola CASE-dir (TAK berubah dari village) — mewarisi default
+-- NULLS Postgres (ASC=NULLS LAST, DESC=NULLS FIRST), sesuai keputusan user.
+-- Predikat keyset (WHERE) BUTUH cursor_is_null: menandai apakah baris cursor
+-- (halaman sebelumnya) bernilai NULL, agar tahu lanjut dari kelompok NULL atau
+-- non-NULL — NULLS Postgres sendiri tak menyimpan info ini lintas-request.
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (p.plan_name IS NULL OR (p.plan_name, s.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND p.plan_name IS NULL AND s.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (p.plan_name IS NOT NULL OR s.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND p.plan_name IS NOT NULL
+              AND (p.plan_name, s.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(status_filter)::text = '' OR s.status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR p.plan_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR s.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN p.plan_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN p.plan_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListSubscriptionsSortByMrr :many
+-- BL-157a (fase lanjutan): sort by s.mrr ("MRR"). NULLABLE (langganan Trial
+-- awal bisa belum ber-MRR). Pola null-aware SAMA dgn SortByPlan, hanya tipe
+-- kolom numeric bukan text — lihat rasional lengkap di SortByPlan.
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (s.mrr IS NULL OR (s.mrr, s.id) > (sqlc.arg(cursor_val)::numeric, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND s.mrr IS NULL AND s.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (s.mrr IS NOT NULL OR s.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND s.mrr IS NOT NULL
+              AND (s.mrr, s.id) < (sqlc.arg(cursor_val)::numeric, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(status_filter)::text = '' OR s.status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR p.plan_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR s.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.mrr END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.mrr END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListSubscriptionsSortByRenewal :many
+-- BL-157a (fase lanjutan): sort by s.end_date ("Renewal Date"). NULLABLE
+-- (langganan tanpa dimensi renewal, mis. Trial belum berjangka). Pola
+-- null-aware SAMA dgn SortByPlan, tipe kolom date — lihat rasional di SortByPlan.
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (s.end_date IS NULL OR (s.end_date, s.id) > (sqlc.arg(cursor_val)::date, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND s.end_date IS NULL AND s.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (s.end_date IS NOT NULL OR s.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND s.end_date IS NOT NULL
+              AND (s.end_date, s.id) < (sqlc.arg(cursor_val)::date, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(status_filter)::text = '' OR s.status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR p.plan_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR s.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.end_date END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.end_date END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListSubscriptionsSortByCsm :many
+-- BL-157a (fase lanjutan): sort by CSM (subscription_owner). Kunci sort HARUS
+-- COALESCE(NULLIF(u.name,''), u.email) — PERSIS logika tampil ownerName/
+-- memberNameMap (sales_leads_detail.go: nama bila terisi, else email) — agar
+-- urutan tak menyimpang dari yang ditampilkan. NULLABLE (subscription_owner
+-- ON DELETE SET NULL). LEFT JOIN users: baris tanpa owner ATAU owner terhapus
+-- → csm_key NULL, masuk kelompok NULL (default Postgres, sesuai kolom
+-- nullable lain).
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+LEFT JOIN plans p ON p.id = s.plan_id
+LEFT JOIN users u ON u.id = s.subscription_owner
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NULL
+                OR (COALESCE(NULLIF(u.name, ''), u.email), s.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean
+              AND COALESCE(NULLIF(u.name, ''), u.email) IS NULL AND s.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL OR s.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL
+              AND (COALESCE(NULLIF(u.name, ''), u.email), s.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(status_filter)::text = '' OR s.status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR p.plan_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR s.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN COALESCE(NULLIF(u.name, ''), u.email) END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN COALESCE(NULLIF(u.name, ''), u.email) END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.id END DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: ListRenewals :many
 -- Dasbor Renewals (Menu 5.2, READ-ONLY — aksi perpanjangan ada di detail langganan,
 -- bukan di sini). Langganan yang punya dimensi renewal (end_date terisi), di-scope
