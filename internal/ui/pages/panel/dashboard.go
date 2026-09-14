@@ -37,10 +37,15 @@ type DashboardView struct {
 // BL-98: ReportPath = tautan "Lihat Laporan →". Handler HANYA menyetelnya bila
 // role ber-crm:reports (canViewReports) → view tak pernah menautkan halaman yang
 // akan 403; "" = tak ada tautan.
+// BL-140: Charts membalik BL-98 KHUSUS Beranda — 2–3 grafik inline per-domain
+// (di bawah strip KPI, TANPA switcher). Handler mengisi Charts hanya utk domain
+// yg sudah difilter per-kapabilitas (BL-141..144); nil/kosong → grid chart tak
+// dirender (regresi TestDashboardBody_NoDanglingCells).
 type DashDomain struct {
 	Title      string
 	ReportPath string
 	KPIs       []DashKPI
+	Charts     []DashChart
 }
 
 // DashKPI — kartu angka ringkas dalam section domain. Value sudah diformat di
@@ -49,6 +54,17 @@ type DashKPI struct {
 	Label      string
 	Value      string
 	ValueClass string
+}
+
+// DashChart — satu grafik inline dalam section domain (BL-140). ChartJSON
+// SUDAH di-marshal handler (h.marshalChart) — view tak pernah membangun option
+// ECharts sendiri (murni-data). ChartID WAJIB berprefiks "chart-" agar
+// charts.js (auto-discovery DOM id) menemukannya — konvensi SAMA dgn chart
+// global (chart-health, dashboard.go).
+type DashChart struct {
+	Title     string
+	ChartID   string
+	ChartJSON string
 }
 
 // DashboardBody merender baris KPI GLOBAL + distribusi health, lalu tiap section
@@ -127,9 +143,13 @@ func dashPanelCols(n int) string {
 }
 
 // dashboardDomain — heading section (judul + tautan "Lihat Laporan →" opsional) +
-// strip KPI. Dipanggil hanya untuk domain yang punya isi (handler menyaring),
-// jadi heading tak pernah berdiri kosong. BL-98: baris judul flex-wrap agar
-// judul & tautan sebaris di desktop, turun rapi di mobile 375px.
+// strip KPI + grid chart opsional. Dipanggil hanya untuk domain yang punya isi
+// (handler menyaring), jadi heading tak pernah berdiri kosong. BL-98: baris
+// judul flex-wrap agar judul & tautan sebaris di desktop, turun rapi di mobile
+// 375px. BL-140: grid chart dirender di BAWAH strip KPI, HANYA bila Charts
+// terisi (handler BL-141..144 yang mengisi per-kapabilitas) — nil/kosong
+// (mis. semua chart domain di-skip F4, atau domain belum disentuh) → tak ada
+// grid sama sekali (regresi TestDashboardBody_NoDanglingCells).
 func dashboardDomain(d DashDomain) g.Node {
 	var kpiStrip g.Node
 	if len(d.KPIs) > 0 {
@@ -139,12 +159,23 @@ func dashboardDomain(d DashDomain) g.Node {
 		}
 		kpiStrip = h.Div(h.Class(dashKPICols(len(d.KPIs))), g.Group(cards))
 	}
+	var chartGrid g.Node
+	if len(d.Charts) > 0 {
+		charts := make([]g.Node, len(d.Charts))
+		for i, c := range d.Charts {
+			charts[i] = dashboardChartCard(c.Title, c.ChartID, c.ChartJSON)
+		}
+		chartGrid = h.Div(h.Class("mt-4"),
+			h.Div(h.Class(dashPanelCols(len(d.Charts))), g.Group(charts)),
+		)
+	}
 	return h.Section(h.Class("mt-8"),
 		h.Div(h.Class("flex flex-wrap items-center justify-between gap-2 mb-3"),
 			h.H2(h.Class("text-lg font-semibold"), g.Text(d.Title)),
 			g.If(d.ReportPath != "", dashboardReportLink(d.ReportPath)),
 		),
 		g.If(kpiStrip != nil, kpiStrip),
+		g.If(chartGrid != nil, chartGrid),
 	)
 }
 
