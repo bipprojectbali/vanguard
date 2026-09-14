@@ -68,6 +68,272 @@ WHERE deleted_at IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListLeadsSortByName :many
+-- BL-157b (fondasi sort per kolom Leads): SAMA PERSIS filter ListLeads
+-- (ownership F3 + mine_only + status_filter + search) — hanya ORDER BY/keyset
+-- yang beda, diurut lead_name (bukan created_at). lead_name TIDAK NULLABLE →
+-- kloning pola ListSubscriptionsSortByVillage (tanpa kerumitan NULL). Sort
+-- HANYA berdasar lead_name (baris bold di sel), BUKAN gabungan dgn
+-- contact_person (subteks) — mirror keputusan "Desa" BL-157a.
+SELECT * FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (lead_name, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (lead_name, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND lead_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR lead_owner = sqlc.arg(uid))
+  AND (sqlc.arg(status_filter)::text = '' OR lead_status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR lead_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN lead_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN lead_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListLeadsSortByStatus :many
+-- BL-157b: sort by lead_status ("Status" — RAW enum New/Contacted/Qualified/
+-- Unqualified/Converted, alfabetis; tak menduplikasi urutan tingkat ke SQL,
+-- mirror keputusan "Masa Berlaku" BL-157a). lead_status NOT NULL → kloning
+-- PERSIS pola ListLeadsSortByName.
+SELECT * FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (lead_status, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (lead_status, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND lead_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR lead_owner = sqlc.arg(uid))
+  AND (sqlc.arg(status_filter)::text = '' OR lead_status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR lead_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN lead_status END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN lead_status END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListLeadsSortByCode :many
+-- BL-157b: sort by entity_code ("Kode"). NULLABLE (entity_code diisi
+-- GenerateEntityCode saat create, tapi kolom tetap nullable di skema). Pola
+-- null-aware SAMA dgn ListSubscriptionsSortByPlan — cursor_is_null menandai
+-- kelompok NULL/non-NULL lintas-request; NULLS default Postgres (ASC=LAST,
+-- DESC=FIRST).
+SELECT * FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (entity_code IS NULL OR (entity_code, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND entity_code IS NULL AND id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (entity_code IS NOT NULL OR id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND entity_code IS NOT NULL
+              AND (entity_code, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND lead_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR lead_owner = sqlc.arg(uid))
+  AND (sqlc.arg(status_filter)::text = '' OR lead_status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR lead_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN entity_code END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN entity_code END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListLeadsSortBySource :many
+-- BL-157b: sort by lead_source ("Sumber"). NULLABLE. Pola null-aware PERSIS
+-- ListLeadsSortByCode, kolom beda.
+SELECT * FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (lead_source IS NULL OR (lead_source, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND lead_source IS NULL AND id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (lead_source IS NOT NULL OR id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND lead_source IS NOT NULL
+              AND (lead_source, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND lead_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR lead_owner = sqlc.arg(uid))
+  AND (sqlc.arg(status_filter)::text = '' OR lead_status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR lead_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN lead_source END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN lead_source END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListLeadsSortByRating :many
+-- BL-157b: sort by rating ("Rating" — RAW enum Cold/Hot/Warm, alfabetis;
+-- keputusan user: BUKAN urutan tingkat Hot→Warm→Cold, mirror keputusan
+-- "Masa Berlaku" BL-157a — tak menduplikasi logika prioritas ke SQL).
+-- NULLABLE. Pola null-aware PERSIS ListLeadsSortByCode.
+SELECT * FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (rating IS NULL OR (rating, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND rating IS NULL AND id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (rating IS NOT NULL OR id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND rating IS NOT NULL
+              AND (rating, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND lead_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR lead_owner = sqlc.arg(uid))
+  AND (sqlc.arg(status_filter)::text = '' OR lead_status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR lead_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN rating END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN rating END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListLeadsSortByValue :many
+-- BL-157b: sort by estimated_value ("Estimasi"). NULLABLE numeric. Kunci sort
+-- memakai nilai ASLI (tak ter-mask) — F4 (maskARR) hanya menyamarkan TAMPILAN
+-- di handler, mirror presedan MRR BL-157a (ListSubscriptionsSortByMrr). Pola
+-- null-aware SAMA dgn ListLeadsSortByCode, tipe kolom numeric bukan text.
+SELECT * FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (estimated_value IS NULL OR (estimated_value, id) > (sqlc.arg(cursor_val)::numeric, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND estimated_value IS NULL AND id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (estimated_value IS NOT NULL OR id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND estimated_value IS NOT NULL
+              AND (estimated_value, id) < (sqlc.arg(cursor_val)::numeric, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND lead_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR lead_owner = sqlc.arg(uid))
+  AND (sqlc.arg(status_filter)::text = '' OR lead_status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR lead_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN estimated_value END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN estimated_value END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListLeadsSortByOwner :many
+-- BL-157b: sort by CSM Pemilik (lead_owner). Kunci sort HARUS
+-- COALESCE(NULLIF(u.name,''), u.email) — PERSIS logika tampil ownerName/
+-- memberNameMap (sales_leads_detail.go: nama bila terisi, else email) — agar
+-- urutan tak menyimpang dari yang ditampilkan. NULLABLE (lead_owner ON DELETE
+-- SET NULL). LEFT JOIN users: baris tanpa owner ATAU owner terhapus →
+-- owner_key NULL, masuk kelompok NULL (default Postgres). Mirror PERSIS
+-- ListSubscriptionsSortByCsm.
+SELECT leads.* FROM leads
+LEFT JOIN users u ON u.id = lead_owner
+WHERE leads.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NULL
+                OR (COALESCE(NULLIF(u.name, ''), u.email), leads.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean
+              AND COALESCE(NULLIF(u.name, ''), u.email) IS NULL AND leads.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL OR leads.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL
+              AND (COALESCE(NULLIF(u.name, ''), u.email), leads.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND lead_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR lead_owner = sqlc.arg(uid))
+  AND (sqlc.arg(status_filter)::text = '' OR lead_status = sqlc.arg(status_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR lead_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN COALESCE(NULLIF(u.name, ''), u.email) END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN COALESCE(NULLIF(u.name, ''), u.email) END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN leads.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN leads.id END DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: UpdateLead :one
 -- Sunting profil & kualifikasi lead. entity_code tak diubah (kode identitas yang
 -- dikutip). converted_* TAK disentuh di sini — itu efek konversi (ConvertLead),

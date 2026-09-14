@@ -923,6 +923,45 @@ type Querier interface {
 	// entity_code); PII (telepon/email) tak ikut agar search bukan jalur enumerasi
 	// data tersamar. Tetap keyset+LIMIT. Trigram/index ditunda (dataset kecil).
 	ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, error)
+	// BL-157b: sort by entity_code ("Kode"). NULLABLE (entity_code diisi
+	// GenerateEntityCode saat create, tapi kolom tetap nullable di skema). Pola
+	// null-aware SAMA dgn ListSubscriptionsSortByPlan — cursor_is_null menandai
+	// kelompok NULL/non-NULL lintas-request; NULLS default Postgres (ASC=LAST,
+	// DESC=FIRST).
+	ListLeadsSortByCode(ctx context.Context, arg ListLeadsSortByCodeParams) ([]Lead, error)
+	// BL-157b (fondasi sort per kolom Leads): SAMA PERSIS filter ListLeads
+	// (ownership F3 + mine_only + status_filter + search) — hanya ORDER BY/keyset
+	// yang beda, diurut lead_name (bukan created_at). lead_name TIDAK NULLABLE →
+	// kloning pola ListSubscriptionsSortByVillage (tanpa kerumitan NULL). Sort
+	// HANYA berdasar lead_name (baris bold di sel), BUKAN gabungan dgn
+	// contact_person (subteks) — mirror keputusan "Desa" BL-157a.
+	ListLeadsSortByName(ctx context.Context, arg ListLeadsSortByNameParams) ([]Lead, error)
+	// BL-157b: sort by CSM Pemilik (lead_owner). Kunci sort HARUS
+	// COALESCE(NULLIF(u.name,''), u.email) — PERSIS logika tampil ownerName/
+	// memberNameMap (sales_leads_detail.go: nama bila terisi, else email) — agar
+	// urutan tak menyimpang dari yang ditampilkan. NULLABLE (lead_owner ON DELETE
+	// SET NULL). LEFT JOIN users: baris tanpa owner ATAU owner terhapus →
+	// owner_key NULL, masuk kelompok NULL (default Postgres). Mirror PERSIS
+	// ListSubscriptionsSortByCsm.
+	ListLeadsSortByOwner(ctx context.Context, arg ListLeadsSortByOwnerParams) ([]Lead, error)
+	// BL-157b: sort by rating ("Rating" — RAW enum Cold/Hot/Warm, alfabetis;
+	// keputusan user: BUKAN urutan tingkat Hot→Warm→Cold, mirror keputusan
+	// "Masa Berlaku" BL-157a — tak menduplikasi logika prioritas ke SQL).
+	// NULLABLE. Pola null-aware PERSIS ListLeadsSortByCode.
+	ListLeadsSortByRating(ctx context.Context, arg ListLeadsSortByRatingParams) ([]Lead, error)
+	// BL-157b: sort by lead_source ("Sumber"). NULLABLE. Pola null-aware PERSIS
+	// ListLeadsSortByCode, kolom beda.
+	ListLeadsSortBySource(ctx context.Context, arg ListLeadsSortBySourceParams) ([]Lead, error)
+	// BL-157b: sort by lead_status ("Status" — RAW enum New/Contacted/Qualified/
+	// Unqualified/Converted, alfabetis; tak menduplikasi urutan tingkat ke SQL,
+	// mirror keputusan "Masa Berlaku" BL-157a). lead_status NOT NULL → kloning
+	// PERSIS pola ListLeadsSortByName.
+	ListLeadsSortByStatus(ctx context.Context, arg ListLeadsSortByStatusParams) ([]Lead, error)
+	// BL-157b: sort by estimated_value ("Estimasi"). NULLABLE numeric. Kunci sort
+	// memakai nilai ASLI (tak ter-mask) — F4 (maskARR) hanya menyamarkan TAMPILAN
+	// di handler, mirror presedan MRR BL-157a (ListSubscriptionsSortByMrr). Pola
+	// null-aware SAMA dgn ListLeadsSortByCode, tipe kolom numeric bukan text.
+	ListLeadsSortByValue(ctx context.Context, arg ListLeadsSortByValueParams) ([]Lead, error)
 	// user_id anggota workspace dgn business_role tertentu — dipakai menarget
 	// notifikasi (mis. semua Manager saat renewal Upsell menunggu persetujuan).
 	// memberships SENGAJA tanpa RLS (dibaca untuk MENENTUKAN scope), jadi filter

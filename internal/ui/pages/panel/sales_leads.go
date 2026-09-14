@@ -44,6 +44,8 @@ type LeadsListView struct {
 	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 	Err        string
 	Msg        string
+	Sort       string // BL-157b: kolom sort aktif ("" = default created_at DESC)
+	Dir        string // BL-157b: "asc"/"desc", hanya bermakna bila Sort != ""
 }
 
 // leadTabDef = satu tab daftar (label + nilai query). Sumber tunggal urutan tab.
@@ -78,7 +80,7 @@ func LeadsList(v LeadsListView) g.Node {
 		// lintas submit search via hiddenField.
 		tabSearchRow(leadTabsNav(v),
 			searchBoxInline(v.Base+"/leads", v.Query, "Cari lead — nama atau kode…", "Cari lead",
-				hiddenField{"tab", v.Tab})),
+				hiddenField{"tab", v.Tab}, hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir})),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Toast(ui.VariantDestructive, "leads-err", g.Text(v.Err)))
@@ -104,8 +106,10 @@ func leadTabsNav(v LeadsListView) g.Node {
 		if t.key == "my" && v.HideMyTab {
 			continue
 		}
-		// q dibawa lintas tab (mencari lalu ganti tab tak menghapus pencarian).
-		href := withQuery(v.Base+"/leads", v.Query, hiddenField{"tab", t.key})
+		// q + sort/dir dibawa lintas tab (mencari/sort lalu ganti tab tak
+		// menghapus pencarian/sort aktif — mirror keputusan #2 Subscriptions).
+		href := withQuery(v.Base+"/leads", v.Query,
+			hiddenField{"tab", t.key}, hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir})
 		cls := "tab"
 		if t.key == v.Tab {
 			cls += " tab-active font-medium"
@@ -148,18 +152,42 @@ func leadsTable(v LeadsListView) g.Node {
 				h.Class("w-full text-sm"),
 				h.THead(h.Tr(
 					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Kode")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Lead")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Sumber")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Status")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Rating")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Estimasi")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("Pemilik")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), leadSortHeader(v, "code", "Kode")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), leadSortHeader(v, "name", "Lead")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), leadSortHeader(v, "source", "Sumber")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), leadSortHeader(v, "status", "Status")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), leadSortHeader(v, "rating", "Rating")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), leadSortHeader(v, "value", "Estimasi")),
+					h.Th(h.Class("py-2 font-medium"), leadSortHeader(v, "owner", "Pemilik")),
 				)),
 				h.TBody(g.Group(rows)),
 			)),
 		),
 	)
+}
+
+// leadSortHeader = header kolom jadi tautan sort (BL-157b, klon persis
+// subSortHeader). Native <a href> (bookmarkable, lolos gotcha #16), BUKAN
+// Datastar. Klik saat non-aktif → sort=col&dir=asc; klik saat aktif → toggle
+// arah. Tautan sort SENDIRI tak membawa after/trail (submit baru reset ke hal
+// 1). tab/q dipertahankan (berdampingan, mirror Subscriptions).
+func leadSortHeader(v LeadsListView, col, label string) g.Node {
+	active := v.Sort == col
+	nextDir := "asc"
+	if active && v.Dir == "asc" {
+		nextDir = "desc"
+	}
+	href := withQuery(v.Base+"/leads", v.Query,
+		hiddenField{"tab", v.Tab}, hiddenField{"sort", col}, hiddenField{"dir", nextDir})
+	text := label
+	if active {
+		arrow := "▲"
+		if v.Dir == "desc" {
+			arrow = "▼"
+		}
+		text = label + " " + arrow
+	}
+	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
 }
 
 func leadRow(base string, l LeadRow) g.Node {
@@ -200,7 +228,9 @@ func leadStatusBadge(status string) g.Node {
 }
 
 func leadsPager(v LeadsListView) g.Node {
-	base := panelListHref(v.Base+"/leads", [2]string{"tab", v.Tab}, [2]string{"q", v.Query})
+	base := panelListHref(v.Base+"/leads",
+		[2]string{"tab", v.Tab}, [2]string{"q", v.Query},
+		[2]string{"sort", v.Sort}, [2]string{"dir", v.Dir})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }
 
