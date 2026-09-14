@@ -39,6 +39,13 @@ func (h *Handler) DealStage(w http.ResponseWriter, r *http.Request) {
 		wsRedirect(w, r, "/deals/"+idStr, "stage")
 		return
 	}
+	// BL-159: sequential-only — jaring terakhir backend, UI (dropdown) sudah
+	// membatasi opsi tapi POST langsung tetap harus ditolak bila lompat tahap
+	// (reopen dari terminal dikecualikan, lihat isValidDealStageTransition).
+	if !isValidDealStageTransition(deal.Stage, stage) {
+		wsRedirect(w, r, "/deals/"+idStr, "stage_sequence")
+		return
+	}
 	winLoss := optTrim(r.FormValue("win_loss_reason"))
 	lossNotes := optTrim(r.FormValue("loss_notes"))
 	lossCode := optTrim(r.FormValue("loss_reason_code"))

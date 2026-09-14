@@ -63,15 +63,17 @@ func (h *Handler) dealDetailView(ctx context.Context, base string, d db.Deal, na
 		h.Log.Error("deals: accepted-quote label", "err", err)
 	}
 	return panel.DealDetailView{
-		Base:             base,
-		ID:               d.ID,
-		EntityCode:       deref(d.EntityCode),
-		DealName:         d.DealName,
-		AccountID:        d.AccountID,
-		AccountLabel:     accountLabel,
-		PrimaryContact:   contactLabel,
-		Stage:            d.Stage,
-		Stages:           dealStageOptions,
+		Base:           base,
+		ID:             d.ID,
+		EntityCode:     deref(d.EntityCode),
+		DealName:       d.DealName,
+		AccountID:      d.AccountID,
+		AccountLabel:   accountLabel,
+		PrimaryContact: contactLabel,
+		Stage:          d.Stage,
+		Stages:         dealStageOptions,
+		NextStages:     nextDealStages(d.Stage), // BL-159: sequential-only
+
 		WonSubStatuses:   wonSubStatusOptions,
 		DealType:         deref(d.DealType),
 		Amount:           maskARR(formatRupiah(d.Amount), br),
