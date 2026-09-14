@@ -1112,6 +1112,51 @@ type Querier interface {
 	// ter-scope ownership di handler; di sini cukup filter account_id + baris hidup.
 	// plan_name dibawa untuk kolom "Paket".
 	ListSubscriptionsForAccount(ctx context.Context, arg ListSubscriptionsForAccountParams) ([]ListSubscriptionsForAccountRow, error)
+	// BL-157a (fase lanjutan): sort by CSM (subscription_owner). Kunci sort HARUS
+	// COALESCE(NULLIF(u.name,''), u.email) — PERSIS logika tampil ownerName/
+	// memberNameMap (sales_leads_detail.go: nama bila terisi, else email) — agar
+	// urutan tak menyimpang dari yang ditampilkan. NULLABLE (subscription_owner
+	// ON DELETE SET NULL). LEFT JOIN users: baris tanpa owner ATAU owner terhapus
+	// → csm_key NULL, masuk kelompok NULL (default Postgres, sesuai kolom
+	// nullable lain).
+	ListSubscriptionsSortByCsm(ctx context.Context, arg ListSubscriptionsSortByCsmParams) ([]ListSubscriptionsSortByCsmRow, error)
+	// BL-157a (fase lanjutan): sort by s.mrr ("MRR"). NULLABLE (langganan Trial
+	// awal bisa belum ber-MRR). Pola null-aware SAMA dgn SortByPlan, hanya tipe
+	// kolom numeric bukan text — lihat rasional lengkap di SortByPlan.
+	ListSubscriptionsSortByMrr(ctx context.Context, arg ListSubscriptionsSortByMrrParams) ([]ListSubscriptionsSortByMrrRow, error)
+	// BL-157a (fase lanjutan): sort by p.plan_name ("Paket"). NULLABLE (BL-88 PR2b:
+	// langganan multi-paket → plan_id parent NULL, identitas di subscription_items).
+	// ORDER BY tetap pola CASE-dir (TAK berubah dari village) — mewarisi default
+	// NULLS Postgres (ASC=NULLS LAST, DESC=NULLS FIRST), sesuai keputusan user.
+	// Predikat keyset (WHERE) BUTUH cursor_is_null: menandai apakah baris cursor
+	// (halaman sebelumnya) bernilai NULL, agar tahu lanjut dari kelompok NULL atau
+	// non-NULL — NULLS Postgres sendiri tak menyimpan info ini lintas-request.
+	ListSubscriptionsSortByPlan(ctx context.Context, arg ListSubscriptionsSortByPlanParams) ([]ListSubscriptionsSortByPlanRow, error)
+	// BL-157a (fase lanjutan): sort by s.end_date ("Renewal Date"). NULLABLE
+	// (langganan tanpa dimensi renewal, mis. Trial belum berjangka). Pola
+	// null-aware SAMA dgn SortByPlan, tipe kolom date — lihat rasional di SortByPlan.
+	ListSubscriptionsSortByRenewal(ctx context.Context, arg ListSubscriptionsSortByRenewalParams) ([]ListSubscriptionsSortByRenewalRow, error)
+	// BL-157a (fase lanjutan): sort by s.status ("Masa Berlaku" — RAW status
+	// Trial/Active/Suspended/PendingApproval/Expired/Cancelled/Churned, alfabetis;
+	// keputusan user: BUKAN band urgensi derivasi subDerivedStatus, agar tak
+	// menduplikasi logika derivasi ke SQL). status NOT NULL → kloning PERSIS pola
+	// ListSubscriptionsSortByVillage (tanpa kerumitan NULL).
+	ListSubscriptionsSortByStatus(ctx context.Context, arg ListSubscriptionsSortByStatusParams) ([]ListSubscriptionsSortByStatusRow, error)
+	// BL-157a (fondasi sort per kolom): SAMA PERSIS filter ListSubscriptions
+	// (ownership F3 + status + search) — hanya ORDER BY/keyset yang beda, diurut
+	// village_name (bukan created_at). village_name dipilih sebagai kolom
+	// percontohan karena TIDAK NULLABLE (INNER JOIN accounts, deleted_at IS NULL);
+	// kolom nullable (plan_name, end_date) ditunda ke fase berikut — NULLS
+	// FIRST/LAST harus konsisten antara ORDER BY & predikat keyset, kompleksitas
+	// tersendiri di luar cakupan fondasi.
+	//
+	// dir diparameterkan (bukan query terpisah per asc/desc) via pola CASE-NULL:
+	// arah non-aktif menghasilkan NULL di semua baris → tak berpengaruh ke urutan,
+	// tie-breaker id ikut arah yang sama agar selaras predikat keyset di bawah.
+	// has_cursor membedakan "halaman pertama" (predikat keyset dilewati total)
+	// dari "halaman lanjutan" — bukan sentinel nilai minimum/maksimum string, yang
+	// mustahil digeneralisasi untuk tipe teks.
+	ListSubscriptionsSortByVillage(ctx context.Context, arg ListSubscriptionsSortByVillageParams) ([]ListSubscriptionsSortByVillageRow, error)
 	// Daftar success plan, keyset (created_at DESC, id DESC) + F3 ownership + filter tab.
 	//
 	// Ownership dikodekan sebagai dua flag boolean (scope_all / is_own):
