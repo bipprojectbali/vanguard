@@ -90,7 +90,7 @@ func ActivitiesList(v ActivitiesListView) g.Node {
 				h.H1(h.Class("text-xl font-semibold"), g.Text(title)),
 				h.P(h.Class("text-base-content/70"), g.Text(subtitle)),
 			),
-			ui.When(v.CanWrite, activityNewButton(v.Base, v.TargetFilter)),
+			ui.When(v.CanWrite, activityNewButton(v.Base, v.TargetFilter, false)),
 		),
 		searchBox(v.Base+"/activities", v.Query, "Cari aktivitas — subjek…", "Cari aktivitas",
 			hiddenField{"target", v.TargetFilter}),
@@ -116,10 +116,21 @@ func ActivitiesList(v ActivitiesListView) g.Node {
 // targetFilter terisi (mode filter per-entitas), link menyertakan ?target= agar
 // form langsung pre-seleksi target tersebut. Baris flex-wrap agar tak mendorong
 // di mobile 375px.
-func activityNewButton(base, targetFilter string) g.Node {
+//
+// fromLog (BL-161 lanjutan): true dari AllActivitiesList (feed lintas-context
+// /activity-log) → tautan menyertakan "?from=log", dibaca
+// activityCurrentPathFromQuery (handler) agar sidebar form ActivityNew tetap
+// menyala "Activities", bukan "Sales Activities". ActivitiesList (halaman Sales
+// Activities sendiri) kirim false — perilaku lama tetap benar di sana.
+func activityNewButton(base, targetFilter string, fromLog bool) g.Node {
 	href := base + "/activities/new"
+	sep := "?"
 	if targetFilter != "" {
-		href += "?target=" + targetFilter
+		href += sep + "target=" + targetFilter
+		sep = "&"
+	}
+	if fromLog {
+		href += sep + "from=log"
 	}
 	return h.Div(
 		h.Class("flex flex-wrap items-center gap-2"),

@@ -19,6 +19,11 @@ import (
 // entitas): pre-seleksi dropdown target bila nilainya ada di opsi; target tak ada /
 // sudah terhapus → dropdown kosong (bukan error — target_id bukan FK, entitas bisa
 // terhapus).
+//
+// currentPath via activityCurrentPathFromQuery (BL-161 lanjutan — sumber: user 14
+// Sep): tombol "Tambah Aktivitas" di AllActivitiesList (/activity-log) menautkan
+// "?from=log" ke sini; tanpa itu form ini SELALU hardcode "/activities" walau
+// diklik dari menu "Activities", jadi sidebar keliru menyala "Sales Activities".
 func (h *Handler) ActivityNew(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !canWriteSalesActivity(ctx) {
@@ -49,7 +54,7 @@ func (h *Handler) ActivityNew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	base := wsPath(slugFromRequest(r), "")
-	h.renderWorkspaceShell(w, r, "Tambah Aktivitas", "/activities",
+	h.renderWorkspaceShell(w, r, "Tambah Aktivitas", activityCurrentPathFromQuery(r),
 		panel.ActivityForm(panel.ActivityFormView{
 			Base:            base,
 			Action:          base + "/activities",
