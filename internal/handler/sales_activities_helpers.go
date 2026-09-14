@@ -15,6 +15,20 @@ import (
 // polimorfik (targetInScope) dipakai lintas aksi Activity. Dipecah dari
 // sales_activities.go untuk file health.
 
+// activityDetailCurrentPath (BL-161) menurunkan currentPath sidebar untuk halaman
+// detail satu Activity SESUAI ASAL KLIK, bukan hardcode "/activities". Baris di
+// feed lintas-context /activity-log (all_activities.go) menautkan ke URL detail
+// ini dengan "?from=log" — bila ada, currentPath ikut menyala "Activities"
+// (bukan "Sales Activities", yang bisa Disabled untuk role tanpa
+// crm:sales_activity mis. CS). Tanpa penanda (masuk dari /activities sendiri,
+// atau akses URL langsung) → "/activities" seperti semula.
+func activityDetailCurrentPath(r *http.Request) string {
+	if r.URL.Query().Get("from") == "log" {
+		return "/activity-log"
+	}
+	return "/activities"
+}
+
 // loadOwnedActivity memuat satu aktivitas & menegakkan F3 (owner_id): di luar
 // cakupan aktor → 404 (kembaran ActivityDetail). (activity, true) bila boleh.
 func (h *Handler) loadOwnedActivity(w http.ResponseWriter, r *http.Request, id int64) (db.Activity, bool) {

@@ -119,10 +119,13 @@ func (h *Handler) ActivitiesList(w http.ResponseWriter, r *http.Request) {
 }
 
 // renderActivitiesForbidden — 403 + penjelasan bagi anggota tanpa izin
-// crm:sales_activity.
+// crm:sales_activity. currentPath via activityDetailCurrentPath (BL-161): jalur
+// ini juga dicapai dari ActivityDetail (klik baris /activity-log tanpa akses
+// Sales Activities, mis. CS) — tanpa penanda "?from=log", sidebar akan menyala
+// item "Sales Activities" yang Disabled untuk peran itu.
 func (h *Handler) renderActivitiesForbidden(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusForbidden)
-	h.renderWorkspaceShell(w, r, "Sales Activities", "/activities",
+	h.renderWorkspaceShell(w, r, "Sales Activities", activityDetailCurrentPath(r),
 		panel.SalesForbidden("Sales Activities"))
 }
 
