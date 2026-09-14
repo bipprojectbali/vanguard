@@ -1217,6 +1217,33 @@ type Querier interface {
 	// splitPage); pengurutan "paling dekat jatuh tempo" ditunda ke slice KPI/agregasi.
 	// previous_value dibawa di s.* untuk kolom "Prev→Current" (tanpa JOIN tambahan).
 	ListRenewals(ctx context.Context, arg ListRenewalsParams) ([]ListRenewalsRow, error)
+	// BL-157g: sort by s.end_date ("Tgl Perpanjang"). Berbeda dari
+	// ListSubscriptionsSortByRenewal (yang harus null-aware, karena ListSubscriptions
+	// mencakup langganan TANPA dimensi renewal): dasbor Renewals SUDAH memfilter
+	// s.end_date IS NOT NULL, jadi kolom ini DIJAMIN terisi di sini → pola
+	// non-nullable sederhana (mirror SortByVillage), tanpa cursor_is_null.
+	ListRenewalsSortByDate(ctx context.Context, arg ListRenewalsSortByDateParams) ([]ListRenewalsSortByDateRow, error)
+	// BL-157g: sort by s.mrr ("Kini" / Prev→Current). NULLABLE — pola null-aware
+	// mirror ListSubscriptionsSortByMrr. Sort atas nilai F4-masked SUDAH preseden
+	// diterima (BL-157a ListSubscriptionsSortByMrr) — masking hanya di tampilan,
+	// bukan di query.
+	ListRenewalsSortByMrr(ctx context.Context, arg ListRenewalsSortByMrrParams) ([]ListRenewalsSortByMrrRow, error)
+	// BL-157g: sort by p.plan_name ("Paket"). NULLABLE (BL-88 PR2b: langganan
+	// multi-paket → plan_id parent NULL) — pola null-aware mirror
+	// ListSubscriptionsSortByPlan (cursor_is_null, NULLS default Postgres).
+	ListRenewalsSortByPlan(ctx context.Context, arg ListRenewalsSortByPlanParams) ([]ListRenewalsSortByPlanRow, error)
+	// BL-157g: sort by "Jenis" — COALESCE(NULLIF(s.renewal_type,''), CASE WHEN
+	// s.auto_renew THEN 'Auto' ELSE 'Manual' END), PERSIS logika tampil
+	// renewalTypeLabel (subscriptions_renewals_row.go) agar urutan tak menyimpang
+	// dari yang ditampilkan. Ekspresi ini TAK PERNAH NULL (auto_renew NOT NULL
+	// DEFAULT false) → pola non-nullable sederhana walau nilainya computed,
+	// tanpa cursor_is_null.
+	ListRenewalsSortByType(ctx context.Context, arg ListRenewalsSortByTypeParams) ([]ListRenewalsSortByTypeRow, error)
+	// BL-157g: SAMA PERSIS filter ListRenewals (end_date IS NOT NULL, ownership F3,
+	// window_filter) — hanya ORDER BY/keyset beda, diurut a.village_name (Desa).
+	// Tak-nullable (INNER JOIN accounts, deleted_at IS NULL) → pola sederhana
+	// (mirror ListSubscriptionsSortByVillage), tanpa cursor_is_null.
+	ListRenewalsSortByVillage(ctx context.Context, arg ListRenewalsSortByVillageParams) ([]ListRenewalsSortByVillageRow, error)
 	// sla_policies.sql — katalog master (SLA Policies), Modul 6 Customer Success
 	// slice A1. Isolasi WORKSPACE ditegakkan RLS (GUC app.tenant_id di WithTenant);
 	// tak ada filter tenant_id manual. sla_policies TANPA soft-delete: is_active=

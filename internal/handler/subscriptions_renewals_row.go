@@ -20,12 +20,79 @@ import (
 // SAMA dgn window 'due' (queries) agar derivasi Status konsisten dgn tab & KPI.
 const dueSoonDays = 30
 
+// renewalListRow = field YANG DIPAKAI renewalRowView, diekstrak dari ENAM
+// struct sqlc berbeda (db.ListRenewalsRow & lima db.ListRenewalsSortByXRow —
+// satu query = satu struct meski SELECT sama persis, BL-157g) agar logika
+// mapping (derivasi status, Jenis fallback, mask F4) TAK diduplikasi per
+// query — mirror subListRow (subscriptions_page.go).
+type renewalListRow struct {
+	ID            int64
+	VillageName   string
+	PlanName      *string
+	ItemCount     int64
+	Status        string
+	EndDate       pgtype.Date
+	AutoRenew     bool
+	RenewalType   *string
+	RenewalStatus *string
+	PreviousValue pgtype.Numeric
+	Mrr           pgtype.Numeric
+}
+
+func renewalListRowFromDefault(s db.ListRenewalsRow) renewalListRow {
+	return renewalListRow{
+		ID: s.ID, VillageName: s.VillageName, PlanName: s.PlanName, ItemCount: s.ItemCount,
+		Status: s.Status, EndDate: s.EndDate, AutoRenew: s.AutoRenew, RenewalType: s.RenewalType,
+		RenewalStatus: s.RenewalStatus, PreviousValue: s.PreviousValue, Mrr: s.Mrr,
+	}
+}
+
+func renewalListRowFromVillageSort(s db.ListRenewalsSortByVillageRow) renewalListRow {
+	return renewalListRow{
+		ID: s.ID, VillageName: s.VillageName, PlanName: s.PlanName, ItemCount: s.ItemCount,
+		Status: s.Status, EndDate: s.EndDate, AutoRenew: s.AutoRenew, RenewalType: s.RenewalType,
+		RenewalStatus: s.RenewalStatus, PreviousValue: s.PreviousValue, Mrr: s.Mrr,
+	}
+}
+
+func renewalListRowFromPlanSort(s db.ListRenewalsSortByPlanRow) renewalListRow {
+	return renewalListRow{
+		ID: s.ID, VillageName: s.VillageName, PlanName: s.PlanName, ItemCount: s.ItemCount,
+		Status: s.Status, EndDate: s.EndDate, AutoRenew: s.AutoRenew, RenewalType: s.RenewalType,
+		RenewalStatus: s.RenewalStatus, PreviousValue: s.PreviousValue, Mrr: s.Mrr,
+	}
+}
+
+func renewalListRowFromDateSort(s db.ListRenewalsSortByDateRow) renewalListRow {
+	return renewalListRow{
+		ID: s.ID, VillageName: s.VillageName, PlanName: s.PlanName, ItemCount: s.ItemCount,
+		Status: s.Status, EndDate: s.EndDate, AutoRenew: s.AutoRenew, RenewalType: s.RenewalType,
+		RenewalStatus: s.RenewalStatus, PreviousValue: s.PreviousValue, Mrr: s.Mrr,
+	}
+}
+
+func renewalListRowFromTypeSort(s db.ListRenewalsSortByTypeRow) renewalListRow {
+	return renewalListRow{
+		ID: s.ID, VillageName: s.VillageName, PlanName: s.PlanName, ItemCount: s.ItemCount,
+		Status: s.Status, EndDate: s.EndDate, AutoRenew: s.AutoRenew, RenewalType: s.RenewalType,
+		RenewalStatus: s.RenewalStatus, PreviousValue: s.PreviousValue, Mrr: s.Mrr,
+	}
+}
+
+func renewalListRowFromMrrSort(s db.ListRenewalsSortByMrrRow) renewalListRow {
+	return renewalListRow{
+		ID: s.ID, VillageName: s.VillageName, PlanName: s.PlanName, ItemCount: s.ItemCount,
+		Status: s.Status, EndDate: s.EndDate, AutoRenew: s.AutoRenew, RenewalType: s.RenewalType,
+		RenewalStatus: s.RenewalStatus, PreviousValue: s.PreviousValue, Mrr: s.Mrr,
+	}
+}
+
 // renewalRowView memetakan satu baris → baris tabel Renewals. Days Left dihitung
 // relatif "hari ini" (zona waktu app). Jenis: renewal_type bila terisi, jika NULL
 // fallback ke auto_renew (BL-94). Status = DERIVASI renewal (bukan lifecycle
 // subscription.status) sesuai wireframe. Prev→Current = previous_value → MRR,
 // keduanya nilai komersial → maskARR (F4, diperbaiki audit FLS M9-1).
-func renewalRowView(s db.ListRenewalsRow, now time.Time, businessRole string) panel.RenewalRow {
+func renewalRowView(s renewalListRow, now time.Time, businessRole string) panel.RenewalRow {
 	label, cls := renewalDerivedStatus(now, s.Status, s.EndDate, s.RenewalStatus)
 	return panel.RenewalRow{
 		ID:          s.ID,

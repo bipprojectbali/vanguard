@@ -430,6 +430,234 @@ WHERE s.deleted_at IS NULL
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListRenewalsSortByVillage :many
+-- BL-157g: SAMA PERSIS filter ListRenewals (end_date IS NOT NULL, ownership F3,
+-- window_filter) — hanya ORDER BY/keyset beda, diurut a.village_name (Desa).
+-- Tak-nullable (INNER JOIN accounts, deleted_at IS NULL) → pola sederhana
+-- (mirror ListSubscriptionsSortByVillage), tanpa cursor_is_null.
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND s.end_date IS NOT NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (a.village_name, s.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (a.village_name, s.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE sqlc.arg(window_filter)::text
+        WHEN 'due'     THEN s.status IN ('Active','PendingApproval')
+                            AND s.end_date >= sqlc.arg(today)::date
+                            AND s.end_date <= (sqlc.arg(today)::date + 30)
+                            AND s.renewal_status IS DISTINCT FROM 'Renewed'
+        WHEN 'grace'   THEN s.status = 'Active' AND s.end_date < sqlc.arg(today)::date
+        WHEN 'renewed' THEN s.renewal_status = 'Renewed'
+        ELSE TRUE
+      END
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.village_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.village_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListRenewalsSortByPlan :many
+-- BL-157g: sort by p.plan_name ("Paket"). NULLABLE (BL-88 PR2b: langganan
+-- multi-paket → plan_id parent NULL) — pola null-aware mirror
+-- ListSubscriptionsSortByPlan (cursor_is_null, NULLS default Postgres).
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND s.end_date IS NOT NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (p.plan_name IS NULL OR (p.plan_name, s.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND p.plan_name IS NULL AND s.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (p.plan_name IS NOT NULL OR s.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND p.plan_name IS NOT NULL
+              AND (p.plan_name, s.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE sqlc.arg(window_filter)::text
+        WHEN 'due'     THEN s.status IN ('Active','PendingApproval')
+                            AND s.end_date >= sqlc.arg(today)::date
+                            AND s.end_date <= (sqlc.arg(today)::date + 30)
+                            AND s.renewal_status IS DISTINCT FROM 'Renewed'
+        WHEN 'grace'   THEN s.status = 'Active' AND s.end_date < sqlc.arg(today)::date
+        WHEN 'renewed' THEN s.renewal_status = 'Renewed'
+        ELSE TRUE
+      END
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN p.plan_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN p.plan_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListRenewalsSortByDate :many
+-- BL-157g: sort by s.end_date ("Tgl Perpanjang"). Berbeda dari
+-- ListSubscriptionsSortByRenewal (yang harus null-aware, karena ListSubscriptions
+-- mencakup langganan TANPA dimensi renewal): dasbor Renewals SUDAH memfilter
+-- s.end_date IS NOT NULL, jadi kolom ini DIJAMIN terisi di sini → pola
+-- non-nullable sederhana (mirror SortByVillage), tanpa cursor_is_null.
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND s.end_date IS NOT NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (s.end_date, s.id) > (sqlc.arg(cursor_val)::date, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (s.end_date, s.id) < (sqlc.arg(cursor_val)::date, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE sqlc.arg(window_filter)::text
+        WHEN 'due'     THEN s.status IN ('Active','PendingApproval')
+                            AND s.end_date >= sqlc.arg(today)::date
+                            AND s.end_date <= (sqlc.arg(today)::date + 30)
+                            AND s.renewal_status IS DISTINCT FROM 'Renewed'
+        WHEN 'grace'   THEN s.status = 'Active' AND s.end_date < sqlc.arg(today)::date
+        WHEN 'renewed' THEN s.renewal_status = 'Renewed'
+        ELSE TRUE
+      END
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.end_date END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.end_date END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListRenewalsSortByType :many
+-- BL-157g: sort by "Jenis" — COALESCE(NULLIF(s.renewal_type,''), CASE WHEN
+-- s.auto_renew THEN 'Auto' ELSE 'Manual' END), PERSIS logika tampil
+-- renewalTypeLabel (subscriptions_renewals_row.go) agar urutan tak menyimpang
+-- dari yang ditampilkan. Ekspresi ini TAK PERNAH NULL (auto_renew NOT NULL
+-- DEFAULT false) → pola non-nullable sederhana walau nilainya computed,
+-- tanpa cursor_is_null.
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND s.end_date IS NOT NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (COALESCE(NULLIF(s.renewal_type, ''), CASE WHEN s.auto_renew THEN 'Auto' ELSE 'Manual' END), s.id)
+              > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (COALESCE(NULLIF(s.renewal_type, ''), CASE WHEN s.auto_renew THEN 'Auto' ELSE 'Manual' END), s.id)
+              < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE sqlc.arg(window_filter)::text
+        WHEN 'due'     THEN s.status IN ('Active','PendingApproval')
+                            AND s.end_date >= sqlc.arg(today)::date
+                            AND s.end_date <= (sqlc.arg(today)::date + 30)
+                            AND s.renewal_status IS DISTINCT FROM 'Renewed'
+        WHEN 'grace'   THEN s.status = 'Active' AND s.end_date < sqlc.arg(today)::date
+        WHEN 'renewed' THEN s.renewal_status = 'Renewed'
+        ELSE TRUE
+      END
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN COALESCE(NULLIF(s.renewal_type, ''), CASE WHEN s.auto_renew THEN 'Auto' ELSE 'Manual' END) END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN COALESCE(NULLIF(s.renewal_type, ''), CASE WHEN s.auto_renew THEN 'Auto' ELSE 'Manual' END) END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListRenewalsSortByMrr :many
+-- BL-157g: sort by s.mrr ("Kini" / Prev→Current). NULLABLE — pola null-aware
+-- mirror ListSubscriptionsSortByMrr. Sort atas nilai F4-masked SUDAH preseden
+-- diterima (BL-157a ListSubscriptionsSortByMrr) — masking hanya di tampilan,
+-- bukan di query.
+SELECT s.*, a.village_name, p.plan_name,
+    (SELECT COUNT(*) FROM subscription_items si WHERE si.subscription_id = s.id)::bigint AS item_count
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND s.end_date IS NOT NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (s.mrr IS NULL OR (s.mrr, s.id) > (sqlc.arg(cursor_val)::numeric, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND s.mrr IS NULL AND s.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (s.mrr IS NOT NULL OR s.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND s.mrr IS NOT NULL
+              AND (s.mrr, s.id) < (sqlc.arg(cursor_val)::numeric, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND s.subscription_owner = sqlc.arg(uid))
+  )
+  AND (
+      CASE sqlc.arg(window_filter)::text
+        WHEN 'due'     THEN s.status IN ('Active','PendingApproval')
+                            AND s.end_date >= sqlc.arg(today)::date
+                            AND s.end_date <= (sqlc.arg(today)::date + 30)
+                            AND s.renewal_status IS DISTINCT FROM 'Renewed'
+        WHEN 'grace'   THEN s.status = 'Active' AND s.end_date < sqlc.arg(today)::date
+        WHEN 'renewed' THEN s.renewal_status = 'Renewed'
+        ELSE TRUE
+      END
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.mrr END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.mrr END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN s.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN s.id END DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: RenewalKPIs :one
 -- KPI dasbor Renewals (BL-94) dalam SATU round-trip, di-scope ownership (flag
 -- SAMA dgn ListRenewals/ListSubscriptions: scope_all → semua; is_own →

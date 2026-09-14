@@ -58,6 +58,11 @@ type RenewalsView struct {
 	NextCursor string
 	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
 	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
+
+	// Sort/Dir (BL-157g): kolom & arah sort aktif. Sort="" = default
+	// (created_at DESC, tanpa header ter-highlight).
+	Sort string
+	Dir  string
 }
 
 // RenewalsList merender halaman: header + ekspor + KPI + tab + tabel + pager.
@@ -124,7 +129,9 @@ func renewalKPICard(label, value, sub, colorCls string) g.Node {
 }
 
 // renewalWindowTabs = baris tab LINK jendela renewal. Navigasi bookmarkable
-// (gotcha #16); flex-wrap agar tak mendorong lebar di mobile.
+// (gotcha #16); flex-wrap agar tak mendorong lebar di mobile. sort/dir
+// dipertahankan lintas tab (BL-157g, mirror dealMineToggle) — mengganti
+// jendela tak mereset sort aktif.
 func renewalWindowTabs(v RenewalsView) g.Node {
 	tabs := make([]g.Node, 0, len(v.Windows))
 	for _, wnd := range v.Windows {
@@ -132,9 +139,9 @@ func renewalWindowTabs(v RenewalsView) g.Node {
 		if v.Window == wnd.Key {
 			cls += " tab-active font-medium"
 		}
-		tabs = append(tabs, h.A(
-			h.Href(v.Base+"/subscriptions/renewals?window="+wnd.Key),
-			h.Class(cls), g.Text(wnd.Label)))
+		href := withQuery(v.Base+"/subscriptions/renewals", "",
+			hiddenField{"window", wnd.Key}, hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir})
+		tabs = append(tabs, h.A(h.Href(href), h.Class(cls), g.Text(wnd.Label)))
 	}
 	return h.Div(h.Role("tablist"), h.Class("tabs tabs-bordered flex-wrap"), g.Group(tabs))
 }
@@ -163,18 +170,42 @@ func renewalsTable(v RenewalsView) g.Node {
 				h.Class("w-full text-sm"),
 				h.THead(h.Tr(
 					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Paket")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Tgl Perpanjang")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), renewalSortHeader(v, "village", "Desa")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), renewalSortHeader(v, "plan", "Paket")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), renewalSortHeader(v, "date", "Tgl Perpanjang")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Sisa Hari")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Jenis")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), renewalSortHeader(v, "type", "Jenis")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Status")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("Prev → Kini")),
+					h.Th(h.Class("py-2 font-medium"), renewalSortHeader(v, "mrr", "Prev → Kini")),
 				)),
 				h.TBody(g.Group(rows)),
 			)),
 		),
 	)
+}
+
+// renewalSortHeader = header <Th> tabel Renewals yang sortable (BL-157g),
+// mirror dealSortHeader/quoteSortHeader: tautan <a> native (bookmarkable,
+// lolos gotcha #16), bukan Datastar. Klik kolom aktif membalik arah; klik
+// kolom lain mulai dari asc. Mengganti sumbu sort SELALU mereset cursor
+// (halaman pertama, ?after= tak dibawa); ?window= dipertahankan.
+func renewalSortHeader(v RenewalsView, col, label string) g.Node {
+	active := v.Sort == col
+	nextDir := "asc"
+	if active && v.Dir == "asc" {
+		nextDir = "desc"
+	}
+	href := withQuery(v.Base+"/subscriptions/renewals", "",
+		hiddenField{"window", v.Window}, hiddenField{"sort", col}, hiddenField{"dir", nextDir})
+	text := label
+	if active {
+		arrow := "▲"
+		if v.Dir == "desc" {
+			arrow = "▼"
+		}
+		text = label + " " + arrow
+	}
+	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
 }
 
 func renewalTableRow(base string, s RenewalRow) g.Node {
@@ -208,6 +239,7 @@ func renewalStatusBadge(s RenewalRow) g.Node {
 }
 
 func renewalsPager(v RenewalsView) g.Node {
-	base := v.Base + "/subscriptions/renewals?window=" + v.Window
+	base := panelListHref(v.Base+"/subscriptions/renewals",
+		[2]string{"window", v.Window}, [2]string{"sort", v.Sort}, [2]string{"dir", v.Dir})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }
