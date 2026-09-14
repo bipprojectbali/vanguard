@@ -18,9 +18,11 @@ import (
 const activityTargetPickerLimit = 200
 
 // activityTargetOptions memuat target dalam cakupan aktor (F3): deal + account +
-// contact. Nilai opsi = "type:id" (dikonsumsi parseActivityTarget); label diberi
-// awalan tipe agar tercampur jelas. Tiap tipe satu query berbatas (bukan N+1,
-// bukan seluruh tabel).
+// contact + lead (BL-160). Nilai opsi = "type:id" (dikonsumsi parseActivityTarget);
+// label diberi awalan tipe agar tercampur jelas. Tiap tipe satu query berbatas
+// (bukan N+1, bukan seluruh tabel). Label Lead diawali entity_code
+// (leadPickerLabel) agar bisa dicari via kode di picker cari-ketik — bukan cuma
+// nama (permintaan user 14 Sep, kembaran alasan accountPickerLabel utk Desa).
 func (h *Handler) activityTargetOptions(ctx context.Context) ([]panel.ActivityTargetOption, error) {
 	uid := session.UserID(ctx)
 	scope := session.BusinessDataScope(ctx)
@@ -71,6 +73,22 @@ func (h *Handler) activityTargetOptions(ctx context.Context) ([]panel.ActivityTa
 		opts = append(opts, panel.ActivityTargetOption{
 			Value: "contact:" + strconv.FormatInt(c.ID, 10),
 			Label: "Kontak · " + fullName(c.FirstName, c.LastName),
+		})
+	}
+
+	lf := db.LeadsListFilterFor(scope)
+	leads, err := h.q(ctx).ListLeads(ctx, db.ListLeadsParams{
+		CursorCreatedAt: at, CursorID: cid,
+		ScopeAll: lf.ScopeAll, IsOwn: lf.IsOwn, Uid: &uid,
+		PageSize: activityTargetPickerLimit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range leads {
+		opts = append(opts, panel.ActivityTargetOption{
+			Value: "lead:" + strconv.FormatInt(l.ID, 10),
+			Label: "Lead · " + leadPickerLabel(l.EntityCode, l.LeadName),
 		})
 	}
 	return opts, nil

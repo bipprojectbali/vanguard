@@ -88,6 +88,20 @@ func (h *Handler) leadLabel(ctx context.Context, id int64) string {
 	return l.LeadName
 }
 
+// leadPickerLabel format label picker Lead: "{entity_code} — {nama}" bila
+// berkode, atau nama saja bila nil. BUKAN accountPickerLabel (village_code) —
+// beda semantik: BL-61 SENGAJA menyembunyikan entity_code dari detail Account,
+// tapi Lead tak pernah punya BL setara (badge EntityCode tetap tampil di
+// LeadDetail). Kode di depan agar bisa dicari via kode (native <datalist>
+// mencocokkan teks opsi apa adanya) — permintaan user 14 Sep: picker aktivitas
+// harus bisa dicari by kode, bukan cuma nama.
+func leadPickerLabel(entityCode *string, name string) string {
+	if entityCode != nil && *entityCode != "" {
+		return *entityCode + " — " + name
+	}
+	return name
+}
+
 // leadFormFields memetakan Lead → nilai prefill form (semua string; nil → "").
 // F4: nomor HP/WhatsApp disamarkan bila phoneEditable=false (canEditPhone,
 // sales-only) — pola sama contactFormFields (BL-106 melepas mask ini dari

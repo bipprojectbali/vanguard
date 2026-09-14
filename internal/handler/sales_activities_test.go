@@ -293,6 +293,34 @@ func TestActivityNew_PreFillsTarget(t *testing.T) {
 	}
 }
 
+// TestActivityNew_TargetOptionsIncludeLeadSearchableByCode: picker target di
+// GET /activities/new memuat opsi Lead berlabel "{entity_code} — {nama}" —
+// bukan cuma nama — sehingga bisa dicari via kode Lead (native <datalist>
+// mencocokkan teks opsi apa adanya). Permintaan user 14 Sep: form aktivitas
+// perlu opsi lead + bisa dicari by kode, bukan cuma nama (kembaran
+// TestActivityNew_PreFillsTarget, membuktikan opsi + label, bukan hanya prefill).
+func TestActivityNew_TargetOptionsIncludeLeadSearchableByCode(t *testing.T) {
+	env, uid := setupAccounts(t)
+	l := env.seedLeadStatus(t, "Lead Dicari", uid, "New")
+	if l.EntityCode == nil || *l.EntityCode == "" {
+		t.Fatalf("seedLeadStatus harus menghasilkan entity_code")
+	}
+
+	req := accountsReq(http.MethodGet, "/activities/new", nil, "")
+	rec := env.runAccount(uid, "member", "sales", req, env.h.ActivityNew)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ActivityNew status %d\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "lead:"+itoa(l.ID)) {
+		t.Errorf("picker target harus memuat opsi lead:%d", l.ID)
+	}
+	wantLabel := *l.EntityCode + " — Lead Dicari"
+	if !strings.Contains(body, wantLabel) {
+		t.Errorf("label opsi lead harus diawali kode (%q) agar bisa dicari by kode, body tak mengandungnya", wantLabel)
+	}
+}
+
 // ── Unit (tanpa DB) ─────────────────────────────────────────────────────────
 
 // TestParseActivityTarget: picker "type:id" diurai & divalidasi bentuk+enum di

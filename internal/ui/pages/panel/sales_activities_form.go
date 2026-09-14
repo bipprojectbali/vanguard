@@ -199,7 +199,7 @@ func activityTargetField(v ActivityFormView) g.Node {
 		Options:     opts,
 		Current:     v.TargetValue,
 		Required:    true,
-		Placeholder: "Ketik untuk mencari deal, desa, atau kontak…",
+		Placeholder: "Ketik untuk mencari deal, desa, kontak, atau lead (nama/kode)…",
 		Help:        "Ketik untuk mencari, lalu pilih target dari daftar yang muncul.",
 		InvalidMsg:  "Pilih target dari daftar.",
 	})
