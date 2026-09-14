@@ -538,6 +538,745 @@ func (q *Queries) ListAccountsForSelect(ctx context.Context, arg ListAccountsFor
 	return items, nil
 }
 
+const listAccountsSortByCsm = `-- name: ListAccountsSortByCsm :many
+SELECT accounts.id, accounts.tenant_id, accounts.account_owner, accounts.assigned_csm, accounts.backup_csm, accounts.village_name, accounts.village_code, accounts.account_type, accounts.parent_account_id, accounts.website, accounts.description, accounts.province_legacy, accounts.regency_legacy, accounts.district_legacy, accounts.village_address, accounts.postal_code, accounts.latitude, accounts.longitude, accounts.territory, accounts.village_status, accounts.village_classification, accounts.population, accounts.hamlets_count, accounts.village_budget, accounts.contact_phone, accounts.office_phone, accounts.office_email, accounts.deleted_at, accounts.created_by, accounts.created_at, accounts.updated_by, accounts.updated_at, accounts.entity_code, accounts.district_id FROM accounts
+LEFT JOIN users u ON u.id = assigned_csm
+WHERE accounts.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NULL
+                OR (COALESCE(NULLIF(u.name, ''), u.email), accounts.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean
+              AND COALESCE(NULLIF(u.name, ''), u.email) IS NULL AND accounts.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL OR accounts.id < $5::bigint))
+          OR (NOT $3::boolean AND COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL
+              AND (COALESCE(NULLIF(u.name, ''), u.email), accounts.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND account_owner = $8)
+      OR ($9::boolean AND (assigned_csm = $8 OR backup_csm = $8))
+  )
+  AND (NOT $10::boolean OR account_owner IS NULL)
+  AND (
+      $11::text = ''
+      OR village_name ILIKE '%' || $11 || '%'
+      OR village_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN COALESCE(NULLIF(u.name, ''), u.email) END ASC,
+  CASE WHEN $2::text = 'desc' THEN COALESCE(NULLIF(u.name, ''), u.email) END DESC,
+  CASE WHEN $2::text = 'asc'  THEN accounts.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN accounts.id END DESC
+LIMIT $12
+`
+
+type ListAccountsSortByCsmParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsSales      bool   `json:"is_sales"`
+	Uid          *int64 `json:"uid"`
+	IsCsm        bool   `json:"is_csm"`
+	Unowned      bool   `json:"unowned"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157c: sort by CS (assigned_csm — HANYA CSM utama, PERSIS kolom yang
+// ditampilkan accountRowView; backup_csm tak ikut ditampilkan di daftar jadi
+// tak ikut kunci sort). Pola PERSIS ListAccountsSortByOwner, kolom join beda.
+func (q *Queries) ListAccountsSortByCsm(ctx context.Context, arg ListAccountsSortByCsmParams) ([]Account, error) {
+	rows, err := q.db.Query(ctx, listAccountsSortByCsm,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+		arg.Unowned,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Account{}
+	for rows.Next() {
+		var i Account
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AccountOwner,
+			&i.AssignedCsm,
+			&i.BackupCsm,
+			&i.VillageName,
+			&i.VillageCode,
+			&i.AccountType,
+			&i.ParentAccountID,
+			&i.Website,
+			&i.Description,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.VillageAddress,
+			&i.PostalCode,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Territory,
+			&i.VillageStatus,
+			&i.VillageClassification,
+			&i.Population,
+			&i.HamletsCount,
+			&i.VillageBudget,
+			&i.ContactPhone,
+			&i.OfficePhone,
+			&i.OfficeEmail,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.EntityCode,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccountsSortByOwner = `-- name: ListAccountsSortByOwner :many
+SELECT accounts.id, accounts.tenant_id, accounts.account_owner, accounts.assigned_csm, accounts.backup_csm, accounts.village_name, accounts.village_code, accounts.account_type, accounts.parent_account_id, accounts.website, accounts.description, accounts.province_legacy, accounts.regency_legacy, accounts.district_legacy, accounts.village_address, accounts.postal_code, accounts.latitude, accounts.longitude, accounts.territory, accounts.village_status, accounts.village_classification, accounts.population, accounts.hamlets_count, accounts.village_budget, accounts.contact_phone, accounts.office_phone, accounts.office_email, accounts.deleted_at, accounts.created_by, accounts.created_at, accounts.updated_by, accounts.updated_at, accounts.entity_code, accounts.district_id FROM accounts
+LEFT JOIN users u ON u.id = account_owner
+WHERE accounts.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NULL
+                OR (COALESCE(NULLIF(u.name, ''), u.email), accounts.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean
+              AND COALESCE(NULLIF(u.name, ''), u.email) IS NULL AND accounts.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL OR accounts.id < $5::bigint))
+          OR (NOT $3::boolean AND COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL
+              AND (COALESCE(NULLIF(u.name, ''), u.email), accounts.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND account_owner = $8)
+      OR ($9::boolean AND (assigned_csm = $8 OR backup_csm = $8))
+  )
+  AND (NOT $10::boolean OR account_owner IS NULL)
+  AND (
+      $11::text = ''
+      OR village_name ILIKE '%' || $11 || '%'
+      OR village_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN COALESCE(NULLIF(u.name, ''), u.email) END ASC,
+  CASE WHEN $2::text = 'desc' THEN COALESCE(NULLIF(u.name, ''), u.email) END DESC,
+  CASE WHEN $2::text = 'asc'  THEN accounts.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN accounts.id END DESC
+LIMIT $12
+`
+
+type ListAccountsSortByOwnerParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsSales      bool   `json:"is_sales"`
+	Uid          *int64 `json:"uid"`
+	IsCsm        bool   `json:"is_csm"`
+	Unowned      bool   `json:"unowned"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157c: sort by Owner (account_owner). Kunci sort HARUS
+// COALESCE(NULLIF(u.name,”), u.email) — PERSIS logika tampil memberName
+// (accounts_list.go: nama bila terisi, else email) — agar urutan tak
+// menyimpang dari yang ditampilkan. NULLABLE (account_owner ON DELETE SET
+// NULL). LEFT JOIN users: baris tanpa owner ATAU owner yang keluar workspace →
+// owner_key NULL, masuk kelompok NULL. Mirror PERSIS ListLeadsSortByOwner,
+// beda hanya filter ownership tiga-flag + unowned (bukan dua-flag+mine_only).
+func (q *Queries) ListAccountsSortByOwner(ctx context.Context, arg ListAccountsSortByOwnerParams) ([]Account, error) {
+	rows, err := q.db.Query(ctx, listAccountsSortByOwner,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+		arg.Unowned,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Account{}
+	for rows.Next() {
+		var i Account
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AccountOwner,
+			&i.AssignedCsm,
+			&i.BackupCsm,
+			&i.VillageName,
+			&i.VillageCode,
+			&i.AccountType,
+			&i.ParentAccountID,
+			&i.Website,
+			&i.Description,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.VillageAddress,
+			&i.PostalCode,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Territory,
+			&i.VillageStatus,
+			&i.VillageClassification,
+			&i.Population,
+			&i.HamletsCount,
+			&i.VillageBudget,
+			&i.ContactPhone,
+			&i.OfficePhone,
+			&i.OfficeEmail,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.EntityCode,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccountsSortByProvince = `-- name: ListAccountsSortByProvince :many
+SELECT accounts.id, accounts.tenant_id, accounts.account_owner, accounts.assigned_csm, accounts.backup_csm, accounts.village_name, accounts.village_code, accounts.account_type, accounts.parent_account_id, accounts.website, accounts.description, accounts.province_legacy, accounts.regency_legacy, accounts.district_legacy, accounts.village_address, accounts.postal_code, accounts.latitude, accounts.longitude, accounts.territory, accounts.village_status, accounts.village_classification, accounts.population, accounts.hamlets_count, accounts.village_budget, accounts.contact_phone, accounts.office_phone, accounts.office_email, accounts.deleted_at, accounts.created_by, accounts.created_at, accounts.updated_by, accounts.updated_at, accounts.entity_code, accounts.district_id FROM accounts
+LEFT JOIN regions d    ON d.id = accounts.district_id
+LEFT JOIN regions rgc  ON rgc.id = d.parent_region_id
+LEFT JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE accounts.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (prov.name IS NULL
+                OR (prov.name, accounts.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean
+              AND prov.name IS NULL AND accounts.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (prov.name IS NOT NULL OR accounts.id < $5::bigint))
+          OR (NOT $3::boolean AND prov.name IS NOT NULL
+              AND (prov.name, accounts.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND account_owner = $8)
+      OR ($9::boolean AND (assigned_csm = $8 OR backup_csm = $8))
+  )
+  AND (NOT $10::boolean OR account_owner IS NULL)
+  AND (
+      $11::text = ''
+      OR village_name ILIKE '%' || $11 || '%'
+      OR village_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN prov.name END ASC,
+  CASE WHEN $2::text = 'desc' THEN prov.name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN accounts.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN accounts.id END DESC
+LIMIT $12
+`
+
+type ListAccountsSortByProvinceParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsSales      bool   `json:"is_sales"`
+	Uid          *int64 `json:"uid"`
+	IsCsm        bool   `json:"is_csm"`
+	Unowned      bool   `json:"unowned"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157c: sort by Provinsi. Sama pola ListAccountsSortByRegency, tapi satu
+// tingkat lebih jauh (Kecamatan → Kabupaten/Kota → Provinsi) — self-join
+// regions 3x, cermin GetRegionAncestry tapi LEFT JOIN (nullable).
+func (q *Queries) ListAccountsSortByProvince(ctx context.Context, arg ListAccountsSortByProvinceParams) ([]Account, error) {
+	rows, err := q.db.Query(ctx, listAccountsSortByProvince,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+		arg.Unowned,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Account{}
+	for rows.Next() {
+		var i Account
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AccountOwner,
+			&i.AssignedCsm,
+			&i.BackupCsm,
+			&i.VillageName,
+			&i.VillageCode,
+			&i.AccountType,
+			&i.ParentAccountID,
+			&i.Website,
+			&i.Description,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.VillageAddress,
+			&i.PostalCode,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Territory,
+			&i.VillageStatus,
+			&i.VillageClassification,
+			&i.Population,
+			&i.HamletsCount,
+			&i.VillageBudget,
+			&i.ContactPhone,
+			&i.OfficePhone,
+			&i.OfficeEmail,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.EntityCode,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccountsSortByRegency = `-- name: ListAccountsSortByRegency :many
+SELECT accounts.id, accounts.tenant_id, accounts.account_owner, accounts.assigned_csm, accounts.backup_csm, accounts.village_name, accounts.village_code, accounts.account_type, accounts.parent_account_id, accounts.website, accounts.description, accounts.province_legacy, accounts.regency_legacy, accounts.district_legacy, accounts.village_address, accounts.postal_code, accounts.latitude, accounts.longitude, accounts.territory, accounts.village_status, accounts.village_classification, accounts.population, accounts.hamlets_count, accounts.village_budget, accounts.contact_phone, accounts.office_phone, accounts.office_email, accounts.deleted_at, accounts.created_by, accounts.created_at, accounts.updated_by, accounts.updated_at, accounts.entity_code, accounts.district_id FROM accounts
+LEFT JOIN regions d   ON d.id = accounts.district_id
+LEFT JOIN regions rgc ON rgc.id = d.parent_region_id
+WHERE accounts.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (rgc.name IS NULL
+                OR (rgc.name, accounts.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean
+              AND rgc.name IS NULL AND accounts.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (rgc.name IS NOT NULL OR accounts.id < $5::bigint))
+          OR (NOT $3::boolean AND rgc.name IS NOT NULL
+              AND (rgc.name, accounts.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND account_owner = $8)
+      OR ($9::boolean AND (assigned_csm = $8 OR backup_csm = $8))
+  )
+  AND (NOT $10::boolean OR account_owner IS NULL)
+  AND (
+      $11::text = ''
+      OR village_name ILIKE '%' || $11 || '%'
+      OR village_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN rgc.name END ASC,
+  CASE WHEN $2::text = 'desc' THEN rgc.name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN accounts.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN accounts.id END DESC
+LIMIT $12
+`
+
+type ListAccountsSortByRegencyParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsSales      bool   `json:"is_sales"`
+	Uid          *int64 `json:"uid"`
+	IsCsm        bool   `json:"is_csm"`
+	Unowned      bool   `json:"unowned"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157c: sort by Kab/Kota (Regency), diturunkan district_id via self-join
+// regions (Kecamatan → Kabupaten/Kota) — PERSIS resolusi regionNames
+// (accounts_view.go): baris tanpa district_id ATAU district yang sudah tak ada
+// di master wilayah → regency NULL, masuk kelompok NULL (default Postgres).
+// LEFT JOIN (bukan JOIN): district_id nullable & region hilang tak boleh
+// menjatuhkan baris account dari daftar (beda dari GetRegionAncestry yang inner
+// join, sebab itu dipakai SETELAH district_id dipastikan ada).
+func (q *Queries) ListAccountsSortByRegency(ctx context.Context, arg ListAccountsSortByRegencyParams) ([]Account, error) {
+	rows, err := q.db.Query(ctx, listAccountsSortByRegency,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+		arg.Unowned,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Account{}
+	for rows.Next() {
+		var i Account
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AccountOwner,
+			&i.AssignedCsm,
+			&i.BackupCsm,
+			&i.VillageName,
+			&i.VillageCode,
+			&i.AccountType,
+			&i.ParentAccountID,
+			&i.Website,
+			&i.Description,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.VillageAddress,
+			&i.PostalCode,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Territory,
+			&i.VillageStatus,
+			&i.VillageClassification,
+			&i.Population,
+			&i.HamletsCount,
+			&i.VillageBudget,
+			&i.ContactPhone,
+			&i.OfficePhone,
+			&i.OfficeEmail,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.EntityCode,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccountsSortByType = `-- name: ListAccountsSortByType :many
+SELECT id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province_legacy, regency_legacy, district_legacy, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code, district_id FROM accounts
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (account_type, id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (account_type, id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND account_owner = $7)
+      OR ($8::boolean AND (assigned_csm = $7 OR backup_csm = $7))
+  )
+  AND (NOT $9::boolean OR account_owner IS NULL)
+  AND (
+      $10::text = ''
+      OR village_name ILIKE '%' || $10 || '%'
+      OR village_code ILIKE '%' || $10 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN account_type END ASC,
+  CASE WHEN $2::text = 'desc' THEN account_type END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $11
+`
+
+type ListAccountsSortByTypeParams struct {
+	HasCursor bool   `json:"has_cursor"`
+	Dir       string `json:"dir"`
+	CursorVal string `json:"cursor_val"`
+	CursorID  int64  `json:"cursor_id"`
+	ScopeAll  bool   `json:"scope_all"`
+	IsSales   bool   `json:"is_sales"`
+	Uid       *int64 `json:"uid"`
+	IsCsm     bool   `json:"is_csm"`
+	Unowned   bool   `json:"unowned"`
+	Search    string `json:"search"`
+	PageSize  int32  `json:"page_size"`
+}
+
+// BL-157c: sort by account_type ("Tipe" — RAW enum customer/former_customer/
+// prospect, alfabetis; tak menduplikasi urutan tampil ke SQL, mirror keputusan
+// "Status" Leads BL-157b). account_type NOT NULL → kloning PERSIS pola
+// ListAccountsSortByVillage, kolom beda.
+func (q *Queries) ListAccountsSortByType(ctx context.Context, arg ListAccountsSortByTypeParams) ([]Account, error) {
+	rows, err := q.db.Query(ctx, listAccountsSortByType,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+		arg.Unowned,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Account{}
+	for rows.Next() {
+		var i Account
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AccountOwner,
+			&i.AssignedCsm,
+			&i.BackupCsm,
+			&i.VillageName,
+			&i.VillageCode,
+			&i.AccountType,
+			&i.ParentAccountID,
+			&i.Website,
+			&i.Description,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.VillageAddress,
+			&i.PostalCode,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Territory,
+			&i.VillageStatus,
+			&i.VillageClassification,
+			&i.Population,
+			&i.HamletsCount,
+			&i.VillageBudget,
+			&i.ContactPhone,
+			&i.OfficePhone,
+			&i.OfficeEmail,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.EntityCode,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccountsSortByVillage = `-- name: ListAccountsSortByVillage :many
+SELECT id, tenant_id, account_owner, assigned_csm, backup_csm, village_name, village_code, account_type, parent_account_id, website, description, province_legacy, regency_legacy, district_legacy, village_address, postal_code, latitude, longitude, territory, village_status, village_classification, population, hamlets_count, village_budget, contact_phone, office_phone, office_email, deleted_at, created_by, created_at, updated_by, updated_at, entity_code, district_id FROM accounts
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (village_name, id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (village_name, id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND account_owner = $7)
+      OR ($8::boolean AND (assigned_csm = $7 OR backup_csm = $7))
+  )
+  AND (NOT $9::boolean OR account_owner IS NULL)
+  AND (
+      $10::text = ''
+      OR village_name ILIKE '%' || $10 || '%'
+      OR village_code ILIKE '%' || $10 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN village_name END ASC,
+  CASE WHEN $2::text = 'desc' THEN village_name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $11
+`
+
+type ListAccountsSortByVillageParams struct {
+	HasCursor bool   `json:"has_cursor"`
+	Dir       string `json:"dir"`
+	CursorVal string `json:"cursor_val"`
+	CursorID  int64  `json:"cursor_id"`
+	ScopeAll  bool   `json:"scope_all"`
+	IsSales   bool   `json:"is_sales"`
+	Uid       *int64 `json:"uid"`
+	IsCsm     bool   `json:"is_csm"`
+	Unowned   bool   `json:"unowned"`
+	Search    string `json:"search"`
+	PageSize  int32  `json:"page_size"`
+}
+
+// BL-157c (fondasi sort per kolom Accounts): SAMA PERSIS filter ListAccounts
+// (ownership F3 tiga-flag + unowned + search) — hanya ORDER BY/keyset yang
+// beda, diurut village_name (bukan created_at). village_name TIDAK NULLABLE →
+// kloning pola ListLeadsSortByName (tanpa kerumitan NULL).
+func (q *Queries) ListAccountsSortByVillage(ctx context.Context, arg ListAccountsSortByVillageParams) ([]Account, error) {
+	rows, err := q.db.Query(ctx, listAccountsSortByVillage,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+		arg.Unowned,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Account{}
+	for rows.Next() {
+		var i Account
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AccountOwner,
+			&i.AssignedCsm,
+			&i.BackupCsm,
+			&i.VillageName,
+			&i.VillageCode,
+			&i.AccountType,
+			&i.ParentAccountID,
+			&i.Website,
+			&i.Description,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.VillageAddress,
+			&i.PostalCode,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Territory,
+			&i.VillageStatus,
+			&i.VillageClassification,
+			&i.Population,
+			&i.HamletsCount,
+			&i.VillageBudget,
+			&i.ContactPhone,
+			&i.OfficePhone,
+			&i.OfficeEmail,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.EntityCode,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const maxVillageSeqForPrefix = `-- name: MaxVillageSeqForPrefix :one
 SELECT COALESCE(MAX((split_part(village_code, '.', 4))::int), 0)::int AS max_seq
 FROM accounts

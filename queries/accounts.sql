@@ -79,6 +79,245 @@ WHERE deleted_at IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListAccountsSortByVillage :many
+-- BL-157c (fondasi sort per kolom Accounts): SAMA PERSIS filter ListAccounts
+-- (ownership F3 tiga-flag + unowned + search) — hanya ORDER BY/keyset yang
+-- beda, diurut village_name (bukan created_at). village_name TIDAK NULLABLE →
+-- kloning pola ListLeadsSortByName (tanpa kerumitan NULL).
+SELECT * FROM accounts
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (village_name, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (village_name, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (assigned_csm = sqlc.arg(uid) OR backup_csm = sqlc.arg(uid)))
+  )
+  AND (NOT sqlc.arg(unowned)::boolean OR account_owner IS NULL)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR village_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN village_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN village_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListAccountsSortByType :many
+-- BL-157c: sort by account_type ("Tipe" — RAW enum customer/former_customer/
+-- prospect, alfabetis; tak menduplikasi urutan tampil ke SQL, mirror keputusan
+-- "Status" Leads BL-157b). account_type NOT NULL → kloning PERSIS pola
+-- ListAccountsSortByVillage, kolom beda.
+SELECT * FROM accounts
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (account_type, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (account_type, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (assigned_csm = sqlc.arg(uid) OR backup_csm = sqlc.arg(uid)))
+  )
+  AND (NOT sqlc.arg(unowned)::boolean OR account_owner IS NULL)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR village_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN account_type END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN account_type END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListAccountsSortByRegency :many
+-- BL-157c: sort by Kab/Kota (Regency), diturunkan district_id via self-join
+-- regions (Kecamatan → Kabupaten/Kota) — PERSIS resolusi regionNames
+-- (accounts_view.go): baris tanpa district_id ATAU district yang sudah tak ada
+-- di master wilayah → regency NULL, masuk kelompok NULL (default Postgres).
+-- LEFT JOIN (bukan JOIN): district_id nullable & region hilang tak boleh
+-- menjatuhkan baris account dari daftar (beda dari GetRegionAncestry yang inner
+-- join, sebab itu dipakai SETELAH district_id dipastikan ada).
+SELECT accounts.* FROM accounts
+LEFT JOIN regions d   ON d.id = accounts.district_id
+LEFT JOIN regions rgc ON rgc.id = d.parent_region_id
+WHERE accounts.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (rgc.name IS NULL
+                OR (rgc.name, accounts.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean
+              AND rgc.name IS NULL AND accounts.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (rgc.name IS NOT NULL OR accounts.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND rgc.name IS NOT NULL
+              AND (rgc.name, accounts.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (assigned_csm = sqlc.arg(uid) OR backup_csm = sqlc.arg(uid)))
+  )
+  AND (NOT sqlc.arg(unowned)::boolean OR account_owner IS NULL)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR village_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN rgc.name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN rgc.name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN accounts.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN accounts.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListAccountsSortByProvince :many
+-- BL-157c: sort by Provinsi. Sama pola ListAccountsSortByRegency, tapi satu
+-- tingkat lebih jauh (Kecamatan → Kabupaten/Kota → Provinsi) — self-join
+-- regions 3x, cermin GetRegionAncestry tapi LEFT JOIN (nullable).
+SELECT accounts.* FROM accounts
+LEFT JOIN regions d    ON d.id = accounts.district_id
+LEFT JOIN regions rgc  ON rgc.id = d.parent_region_id
+LEFT JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE accounts.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (prov.name IS NULL
+                OR (prov.name, accounts.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean
+              AND prov.name IS NULL AND accounts.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (prov.name IS NOT NULL OR accounts.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND prov.name IS NOT NULL
+              AND (prov.name, accounts.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (assigned_csm = sqlc.arg(uid) OR backup_csm = sqlc.arg(uid)))
+  )
+  AND (NOT sqlc.arg(unowned)::boolean OR account_owner IS NULL)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR village_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN prov.name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN prov.name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN accounts.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN accounts.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListAccountsSortByOwner :many
+-- BL-157c: sort by Owner (account_owner). Kunci sort HARUS
+-- COALESCE(NULLIF(u.name,''), u.email) — PERSIS logika tampil memberName
+-- (accounts_list.go: nama bila terisi, else email) — agar urutan tak
+-- menyimpang dari yang ditampilkan. NULLABLE (account_owner ON DELETE SET
+-- NULL). LEFT JOIN users: baris tanpa owner ATAU owner yang keluar workspace →
+-- owner_key NULL, masuk kelompok NULL. Mirror PERSIS ListLeadsSortByOwner,
+-- beda hanya filter ownership tiga-flag + unowned (bukan dua-flag+mine_only).
+SELECT accounts.* FROM accounts
+LEFT JOIN users u ON u.id = account_owner
+WHERE accounts.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NULL
+                OR (COALESCE(NULLIF(u.name, ''), u.email), accounts.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean
+              AND COALESCE(NULLIF(u.name, ''), u.email) IS NULL AND accounts.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL OR accounts.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL
+              AND (COALESCE(NULLIF(u.name, ''), u.email), accounts.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (assigned_csm = sqlc.arg(uid) OR backup_csm = sqlc.arg(uid)))
+  )
+  AND (NOT sqlc.arg(unowned)::boolean OR account_owner IS NULL)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR village_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN COALESCE(NULLIF(u.name, ''), u.email) END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN COALESCE(NULLIF(u.name, ''), u.email) END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN accounts.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN accounts.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListAccountsSortByCsm :many
+-- BL-157c: sort by CS (assigned_csm — HANYA CSM utama, PERSIS kolom yang
+-- ditampilkan accountRowView; backup_csm tak ikut ditampilkan di daftar jadi
+-- tak ikut kunci sort). Pola PERSIS ListAccountsSortByOwner, kolom join beda.
+SELECT accounts.* FROM accounts
+LEFT JOIN users u ON u.id = assigned_csm
+WHERE accounts.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NULL
+                OR (COALESCE(NULLIF(u.name, ''), u.email), accounts.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean
+              AND COALESCE(NULLIF(u.name, ''), u.email) IS NULL AND accounts.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL OR accounts.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL
+              AND (COALESCE(NULLIF(u.name, ''), u.email), accounts.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (assigned_csm = sqlc.arg(uid) OR backup_csm = sqlc.arg(uid)))
+  )
+  AND (NOT sqlc.arg(unowned)::boolean OR account_owner IS NULL)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR village_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR village_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN COALESCE(NULLIF(u.name, ''), u.email) END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN COALESCE(NULLIF(u.name, ''), u.email) END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN accounts.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN accounts.id END DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: UpdateAccount :one
 -- Sunting profil desa. entity_code tak diubah (kode identitas internal yang
 -- dikutip, stabil). village_code KINI ikut diperbarui (BL-66): saat pengguna

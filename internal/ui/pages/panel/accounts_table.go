@@ -29,17 +29,40 @@ func accountsTable(v AccountsListView) g.Node {
 				h.Class("w-full text-sm"),
 				h.THead(h.Tr(
 					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Tipe")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Kab/Kota")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Provinsi")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Owner")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("CS")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), accountSortHeader(v, "village", "Desa")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), accountSortHeader(v, "type", "Tipe")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), accountSortHeader(v, "regency", "Kab/Kota")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), accountSortHeader(v, "province", "Provinsi")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), accountSortHeader(v, "owner", "Owner")),
+					h.Th(h.Class("py-2 font-medium"), accountSortHeader(v, "csm", "CS")),
 				)),
 				h.TBody(g.Group(rows)),
 			)),
 		),
 	)
+}
+
+// accountSortHeader = header kolom jadi tautan sort (BL-157c, klon persis
+// leadSortHeader). Native <a href> (bookmarkable, lolos gotcha #16), BUKAN
+// Datastar. Klik saat non-aktif → sort=col&dir=asc; klik saat aktif → toggle
+// arah. Tautan sort SENDIRI tak membawa after/trail (submit baru reset ke hal
+// 1); view/q dipertahankan lewat accountsListHref.
+func accountSortHeader(v AccountsListView, col, label string) g.Node {
+	active := v.Sort == col
+	nextDir := "asc"
+	if active && v.Dir == "asc" {
+		nextDir = "desc"
+	}
+	href := accountsListHref(v.Base, v.ActiveView, v.Query, col, nextDir)
+	text := label
+	if active {
+		arrow := "▲"
+		if v.Dir == "desc" {
+			arrow = "▼"
+		}
+		text = label + " " + arrow
+	}
+	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
 }
 
 func accountRow(base string, a AccountRow) g.Node {
@@ -67,5 +90,5 @@ func accountRow(base string, a AccountRow) g.Node {
 // bookmarkable + dimuat ulang, lolos gotcha #16), tap target 44px, flex-wrap
 // untuk 375px. Ujung daftar dikatakan eksplisit.
 func accountsPager(v AccountsListView) g.Node {
-	return ui.KeysetPager(accountsListHref(v.Base, v.ActiveView, v.Query), v.After, v.Trail, v.NextCursor)
+	return ui.KeysetPager(accountsListHref(v.Base, v.ActiveView, v.Query, v.Sort, v.Dir), v.After, v.Trail, v.NextCursor)
 }
