@@ -80,9 +80,10 @@ func healthScoreStr(s *int16) string {
 	return strconv.FormatInt(int64(*s), 10)
 }
 
-// healthRowToView mengonversi ListHealthScoresRow ke panel.HealthScoreRowView.
-// uid dioper untuk href akun — satu-satunya caller butuh uid dari session.
-func healthRowToView(r db.ListHealthScoresRow, slug string, tz *time.Location, _ int64) panel.HealthScoreRowView {
+// healthRowToView mengonversi healthListRow (adapter BL-157i, lihat
+// health_score_row.go) ke panel.HealthScoreRowView. uid dioper untuk href
+// akun — satu-satunya caller butuh uid dari session.
+func healthRowToView(r healthListRow, slug string, tz *time.Location, _ int64) panel.HealthScoreRowView {
 	statusLabel, statusBadge := healthScoreStatus(r.HealthStatus)
 	loc := time.UTC
 	if tz != nil {

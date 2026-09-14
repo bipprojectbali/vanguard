@@ -83,9 +83,13 @@ func roundToInt(f float64) int {
 	return int(f + 0.5)
 }
 
-// healthTableSubtitle — subteks tabel BL-96. Urutan dipertahankan created_at
-// DESC (keputusan B, keyset BL-7 tak diubah) → "dari terbaru", BUKAN "skor
-// terendah" seperti mockup (yang butuh ganti kolom cursor).
-func healthTableSubtitle(total int64) string {
+// healthTableSubtitle — subteks tabel BL-96. Default (sortCol=="") tetap
+// created_at DESC (keputusan B, keyset BL-7 tak diubah) → "dari terbaru".
+// BL-157i: saat user memilih sort kolom lain, klaim "dari terbaru" jadi salah
+// → dibuang, sisakan "N desa binaan" saja (mirror pola subtitle Renewals).
+func healthTableSubtitle(total int64, sortCol string) string {
+	if sortCol != "" {
+		return strconv.FormatInt(total, 10) + " desa binaan"
+	}
 	return "Diurutkan dari terbaru · " + strconv.FormatInt(total, 10) + " desa binaan"
 }

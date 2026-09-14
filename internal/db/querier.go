@@ -965,6 +965,30 @@ type Querier interface {
 	// DEKAT (ASC) dari langganan Active belum-terhapus. LATERAL LIMIT 1 memakai
 	// idx_subs_one_active-adjacent (tenant_id, end_date) WHERE status='Active'.
 	ListHealthScores(ctx context.Context, arg ListHealthScoresParams) ([]ListHealthScoresRow, error)
+	// BL-157i: sort by cs.adoption_score ("Adopsi"). NULLABLE smallint — pola
+	// null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+	ListHealthScoresSortByAdoption(ctx context.Context, arg ListHealthScoresSortByAdoptionParams) ([]ListHealthScoresSortByAdoptionRow, error)
+	// BL-157i: sort by cs.engagement_score ("Engagement"). NULLABLE smallint —
+	// pola null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+	ListHealthScoresSortByEngagement(ctx context.Context, arg ListHealthScoresSortByEngagementParams) ([]ListHealthScoresSortByEngagementRow, error)
+	// BL-157i: sort by sub.end_date ("Jatuh Tempo"). NULLABLE — LATERAL bisa
+	// kosong (akun tanpa langganan Active ber-end_date) — pola null-aware mirror
+	// ListDealsSortByCloseDate, tipe kolom date.
+	ListHealthScoresSortByRenewal(ctx context.Context, arg ListHealthScoresSortByRenewalParams) ([]ListHealthScoresSortByRenewalRow, error)
+	// BL-157i: sort by cs.overall_health_score ("Skor"). NULLABLE smallint (akun
+	// belum diskor CSM) — pola null-aware mirror ListDealsSortByProbability.
+	ListHealthScoresSortByScore(ctx context.Context, arg ListHealthScoresSortByScoreParams) ([]ListHealthScoresSortByScoreRow, error)
+	// BL-157i: sort by cs.support_score ("Support"). NULLABLE smallint — pola
+	// null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+	ListHealthScoresSortBySupport(ctx context.Context, arg ListHealthScoresSortBySupportParams) ([]ListHealthScoresSortBySupportRow, error)
+	// BL-157i: sort by cs.score_trend ("Tren"). NULLABLE text — pola null-aware
+	// mirror ListRenewalsSortByPlan.
+	ListHealthScoresSortByTrend(ctx context.Context, arg ListHealthScoresSortByTrendParams) ([]ListHealthScoresSortByTrendRow, error)
+	// BL-157i: SAMA PERSIS filter ListHealthScores (ownership F3, segment BL-114,
+	// filter_status, search) — hanya ORDER BY/keyset beda, diurut a.village_name
+	// (Desa). Tak-nullable (village_name NOT NULL) → pola sederhana, tanpa
+	// cursor_is_null (mirror ListRenewalsSortByVillage).
+	ListHealthScoresSortByVillage(ctx context.Context, arg ListHealthScoresSortByVillageParams) ([]ListHealthScoresSortByVillageRow, error)
 	// Undangan PENDING satu workspace (panel anggota) — yang sudah diterima disaring.
 	ListInvitesByTenant(ctx context.Context, tenantID int64) ([]Invite, error)
 	// kb_articles.sql — katalog master (Knowledge Base), Modul 6 Customer
