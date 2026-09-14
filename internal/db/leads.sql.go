@@ -269,6 +269,821 @@ func (q *Queries) ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, e
 	return items, nil
 }
 
+const listLeadsSortByCode = `-- name: ListLeadsSortByCode :many
+SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (entity_code IS NULL OR (entity_code, id) > ($4::text, $5::bigint)))
+          OR ($3::boolean AND entity_code IS NULL AND id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (entity_code IS NOT NULL OR id < $5::bigint))
+          OR (NOT $3::boolean AND entity_code IS NOT NULL
+              AND (entity_code, id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND lead_owner = $8)
+  )
+  AND (NOT $9::boolean OR lead_owner = $8)
+  AND ($10::text = '' OR lead_status = $10::text)
+  AND (
+      $11::text = ''
+      OR lead_name ILIKE '%' || $11 || '%'
+      OR entity_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN entity_code END ASC,
+  CASE WHEN $2::text = 'desc' THEN entity_code END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $12
+`
+
+type ListLeadsSortByCodeParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	MineOnly     bool   `json:"mine_only"`
+	StatusFilter string `json:"status_filter"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157b: sort by entity_code ("Kode"). NULLABLE (entity_code diisi
+// GenerateEntityCode saat create, tapi kolom tetap nullable di skema). Pola
+// null-aware SAMA dgn ListSubscriptionsSortByPlan — cursor_is_null menandai
+// kelompok NULL/non-NULL lintas-request; NULLS default Postgres (ASC=LAST,
+// DESC=FIRST).
+func (q *Queries) ListLeadsSortByCode(ctx context.Context, arg ListLeadsSortByCodeParams) ([]Lead, error) {
+	rows, err := q.db.Query(ctx, listLeadsSortByCode,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StatusFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Lead{}
+	for rows.Next() {
+		var i Lead
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.LeadOwner,
+			&i.LeadName,
+			&i.ContactPerson,
+			&i.JobTitle,
+			&i.LeadSource,
+			&i.LeadStatus,
+			&i.Rating,
+			&i.UnqualifiedReason,
+			&i.EstimatedValue,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.MobilePhone,
+			&i.Whatsapp,
+			&i.Email,
+			&i.Converted,
+			&i.ConvertedAccountID,
+			&i.ConvertedContactID,
+			&i.ConvertedDealID,
+			&i.ConvertedAt,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeadsSortByName = `-- name: ListLeadsSortByName :many
+SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (lead_name, id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (lead_name, id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND lead_owner = $7)
+  )
+  AND (NOT $8::boolean OR lead_owner = $7)
+  AND ($9::text = '' OR lead_status = $9::text)
+  AND (
+      $10::text = ''
+      OR lead_name ILIKE '%' || $10 || '%'
+      OR entity_code ILIKE '%' || $10 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN lead_name END ASC,
+  CASE WHEN $2::text = 'desc' THEN lead_name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $11
+`
+
+type ListLeadsSortByNameParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	MineOnly     bool   `json:"mine_only"`
+	StatusFilter string `json:"status_filter"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157b (fondasi sort per kolom Leads): SAMA PERSIS filter ListLeads
+// (ownership F3 + mine_only + status_filter + search) — hanya ORDER BY/keyset
+// yang beda, diurut lead_name (bukan created_at). lead_name TIDAK NULLABLE →
+// kloning pola ListSubscriptionsSortByVillage (tanpa kerumitan NULL). Sort
+// HANYA berdasar lead_name (baris bold di sel), BUKAN gabungan dgn
+// contact_person (subteks) — mirror keputusan "Desa" BL-157a.
+func (q *Queries) ListLeadsSortByName(ctx context.Context, arg ListLeadsSortByNameParams) ([]Lead, error) {
+	rows, err := q.db.Query(ctx, listLeadsSortByName,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StatusFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Lead{}
+	for rows.Next() {
+		var i Lead
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.LeadOwner,
+			&i.LeadName,
+			&i.ContactPerson,
+			&i.JobTitle,
+			&i.LeadSource,
+			&i.LeadStatus,
+			&i.Rating,
+			&i.UnqualifiedReason,
+			&i.EstimatedValue,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.MobilePhone,
+			&i.Whatsapp,
+			&i.Email,
+			&i.Converted,
+			&i.ConvertedAccountID,
+			&i.ConvertedContactID,
+			&i.ConvertedDealID,
+			&i.ConvertedAt,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeadsSortByOwner = `-- name: ListLeadsSortByOwner :many
+SELECT leads.id, leads.tenant_id, leads.entity_code, leads.lead_owner, leads.lead_name, leads.contact_person, leads.job_title, leads.lead_source, leads.lead_status, leads.rating, leads.unqualified_reason, leads.estimated_value, leads.province_legacy, leads.regency_legacy, leads.district_legacy, leads.mobile_phone, leads.whatsapp, leads.email, leads.converted, leads.converted_account_id, leads.converted_contact_id, leads.converted_deal_id, leads.converted_at, leads.deleted_at, leads.created_by, leads.created_at, leads.updated_by, leads.updated_at, leads.district_id FROM leads
+LEFT JOIN users u ON u.id = lead_owner
+WHERE leads.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NULL
+                OR (COALESCE(NULLIF(u.name, ''), u.email), leads.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean
+              AND COALESCE(NULLIF(u.name, ''), u.email) IS NULL AND leads.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL OR leads.id < $5::bigint))
+          OR (NOT $3::boolean AND COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL
+              AND (COALESCE(NULLIF(u.name, ''), u.email), leads.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND lead_owner = $8)
+  )
+  AND (NOT $9::boolean OR lead_owner = $8)
+  AND ($10::text = '' OR lead_status = $10::text)
+  AND (
+      $11::text = ''
+      OR lead_name ILIKE '%' || $11 || '%'
+      OR entity_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN COALESCE(NULLIF(u.name, ''), u.email) END ASC,
+  CASE WHEN $2::text = 'desc' THEN COALESCE(NULLIF(u.name, ''), u.email) END DESC,
+  CASE WHEN $2::text = 'asc'  THEN leads.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN leads.id END DESC
+LIMIT $12
+`
+
+type ListLeadsSortByOwnerParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	MineOnly     bool   `json:"mine_only"`
+	StatusFilter string `json:"status_filter"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157b: sort by CSM Pemilik (lead_owner). Kunci sort HARUS
+// COALESCE(NULLIF(u.name,”), u.email) — PERSIS logika tampil ownerName/
+// memberNameMap (sales_leads_detail.go: nama bila terisi, else email) — agar
+// urutan tak menyimpang dari yang ditampilkan. NULLABLE (lead_owner ON DELETE
+// SET NULL). LEFT JOIN users: baris tanpa owner ATAU owner terhapus →
+// owner_key NULL, masuk kelompok NULL (default Postgres). Mirror PERSIS
+// ListSubscriptionsSortByCsm.
+func (q *Queries) ListLeadsSortByOwner(ctx context.Context, arg ListLeadsSortByOwnerParams) ([]Lead, error) {
+	rows, err := q.db.Query(ctx, listLeadsSortByOwner,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StatusFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Lead{}
+	for rows.Next() {
+		var i Lead
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.LeadOwner,
+			&i.LeadName,
+			&i.ContactPerson,
+			&i.JobTitle,
+			&i.LeadSource,
+			&i.LeadStatus,
+			&i.Rating,
+			&i.UnqualifiedReason,
+			&i.EstimatedValue,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.MobilePhone,
+			&i.Whatsapp,
+			&i.Email,
+			&i.Converted,
+			&i.ConvertedAccountID,
+			&i.ConvertedContactID,
+			&i.ConvertedDealID,
+			&i.ConvertedAt,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeadsSortByRating = `-- name: ListLeadsSortByRating :many
+SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (rating IS NULL OR (rating, id) > ($4::text, $5::bigint)))
+          OR ($3::boolean AND rating IS NULL AND id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (rating IS NOT NULL OR id < $5::bigint))
+          OR (NOT $3::boolean AND rating IS NOT NULL
+              AND (rating, id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND lead_owner = $8)
+  )
+  AND (NOT $9::boolean OR lead_owner = $8)
+  AND ($10::text = '' OR lead_status = $10::text)
+  AND (
+      $11::text = ''
+      OR lead_name ILIKE '%' || $11 || '%'
+      OR entity_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN rating END ASC,
+  CASE WHEN $2::text = 'desc' THEN rating END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $12
+`
+
+type ListLeadsSortByRatingParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	MineOnly     bool   `json:"mine_only"`
+	StatusFilter string `json:"status_filter"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157b: sort by rating ("Rating" — RAW enum Cold/Hot/Warm, alfabetis;
+// keputusan user: BUKAN urutan tingkat Hot→Warm→Cold, mirror keputusan
+// "Masa Berlaku" BL-157a — tak menduplikasi logika prioritas ke SQL).
+// NULLABLE. Pola null-aware PERSIS ListLeadsSortByCode.
+func (q *Queries) ListLeadsSortByRating(ctx context.Context, arg ListLeadsSortByRatingParams) ([]Lead, error) {
+	rows, err := q.db.Query(ctx, listLeadsSortByRating,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StatusFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Lead{}
+	for rows.Next() {
+		var i Lead
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.LeadOwner,
+			&i.LeadName,
+			&i.ContactPerson,
+			&i.JobTitle,
+			&i.LeadSource,
+			&i.LeadStatus,
+			&i.Rating,
+			&i.UnqualifiedReason,
+			&i.EstimatedValue,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.MobilePhone,
+			&i.Whatsapp,
+			&i.Email,
+			&i.Converted,
+			&i.ConvertedAccountID,
+			&i.ConvertedContactID,
+			&i.ConvertedDealID,
+			&i.ConvertedAt,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeadsSortBySource = `-- name: ListLeadsSortBySource :many
+SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (lead_source IS NULL OR (lead_source, id) > ($4::text, $5::bigint)))
+          OR ($3::boolean AND lead_source IS NULL AND id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (lead_source IS NOT NULL OR id < $5::bigint))
+          OR (NOT $3::boolean AND lead_source IS NOT NULL
+              AND (lead_source, id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND lead_owner = $8)
+  )
+  AND (NOT $9::boolean OR lead_owner = $8)
+  AND ($10::text = '' OR lead_status = $10::text)
+  AND (
+      $11::text = ''
+      OR lead_name ILIKE '%' || $11 || '%'
+      OR entity_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN lead_source END ASC,
+  CASE WHEN $2::text = 'desc' THEN lead_source END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $12
+`
+
+type ListLeadsSortBySourceParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	MineOnly     bool   `json:"mine_only"`
+	StatusFilter string `json:"status_filter"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157b: sort by lead_source ("Sumber"). NULLABLE. Pola null-aware PERSIS
+// ListLeadsSortByCode, kolom beda.
+func (q *Queries) ListLeadsSortBySource(ctx context.Context, arg ListLeadsSortBySourceParams) ([]Lead, error) {
+	rows, err := q.db.Query(ctx, listLeadsSortBySource,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StatusFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Lead{}
+	for rows.Next() {
+		var i Lead
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.LeadOwner,
+			&i.LeadName,
+			&i.ContactPerson,
+			&i.JobTitle,
+			&i.LeadSource,
+			&i.LeadStatus,
+			&i.Rating,
+			&i.UnqualifiedReason,
+			&i.EstimatedValue,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.MobilePhone,
+			&i.Whatsapp,
+			&i.Email,
+			&i.Converted,
+			&i.ConvertedAccountID,
+			&i.ConvertedContactID,
+			&i.ConvertedDealID,
+			&i.ConvertedAt,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeadsSortByStatus = `-- name: ListLeadsSortByStatus :many
+SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (lead_status, id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (lead_status, id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND lead_owner = $7)
+  )
+  AND (NOT $8::boolean OR lead_owner = $7)
+  AND ($9::text = '' OR lead_status = $9::text)
+  AND (
+      $10::text = ''
+      OR lead_name ILIKE '%' || $10 || '%'
+      OR entity_code ILIKE '%' || $10 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN lead_status END ASC,
+  CASE WHEN $2::text = 'desc' THEN lead_status END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $11
+`
+
+type ListLeadsSortByStatusParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	MineOnly     bool   `json:"mine_only"`
+	StatusFilter string `json:"status_filter"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157b: sort by lead_status ("Status" — RAW enum New/Contacted/Qualified/
+// Unqualified/Converted, alfabetis; tak menduplikasi urutan tingkat ke SQL,
+// mirror keputusan "Masa Berlaku" BL-157a). lead_status NOT NULL → kloning
+// PERSIS pola ListLeadsSortByName.
+func (q *Queries) ListLeadsSortByStatus(ctx context.Context, arg ListLeadsSortByStatusParams) ([]Lead, error) {
+	rows, err := q.db.Query(ctx, listLeadsSortByStatus,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StatusFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Lead{}
+	for rows.Next() {
+		var i Lead
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.LeadOwner,
+			&i.LeadName,
+			&i.ContactPerson,
+			&i.JobTitle,
+			&i.LeadSource,
+			&i.LeadStatus,
+			&i.Rating,
+			&i.UnqualifiedReason,
+			&i.EstimatedValue,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.MobilePhone,
+			&i.Whatsapp,
+			&i.Email,
+			&i.Converted,
+			&i.ConvertedAccountID,
+			&i.ConvertedContactID,
+			&i.ConvertedDealID,
+			&i.ConvertedAt,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLeadsSortByValue = `-- name: ListLeadsSortByValue :many
+SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id FROM leads
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (estimated_value IS NULL OR (estimated_value, id) > ($4::numeric, $5::bigint)))
+          OR ($3::boolean AND estimated_value IS NULL AND id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (estimated_value IS NOT NULL OR id < $5::bigint))
+          OR (NOT $3::boolean AND estimated_value IS NOT NULL
+              AND (estimated_value, id) < ($4::numeric, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND lead_owner = $8)
+  )
+  AND (NOT $9::boolean OR lead_owner = $8)
+  AND ($10::text = '' OR lead_status = $10::text)
+  AND (
+      $11::text = ''
+      OR lead_name ILIKE '%' || $11 || '%'
+      OR entity_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN estimated_value END ASC,
+  CASE WHEN $2::text = 'desc' THEN estimated_value END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $12
+`
+
+type ListLeadsSortByValueParams struct {
+	HasCursor    bool           `json:"has_cursor"`
+	Dir          string         `json:"dir"`
+	CursorIsNull bool           `json:"cursor_is_null"`
+	CursorVal    pgtype.Numeric `json:"cursor_val"`
+	CursorID     int64          `json:"cursor_id"`
+	ScopeAll     bool           `json:"scope_all"`
+	IsOwn        bool           `json:"is_own"`
+	Uid          *int64         `json:"uid"`
+	MineOnly     bool           `json:"mine_only"`
+	StatusFilter string         `json:"status_filter"`
+	Search       string         `json:"search"`
+	PageSize     int32          `json:"page_size"`
+}
+
+// BL-157b: sort by estimated_value ("Estimasi"). NULLABLE numeric. Kunci sort
+// memakai nilai ASLI (tak ter-mask) — F4 (maskARR) hanya menyamarkan TAMPILAN
+// di handler, mirror presedan MRR BL-157a (ListSubscriptionsSortByMrr). Pola
+// null-aware SAMA dgn ListLeadsSortByCode, tipe kolom numeric bukan text.
+func (q *Queries) ListLeadsSortByValue(ctx context.Context, arg ListLeadsSortByValueParams) ([]Lead, error) {
+	rows, err := q.db.Query(ctx, listLeadsSortByValue,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StatusFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Lead{}
+	for rows.Next() {
+		var i Lead
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.LeadOwner,
+			&i.LeadName,
+			&i.ContactPerson,
+			&i.JobTitle,
+			&i.LeadSource,
+			&i.LeadStatus,
+			&i.Rating,
+			&i.UnqualifiedReason,
+			&i.EstimatedValue,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.MobilePhone,
+			&i.Whatsapp,
+			&i.Email,
+			&i.Converted,
+			&i.ConvertedAccountID,
+			&i.ConvertedContactID,
+			&i.ConvertedDealID,
+			&i.ConvertedAt,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.DistrictID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markLeadConverted = `-- name: MarkLeadConverted :exec
 UPDATE leads SET
     converted            = true,

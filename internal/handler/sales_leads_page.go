@@ -50,27 +50,17 @@ func (h *Handler) LeadsList(w http.ResponseWriter, r *http.Request) {
 	// Trim agar spasi belaka ≡ tak mencari (query kosong lolos predikat SQL).
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
-	cursorAt, cursorID := pageCursor(r)
-	rows, err := h.q(ctx).ListLeads(ctx, db.ListLeadsParams{
-		CursorCreatedAt: cursorAt,
-		CursorID:        cursorID,
-		ScopeAll:        filter.ScopeAll,
-		IsOwn:           filter.IsOwn,
-		Uid:             &uid,
-		MineOnly:        mineOnly,
-		StatusFilter:    statusFilter,
-		Search:          query,
-		PageSize:        pageSize + 1,
-	})
-	if err != nil {
-		h.Log.Error("leads: list", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+	// sort/dir (BL-157b): whitelist 7 kolom sortable (leadSortableColumns).
+	// Kombinasi tak dikenal → jatuh ke jalur default (created_at DESC), TAK
+	// error — URL lama/disunting tetap render halaman yang benar.
+	sortCol := r.URL.Query().Get("sort")
+	if !leadSortableColumns[sortCol] {
+		sortCol = ""
 	}
-
-	shown, nextCursor := splitPage(rows, func(l db.Lead) (pgtype.Timestamptz, int64) {
-		return l.CreatedAt, l.ID
-	})
+	dir := r.URL.Query().Get("dir")
+	if dir != "asc" && dir != "desc" {
+		dir = "asc"
+	}
 
 	names, err := h.memberNameMap(ctx)
 	if err != nil {
@@ -79,6 +69,227 @@ func (h *Handler) LeadsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	br := session.BusinessRole(ctx)
+
+	var shown []db.Lead
+	var nextCursor string
+	switch sortCol {
+	case "name":
+		cursorVal, cursorSortID, hasCursor := pageCursorText(r)
+		rows, err := h.q(ctx).ListLeadsSortByName(ctx, db.ListLeadsSortByNameParams{
+			HasCursor:    hasCursor,
+			Dir:          dir,
+			CursorVal:    cursorVal,
+			CursorID:     cursorSortID,
+			ScopeAll:     filter.ScopeAll,
+			IsOwn:        filter.IsOwn,
+			Uid:          &uid,
+			MineOnly:     mineOnly,
+			StatusFilter: statusFilter,
+			Search:       query,
+			PageSize:     pageSize + 1,
+		})
+		if err != nil {
+			h.Log.Error("leads: list sort name", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		shown, nextCursor = splitPageText(rows, func(l db.Lead) (string, int64) {
+			return l.LeadName, l.ID
+		})
+	case "status":
+		// Status diurut RAW enum (New/Contacted/…, alfabetis) — keputusan user,
+		// tak menduplikasi urutan tingkat ke SQL.
+		cursorVal, cursorSortID, hasCursor := pageCursorText(r)
+		rows, err := h.q(ctx).ListLeadsSortByStatus(ctx, db.ListLeadsSortByStatusParams{
+			HasCursor:    hasCursor,
+			Dir:          dir,
+			CursorVal:    cursorVal,
+			CursorID:     cursorSortID,
+			ScopeAll:     filter.ScopeAll,
+			IsOwn:        filter.IsOwn,
+			Uid:          &uid,
+			MineOnly:     mineOnly,
+			StatusFilter: statusFilter,
+			Search:       query,
+			PageSize:     pageSize + 1,
+		})
+		if err != nil {
+			h.Log.Error("leads: list sort status", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		shown, nextCursor = splitPageText(rows, func(l db.Lead) (string, int64) {
+			return l.LeadStatus, l.ID
+		})
+	case "code":
+		cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
+		rows, err := h.q(ctx).ListLeadsSortByCode(ctx, db.ListLeadsSortByCodeParams{
+			HasCursor:    hasCursor,
+			Dir:          dir,
+			CursorIsNull: isNull,
+			CursorVal:    cursorVal,
+			CursorID:     cursorSortID,
+			ScopeAll:     filter.ScopeAll,
+			IsOwn:        filter.IsOwn,
+			Uid:          &uid,
+			MineOnly:     mineOnly,
+			StatusFilter: statusFilter,
+			Search:       query,
+			PageSize:     pageSize + 1,
+		})
+		if err != nil {
+			h.Log.Error("leads: list sort code", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		shown, nextCursor = splitPageTextNullable(rows, func(l db.Lead) (string, int64, bool) {
+			if l.EntityCode == nil {
+				return "", l.ID, true
+			}
+			return *l.EntityCode, l.ID, false
+		})
+	case "source":
+		cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
+		rows, err := h.q(ctx).ListLeadsSortBySource(ctx, db.ListLeadsSortBySourceParams{
+			HasCursor:    hasCursor,
+			Dir:          dir,
+			CursorIsNull: isNull,
+			CursorVal:    cursorVal,
+			CursorID:     cursorSortID,
+			ScopeAll:     filter.ScopeAll,
+			IsOwn:        filter.IsOwn,
+			Uid:          &uid,
+			MineOnly:     mineOnly,
+			StatusFilter: statusFilter,
+			Search:       query,
+			PageSize:     pageSize + 1,
+		})
+		if err != nil {
+			h.Log.Error("leads: list sort source", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		shown, nextCursor = splitPageTextNullable(rows, func(l db.Lead) (string, int64, bool) {
+			if l.LeadSource == nil {
+				return "", l.ID, true
+			}
+			return *l.LeadSource, l.ID, false
+		})
+	case "rating":
+		cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
+		rows, err := h.q(ctx).ListLeadsSortByRating(ctx, db.ListLeadsSortByRatingParams{
+			HasCursor:    hasCursor,
+			Dir:          dir,
+			CursorIsNull: isNull,
+			CursorVal:    cursorVal,
+			CursorID:     cursorSortID,
+			ScopeAll:     filter.ScopeAll,
+			IsOwn:        filter.IsOwn,
+			Uid:          &uid,
+			MineOnly:     mineOnly,
+			StatusFilter: statusFilter,
+			Search:       query,
+			PageSize:     pageSize + 1,
+		})
+		if err != nil {
+			h.Log.Error("leads: list sort rating", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		shown, nextCursor = splitPageTextNullable(rows, func(l db.Lead) (string, int64, bool) {
+			if l.Rating == nil {
+				return "", l.ID, true
+			}
+			return *l.Rating, l.ID, false
+		})
+	case "value":
+		cursorRaw, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
+		// cursor Estimasi kanonik = teks desimal apa adanya (optNumeric ada di
+		// sales_format_number.go) — urutan SUNGGUHAN terjadi di SQL atas
+		// cursor_val bertipe numeric asli, mirror MRR Subscriptions.
+		cursorVal, code := optNumeric(cursorRaw, "")
+		if code != "" {
+			hasCursor = false
+		}
+		rows, err := h.q(ctx).ListLeadsSortByValue(ctx, db.ListLeadsSortByValueParams{
+			HasCursor:    hasCursor,
+			Dir:          dir,
+			CursorIsNull: isNull,
+			CursorVal:    cursorVal,
+			CursorID:     cursorSortID,
+			ScopeAll:     filter.ScopeAll,
+			IsOwn:        filter.IsOwn,
+			Uid:          &uid,
+			MineOnly:     mineOnly,
+			StatusFilter: statusFilter,
+			Search:       query,
+			PageSize:     pageSize + 1,
+		})
+		if err != nil {
+			h.Log.Error("leads: list sort value", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		shown, nextCursor = splitPageTextNullable(rows, func(l db.Lead) (string, int64, bool) {
+			if !l.EstimatedValue.Valid {
+				return "", l.ID, true
+			}
+			return numericStr(l.EstimatedValue), l.ID, false
+		})
+	case "owner":
+		cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
+		rows, err := h.q(ctx).ListLeadsSortByOwner(ctx, db.ListLeadsSortByOwnerParams{
+			HasCursor:    hasCursor,
+			Dir:          dir,
+			CursorIsNull: isNull,
+			CursorVal:    cursorVal,
+			CursorID:     cursorSortID,
+			ScopeAll:     filter.ScopeAll,
+			IsOwn:        filter.IsOwn,
+			Uid:          &uid,
+			MineOnly:     mineOnly,
+			StatusFilter: statusFilter,
+			Search:       query,
+			PageSize:     pageSize + 1,
+		})
+		if err != nil {
+			h.Log.Error("leads: list sort owner", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		// Kunci cursor Pemilik = nama/email resolusi peta anggota (ownerName),
+		// PERSIS yang ditampilkan — bukan owner mentah. NULL-nya mengikuti
+		// lead_owner asli (bukan string kosong hasil ownerName), sama dengan
+		// kondisi NULL di kunci sort SQL (LEFT JOIN users).
+		shown, nextCursor = splitPageTextNullable(rows, func(l db.Lead) (string, int64, bool) {
+			if l.LeadOwner == nil {
+				return "", l.ID, true
+			}
+			return ownerName(l.LeadOwner, names), l.ID, false
+		})
+	default:
+		cursorAt, cursorID := pageCursor(r)
+		rows, err := h.q(ctx).ListLeads(ctx, db.ListLeadsParams{
+			CursorCreatedAt: cursorAt,
+			CursorID:        cursorID,
+			ScopeAll:        filter.ScopeAll,
+			IsOwn:           filter.IsOwn,
+			Uid:             &uid,
+			MineOnly:        mineOnly,
+			StatusFilter:    statusFilter,
+			Search:          query,
+			PageSize:        pageSize + 1,
+		})
+		if err != nil {
+			h.Log.Error("leads: list", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		shown, nextCursor = splitPage(rows, func(l db.Lead) (pgtype.Timestamptz, int64) {
+			return l.CreatedAt, l.ID
+		})
+	}
+
 	items := make([]panel.LeadRow, 0, len(shown))
 	for _, l := range shown {
 		items = append(items, leadRowView(l, names, br))
@@ -97,7 +308,22 @@ func (h *Handler) LeadsList(w http.ResponseWriter, r *http.Request) {
 		Trail:      pageTrail(r),
 		Err:        wsErrMsg(r.URL.Query().Get("err")),
 		Msg:        leadsMsg(r.URL.Query().Get("ok")),
+		Sort:       sortCol,
+		Dir:        dir,
 	}))
+}
+
+// leadSortableColumns = whitelist kolom yang boleh diminta lewat ?sort= (BL-157b:
+// 7 kolom tabel Leads). ?sort= di luar daftar ini diperlakukan seolah absen
+// (jatuh ke default created_at DESC), TAK error.
+var leadSortableColumns = map[string]bool{
+	"code":   true,
+	"name":   true,
+	"source": true,
+	"status": true,
+	"rating": true,
+	"value":  true,
+	"owner":  true,
 }
 
 // renderLeadsForbidden — 403 + penjelasan bagi anggota tanpa peran CRM. Status
