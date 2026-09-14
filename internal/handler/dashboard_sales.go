@@ -11,10 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// dashboard_sales.go — BL-59a + BL-98: section domain "Sales" pada Beranda
-// (Modul 1). Komposisi-per-izin: tiap butir digate kapabilitas modulnya; role
-// melihat UNION butir dari modul yang boleh diaksesnya; domain tampil hanya bila
-// ≥1 KPI tampil (heading di view).
+// dashboard_sales.go — BL-59a + BL-98 + BL-141: section domain "Sales" pada
+// Beranda (Modul 1). Komposisi-per-izin: tiap butir digate kapabilitas
+// modulnya; role melihat UNION butir dari modul yang boleh diaksesnya; domain
+// tampil hanya bila ≥1 KPI tampil (heading di view).
 //
 // BL-98 (ramping): section Sales kini MAKSIMUM 2 KPI paling penting — Win Rate &
 // Deal Tutup Bulan Ini (keduanya di bawah crm:deals) — TANPA chart domain. Chart
@@ -23,6 +23,14 @@ import (
 // (won/lost → Win Rate) + DashboardDealsClosingThisMonth. F3 via
 // DealsListFilterFor(dataScope). F4: murni COUNT/persen (tanpa Rp) → tak butuh
 // masking.
+//
+// BL-141 (membalik BL-98 KHUSUS Beranda): tambah 3 chart inline, SEMUA di
+// bawah gate crm:deals yang sama dgn KPI di atas (ticket BL-141 — bukan
+// crm:leads terpisah utk chart Leads per Sumber, berbeda dari pola pre-BL-98
+// yg pernah menggate chart itu via canViewLeads; di sini disatukan supaya
+// section Sales konsisten satu kapabilitas). Win/Loss REUSE stats yg sudah
+// diambil di atas (tanpa query baru); Pipeline & Leads pakai query dashboard.sql
+// yang sudah ada sejak BL-59a.
 
 // dashSalesDomain merakit section Sales. bool kedua = "punya isi" (≥1 KPI) →
 // handler hanya menambahkan domain ke view bila true (heading tak muncul kosong).
@@ -57,6 +65,57 @@ func (h *Handler) dashSalesDomain(ctx context.Context, dataScope string, uid int
 			Label: "Deal Tutup Bulan Ini", Value: strconv.FormatInt(closing, 10),
 			ValueClass: "text-primary",
 		})
+
+		// Chart 1: Pipeline per Stage (bar) — deal terbuka per-stage, urut alami
+		// kanban (query sudah CASE-order).
+		pipeline, err := q.DashboardPipelineByStage(ctx, db.DashboardPipelineByStageParams{
+			ScopeAll: deal.ScopeAll, IsOwn: deal.IsOwn, Uid: &uid,
+		})
+		if err != nil {
+			return panel.DashDomain{}, false, err
+		}
+		stages := make([]string, len(pipeline))
+		stageCounts := make([]int64, len(pipeline))
+		for i, p := range pipeline {
+			stages[i] = p.Stage
+			stageCounts[i] = p.DealCount
+		}
+		d.Charts = append(d.Charts, panel.DashChart{
+			Title: "Pipeline per Stage", ChartID: "chart-sales-pipeline",
+			ChartJSON: h.marshalChart(barOption(stages, stageCounts)),
+		})
+
+		// Chart 2: Leads per Sumber (pie) — filter F3 TERPISAH dari deal (sumber
+		// data leads, bukan deals; LeadsListFilterFor sama pola DealsListFilterFor).
+		lead := db.LeadsListFilterFor(dataScope)
+		bySource, err := q.DashboardLeadsBySource(ctx, db.DashboardLeadsBySourceParams{
+			ScopeAll: lead.ScopeAll, IsOwn: lead.IsOwn, Uid: &uid,
+		})
+		if err != nil {
+			return panel.DashDomain{}, false, err
+		}
+		sources := make([]string, len(bySource))
+		sourceCounts := make([]int64, len(bySource))
+		for i, s := range bySource {
+			sources[i] = s.Source
+			sourceCounts[i] = s.LeadCount
+		}
+		d.Charts = append(d.Charts, panel.DashChart{
+			Title: "Leads per Sumber", ChartID: "chart-sales-leads",
+			ChartJSON: h.marshalChart(pieOption("Leads", sources, sourceCounts)),
+		})
+
+		// Chart 3: Win/Loss (pie) — REUSE stats yg sudah diambil di atas (tanpa
+		// query baru). Skip total bila belum ada deal tertutup sama sekali (won+
+		// lost==0) — pie kosong tak berguna, drpd render donut 0/0 yg
+		// membingungkan.
+		if stats.WonCount+stats.LostCount > 0 {
+			d.Charts = append(d.Charts, panel.DashChart{
+				Title: "Win/Loss", ChartID: "chart-sales-winloss",
+				ChartJSON: h.marshalChart(pieOption("Deal Tertutup",
+					[]string{"Won", "Lost"}, []int64{stats.WonCount, stats.LostCount})),
+			})
+		}
 	}
 
 	// BL-98: tautan Sales Report — HANYA bila role ber-crm:reports (jangan pernah
