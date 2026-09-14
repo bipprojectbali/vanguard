@@ -72,12 +72,29 @@ func TestDealStepper_RendersSixNodes(t *testing.T) {
 }
 
 // stageControlFixture = view minimal untuk merender kontrol Ubah Tahap.
+// NextStages dihitung ala nextDealStages (BL-159) — diduplikasi kecil di sini
+// (bukan impor package handler, hindari siklus impor) atas pipelineStages tetap:
+// tahap aktif biasa → satu opsi (tahap berikutnya); "Negotiation" (aktif
+// terakhir) → dua opsi terminal (Closed Won, Closed Lost).
 func stageControlFixture(stage string) DealDetailView {
+	active := pipelineStages[:len(pipelineStages)-2]
+	var next []string
+	for i, s := range active {
+		if s != stage {
+			continue
+		}
+		if i == len(active)-1 {
+			next = []string{"Closed Won", "Closed Lost"}
+		} else {
+			next = []string{active[i+1]}
+		}
+	}
 	return DealDetailView{
-		Base:   "/w/acme",
-		ID:     42,
-		Stage:  stage,
-		Stages: pipelineStages,
+		Base:       "/w/acme",
+		ID:         42,
+		Stage:      stage,
+		Stages:     pipelineStages,
+		NextStages: next,
 	}
 }
 
@@ -120,9 +137,11 @@ func TestDealStageControl_NativePost(t *testing.T) {
 // kontrol tahap merender <select name="subscription_status"> yang data-show HANYA
 // pada Closed Won (deal menang membuat langganan otomatis). Opsi pertama = default
 // terpilih. Ini juga regresi panik "index out of range": g.Iff (bukan g.If) menjaga
-// WonSubStatuses[0] tak diakses saat slice kosong.
+// WonSubStatuses[0] tak diakses saat slice kosong. Fixture current = "Negotiation"
+// (BL-159: tahap aktif terakhir) — opsi pertama otomatis "Closed Won" (bukan lagi
+// current stage itu sendiri, karena select kini hanya berisi tahap SAH berikutnya).
 func TestDealStageControl_WonSubscriptionStatus(t *testing.T) {
-	fx := stageControlFixture("Closed Won")
+	fx := stageControlFixture("Negotiation")
 	fx.WonSubStatuses = []string{"Active", "Trial"}
 	out := renderLeads(t, dealStageControl(fx, "/w/acme/deals/42"))
 
@@ -143,7 +162,7 @@ func TestDealStageControl_WonSubscriptionStatus(t *testing.T) {
 // TestDealStageControl_NoWonSubStatuses_NoPanic: WonSubStatuses kosong → field
 // status langganan TIDAK dirender dan TIDAK panik (g.Iff menunda akses [0]).
 func TestDealStageControl_NoWonSubStatuses_NoPanic(t *testing.T) {
-	out := renderLeads(t, dealStageControl(stageControlFixture("Closed Won"), "/w/acme/deals/42"))
+	out := renderLeads(t, dealStageControl(stageControlFixture("Negotiation"), "/w/acme/deals/42"))
 	if strings.Contains(out, `name="subscription_status"`) {
 		t.Errorf("tanpa WonSubStatuses, field subscription_status tak boleh dirender:\n%s", out)
 	}
