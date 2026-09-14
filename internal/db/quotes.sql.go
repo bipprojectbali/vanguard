@@ -502,6 +502,666 @@ func (q *Queries) ListQuotesForDeal(ctx context.Context, arg ListQuotesForDealPa
 	return items, nil
 }
 
+const listQuotesSortByCode = `-- name: ListQuotesSortByCode :many
+SELECT q.id, q.tenant_id, q.entity_code, q.deal_id, q.account_id, q.quote_name, q.quote_status, q.expiration_date, q.payment_terms, q.notes_terms, q.prepared_by, q.grand_total, q.tax_amount, q.deleted_at, q.created_by, q.created_at, q.updated_by, q.updated_at, q.tax_mode, q.tax_rate, q.subscription_term, q.contract_term_months, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (q.entity_code IS NULL OR (q.entity_code, q.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean AND q.entity_code IS NULL AND q.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (q.entity_code IS NOT NULL OR q.id < $5::bigint))
+          OR (NOT $3::boolean AND q.entity_code IS NOT NULL
+              AND (q.entity_code, q.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND d.deal_owner = $8)
+  )
+  AND (
+      $9::text = ''
+      OR q.quote_name ILIKE '%' || $9 || '%'
+      OR q.entity_code ILIKE '%' || $9 || '%'
+      OR d.deal_name ILIKE '%' || $9 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN q.entity_code END ASC,
+  CASE WHEN $2::text = 'desc' THEN q.entity_code END DESC,
+  CASE WHEN $2::text = 'asc'  THEN q.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN q.id END DESC
+LIMIT $10
+`
+
+type ListQuotesSortByCodeParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+type ListQuotesSortByCodeRow struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	EntityCode         *string            `json:"entity_code"`
+	DealID             *int64             `json:"deal_id"`
+	AccountID          int64              `json:"account_id"`
+	QuoteName          *string            `json:"quote_name"`
+	QuoteStatus        string             `json:"quote_status"`
+	ExpirationDate     pgtype.Date        `json:"expiration_date"`
+	PaymentTerms       *string            `json:"payment_terms"`
+	NotesTerms         *string            `json:"notes_terms"`
+	PreparedBy         *int64             `json:"prepared_by"`
+	GrandTotal         pgtype.Numeric     `json:"grand_total"`
+	TaxAmount          pgtype.Numeric     `json:"tax_amount"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	TaxMode            string             `json:"tax_mode"`
+	TaxRate            pgtype.Numeric     `json:"tax_rate"`
+	SubscriptionTerm   *string            `json:"subscription_term"`
+	ContractTermMonths *int32             `json:"contract_term_months"`
+	DealName           string             `json:"deal_name"`
+}
+
+// BL-157f (klon persis pola ListDealsSortByCode/ListLeadsSortByCode): SAMA
+// PERSIS filter ListQuotes (ownership F3 warisan deal + search) — hanya
+// ORDER BY/keyset yang beda, diurut entity_code (bukan created_at).
+// entity_code NULLABLE. NULLS default Postgres (ASC=LAST, DESC=FIRST).
+func (q *Queries) ListQuotesSortByCode(ctx context.Context, arg ListQuotesSortByCodeParams) ([]ListQuotesSortByCodeRow, error) {
+	rows, err := q.db.Query(ctx, listQuotesSortByCode,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListQuotesSortByCodeRow{}
+	for rows.Next() {
+		var i ListQuotesSortByCodeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealID,
+			&i.AccountID,
+			&i.QuoteName,
+			&i.QuoteStatus,
+			&i.ExpirationDate,
+			&i.PaymentTerms,
+			&i.NotesTerms,
+			&i.PreparedBy,
+			&i.GrandTotal,
+			&i.TaxAmount,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.TaxMode,
+			&i.TaxRate,
+			&i.SubscriptionTerm,
+			&i.ContractTermMonths,
+			&i.DealName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQuotesSortByDeal = `-- name: ListQuotesSortByDeal :many
+SELECT q.id, q.tenant_id, q.entity_code, q.deal_id, q.account_id, q.quote_name, q.quote_status, q.expiration_date, q.payment_terms, q.notes_terms, q.prepared_by, q.grand_total, q.tax_amount, q.deleted_at, q.created_by, q.created_at, q.updated_by, q.updated_at, q.tax_mode, q.tax_rate, q.subscription_term, q.contract_term_months, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (d.deal_name, q.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (d.deal_name, q.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND d.deal_owner = $7)
+  )
+  AND (
+      $8::text = ''
+      OR q.quote_name ILIKE '%' || $8 || '%'
+      OR q.entity_code ILIKE '%' || $8 || '%'
+      OR d.deal_name ILIKE '%' || $8 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN d.deal_name END ASC,
+  CASE WHEN $2::text = 'desc' THEN d.deal_name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN q.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN q.id END DESC
+LIMIT $9
+`
+
+type ListQuotesSortByDealParams struct {
+	HasCursor bool   `json:"has_cursor"`
+	Dir       string `json:"dir"`
+	CursorVal string `json:"cursor_val"`
+	CursorID  int64  `json:"cursor_id"`
+	ScopeAll  bool   `json:"scope_all"`
+	IsOwn     bool   `json:"is_own"`
+	Uid       *int64 `json:"uid"`
+	Search    string `json:"search"`
+	PageSize  int32  `json:"page_size"`
+}
+
+type ListQuotesSortByDealRow struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	EntityCode         *string            `json:"entity_code"`
+	DealID             *int64             `json:"deal_id"`
+	AccountID          int64              `json:"account_id"`
+	QuoteName          *string            `json:"quote_name"`
+	QuoteStatus        string             `json:"quote_status"`
+	ExpirationDate     pgtype.Date        `json:"expiration_date"`
+	PaymentTerms       *string            `json:"payment_terms"`
+	NotesTerms         *string            `json:"notes_terms"`
+	PreparedBy         *int64             `json:"prepared_by"`
+	GrandTotal         pgtype.Numeric     `json:"grand_total"`
+	TaxAmount          pgtype.Numeric     `json:"tax_amount"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	TaxMode            string             `json:"tax_mode"`
+	TaxRate            pgtype.Numeric     `json:"tax_rate"`
+	SubscriptionTerm   *string            `json:"subscription_term"`
+	ContractTermMonths *int32             `json:"contract_term_months"`
+	DealName           string             `json:"deal_name"`
+}
+
+// BL-157f: sort by d.deal_name ("Deal"). deal_name NOT NULL (deals selalu
+// punya nama) → kloning pola non-null ListDealsSortByName, kunci di kolom
+// tabel JOIN (bukan tabel utama quotes).
+func (q *Queries) ListQuotesSortByDeal(ctx context.Context, arg ListQuotesSortByDealParams) ([]ListQuotesSortByDealRow, error) {
+	rows, err := q.db.Query(ctx, listQuotesSortByDeal,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListQuotesSortByDealRow{}
+	for rows.Next() {
+		var i ListQuotesSortByDealRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealID,
+			&i.AccountID,
+			&i.QuoteName,
+			&i.QuoteStatus,
+			&i.ExpirationDate,
+			&i.PaymentTerms,
+			&i.NotesTerms,
+			&i.PreparedBy,
+			&i.GrandTotal,
+			&i.TaxAmount,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.TaxMode,
+			&i.TaxRate,
+			&i.SubscriptionTerm,
+			&i.ContractTermMonths,
+			&i.DealName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQuotesSortByName = `-- name: ListQuotesSortByName :many
+SELECT q.id, q.tenant_id, q.entity_code, q.deal_id, q.account_id, q.quote_name, q.quote_status, q.expiration_date, q.payment_terms, q.notes_terms, q.prepared_by, q.grand_total, q.tax_amount, q.deleted_at, q.created_by, q.created_at, q.updated_by, q.updated_at, q.tax_mode, q.tax_rate, q.subscription_term, q.contract_term_months, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (q.quote_name IS NULL OR (q.quote_name, q.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean AND q.quote_name IS NULL AND q.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (q.quote_name IS NOT NULL OR q.id < $5::bigint))
+          OR (NOT $3::boolean AND q.quote_name IS NOT NULL
+              AND (q.quote_name, q.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND d.deal_owner = $8)
+  )
+  AND (
+      $9::text = ''
+      OR q.quote_name ILIKE '%' || $9 || '%'
+      OR q.entity_code ILIKE '%' || $9 || '%'
+      OR d.deal_name ILIKE '%' || $9 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN q.quote_name END ASC,
+  CASE WHEN $2::text = 'desc' THEN q.quote_name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN q.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN q.id END DESC
+LIMIT $10
+`
+
+type ListQuotesSortByNameParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+type ListQuotesSortByNameRow struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	EntityCode         *string            `json:"entity_code"`
+	DealID             *int64             `json:"deal_id"`
+	AccountID          int64              `json:"account_id"`
+	QuoteName          *string            `json:"quote_name"`
+	QuoteStatus        string             `json:"quote_status"`
+	ExpirationDate     pgtype.Date        `json:"expiration_date"`
+	PaymentTerms       *string            `json:"payment_terms"`
+	NotesTerms         *string            `json:"notes_terms"`
+	PreparedBy         *int64             `json:"prepared_by"`
+	GrandTotal         pgtype.Numeric     `json:"grand_total"`
+	TaxAmount          pgtype.Numeric     `json:"tax_amount"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	TaxMode            string             `json:"tax_mode"`
+	TaxRate            pgtype.Numeric     `json:"tax_rate"`
+	SubscriptionTerm   *string            `json:"subscription_term"`
+	ContractTermMonths *int32             `json:"contract_term_months"`
+	DealName           string             `json:"deal_name"`
+}
+
+// BL-157f: sort by quote_name ("Nama"). NULLABLE (skema: TEXT tanpa NOT NULL,
+// beda dari deal_name) → kloning pola null-aware ListQuotesSortByCode, bukan
+// pola non-null ListDealsSortByName.
+func (q *Queries) ListQuotesSortByName(ctx context.Context, arg ListQuotesSortByNameParams) ([]ListQuotesSortByNameRow, error) {
+	rows, err := q.db.Query(ctx, listQuotesSortByName,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListQuotesSortByNameRow{}
+	for rows.Next() {
+		var i ListQuotesSortByNameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealID,
+			&i.AccountID,
+			&i.QuoteName,
+			&i.QuoteStatus,
+			&i.ExpirationDate,
+			&i.PaymentTerms,
+			&i.NotesTerms,
+			&i.PreparedBy,
+			&i.GrandTotal,
+			&i.TaxAmount,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.TaxMode,
+			&i.TaxRate,
+			&i.SubscriptionTerm,
+			&i.ContractTermMonths,
+			&i.DealName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQuotesSortByStatus = `-- name: ListQuotesSortByStatus :many
+SELECT q.id, q.tenant_id, q.entity_code, q.deal_id, q.account_id, q.quote_name, q.quote_status, q.expiration_date, q.payment_terms, q.notes_terms, q.prepared_by, q.grand_total, q.tax_amount, q.deleted_at, q.created_by, q.created_at, q.updated_by, q.updated_at, q.tax_mode, q.tax_rate, q.subscription_term, q.contract_term_months, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (q.quote_status, q.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (q.quote_status, q.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND d.deal_owner = $7)
+  )
+  AND (
+      $8::text = ''
+      OR q.quote_name ILIKE '%' || $8 || '%'
+      OR q.entity_code ILIKE '%' || $8 || '%'
+      OR d.deal_name ILIKE '%' || $8 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN q.quote_status END ASC,
+  CASE WHEN $2::text = 'desc' THEN q.quote_status END DESC,
+  CASE WHEN $2::text = 'asc'  THEN q.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN q.id END DESC
+LIMIT $9
+`
+
+type ListQuotesSortByStatusParams struct {
+	HasCursor bool   `json:"has_cursor"`
+	Dir       string `json:"dir"`
+	CursorVal string `json:"cursor_val"`
+	CursorID  int64  `json:"cursor_id"`
+	ScopeAll  bool   `json:"scope_all"`
+	IsOwn     bool   `json:"is_own"`
+	Uid       *int64 `json:"uid"`
+	Search    string `json:"search"`
+	PageSize  int32  `json:"page_size"`
+}
+
+type ListQuotesSortByStatusRow struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	EntityCode         *string            `json:"entity_code"`
+	DealID             *int64             `json:"deal_id"`
+	AccountID          int64              `json:"account_id"`
+	QuoteName          *string            `json:"quote_name"`
+	QuoteStatus        string             `json:"quote_status"`
+	ExpirationDate     pgtype.Date        `json:"expiration_date"`
+	PaymentTerms       *string            `json:"payment_terms"`
+	NotesTerms         *string            `json:"notes_terms"`
+	PreparedBy         *int64             `json:"prepared_by"`
+	GrandTotal         pgtype.Numeric     `json:"grand_total"`
+	TaxAmount          pgtype.Numeric     `json:"tax_amount"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	TaxMode            string             `json:"tax_mode"`
+	TaxRate            pgtype.Numeric     `json:"tax_rate"`
+	SubscriptionTerm   *string            `json:"subscription_term"`
+	ContractTermMonths *int32             `json:"contract_term_months"`
+	DealName           string             `json:"deal_name"`
+}
+
+// BL-157f: sort by quote_status ("Status" — RAW enum Draft/Sent/Under
+// Review/Accepted/Rejected/Expired, alfabetis; mirror keputusan Status Leads/
+// Tahap Deals, tak menduplikasi urutan lifecycle ke SQL). NOT NULL → kloning
+// pola non-null ListQuotesSortByDeal.
+func (q *Queries) ListQuotesSortByStatus(ctx context.Context, arg ListQuotesSortByStatusParams) ([]ListQuotesSortByStatusRow, error) {
+	rows, err := q.db.Query(ctx, listQuotesSortByStatus,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListQuotesSortByStatusRow{}
+	for rows.Next() {
+		var i ListQuotesSortByStatusRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealID,
+			&i.AccountID,
+			&i.QuoteName,
+			&i.QuoteStatus,
+			&i.ExpirationDate,
+			&i.PaymentTerms,
+			&i.NotesTerms,
+			&i.PreparedBy,
+			&i.GrandTotal,
+			&i.TaxAmount,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.TaxMode,
+			&i.TaxRate,
+			&i.SubscriptionTerm,
+			&i.ContractTermMonths,
+			&i.DealName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQuotesSortByTotal = `-- name: ListQuotesSortByTotal :many
+SELECT q.id, q.tenant_id, q.entity_code, q.deal_id, q.account_id, q.quote_name, q.quote_status, q.expiration_date, q.payment_terms, q.notes_terms, q.prepared_by, q.grand_total, q.tax_amount, q.deleted_at, q.created_by, q.created_at, q.updated_by, q.updated_at, q.tax_mode, q.tax_rate, q.subscription_term, q.contract_term_months, d.deal_name
+FROM quotes q
+JOIN deals d ON d.id = q.deal_id
+WHERE q.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (q.grand_total IS NULL OR (q.grand_total, q.id) > ($4::numeric, $5::bigint)))
+          OR ($3::boolean AND q.grand_total IS NULL AND q.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (q.grand_total IS NOT NULL OR q.id < $5::bigint))
+          OR (NOT $3::boolean AND q.grand_total IS NOT NULL
+              AND (q.grand_total, q.id) < ($4::numeric, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND d.deal_owner = $8)
+  )
+  AND (
+      $9::text = ''
+      OR q.quote_name ILIKE '%' || $9 || '%'
+      OR q.entity_code ILIKE '%' || $9 || '%'
+      OR d.deal_name ILIKE '%' || $9 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN q.grand_total END ASC,
+  CASE WHEN $2::text = 'desc' THEN q.grand_total END DESC,
+  CASE WHEN $2::text = 'asc'  THEN q.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN q.id END DESC
+LIMIT $10
+`
+
+type ListQuotesSortByTotalParams struct {
+	HasCursor    bool           `json:"has_cursor"`
+	Dir          string         `json:"dir"`
+	CursorIsNull bool           `json:"cursor_is_null"`
+	CursorVal    pgtype.Numeric `json:"cursor_val"`
+	CursorID     int64          `json:"cursor_id"`
+	ScopeAll     bool           `json:"scope_all"`
+	IsOwn        bool           `json:"is_own"`
+	Uid          *int64         `json:"uid"`
+	Search       string         `json:"search"`
+	PageSize     int32          `json:"page_size"`
+}
+
+type ListQuotesSortByTotalRow struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	EntityCode         *string            `json:"entity_code"`
+	DealID             *int64             `json:"deal_id"`
+	AccountID          int64              `json:"account_id"`
+	QuoteName          *string            `json:"quote_name"`
+	QuoteStatus        string             `json:"quote_status"`
+	ExpirationDate     pgtype.Date        `json:"expiration_date"`
+	PaymentTerms       *string            `json:"payment_terms"`
+	NotesTerms         *string            `json:"notes_terms"`
+	PreparedBy         *int64             `json:"prepared_by"`
+	GrandTotal         pgtype.Numeric     `json:"grand_total"`
+	TaxAmount          pgtype.Numeric     `json:"tax_amount"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	TaxMode            string             `json:"tax_mode"`
+	TaxRate            pgtype.Numeric     `json:"tax_rate"`
+	SubscriptionTerm   *string            `json:"subscription_term"`
+	ContractTermMonths *int32             `json:"contract_term_months"`
+	DealName           string             `json:"deal_name"`
+}
+
+// BL-157f: sort by grand_total ("Grand Total"). NULLABLE numeric (snapshot
+// dihitung ulang dari quote_items — quote baru tanpa item = NULL). Kunci sort
+// memakai nilai ASLI (kolom ini tak pernah disamarkan F4 di manapun, beda dari
+// amount Deals) → kloning pola null-aware ListDealsSortByAmount.
+func (q *Queries) ListQuotesSortByTotal(ctx context.Context, arg ListQuotesSortByTotalParams) ([]ListQuotesSortByTotalRow, error) {
+	rows, err := q.db.Query(ctx, listQuotesSortByTotal,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListQuotesSortByTotalRow{}
+	for rows.Next() {
+		var i ListQuotesSortByTotalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealID,
+			&i.AccountID,
+			&i.QuoteName,
+			&i.QuoteStatus,
+			&i.ExpirationDate,
+			&i.PaymentTerms,
+			&i.NotesTerms,
+			&i.PreparedBy,
+			&i.GrandTotal,
+			&i.TaxAmount,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.TaxMode,
+			&i.TaxRate,
+			&i.SubscriptionTerm,
+			&i.ContractTermMonths,
+			&i.DealName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const quoteItemsSubtotal = `-- name: QuoteItemsSubtotal :one
 SELECT COALESCE(SUM(subtotal), 0)::numeric AS items_subtotal
 FROM quote_items
