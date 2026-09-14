@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -51,7 +50,7 @@ func contactsReq(method, target string, form url.Values, id, contactID string) *
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("slug", "test")
+	rctx.URLParams.Add(slugURLParam, "test") // slug dibaca handler (wsPath/wsRedirect)
 	if id != "" {
 		rctx.URLParams.Add("id", id)
 	}
@@ -126,16 +125,27 @@ func contactFormValues(firstName string) url.Values {
 	return url.Values{"first_name": {firstName}}
 }
 
-var contactsAfterRe = regexp.MustCompile(`contacts\?after=([0-9]+_[0-9]+)`)
-
 // extractContactsAfter menarik cursor ?after= dari href "Berikutnya" di body.
+// after= tak selalu persis mengekor "contacts?" — panelListHref (BL-157d)
+// mendahuluinya dengan view=/q=/sort=/dir=, jadi dicari via marker "after="
+// polos (kembaran sortAfter di subscriptions_sort_test.go).
 func extractContactsAfter(t *testing.T, body string) string {
 	t.Helper()
-	m := contactsAfterRe.FindStringSubmatch(body)
-	if m == nil {
+	i := strings.Index(body, "contacts?")
+	if i < 0 {
 		t.Fatalf("tautan contacts ?after= tak ditemukan di body")
 	}
-	return m[1]
+	rest := body[i:]
+	j := strings.Index(rest, "after=")
+	if j < 0 {
+		t.Fatalf("tautan contacts ?after= tak ditemukan di body")
+	}
+	rest = rest[j+len("after="):]
+	end := strings.IndexAny(rest, `&"'`)
+	if end < 0 {
+		t.Fatalf("tautan contacts ?after= tak ditemukan di body")
+	}
+	return rest[:end]
 }
 
 // --- F2: gerbang read/write ------------------------------------------------

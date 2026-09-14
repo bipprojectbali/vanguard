@@ -92,6 +92,148 @@ WHERE c.deleted_at IS NULL
 ORDER BY c.created_at DESC, c.id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListContactsSortByCode :many
+-- BL-157d (fondasi sort per kolom Kontak global): SAMA PERSIS filter
+-- ListContacts (JOIN desa induk + ownership F3 tiga-flag + search) — hanya
+-- ORDER BY/keyset yang beda, diurut entity_code ("Kode"). entity_code
+-- NULLABLE (BL-132, kolom lama tak di-backfill) → pola null-aware SAMA dgn
+-- ListLeadsSortByCode: cursor_is_null menandai kelompok NULL/non-NULL, NULLS
+-- default Postgres (ASC=LAST, DESC=FIRST).
+SELECT c.*, a.village_name FROM contacts c
+JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
+WHERE c.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (c.entity_code IS NULL OR (c.entity_code, c.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND c.entity_code IS NULL AND c.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (c.entity_code IS NOT NULL OR c.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND c.entity_code IS NOT NULL
+              AND (c.entity_code, c.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND a.account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR (c.first_name || ' ' || coalesce(c.last_name, '')) ILIKE '%' || sqlc.arg(search) || '%'
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN c.entity_code END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN c.entity_code END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN c.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN c.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListContactsSortByName :many
+-- BL-157d: sort by nama kontak (first_name + last_name, PERSIS ekspresi yang
+-- dipakai search ListContacts). Ekspresi ini SELALU NOT NULL (first_name
+-- NOT NULL, coalesce menutup last_name) → kloning pola sederhana
+-- ListLeadsSortByName (tanpa kerumitan NULL), kolom expr bukan kolom polos.
+SELECT c.*, a.village_name FROM contacts c
+JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
+WHERE c.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND ((c.first_name || ' ' || coalesce(c.last_name, '')), c.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND ((c.first_name || ' ' || coalesce(c.last_name, '')), c.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND a.account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR (c.first_name || ' ' || coalesce(c.last_name, '')) ILIKE '%' || sqlc.arg(search) || '%'
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN (c.first_name || ' ' || coalesce(c.last_name, '')) END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN (c.first_name || ' ' || coalesce(c.last_name, '')) END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN c.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN c.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListContactsSortByRole :many
+-- BL-157d: sort by contact_role ("Peran" — RAW enum alfabetis, mirror
+-- keputusan "Status" Leads/"Tipe" Accounts: tak menduplikasi urutan tampil ke
+-- SQL). NULLABLE → pola null-aware SAMA dgn ListContactsSortByCode, kolom beda.
+SELECT c.*, a.village_name FROM contacts c
+JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
+WHERE c.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (c.contact_role IS NULL OR (c.contact_role, c.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND c.contact_role IS NULL AND c.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (c.contact_role IS NOT NULL OR c.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND c.contact_role IS NOT NULL
+              AND (c.contact_role, c.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND a.account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR (c.first_name || ' ' || coalesce(c.last_name, '')) ILIKE '%' || sqlc.arg(search) || '%'
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN c.contact_role END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN c.contact_role END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN c.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN c.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListContactsSortByVillage :many
+-- BL-157d: sort by Desa (a.village_name, desa induk). village_name TIDAK
+-- NULLABLE (00005_crm_foundation.sql) → kloning pola sederhana
+-- ListContactsSortByName (tanpa kerumitan NULL), kolom beda + dari JOIN.
+SELECT c.*, a.village_name FROM contacts c
+JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
+WHERE c.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (a.village_name, c.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (a.village_name, c.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_sales)::boolean AND a.account_owner = sqlc.arg(uid))
+      OR (sqlc.arg(is_csm)::boolean AND (a.assigned_csm = sqlc.arg(uid) OR a.backup_csm = sqlc.arg(uid)))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR (c.first_name || ' ' || coalesce(c.last_name, '')) ILIKE '%' || sqlc.arg(search) || '%'
+      OR a.village_name ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN a.village_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN a.village_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN c.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN c.id END DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: UpdateContact :one
 -- Sunting kontak. is_primary_contact di-set pemanggil setelah mengosongkan primary
 -- lama (ClearAccountPrimaryContact) bila dinaikkan jadi utama. account_id TIDAK

@@ -832,6 +832,26 @@ type Querier interface {
 	// memanggil ini). Kontak utama diangkat ke atas agar penanda primary langsung
 	// terlihat tanpa menggeser urutan kronologis baris lainnya.
 	ListContactsByAccount(ctx context.Context, arg ListContactsByAccountParams) ([]Contact, error)
+	// BL-157d (fondasi sort per kolom Kontak global): SAMA PERSIS filter
+	// ListContacts (JOIN desa induk + ownership F3 tiga-flag + search) — hanya
+	// ORDER BY/keyset yang beda, diurut entity_code ("Kode"). entity_code
+	// NULLABLE (BL-132, kolom lama tak di-backfill) → pola null-aware SAMA dgn
+	// ListLeadsSortByCode: cursor_is_null menandai kelompok NULL/non-NULL, NULLS
+	// default Postgres (ASC=LAST, DESC=FIRST).
+	ListContactsSortByCode(ctx context.Context, arg ListContactsSortByCodeParams) ([]ListContactsSortByCodeRow, error)
+	// BL-157d: sort by nama kontak (first_name + last_name, PERSIS ekspresi yang
+	// dipakai search ListContacts). Ekspresi ini SELALU NOT NULL (first_name
+	// NOT NULL, coalesce menutup last_name) → kloning pola sederhana
+	// ListLeadsSortByName (tanpa kerumitan NULL), kolom expr bukan kolom polos.
+	ListContactsSortByName(ctx context.Context, arg ListContactsSortByNameParams) ([]ListContactsSortByNameRow, error)
+	// BL-157d: sort by contact_role ("Peran" — RAW enum alfabetis, mirror
+	// keputusan "Status" Leads/"Tipe" Accounts: tak menduplikasi urutan tampil ke
+	// SQL). NULLABLE → pola null-aware SAMA dgn ListContactsSortByCode, kolom beda.
+	ListContactsSortByRole(ctx context.Context, arg ListContactsSortByRoleParams) ([]ListContactsSortByRoleRow, error)
+	// BL-157d: sort by Desa (a.village_name, desa induk). village_name TIDAK
+	// NULLABLE (00005_crm_foundation.sql) → kloning pola sederhana
+	// ListContactsSortByName (tanpa kerumitan NULL), kolom beda + dari JOIN.
+	ListContactsSortByVillage(ctx context.Context, arg ListContactsSortByVillageParams) ([]ListContactsSortByVillageRow, error)
 	// Daftar deal (tampilan Tabel), keyset (created_at DESC, id DESC) + filter
 	// ownership F3 + filter stage opsional. Dua flag ownership (sumber SATU dengan
 	// DealsListFilter): scope_all → semua; is_own → deal_owner = uid; keduanya false
