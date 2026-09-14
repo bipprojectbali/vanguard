@@ -1009,7 +1009,8 @@ WHERE s.deleted_at IS NULL
                             AND s.end_date <= ($7::date + 30)
                             AND s.renewal_status IS DISTINCT FROM 'Renewed'
         WHEN 'grace'   THEN s.status = 'Active' AND s.end_date < $7::date
-        WHEN 'renewed' THEN s.renewal_status = 'Renewed'
+        WHEN 'renewed' THEN s.status IN ('Active','PendingApproval')
+                            AND s.renewal_status = 'Renewed'
         ELSE TRUE
       END
   )
@@ -1085,7 +1086,12 @@ type ListRenewalsRow struct {
 //     — jatuh tempo (BL-152: yang sudah Renewed eksklusif ke tab 'renewed'
 //     agar tak dobel-hitung & badge Diperpanjang menang).
 //   - 'grace'   : Active, end_date < today — lewat tempo tapi masih berjalan.
-//   - 'renewed' : renewal_status = 'Renewed' — sudah diperpanjang.
+//   - 'renewed' : status ∈ {Active,PendingApproval} & renewal_status = 'Renewed'
+//     (BL-155: syarat status MASIH hidup — langganan yang sudah di-
+//     CHURN/Expired/Cancelled TETAP menyandang renewal_status='Renewed'
+//     lama, ChurnSubscription sengaja tak membersihkannya; tanpa syarat
+//     ini akun yang sudah hilang ikut terhitung "sudah diperpanjang" —
+//     tetap muncul di jendela 'Semua' berbadge lifecycle-nya sendiri).
 //   - lainnya   : semua langganan ber-end_date (jendela 'Semua').
 //
 // Urut created_at DESC + keyset SAMA dgn ListSubscriptions (reuse pageCursor/
@@ -2777,7 +2783,8 @@ SELECT
         WHERE s.status = 'Active' AND s.end_date < $1::date
     )::bigint AS grace,
     COUNT(*) FILTER (
-        WHERE s.renewal_status = 'Renewed'
+        WHERE s.status IN ('Active','PendingApproval')
+          AND s.renewal_status = 'Renewed'
     )::bigint AS renewed_count,
     COUNT(*) FILTER (
         WHERE s.end_date < $1::date
@@ -2822,7 +2829,9 @@ type RenewalKPIsRow struct {
 //   - due_30      : Active/PendingApproval, end_date in [today, today+30], BELUM Renewed
 //     (= window 'due'; BL-152: Renewed eksklusif ke renewed_count, tak dobel).
 //   - grace       : Active, end_date < today (= window 'grace').
-//   - renewed     : renewal_status = 'Renewed' (= window 'renewed', sudah diperpanjang).
+//   - renewed     : status ∈ {Active,PendingApproval} & renewal_status = 'Renewed'
+//     (= window 'renewed'; BL-155: syarat status hidup, lihat komentar
+//     ListRenewals — akun churned/expired TAK ikut "Diperpanjang").
 //   - Renewal Rate 12 bln (BL-94, definisi SAMA dgn ReportRenewalSummary): renewed_past
 //     / due_past atas kohort jatuh tempo (end_date < today) DALAM 12 bln terakhir;
 //     "diperpanjang" = ada baris renewal anak (previous_subscription_id menunjuk balik).

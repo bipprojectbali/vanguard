@@ -59,10 +59,15 @@ func renewalTypeLabel(renewalType *string, autoRenew bool) string {
 // (BL-127: dulu label murni selisih tanggal tanpa cek status → langganan non-aktif
 // ber-end_date dekat memakai badge "Akan Jatuh Tempo"/"Masa Tenggang" di tab "Semua"
 // padahal tereksklusi dari tab-tab itu). Urutan prioritas:
-//   - renewal_status = 'Renewed'                                 → "Diperpanjang"
+//   - status ∈ {Active,PendingApproval} & renewal_status = 'Renewed'  → "Diperpanjang"
 //     (BL-152: DIDAHULUKAN — sudah diperpanjang menang atas due-window "apa pun
 //     sisa hari"; query 'due' pun mengecualikan Renewed → tab & badge selaras,
-//     tak ada dobel-hitung due vs renewed).
+//     tak ada dobel-hitung due vs renewed. BL-155: syarat status MASIH hidup
+//     ditambahkan — ChurnSubscription TAK membersihkan renewal_status, jadi
+//     langganan yang pernah diperpanjang lalu di-churn tetap menyandang
+//     renewal_status='Renewed' selamanya; tanpa syarat ini badge "Diperpanjang"
+//     menutupi status Churned/Expired sebenarnya. Status terminal HARUS menang
+//     — label lifecycle di bawah yang berlaku, konsisten dgn window 'renewed').
 //   - 'due'   : status ∈ {Active,PendingApproval} & 0 ≤ sisa ≤ 30 → "Akan Jatuh Tempo".
 //   - 'grace' : status = Active & sisa < 0                        → "Masa Tenggang".
 //   - status non-Active lain (Trial/Churned/Expired/…)           → label lifecycle.
@@ -70,10 +75,10 @@ func renewalTypeLabel(renewalType *string, autoRenew bool) string {
 //
 // Mengembalikan label + class badge daisyUI (token semantik, bukan absolut).
 func renewalDerivedStatus(now time.Time, status string, end pgtype.Date, renewalStatus *string) (label, badgeClass string) {
-	if renewalStatus != nil && *renewalStatus == "Renewed" {
+	dueEligible := status == "Active" || status == "PendingApproval"
+	if dueEligible && renewalStatus != nil && *renewalStatus == "Renewed" {
 		return "Diperpanjang", "badge badge-success"
 	}
-	dueEligible := status == "Active" || status == "PendingApproval"
 	if end.Valid {
 		a := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 		b := time.Date(end.Time.Year(), end.Time.Month(), end.Time.Day(), 0, 0, 0, 0, time.UTC)

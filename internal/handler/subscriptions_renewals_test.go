@@ -230,6 +230,51 @@ func TestSubscriptionRenewals_ScopedByOwnership(t *testing.T) {
 	}
 }
 
+// TestSubscriptionRenewals_ChurnedRenewedExcludedFromRenewedWindow (BL-155):
+// langganan yang PERNAH diperpanjang (renewal_status='Renewed') lalu di-churn
+// (status='Churned') TAK boleh muncul di tab/KPI 'renewed' — ChurnSubscription
+// sengaja tak membersihkan renewal_status, jadi syarat status masih hidup
+// (Active/PendingApproval) yang menyaringnya di query. Baris itu TETAP muncul
+// di tab 'all' berbadge lifecycle "Churned" (bukan hilang/ketutup).
+func TestSubscriptionRenewals_ChurnedRenewedExcludedFromRenewedWindow(t *testing.T) {
+	env, uid := setupAccounts(t)
+	now := time.Now()
+	alive := env.seedAccount(t, "Desa RenewedAlive", &uid, nil, nil)
+	churned := env.seedAccount(t, "Desa PascaChurn", &uid, nil, nil)
+	pAlive := env.seedPlan(t, "Plan RenewedAlive", "PL-RA", "1000000")
+	pChurned := env.seedPlan(t, "Plan PascaChurn", "PL-PC", "1000000")
+	env.seedRenewalSub(t, alive.ID, pAlive, &uid, "Active", now.AddDate(0, 0, 90), "Renewed", "Manual")
+	env.seedRenewalSub(t, churned.ID, pChurned, &uid, "Churned", now.AddDate(0, 0, 5), "Renewed", "Manual")
+
+	// Tab 'renewed': hanya yang MASIH hidup (Active/PendingApproval).
+	ren := env.runAccount(uid, "owner", "manager", renewalsReq("renewed"), env.h.SubscriptionRenewals)
+	if ren.Code != http.StatusOK {
+		t.Fatalf("renewed status = %d, want 200", ren.Code)
+	}
+	renBody := ren.Body.String()
+	if !strings.Contains(renBody, "Desa RenewedAlive") {
+		t.Error("tab renewed harus memuat langganan Renewed yang masih Active")
+	}
+	if strings.Contains(renBody, "Desa PascaChurn") {
+		t.Error("BL-155: tab renewed TAK boleh memuat langganan Renewed yang sudah Churned")
+	}
+
+	// Tab 'all': baris churned tetap muncul, berbadge lifecycle "Churned".
+	all := env.runAccount(uid, "owner", "manager", renewalsReq("all"), env.h.SubscriptionRenewals)
+	allBody := all.Body.String()
+	if !strings.Contains(allBody, "Desa PascaChurn") {
+		t.Error("tab all harus tetap memuat langganan yang sudah churned")
+	}
+	if !strings.Contains(allBody, "Churned") {
+		t.Error("BL-155: baris churned di tab all harus berbadge lifecycle Churned")
+	}
+
+	// KPI 'renewed': hanya menghitung yang masih hidup (1), bukan 2.
+	if !strings.Contains(renBody, `text-success">1</p>`) {
+		t.Error("BL-155: KPI Diperpanjang harus 1 (churned tak ikut terhitung)")
+	}
+}
+
 // TestSubscriptionRenewals_ExcludesNoEndDate: langganan tanpa end_date bukan
 // renewal → tak muncul bahkan di jendela 'all'.
 func TestSubscriptionRenewals_ExcludesNoEndDate(t *testing.T) {

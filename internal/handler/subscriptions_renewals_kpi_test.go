@@ -78,6 +78,15 @@ func TestRenewalDerivedStatus(t *testing.T) {
 		{"Expired end dekat → label lifecycle, bukan Jatuh Tempo", "Expired", dateAfter(5), nil, "Expired", "badge badge-error"},
 		{"Expired lewat tempo → label lifecycle, bukan Masa Tenggang", "Expired", dateAfter(-10), nil, "Expired", "badge badge-error"},
 		{"Churned end dekat → label lifecycle", "Churned", dateAfter(3), nil, "Churned", "badge badge-error"},
+		// BL-155: langganan yang PERNAH diperpanjang (renewal_status='Renewed')
+		// lalu di-churn TAK boleh tetap berbadge "Diperpanjang" — status terminal
+		// (lifecycle) menang atas renewal_status lama yang tak dibersihkan
+		// ChurnSubscription. Berlaku untuk semua status non-Active/PendingApproval,
+		// apa pun jarak end_date.
+		{"Churned + Renewed end dekat → Churned (bukan Diperpanjang)", "Churned", dateAfter(3), &renewed, "Churned", "badge badge-error"},
+		{"Churned + Renewed lewat tempo → Churned (bukan Diperpanjang)", "Churned", dateAfter(-10), &renewed, "Churned", "badge badge-error"},
+		{"Expired + Renewed → Expired (bukan Diperpanjang)", "Expired", dateAfter(5), &renewed, "Expired", "badge badge-error"},
+		{"Cancelled + Renewed → Cancelled (bukan Diperpanjang)", "Cancelled", dateAfter(5), &renewed, "Cancelled", "badge badge-error"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
