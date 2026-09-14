@@ -45,7 +45,7 @@ func (h *Handler) SubscriptionRenewalsExport(w http.ResponseWriter, r *http.Requ
 	headers := []string{"Desa", "Paket", "Tgl Perpanjang", "Sisa Hari", "Jenis", "Status", "Nilai Sebelumnya", "MRR Kini"}
 	rows := make([][]string, 0, len(all))
 	for _, s := range all {
-		v := renewalRowView(s, now, br)
+		v := renewalRowView(renewalListRowFromDefault(s), now, br)
 		rows = append(rows, []string{
 			v.Village, v.Plan, v.RenewalDate, v.DaysLeft, v.Type, v.Status, v.PrevValue, v.CurrentMRR,
 		})
