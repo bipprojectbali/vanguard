@@ -352,6 +352,753 @@ func (q *Queries) ListTickets(ctx context.Context, arg ListTicketsParams) ([]Lis
 	return items, nil
 }
 
+const listTicketsSortByAgent = `-- name: ListTicketsSortByAgent :many
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (u.name IS NULL OR (u.name, t.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean AND u.name IS NULL AND t.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (u.name IS NOT NULL OR t.id < $5::bigint))
+          OR (NOT $3::boolean AND u.name IS NOT NULL
+              AND (u.name, t.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND (
+          a.account_owner = $8
+          OR a.assigned_csm = $8
+          OR a.backup_csm = $8
+      ))
+  )
+  AND ($9 = '' OR t.status = $9)
+  AND (NOT $10::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT $11::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND ($12::text = ''
+       OR t.subject ILIKE '%' || $12 || '%'
+       OR a.village_name ILIKE '%' || $12 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN u.name END ASC,
+  CASE WHEN $2::text = 'desc' THEN u.name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN t.id END DESC
+LIMIT $13
+`
+
+type ListTicketsSortByAgentParams struct {
+	HasCursor         bool        `json:"has_cursor"`
+	Dir               string      `json:"dir"`
+	CursorIsNull      bool        `json:"cursor_is_null"`
+	CursorVal         string      `json:"cursor_val"`
+	CursorID          int64       `json:"cursor_id"`
+	ScopeAll          bool        `json:"scope_all"`
+	IsOwn             bool        `json:"is_own"`
+	Uid               *int64      `json:"uid"`
+	FilterStatus      interface{} `json:"filter_status"`
+	FilterSlaBreached bool        `json:"filter_sla_breached"`
+	FilterSlaAtRisk   bool        `json:"filter_sla_at_risk"`
+	Search            string      `json:"search"`
+	PageSize          int32       `json:"page_size"`
+}
+
+type ListTicketsSortByAgentRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	Priority       string             `json:"priority"`
+	Status         string             `json:"status"`
+	AssignedTo     *int64             `json:"assigned_to"`
+	SlaDeadlineAt  pgtype.Timestamptz `json:"sla_deadline_at"`
+	ResolvedAt     pgtype.Timestamptz `json:"resolved_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	AccountName    string             `json:"account_name"`
+	AssignedToName *string            `json:"assigned_to_name"`
+}
+
+// BL-157h: sort by u.name ("Agen" — assigned_to_name). NULLABLE (assigned_to
+// NULL = belum ditugaskan). Kunci sort PLAIN u.name (bukan COALESCE dgn
+// email seperti ListSubscriptionsSortByCsm) — ticketRowView menampilkan
+// AssignedToName apa adanya tanpa fallback email, jadi urutan harus sama
+// dgn yang ditampilkan. Pola null-aware sama ListSubscriptionsSortByPlan.
+func (q *Queries) ListTicketsSortByAgent(ctx context.Context, arg ListTicketsSortByAgentParams) ([]ListTicketsSortByAgentRow, error) {
+	rows, err := q.db.Query(ctx, listTicketsSortByAgent,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.FilterStatus,
+		arg.FilterSlaBreached,
+		arg.FilterSlaAtRisk,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTicketsSortByAgentRow{}
+	for rows.Next() {
+		var i ListTicketsSortByAgentRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.Priority,
+			&i.Status,
+			&i.AssignedTo,
+			&i.SlaDeadlineAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AccountName,
+			&i.AssignedToName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTicketsSortByPriority = `-- name: ListTicketsSortByPriority :many
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (t.priority, t.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (t.priority, t.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND (
+          a.account_owner = $7
+          OR a.assigned_csm = $7
+          OR a.backup_csm = $7
+      ))
+  )
+  AND ($8 = '' OR t.status = $8)
+  AND (NOT $9::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT $10::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND ($11::text = ''
+       OR t.subject ILIKE '%' || $11 || '%'
+       OR a.village_name ILIKE '%' || $11 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN t.priority END ASC,
+  CASE WHEN $2::text = 'desc' THEN t.priority END DESC,
+  CASE WHEN $2::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN t.id END DESC
+LIMIT $12
+`
+
+type ListTicketsSortByPriorityParams struct {
+	HasCursor         bool        `json:"has_cursor"`
+	Dir               string      `json:"dir"`
+	CursorVal         string      `json:"cursor_val"`
+	CursorID          int64       `json:"cursor_id"`
+	ScopeAll          bool        `json:"scope_all"`
+	IsOwn             bool        `json:"is_own"`
+	Uid               *int64      `json:"uid"`
+	FilterStatus      interface{} `json:"filter_status"`
+	FilterSlaBreached bool        `json:"filter_sla_breached"`
+	FilterSlaAtRisk   bool        `json:"filter_sla_at_risk"`
+	Search            string      `json:"search"`
+	PageSize          int32       `json:"page_size"`
+}
+
+type ListTicketsSortByPriorityRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	Priority       string             `json:"priority"`
+	Status         string             `json:"status"`
+	AssignedTo     *int64             `json:"assigned_to"`
+	SlaDeadlineAt  pgtype.Timestamptz `json:"sla_deadline_at"`
+	ResolvedAt     pgtype.Timestamptz `json:"resolved_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	AccountName    string             `json:"account_name"`
+	AssignedToName *string            `json:"assigned_to_name"`
+}
+
+// BL-157h: sort by t.priority ("Prioritas" — RAW rendah/sedang/tinggi,
+// alfabetis; bukan bobot urgensi). NOT NULL, pola sama SortByVillage.
+func (q *Queries) ListTicketsSortByPriority(ctx context.Context, arg ListTicketsSortByPriorityParams) ([]ListTicketsSortByPriorityRow, error) {
+	rows, err := q.db.Query(ctx, listTicketsSortByPriority,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.FilterStatus,
+		arg.FilterSlaBreached,
+		arg.FilterSlaAtRisk,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTicketsSortByPriorityRow{}
+	for rows.Next() {
+		var i ListTicketsSortByPriorityRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.Priority,
+			&i.Status,
+			&i.AssignedTo,
+			&i.SlaDeadlineAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AccountName,
+			&i.AssignedToName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTicketsSortBySla = `-- name: ListTicketsSortBySla :many
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (t.sla_deadline_at IS NULL OR (t.sla_deadline_at, t.id) > ($4::timestamptz, $5::bigint)))
+          OR ($3::boolean AND t.sla_deadline_at IS NULL AND t.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (t.sla_deadline_at IS NOT NULL OR t.id < $5::bigint))
+          OR (NOT $3::boolean AND t.sla_deadline_at IS NOT NULL
+              AND (t.sla_deadline_at, t.id) < ($4::timestamptz, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND (
+          a.account_owner = $8
+          OR a.assigned_csm = $8
+          OR a.backup_csm = $8
+      ))
+  )
+  AND ($9 = '' OR t.status = $9)
+  AND (NOT $10::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT $11::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND ($12::text = ''
+       OR t.subject ILIKE '%' || $12 || '%'
+       OR a.village_name ILIKE '%' || $12 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN t.sla_deadline_at END ASC,
+  CASE WHEN $2::text = 'desc' THEN t.sla_deadline_at END DESC,
+  CASE WHEN $2::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN t.id END DESC
+LIMIT $13
+`
+
+type ListTicketsSortBySlaParams struct {
+	HasCursor         bool               `json:"has_cursor"`
+	Dir               string             `json:"dir"`
+	CursorIsNull      bool               `json:"cursor_is_null"`
+	CursorVal         pgtype.Timestamptz `json:"cursor_val"`
+	CursorID          int64              `json:"cursor_id"`
+	ScopeAll          bool               `json:"scope_all"`
+	IsOwn             bool               `json:"is_own"`
+	Uid               *int64             `json:"uid"`
+	FilterStatus      interface{}        `json:"filter_status"`
+	FilterSlaBreached bool               `json:"filter_sla_breached"`
+	FilterSlaAtRisk   bool               `json:"filter_sla_at_risk"`
+	Search            string             `json:"search"`
+	PageSize          int32              `json:"page_size"`
+}
+
+type ListTicketsSortBySlaRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	Priority       string             `json:"priority"`
+	Status         string             `json:"status"`
+	AssignedTo     *int64             `json:"assigned_to"`
+	SlaDeadlineAt  pgtype.Timestamptz `json:"sla_deadline_at"`
+	ResolvedAt     pgtype.Timestamptz `json:"resolved_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	AccountName    string             `json:"account_name"`
+	AssignedToName *string            `json:"assigned_to_name"`
+}
+
+// BL-157h: sort by t.sla_deadline_at ("SLA" — RAW deadline, bukan label
+// turunan Terpenuhi/Terlanggar/"Nj Mm lagi" — sama prinsip dgn SortByStatus
+// Subscriptions: sortir sumbu mentah, jangan duplikasi derivasi ke SQL).
+// NULLABLE (tiket belum bersla_policy). Pola null-aware sama SortByMrr,
+// tipe timestamptz bukan numeric.
+func (q *Queries) ListTicketsSortBySla(ctx context.Context, arg ListTicketsSortBySlaParams) ([]ListTicketsSortBySlaRow, error) {
+	rows, err := q.db.Query(ctx, listTicketsSortBySla,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.FilterStatus,
+		arg.FilterSlaBreached,
+		arg.FilterSlaAtRisk,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTicketsSortBySlaRow{}
+	for rows.Next() {
+		var i ListTicketsSortBySlaRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.Priority,
+			&i.Status,
+			&i.AssignedTo,
+			&i.SlaDeadlineAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AccountName,
+			&i.AssignedToName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTicketsSortByStatus = `-- name: ListTicketsSortByStatus :many
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (t.status, t.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (t.status, t.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND (
+          a.account_owner = $7
+          OR a.assigned_csm = $7
+          OR a.backup_csm = $7
+      ))
+  )
+  AND ($8 = '' OR t.status = $8)
+  AND (NOT $9::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT $10::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND ($11::text = ''
+       OR t.subject ILIKE '%' || $11 || '%'
+       OR a.village_name ILIKE '%' || $11 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN t.status END ASC,
+  CASE WHEN $2::text = 'desc' THEN t.status END DESC,
+  CASE WHEN $2::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN t.id END DESC
+LIMIT $12
+`
+
+type ListTicketsSortByStatusParams struct {
+	HasCursor         bool        `json:"has_cursor"`
+	Dir               string      `json:"dir"`
+	CursorVal         string      `json:"cursor_val"`
+	CursorID          int64       `json:"cursor_id"`
+	ScopeAll          bool        `json:"scope_all"`
+	IsOwn             bool        `json:"is_own"`
+	Uid               *int64      `json:"uid"`
+	FilterStatus      interface{} `json:"filter_status"`
+	FilterSlaBreached bool        `json:"filter_sla_breached"`
+	FilterSlaAtRisk   bool        `json:"filter_sla_at_risk"`
+	Search            string      `json:"search"`
+	PageSize          int32       `json:"page_size"`
+}
+
+type ListTicketsSortByStatusRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	Priority       string             `json:"priority"`
+	Status         string             `json:"status"`
+	AssignedTo     *int64             `json:"assigned_to"`
+	SlaDeadlineAt  pgtype.Timestamptz `json:"sla_deadline_at"`
+	ResolvedAt     pgtype.Timestamptz `json:"resolved_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	AccountName    string             `json:"account_name"`
+	AssignedToName *string            `json:"assigned_to_name"`
+}
+
+// BL-157h: sort by t.status ("Status" — RAW baru/diproses/menunggu/selesai).
+// Berbeda dari Renewals (BL-157g, Status dikecualikan krn derivasi penuh):
+// di sini status ADALAH kolom mentah, bukan turunan, jadi aman disortir
+// langsung. NOT NULL, pola sama SortByVillage.
+func (q *Queries) ListTicketsSortByStatus(ctx context.Context, arg ListTicketsSortByStatusParams) ([]ListTicketsSortByStatusRow, error) {
+	rows, err := q.db.Query(ctx, listTicketsSortByStatus,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.FilterStatus,
+		arg.FilterSlaBreached,
+		arg.FilterSlaAtRisk,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTicketsSortByStatusRow{}
+	for rows.Next() {
+		var i ListTicketsSortByStatusRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.Priority,
+			&i.Status,
+			&i.AssignedTo,
+			&i.SlaDeadlineAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AccountName,
+			&i.AssignedToName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTicketsSortBySubject = `-- name: ListTicketsSortBySubject :many
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (t.subject, t.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (t.subject, t.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND (
+          a.account_owner = $7
+          OR a.assigned_csm = $7
+          OR a.backup_csm = $7
+      ))
+  )
+  AND ($8 = '' OR t.status = $8)
+  AND (NOT $9::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT $10::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND ($11::text = ''
+       OR t.subject ILIKE '%' || $11 || '%'
+       OR a.village_name ILIKE '%' || $11 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN t.subject END ASC,
+  CASE WHEN $2::text = 'desc' THEN t.subject END DESC,
+  CASE WHEN $2::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN t.id END DESC
+LIMIT $12
+`
+
+type ListTicketsSortBySubjectParams struct {
+	HasCursor         bool        `json:"has_cursor"`
+	Dir               string      `json:"dir"`
+	CursorVal         string      `json:"cursor_val"`
+	CursorID          int64       `json:"cursor_id"`
+	ScopeAll          bool        `json:"scope_all"`
+	IsOwn             bool        `json:"is_own"`
+	Uid               *int64      `json:"uid"`
+	FilterStatus      interface{} `json:"filter_status"`
+	FilterSlaBreached bool        `json:"filter_sla_breached"`
+	FilterSlaAtRisk   bool        `json:"filter_sla_at_risk"`
+	Search            string      `json:"search"`
+	PageSize          int32       `json:"page_size"`
+}
+
+type ListTicketsSortBySubjectRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	Priority       string             `json:"priority"`
+	Status         string             `json:"status"`
+	AssignedTo     *int64             `json:"assigned_to"`
+	SlaDeadlineAt  pgtype.Timestamptz `json:"sla_deadline_at"`
+	ResolvedAt     pgtype.Timestamptz `json:"resolved_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	AccountName    string             `json:"account_name"`
+	AssignedToName *string            `json:"assigned_to_name"`
+}
+
+// BL-157h: sort by t.subject ("Subjek"). NOT NULL, pola sama SortByVillage.
+func (q *Queries) ListTicketsSortBySubject(ctx context.Context, arg ListTicketsSortBySubjectParams) ([]ListTicketsSortBySubjectRow, error) {
+	rows, err := q.db.Query(ctx, listTicketsSortBySubject,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.FilterStatus,
+		arg.FilterSlaBreached,
+		arg.FilterSlaAtRisk,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTicketsSortBySubjectRow{}
+	for rows.Next() {
+		var i ListTicketsSortBySubjectRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.Priority,
+			&i.Status,
+			&i.AssignedTo,
+			&i.SlaDeadlineAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AccountName,
+			&i.AssignedToName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTicketsSortByVillage = `-- name: ListTicketsSortByVillage :many
+SELECT
+    t.id, t.account_id, t.subject, t.priority, t.status,
+    t.assigned_to, t.sla_deadline_at, t.resolved_at,
+    t.created_at, t.updated_at,
+    a.village_name AS account_name,
+    u.name AS assigned_to_name
+FROM tickets t
+JOIN accounts a ON t.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON t.assigned_to = u.id
+WHERE (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (a.village_name, t.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (a.village_name, t.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND (
+          a.account_owner = $7
+          OR a.assigned_csm = $7
+          OR a.backup_csm = $7
+      ))
+  )
+  AND ($8 = '' OR t.status = $8)
+  AND (NOT $9::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at < now() AND t.status <> 'selesai'))
+  AND (NOT $10::boolean
+       OR (t.sla_deadline_at IS NOT NULL AND t.sla_deadline_at > now()
+           AND t.sla_deadline_at < now() + INTERVAL '4 hours' AND t.status <> 'selesai'))
+  AND ($11::text = ''
+       OR t.subject ILIKE '%' || $11 || '%'
+       OR a.village_name ILIKE '%' || $11 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN a.village_name END ASC,
+  CASE WHEN $2::text = 'desc' THEN a.village_name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN t.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN t.id END DESC
+LIMIT $12
+`
+
+type ListTicketsSortByVillageParams struct {
+	HasCursor         bool        `json:"has_cursor"`
+	Dir               string      `json:"dir"`
+	CursorVal         string      `json:"cursor_val"`
+	CursorID          int64       `json:"cursor_id"`
+	ScopeAll          bool        `json:"scope_all"`
+	IsOwn             bool        `json:"is_own"`
+	Uid               *int64      `json:"uid"`
+	FilterStatus      interface{} `json:"filter_status"`
+	FilterSlaBreached bool        `json:"filter_sla_breached"`
+	FilterSlaAtRisk   bool        `json:"filter_sla_at_risk"`
+	Search            string      `json:"search"`
+	PageSize          int32       `json:"page_size"`
+}
+
+type ListTicketsSortByVillageRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	Priority       string             `json:"priority"`
+	Status         string             `json:"status"`
+	AssignedTo     *int64             `json:"assigned_to"`
+	SlaDeadlineAt  pgtype.Timestamptz `json:"sla_deadline_at"`
+	ResolvedAt     pgtype.Timestamptz `json:"resolved_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	AccountName    string             `json:"account_name"`
+	AssignedToName *string            `json:"assigned_to_name"`
+}
+
+// BL-157h: sort by a.village_name ("Desa"). SAMA PERSIS filter ListTickets
+// (ownership F3 + tab filter + search) — hanya ORDER BY/keyset beda. NOT NULL
+// (INNER JOIN accounts + deleted_at IS NULL), pola non-nullable text sama
+// ListSubscriptionsSortByVillage (BL-157a).
+func (q *Queries) ListTicketsSortByVillage(ctx context.Context, arg ListTicketsSortByVillageParams) ([]ListTicketsSortByVillageRow, error) {
+	rows, err := q.db.Query(ctx, listTicketsSortByVillage,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.FilterStatus,
+		arg.FilterSlaBreached,
+		arg.FilterSlaAtRisk,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTicketsSortByVillageRow{}
+	for rows.Next() {
+		var i ListTicketsSortByVillageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.Priority,
+			&i.Status,
+			&i.AssignedTo,
+			&i.SlaDeadlineAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AccountName,
+			&i.AssignedToName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateTicketStatus = `-- name: UpdateTicketStatus :one
 UPDATE tickets
 SET

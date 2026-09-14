@@ -268,3 +268,1110 @@ func (q *Queries) ListHealthScores(ctx context.Context, arg ListHealthScoresPara
 	}
 	return items, nil
 }
+
+const listHealthScoresSortByAdoption = `-- name: ListHealthScoresSortByAdoption :many
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (cs.adoption_score IS NULL OR (cs.adoption_score, a.id) > ($4::smallint, $5::bigint)))
+          OR ($3::boolean AND cs.adoption_score IS NULL AND a.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (cs.adoption_score IS NOT NULL OR a.id < $5::bigint))
+          OR (NOT $3::boolean AND cs.adoption_score IS NOT NULL
+              AND (cs.adoption_score, a.id) < ($4::smallint, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean
+          AND (a.assigned_csm = $8 OR a.backup_csm = $8))
+      OR ($9::boolean
+          AND a.account_owner = $8)
+  )
+  AND (
+      CASE WHEN $10::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND ($11::text = ''
+       OR COALESCE(cs.health_status, '') = $11::text)
+  AND ($12::text = ''
+       OR a.village_name ILIKE '%' || $12 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN cs.adoption_score END ASC,
+  CASE WHEN $2::text = 'desc' THEN cs.adoption_score END DESC,
+  CASE WHEN $2::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN a.id END DESC
+LIMIT $13
+`
+
+type ListHealthScoresSortByAdoptionParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    int16  `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsCsm        bool   `json:"is_csm"`
+	Uid          *int64 `json:"uid"`
+	IsSales      bool   `json:"is_sales"`
+	Segment      string `json:"segment"`
+	FilterStatus string `json:"filter_status"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+type ListHealthScoresSortByAdoptionRow struct {
+	ID                 int64              `json:"id"`
+	AccountName        string             `json:"account_name"`
+	OverallHealthScore *int16             `json:"overall_health_score"`
+	HealthStatus       *string            `json:"health_status"`
+	AdoptionScore      *int16             `json:"adoption_score"`
+	EngagementScore    *int16             `json:"engagement_score"`
+	SupportScore       *int16             `json:"support_score"`
+	SentimentScore     *int16             `json:"sentiment_score"`
+	ScoreTrend         *string            `json:"score_trend"`
+	LifecycleStage     *string            `json:"lifecycle_stage"`
+	StageEntryDate     pgtype.Date        `json:"stage_entry_date"`
+	RenewalEndDate     pgtype.Date        `json:"renewal_end_date"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+// BL-157i: sort by cs.adoption_score ("Adopsi"). NULLABLE smallint — pola
+// null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+func (q *Queries) ListHealthScoresSortByAdoption(ctx context.Context, arg ListHealthScoresSortByAdoptionParams) ([]ListHealthScoresSortByAdoptionRow, error) {
+	rows, err := q.db.Query(ctx, listHealthScoresSortByAdoption,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsCsm,
+		arg.Uid,
+		arg.IsSales,
+		arg.Segment,
+		arg.FilterStatus,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHealthScoresSortByAdoptionRow{}
+	for rows.Next() {
+		var i ListHealthScoresSortByAdoptionRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountName,
+			&i.OverallHealthScore,
+			&i.HealthStatus,
+			&i.AdoptionScore,
+			&i.EngagementScore,
+			&i.SupportScore,
+			&i.SentimentScore,
+			&i.ScoreTrend,
+			&i.LifecycleStage,
+			&i.StageEntryDate,
+			&i.RenewalEndDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHealthScoresSortByEngagement = `-- name: ListHealthScoresSortByEngagement :many
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (cs.engagement_score IS NULL OR (cs.engagement_score, a.id) > ($4::smallint, $5::bigint)))
+          OR ($3::boolean AND cs.engagement_score IS NULL AND a.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (cs.engagement_score IS NOT NULL OR a.id < $5::bigint))
+          OR (NOT $3::boolean AND cs.engagement_score IS NOT NULL
+              AND (cs.engagement_score, a.id) < ($4::smallint, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean
+          AND (a.assigned_csm = $8 OR a.backup_csm = $8))
+      OR ($9::boolean
+          AND a.account_owner = $8)
+  )
+  AND (
+      CASE WHEN $10::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND ($11::text = ''
+       OR COALESCE(cs.health_status, '') = $11::text)
+  AND ($12::text = ''
+       OR a.village_name ILIKE '%' || $12 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN cs.engagement_score END ASC,
+  CASE WHEN $2::text = 'desc' THEN cs.engagement_score END DESC,
+  CASE WHEN $2::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN a.id END DESC
+LIMIT $13
+`
+
+type ListHealthScoresSortByEngagementParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    int16  `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsCsm        bool   `json:"is_csm"`
+	Uid          *int64 `json:"uid"`
+	IsSales      bool   `json:"is_sales"`
+	Segment      string `json:"segment"`
+	FilterStatus string `json:"filter_status"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+type ListHealthScoresSortByEngagementRow struct {
+	ID                 int64              `json:"id"`
+	AccountName        string             `json:"account_name"`
+	OverallHealthScore *int16             `json:"overall_health_score"`
+	HealthStatus       *string            `json:"health_status"`
+	AdoptionScore      *int16             `json:"adoption_score"`
+	EngagementScore    *int16             `json:"engagement_score"`
+	SupportScore       *int16             `json:"support_score"`
+	SentimentScore     *int16             `json:"sentiment_score"`
+	ScoreTrend         *string            `json:"score_trend"`
+	LifecycleStage     *string            `json:"lifecycle_stage"`
+	StageEntryDate     pgtype.Date        `json:"stage_entry_date"`
+	RenewalEndDate     pgtype.Date        `json:"renewal_end_date"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+// BL-157i: sort by cs.engagement_score ("Engagement"). NULLABLE smallint —
+// pola null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+func (q *Queries) ListHealthScoresSortByEngagement(ctx context.Context, arg ListHealthScoresSortByEngagementParams) ([]ListHealthScoresSortByEngagementRow, error) {
+	rows, err := q.db.Query(ctx, listHealthScoresSortByEngagement,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsCsm,
+		arg.Uid,
+		arg.IsSales,
+		arg.Segment,
+		arg.FilterStatus,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHealthScoresSortByEngagementRow{}
+	for rows.Next() {
+		var i ListHealthScoresSortByEngagementRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountName,
+			&i.OverallHealthScore,
+			&i.HealthStatus,
+			&i.AdoptionScore,
+			&i.EngagementScore,
+			&i.SupportScore,
+			&i.SentimentScore,
+			&i.ScoreTrend,
+			&i.LifecycleStage,
+			&i.StageEntryDate,
+			&i.RenewalEndDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHealthScoresSortByRenewal = `-- name: ListHealthScoresSortByRenewal :many
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (sub.end_date IS NULL OR (sub.end_date, a.id) > ($4::date, $5::bigint)))
+          OR ($3::boolean AND sub.end_date IS NULL AND a.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (sub.end_date IS NOT NULL OR a.id < $5::bigint))
+          OR (NOT $3::boolean AND sub.end_date IS NOT NULL
+              AND (sub.end_date, a.id) < ($4::date, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean
+          AND (a.assigned_csm = $8 OR a.backup_csm = $8))
+      OR ($9::boolean
+          AND a.account_owner = $8)
+  )
+  AND (
+      CASE WHEN $10::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND ($11::text = ''
+       OR COALESCE(cs.health_status, '') = $11::text)
+  AND ($12::text = ''
+       OR a.village_name ILIKE '%' || $12 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN sub.end_date END ASC,
+  CASE WHEN $2::text = 'desc' THEN sub.end_date END DESC,
+  CASE WHEN $2::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN a.id END DESC
+LIMIT $13
+`
+
+type ListHealthScoresSortByRenewalParams struct {
+	HasCursor    bool        `json:"has_cursor"`
+	Dir          string      `json:"dir"`
+	CursorIsNull bool        `json:"cursor_is_null"`
+	CursorVal    pgtype.Date `json:"cursor_val"`
+	CursorID     int64       `json:"cursor_id"`
+	ScopeAll     bool        `json:"scope_all"`
+	IsCsm        bool        `json:"is_csm"`
+	Uid          *int64      `json:"uid"`
+	IsSales      bool        `json:"is_sales"`
+	Segment      string      `json:"segment"`
+	FilterStatus string      `json:"filter_status"`
+	Search       string      `json:"search"`
+	PageSize     int32       `json:"page_size"`
+}
+
+type ListHealthScoresSortByRenewalRow struct {
+	ID                 int64              `json:"id"`
+	AccountName        string             `json:"account_name"`
+	OverallHealthScore *int16             `json:"overall_health_score"`
+	HealthStatus       *string            `json:"health_status"`
+	AdoptionScore      *int16             `json:"adoption_score"`
+	EngagementScore    *int16             `json:"engagement_score"`
+	SupportScore       *int16             `json:"support_score"`
+	SentimentScore     *int16             `json:"sentiment_score"`
+	ScoreTrend         *string            `json:"score_trend"`
+	LifecycleStage     *string            `json:"lifecycle_stage"`
+	StageEntryDate     pgtype.Date        `json:"stage_entry_date"`
+	RenewalEndDate     pgtype.Date        `json:"renewal_end_date"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+// BL-157i: sort by sub.end_date ("Jatuh Tempo"). NULLABLE — LATERAL bisa
+// kosong (akun tanpa langganan Active ber-end_date) — pola null-aware mirror
+// ListDealsSortByCloseDate, tipe kolom date.
+func (q *Queries) ListHealthScoresSortByRenewal(ctx context.Context, arg ListHealthScoresSortByRenewalParams) ([]ListHealthScoresSortByRenewalRow, error) {
+	rows, err := q.db.Query(ctx, listHealthScoresSortByRenewal,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsCsm,
+		arg.Uid,
+		arg.IsSales,
+		arg.Segment,
+		arg.FilterStatus,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHealthScoresSortByRenewalRow{}
+	for rows.Next() {
+		var i ListHealthScoresSortByRenewalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountName,
+			&i.OverallHealthScore,
+			&i.HealthStatus,
+			&i.AdoptionScore,
+			&i.EngagementScore,
+			&i.SupportScore,
+			&i.SentimentScore,
+			&i.ScoreTrend,
+			&i.LifecycleStage,
+			&i.StageEntryDate,
+			&i.RenewalEndDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHealthScoresSortByScore = `-- name: ListHealthScoresSortByScore :many
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (cs.overall_health_score IS NULL OR (cs.overall_health_score, a.id) > ($4::smallint, $5::bigint)))
+          OR ($3::boolean AND cs.overall_health_score IS NULL AND a.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (cs.overall_health_score IS NOT NULL OR a.id < $5::bigint))
+          OR (NOT $3::boolean AND cs.overall_health_score IS NOT NULL
+              AND (cs.overall_health_score, a.id) < ($4::smallint, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean
+          AND (a.assigned_csm = $8 OR a.backup_csm = $8))
+      OR ($9::boolean
+          AND a.account_owner = $8)
+  )
+  AND (
+      CASE WHEN $10::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND ($11::text = ''
+       OR COALESCE(cs.health_status, '') = $11::text)
+  AND ($12::text = ''
+       OR a.village_name ILIKE '%' || $12 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN cs.overall_health_score END ASC,
+  CASE WHEN $2::text = 'desc' THEN cs.overall_health_score END DESC,
+  CASE WHEN $2::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN a.id END DESC
+LIMIT $13
+`
+
+type ListHealthScoresSortByScoreParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    int16  `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsCsm        bool   `json:"is_csm"`
+	Uid          *int64 `json:"uid"`
+	IsSales      bool   `json:"is_sales"`
+	Segment      string `json:"segment"`
+	FilterStatus string `json:"filter_status"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+type ListHealthScoresSortByScoreRow struct {
+	ID                 int64              `json:"id"`
+	AccountName        string             `json:"account_name"`
+	OverallHealthScore *int16             `json:"overall_health_score"`
+	HealthStatus       *string            `json:"health_status"`
+	AdoptionScore      *int16             `json:"adoption_score"`
+	EngagementScore    *int16             `json:"engagement_score"`
+	SupportScore       *int16             `json:"support_score"`
+	SentimentScore     *int16             `json:"sentiment_score"`
+	ScoreTrend         *string            `json:"score_trend"`
+	LifecycleStage     *string            `json:"lifecycle_stage"`
+	StageEntryDate     pgtype.Date        `json:"stage_entry_date"`
+	RenewalEndDate     pgtype.Date        `json:"renewal_end_date"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+// BL-157i: sort by cs.overall_health_score ("Skor"). NULLABLE smallint (akun
+// belum diskor CSM) — pola null-aware mirror ListDealsSortByProbability.
+func (q *Queries) ListHealthScoresSortByScore(ctx context.Context, arg ListHealthScoresSortByScoreParams) ([]ListHealthScoresSortByScoreRow, error) {
+	rows, err := q.db.Query(ctx, listHealthScoresSortByScore,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsCsm,
+		arg.Uid,
+		arg.IsSales,
+		arg.Segment,
+		arg.FilterStatus,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHealthScoresSortByScoreRow{}
+	for rows.Next() {
+		var i ListHealthScoresSortByScoreRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountName,
+			&i.OverallHealthScore,
+			&i.HealthStatus,
+			&i.AdoptionScore,
+			&i.EngagementScore,
+			&i.SupportScore,
+			&i.SentimentScore,
+			&i.ScoreTrend,
+			&i.LifecycleStage,
+			&i.StageEntryDate,
+			&i.RenewalEndDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHealthScoresSortBySupport = `-- name: ListHealthScoresSortBySupport :many
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (cs.support_score IS NULL OR (cs.support_score, a.id) > ($4::smallint, $5::bigint)))
+          OR ($3::boolean AND cs.support_score IS NULL AND a.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (cs.support_score IS NOT NULL OR a.id < $5::bigint))
+          OR (NOT $3::boolean AND cs.support_score IS NOT NULL
+              AND (cs.support_score, a.id) < ($4::smallint, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean
+          AND (a.assigned_csm = $8 OR a.backup_csm = $8))
+      OR ($9::boolean
+          AND a.account_owner = $8)
+  )
+  AND (
+      CASE WHEN $10::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND ($11::text = ''
+       OR COALESCE(cs.health_status, '') = $11::text)
+  AND ($12::text = ''
+       OR a.village_name ILIKE '%' || $12 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN cs.support_score END ASC,
+  CASE WHEN $2::text = 'desc' THEN cs.support_score END DESC,
+  CASE WHEN $2::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN a.id END DESC
+LIMIT $13
+`
+
+type ListHealthScoresSortBySupportParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    int16  `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsCsm        bool   `json:"is_csm"`
+	Uid          *int64 `json:"uid"`
+	IsSales      bool   `json:"is_sales"`
+	Segment      string `json:"segment"`
+	FilterStatus string `json:"filter_status"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+type ListHealthScoresSortBySupportRow struct {
+	ID                 int64              `json:"id"`
+	AccountName        string             `json:"account_name"`
+	OverallHealthScore *int16             `json:"overall_health_score"`
+	HealthStatus       *string            `json:"health_status"`
+	AdoptionScore      *int16             `json:"adoption_score"`
+	EngagementScore    *int16             `json:"engagement_score"`
+	SupportScore       *int16             `json:"support_score"`
+	SentimentScore     *int16             `json:"sentiment_score"`
+	ScoreTrend         *string            `json:"score_trend"`
+	LifecycleStage     *string            `json:"lifecycle_stage"`
+	StageEntryDate     pgtype.Date        `json:"stage_entry_date"`
+	RenewalEndDate     pgtype.Date        `json:"renewal_end_date"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+// BL-157i: sort by cs.support_score ("Support"). NULLABLE smallint — pola
+// null-aware SAMA dgn ListHealthScoresSortByScore, kolom beda.
+func (q *Queries) ListHealthScoresSortBySupport(ctx context.Context, arg ListHealthScoresSortBySupportParams) ([]ListHealthScoresSortBySupportRow, error) {
+	rows, err := q.db.Query(ctx, listHealthScoresSortBySupport,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsCsm,
+		arg.Uid,
+		arg.IsSales,
+		arg.Segment,
+		arg.FilterStatus,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHealthScoresSortBySupportRow{}
+	for rows.Next() {
+		var i ListHealthScoresSortBySupportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountName,
+			&i.OverallHealthScore,
+			&i.HealthStatus,
+			&i.AdoptionScore,
+			&i.EngagementScore,
+			&i.SupportScore,
+			&i.SentimentScore,
+			&i.ScoreTrend,
+			&i.LifecycleStage,
+			&i.StageEntryDate,
+			&i.RenewalEndDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHealthScoresSortByTrend = `-- name: ListHealthScoresSortByTrend :many
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (cs.score_trend IS NULL OR (cs.score_trend, a.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean AND cs.score_trend IS NULL AND a.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (cs.score_trend IS NOT NULL OR a.id < $5::bigint))
+          OR (NOT $3::boolean AND cs.score_trend IS NOT NULL
+              AND (cs.score_trend, a.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean
+          AND (a.assigned_csm = $8 OR a.backup_csm = $8))
+      OR ($9::boolean
+          AND a.account_owner = $8)
+  )
+  AND (
+      CASE WHEN $10::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND ($11::text = ''
+       OR COALESCE(cs.health_status, '') = $11::text)
+  AND ($12::text = ''
+       OR a.village_name ILIKE '%' || $12 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN cs.score_trend END ASC,
+  CASE WHEN $2::text = 'desc' THEN cs.score_trend END DESC,
+  CASE WHEN $2::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN a.id END DESC
+LIMIT $13
+`
+
+type ListHealthScoresSortByTrendParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsCsm        bool   `json:"is_csm"`
+	Uid          *int64 `json:"uid"`
+	IsSales      bool   `json:"is_sales"`
+	Segment      string `json:"segment"`
+	FilterStatus string `json:"filter_status"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+type ListHealthScoresSortByTrendRow struct {
+	ID                 int64              `json:"id"`
+	AccountName        string             `json:"account_name"`
+	OverallHealthScore *int16             `json:"overall_health_score"`
+	HealthStatus       *string            `json:"health_status"`
+	AdoptionScore      *int16             `json:"adoption_score"`
+	EngagementScore    *int16             `json:"engagement_score"`
+	SupportScore       *int16             `json:"support_score"`
+	SentimentScore     *int16             `json:"sentiment_score"`
+	ScoreTrend         *string            `json:"score_trend"`
+	LifecycleStage     *string            `json:"lifecycle_stage"`
+	StageEntryDate     pgtype.Date        `json:"stage_entry_date"`
+	RenewalEndDate     pgtype.Date        `json:"renewal_end_date"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+// BL-157i: sort by cs.score_trend ("Tren"). NULLABLE text — pola null-aware
+// mirror ListRenewalsSortByPlan.
+func (q *Queries) ListHealthScoresSortByTrend(ctx context.Context, arg ListHealthScoresSortByTrendParams) ([]ListHealthScoresSortByTrendRow, error) {
+	rows, err := q.db.Query(ctx, listHealthScoresSortByTrend,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsCsm,
+		arg.Uid,
+		arg.IsSales,
+		arg.Segment,
+		arg.FilterStatus,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHealthScoresSortByTrendRow{}
+	for rows.Next() {
+		var i ListHealthScoresSortByTrendRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountName,
+			&i.OverallHealthScore,
+			&i.HealthStatus,
+			&i.AdoptionScore,
+			&i.EngagementScore,
+			&i.SupportScore,
+			&i.SentimentScore,
+			&i.ScoreTrend,
+			&i.LifecycleStage,
+			&i.StageEntryDate,
+			&i.RenewalEndDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHealthScoresSortByVillage = `-- name: ListHealthScoresSortByVillage :many
+SELECT
+    a.id,
+    a.village_name           AS account_name,
+    cs.overall_health_score,
+    cs.health_status,
+    cs.adoption_score,
+    cs.engagement_score,
+    cs.support_score,
+    cs.sentiment_score,
+    cs.score_trend,
+    cs.lifecycle_stage,
+    cs.stage_entry_date,
+    sub.end_date AS renewal_end_date,
+    a.created_at
+FROM accounts a
+LEFT JOIN customer_success cs
+       ON cs.account_id = a.id AND cs.tenant_id = a.tenant_id
+LEFT JOIN LATERAL (
+    SELECT s.end_date
+    FROM subscriptions s
+    WHERE s.account_id = a.id AND s.tenant_id = a.tenant_id
+      AND s.status = 'Active' AND s.deleted_at IS NULL
+      AND s.end_date IS NOT NULL
+    ORDER BY s.end_date ASC
+    LIMIT 1
+) sub ON TRUE
+WHERE a.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (a.village_name, a.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (a.village_name, a.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean
+          AND (a.assigned_csm = $7 OR a.backup_csm = $7))
+      OR ($8::boolean
+          AND a.account_owner = $7)
+  )
+  AND (
+      CASE WHEN $9::text = 'churned' THEN
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s3
+                  WHERE s3.account_id = a.id AND s3.tenant_id = a.tenant_id
+                    AND s3.deleted_at IS NULL
+                    AND s3.status IN ('Trial','Active','Suspended'))
+      ELSE
+          EXISTS (SELECT 1 FROM subscriptions s2
+                  WHERE s2.account_id = a.id AND s2.tenant_id = a.tenant_id
+                    AND s2.deleted_at IS NULL
+                    AND s2.status IN ('Trial','Active','Suspended'))
+      END
+  )
+  AND ($10::text = ''
+       OR COALESCE(cs.health_status, '') = $10::text)
+  AND ($11::text = ''
+       OR a.village_name ILIKE '%' || $11 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN a.village_name END ASC,
+  CASE WHEN $2::text = 'desc' THEN a.village_name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN a.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN a.id END DESC
+LIMIT $12
+`
+
+type ListHealthScoresSortByVillageParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsCsm        bool   `json:"is_csm"`
+	Uid          *int64 `json:"uid"`
+	IsSales      bool   `json:"is_sales"`
+	Segment      string `json:"segment"`
+	FilterStatus string `json:"filter_status"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+type ListHealthScoresSortByVillageRow struct {
+	ID                 int64              `json:"id"`
+	AccountName        string             `json:"account_name"`
+	OverallHealthScore *int16             `json:"overall_health_score"`
+	HealthStatus       *string            `json:"health_status"`
+	AdoptionScore      *int16             `json:"adoption_score"`
+	EngagementScore    *int16             `json:"engagement_score"`
+	SupportScore       *int16             `json:"support_score"`
+	SentimentScore     *int16             `json:"sentiment_score"`
+	ScoreTrend         *string            `json:"score_trend"`
+	LifecycleStage     *string            `json:"lifecycle_stage"`
+	StageEntryDate     pgtype.Date        `json:"stage_entry_date"`
+	RenewalEndDate     pgtype.Date        `json:"renewal_end_date"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+// BL-157i: SAMA PERSIS filter ListHealthScores (ownership F3, segment BL-114,
+// filter_status, search) — hanya ORDER BY/keyset beda, diurut a.village_name
+// (Desa). Tak-nullable (village_name NOT NULL) → pola sederhana, tanpa
+// cursor_is_null (mirror ListRenewalsSortByVillage).
+func (q *Queries) ListHealthScoresSortByVillage(ctx context.Context, arg ListHealthScoresSortByVillageParams) ([]ListHealthScoresSortByVillageRow, error) {
+	rows, err := q.db.Query(ctx, listHealthScoresSortByVillage,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsCsm,
+		arg.Uid,
+		arg.IsSales,
+		arg.Segment,
+		arg.FilterStatus,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHealthScoresSortByVillageRow{}
+	for rows.Next() {
+		var i ListHealthScoresSortByVillageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountName,
+			&i.OverallHealthScore,
+			&i.HealthStatus,
+			&i.AdoptionScore,
+			&i.EngagementScore,
+			&i.SupportScore,
+			&i.SentimentScore,
+			&i.ScoreTrend,
+			&i.LifecycleStage,
+			&i.StageEntryDate,
+			&i.RenewalEndDate,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
