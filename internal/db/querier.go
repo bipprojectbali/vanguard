@@ -873,6 +873,41 @@ type Querier interface {
 	// mine_only (BL-10) menyaring papan ke deal_owner = uid saat toggle "Deal Saya"
 	// aktif — KPI (DealPipelineStats) ikut tersaring agar papan & ringkasan seiring.
 	ListDealsForPipeline(ctx context.Context, arg ListDealsForPipelineParams) ([]Deal, error)
+	// BL-157e: sort by amount ("Nilai"). NULLABLE numeric. Kunci sort memakai
+	// nilai ASLI (tak ter-mask) — F4 (maskARR) hanya menyamarkan TAMPILAN di
+	// handler, mirror presedan Estimasi Leads (ListLeadsSortByValue). Pola
+	// null-aware SAMA dgn ListDealsSortByCode, tipe kolom numeric bukan text.
+	ListDealsSortByAmount(ctx context.Context, arg ListDealsSortByAmountParams) ([]Deal, error)
+	// BL-157e: sort by expected_close_date ("Perkiraan Tutup"). NULLABLE date
+	// (belum tentu diisi saat deal dibuat). Pola null-aware SAMA dgn
+	// ListDealsSortByCode, tipe kolom date — kloning PERSIS
+	// ListSubscriptionsSortByRenewal.
+	ListDealsSortByCloseDate(ctx context.Context, arg ListDealsSortByCloseDateParams) ([]Deal, error)
+	// BL-157e (fondasi sort per kolom Deals): SAMA PERSIS filter ListDeals
+	// (ownership F3 + mine_only + stage_filter + search) — hanya ORDER BY/keyset
+	// yang beda, diurut entity_code (bukan created_at). entity_code NULLABLE
+	// (diisi GenerateEntityCode saat create, tapi kolom tetap nullable di skema)
+	// → kloning PERSIS pola ListLeadsSortByCode. NULLS default Postgres
+	// (ASC=LAST, DESC=FIRST).
+	ListDealsSortByCode(ctx context.Context, arg ListDealsSortByCodeParams) ([]Deal, error)
+	// BL-157e: sort by deal_name ("Deal"). deal_name TIDAK NULLABLE → kloning pola
+	// ListLeadsSortByName (tanpa kerumitan NULL).
+	ListDealsSortByName(ctx context.Context, arg ListDealsSortByNameParams) ([]Deal, error)
+	// BL-157e: sort by Pemilik (deal_owner). Kunci sort HARUS
+	// COALESCE(NULLIF(u.name,''), u.email) — PERSIS logika tampil ownerName/
+	// memberNameMap (nama bila terisi, else email) — agar urutan tak menyimpang
+	// dari yang ditampilkan. NULLABLE (deal_owner ON DELETE SET NULL). LEFT JOIN
+	// users: baris tanpa owner ATAU owner terhapus → owner_key NULL, masuk
+	// kelompok NULL (default Postgres). Mirror PERSIS ListLeadsSortByOwner.
+	ListDealsSortByOwner(ctx context.Context, arg ListDealsSortByOwnerParams) ([]Deal, error)
+	// BL-157e: sort by probability ("Peluang", %). NULLABLE smallint. Pola
+	// null-aware SAMA dgn ListDealsSortByAmount, tipe kolom smallint.
+	ListDealsSortByProbability(ctx context.Context, arg ListDealsSortByProbabilityParams) ([]Deal, error)
+	// BL-157e: sort by stage ("Tahap" — RAW enum Prospecting/Qualification/…,
+	// alfabetis; tak menduplikasi urutan pipeline ke SQL, mirror keputusan
+	// "Status" Leads BL-157b). stage NOT NULL → kloning PERSIS pola
+	// ListDealsSortByName.
+	ListDealsSortByStage(ctx context.Context, arg ListDealsSortByStageParams) ([]Deal, error)
 	// Level 3 (Kecamatan) di bawah satu kabupaten/kota. Sama alasannya dgn
 	// ListRegenciesByProvince — bukan jalur utama (JS-side), cadangan validasi.
 	ListDistrictsByRegency(ctx context.Context, parentRegionID *int64) ([]Region, error)

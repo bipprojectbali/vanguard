@@ -62,6 +62,268 @@ WHERE deleted_at IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListDealsSortByCode :many
+-- BL-157e (fondasi sort per kolom Deals): SAMA PERSIS filter ListDeals
+-- (ownership F3 + mine_only + stage_filter + search) — hanya ORDER BY/keyset
+-- yang beda, diurut entity_code (bukan created_at). entity_code NULLABLE
+-- (diisi GenerateEntityCode saat create, tapi kolom tetap nullable di skema)
+-- → kloning PERSIS pola ListLeadsSortByCode. NULLS default Postgres
+-- (ASC=LAST, DESC=FIRST).
+SELECT * FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (entity_code IS NULL OR (entity_code, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND entity_code IS NULL AND id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (entity_code IS NOT NULL OR id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND entity_code IS NOT NULL
+              AND (entity_code, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR deal_owner = sqlc.arg(uid))
+  AND (sqlc.arg(stage_filter)::text = '' OR stage = sqlc.arg(stage_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR deal_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN entity_code END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN entity_code END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListDealsSortByName :many
+-- BL-157e: sort by deal_name ("Deal"). deal_name TIDAK NULLABLE → kloning pola
+-- ListLeadsSortByName (tanpa kerumitan NULL).
+SELECT * FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (deal_name, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (deal_name, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR deal_owner = sqlc.arg(uid))
+  AND (sqlc.arg(stage_filter)::text = '' OR stage = sqlc.arg(stage_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR deal_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN deal_name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN deal_name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListDealsSortByStage :many
+-- BL-157e: sort by stage ("Tahap" — RAW enum Prospecting/Qualification/…,
+-- alfabetis; tak menduplikasi urutan pipeline ke SQL, mirror keputusan
+-- "Status" Leads BL-157b). stage NOT NULL → kloning PERSIS pola
+-- ListDealsSortByName.
+SELECT * FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (stage, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (stage, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR deal_owner = sqlc.arg(uid))
+  AND (sqlc.arg(stage_filter)::text = '' OR stage = sqlc.arg(stage_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR deal_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN stage END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN stage END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListDealsSortByAmount :many
+-- BL-157e: sort by amount ("Nilai"). NULLABLE numeric. Kunci sort memakai
+-- nilai ASLI (tak ter-mask) — F4 (maskARR) hanya menyamarkan TAMPILAN di
+-- handler, mirror presedan Estimasi Leads (ListLeadsSortByValue). Pola
+-- null-aware SAMA dgn ListDealsSortByCode, tipe kolom numeric bukan text.
+SELECT * FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (amount IS NULL OR (amount, id) > (sqlc.arg(cursor_val)::numeric, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND amount IS NULL AND id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (amount IS NOT NULL OR id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND amount IS NOT NULL
+              AND (amount, id) < (sqlc.arg(cursor_val)::numeric, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR deal_owner = sqlc.arg(uid))
+  AND (sqlc.arg(stage_filter)::text = '' OR stage = sqlc.arg(stage_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR deal_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN amount END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN amount END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListDealsSortByProbability :many
+-- BL-157e: sort by probability ("Peluang", %). NULLABLE smallint. Pola
+-- null-aware SAMA dgn ListDealsSortByAmount, tipe kolom smallint.
+SELECT * FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (probability IS NULL OR (probability, id) > (sqlc.arg(cursor_val)::smallint, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND probability IS NULL AND id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (probability IS NOT NULL OR id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND probability IS NOT NULL
+              AND (probability, id) < (sqlc.arg(cursor_val)::smallint, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR deal_owner = sqlc.arg(uid))
+  AND (sqlc.arg(stage_filter)::text = '' OR stage = sqlc.arg(stage_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR deal_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN probability END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN probability END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListDealsSortByCloseDate :many
+-- BL-157e: sort by expected_close_date ("Perkiraan Tutup"). NULLABLE date
+-- (belum tentu diisi saat deal dibuat). Pola null-aware SAMA dgn
+-- ListDealsSortByCode, tipe kolom date — kloning PERSIS
+-- ListSubscriptionsSortByRenewal.
+SELECT * FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (expected_close_date IS NULL OR (expected_close_date, id) > (sqlc.arg(cursor_val)::date, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND expected_close_date IS NULL AND id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (expected_close_date IS NOT NULL OR id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND expected_close_date IS NOT NULL
+              AND (expected_close_date, id) < (sqlc.arg(cursor_val)::date, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR deal_owner = sqlc.arg(uid))
+  AND (sqlc.arg(stage_filter)::text = '' OR stage = sqlc.arg(stage_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR deal_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN expected_close_date END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN expected_close_date END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListDealsSortByOwner :many
+-- BL-157e: sort by Pemilik (deal_owner). Kunci sort HARUS
+-- COALESCE(NULLIF(u.name,''), u.email) — PERSIS logika tampil ownerName/
+-- memberNameMap (nama bila terisi, else email) — agar urutan tak menyimpang
+-- dari yang ditampilkan. NULLABLE (deal_owner ON DELETE SET NULL). LEFT JOIN
+-- users: baris tanpa owner ATAU owner terhapus → owner_key NULL, masuk
+-- kelompok NULL (default Postgres). Mirror PERSIS ListLeadsSortByOwner.
+SELECT deals.* FROM deals
+LEFT JOIN users u ON u.id = deal_owner
+WHERE deals.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NULL
+                OR (COALESCE(NULLIF(u.name, ''), u.email), deals.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean
+              AND COALESCE(NULLIF(u.name, ''), u.email) IS NULL AND deals.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL OR deals.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL
+              AND (COALESCE(NULLIF(u.name, ''), u.email), deals.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND deal_owner = sqlc.arg(uid))
+  )
+  AND (NOT sqlc.arg(mine_only)::boolean OR deal_owner = sqlc.arg(uid))
+  AND (sqlc.arg(stage_filter)::text = '' OR stage = sqlc.arg(stage_filter)::text)
+  AND (
+      sqlc.arg(search)::text = ''
+      OR deal_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN COALESCE(NULLIF(u.name, ''), u.email) END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN COALESCE(NULLIF(u.name, ''), u.email) END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN deals.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN deals.id END DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: ListDealsForPipeline :many
 -- Papan Kanban: seluruh deal hidup dalam cakupan ownership, diurutkan agar kartu
 -- rapi per-stage lalu terbaru dulu. Di-bucket per-stage di handler (bukan N query

@@ -460,6 +460,803 @@ func (q *Queries) ListDealsForPipeline(ctx context.Context, arg ListDealsForPipe
 	return items, nil
 }
 
+const listDealsSortByAmount = `-- name: ListDealsSortByAmount :many
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (amount IS NULL OR (amount, id) > ($4::numeric, $5::bigint)))
+          OR ($3::boolean AND amount IS NULL AND id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (amount IS NOT NULL OR id < $5::bigint))
+          OR (NOT $3::boolean AND amount IS NOT NULL
+              AND (amount, id) < ($4::numeric, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND deal_owner = $8)
+  )
+  AND (NOT $9::boolean OR deal_owner = $8)
+  AND ($10::text = '' OR stage = $10::text)
+  AND (
+      $11::text = ''
+      OR deal_name ILIKE '%' || $11 || '%'
+      OR entity_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN amount END ASC,
+  CASE WHEN $2::text = 'desc' THEN amount END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $12
+`
+
+type ListDealsSortByAmountParams struct {
+	HasCursor    bool           `json:"has_cursor"`
+	Dir          string         `json:"dir"`
+	CursorIsNull bool           `json:"cursor_is_null"`
+	CursorVal    pgtype.Numeric `json:"cursor_val"`
+	CursorID     int64          `json:"cursor_id"`
+	ScopeAll     bool           `json:"scope_all"`
+	IsOwn        bool           `json:"is_own"`
+	Uid          *int64         `json:"uid"`
+	MineOnly     bool           `json:"mine_only"`
+	StageFilter  string         `json:"stage_filter"`
+	Search       string         `json:"search"`
+	PageSize     int32          `json:"page_size"`
+}
+
+// BL-157e: sort by amount ("Nilai"). NULLABLE numeric. Kunci sort memakai
+// nilai ASLI (tak ter-mask) — F4 (maskARR) hanya menyamarkan TAMPILAN di
+// handler, mirror presedan Estimasi Leads (ListLeadsSortByValue). Pola
+// null-aware SAMA dgn ListDealsSortByCode, tipe kolom numeric bukan text.
+func (q *Queries) ListDealsSortByAmount(ctx context.Context, arg ListDealsSortByAmountParams) ([]Deal, error) {
+	rows, err := q.db.Query(ctx, listDealsSortByAmount,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StageFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deal{}
+	for rows.Next() {
+		var i Deal
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealOwner,
+			&i.AccountID,
+			&i.PrimaryContactID,
+			&i.PlanRequestedID,
+			&i.DealName,
+			&i.DealType,
+			&i.Stage,
+			&i.Amount,
+			&i.Probability,
+			&i.ExpectedCloseDate,
+			&i.ForecastCategory,
+			&i.NextStep,
+			&i.ClosedDate,
+			&i.WinLossReason,
+			&i.Competitor,
+			&i.LossNotes,
+			&i.SubscriptionTerm,
+			&i.CreatedSubscriptionID,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.LossReasonCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDealsSortByCloseDate = `-- name: ListDealsSortByCloseDate :many
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (expected_close_date IS NULL OR (expected_close_date, id) > ($4::date, $5::bigint)))
+          OR ($3::boolean AND expected_close_date IS NULL AND id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (expected_close_date IS NOT NULL OR id < $5::bigint))
+          OR (NOT $3::boolean AND expected_close_date IS NOT NULL
+              AND (expected_close_date, id) < ($4::date, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND deal_owner = $8)
+  )
+  AND (NOT $9::boolean OR deal_owner = $8)
+  AND ($10::text = '' OR stage = $10::text)
+  AND (
+      $11::text = ''
+      OR deal_name ILIKE '%' || $11 || '%'
+      OR entity_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN expected_close_date END ASC,
+  CASE WHEN $2::text = 'desc' THEN expected_close_date END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $12
+`
+
+type ListDealsSortByCloseDateParams struct {
+	HasCursor    bool        `json:"has_cursor"`
+	Dir          string      `json:"dir"`
+	CursorIsNull bool        `json:"cursor_is_null"`
+	CursorVal    pgtype.Date `json:"cursor_val"`
+	CursorID     int64       `json:"cursor_id"`
+	ScopeAll     bool        `json:"scope_all"`
+	IsOwn        bool        `json:"is_own"`
+	Uid          *int64      `json:"uid"`
+	MineOnly     bool        `json:"mine_only"`
+	StageFilter  string      `json:"stage_filter"`
+	Search       string      `json:"search"`
+	PageSize     int32       `json:"page_size"`
+}
+
+// BL-157e: sort by expected_close_date ("Perkiraan Tutup"). NULLABLE date
+// (belum tentu diisi saat deal dibuat). Pola null-aware SAMA dgn
+// ListDealsSortByCode, tipe kolom date — kloning PERSIS
+// ListSubscriptionsSortByRenewal.
+func (q *Queries) ListDealsSortByCloseDate(ctx context.Context, arg ListDealsSortByCloseDateParams) ([]Deal, error) {
+	rows, err := q.db.Query(ctx, listDealsSortByCloseDate,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StageFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deal{}
+	for rows.Next() {
+		var i Deal
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealOwner,
+			&i.AccountID,
+			&i.PrimaryContactID,
+			&i.PlanRequestedID,
+			&i.DealName,
+			&i.DealType,
+			&i.Stage,
+			&i.Amount,
+			&i.Probability,
+			&i.ExpectedCloseDate,
+			&i.ForecastCategory,
+			&i.NextStep,
+			&i.ClosedDate,
+			&i.WinLossReason,
+			&i.Competitor,
+			&i.LossNotes,
+			&i.SubscriptionTerm,
+			&i.CreatedSubscriptionID,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.LossReasonCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDealsSortByCode = `-- name: ListDealsSortByCode :many
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (entity_code IS NULL OR (entity_code, id) > ($4::text, $5::bigint)))
+          OR ($3::boolean AND entity_code IS NULL AND id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (entity_code IS NOT NULL OR id < $5::bigint))
+          OR (NOT $3::boolean AND entity_code IS NOT NULL
+              AND (entity_code, id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND deal_owner = $8)
+  )
+  AND (NOT $9::boolean OR deal_owner = $8)
+  AND ($10::text = '' OR stage = $10::text)
+  AND (
+      $11::text = ''
+      OR deal_name ILIKE '%' || $11 || '%'
+      OR entity_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN entity_code END ASC,
+  CASE WHEN $2::text = 'desc' THEN entity_code END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $12
+`
+
+type ListDealsSortByCodeParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	MineOnly     bool   `json:"mine_only"`
+	StageFilter  string `json:"stage_filter"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157e (fondasi sort per kolom Deals): SAMA PERSIS filter ListDeals
+// (ownership F3 + mine_only + stage_filter + search) — hanya ORDER BY/keyset
+// yang beda, diurut entity_code (bukan created_at). entity_code NULLABLE
+// (diisi GenerateEntityCode saat create, tapi kolom tetap nullable di skema)
+// → kloning PERSIS pola ListLeadsSortByCode. NULLS default Postgres
+// (ASC=LAST, DESC=FIRST).
+func (q *Queries) ListDealsSortByCode(ctx context.Context, arg ListDealsSortByCodeParams) ([]Deal, error) {
+	rows, err := q.db.Query(ctx, listDealsSortByCode,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StageFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deal{}
+	for rows.Next() {
+		var i Deal
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealOwner,
+			&i.AccountID,
+			&i.PrimaryContactID,
+			&i.PlanRequestedID,
+			&i.DealName,
+			&i.DealType,
+			&i.Stage,
+			&i.Amount,
+			&i.Probability,
+			&i.ExpectedCloseDate,
+			&i.ForecastCategory,
+			&i.NextStep,
+			&i.ClosedDate,
+			&i.WinLossReason,
+			&i.Competitor,
+			&i.LossNotes,
+			&i.SubscriptionTerm,
+			&i.CreatedSubscriptionID,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.LossReasonCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDealsSortByName = `-- name: ListDealsSortByName :many
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (deal_name, id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (deal_name, id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND deal_owner = $7)
+  )
+  AND (NOT $8::boolean OR deal_owner = $7)
+  AND ($9::text = '' OR stage = $9::text)
+  AND (
+      $10::text = ''
+      OR deal_name ILIKE '%' || $10 || '%'
+      OR entity_code ILIKE '%' || $10 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN deal_name END ASC,
+  CASE WHEN $2::text = 'desc' THEN deal_name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $11
+`
+
+type ListDealsSortByNameParams struct {
+	HasCursor   bool   `json:"has_cursor"`
+	Dir         string `json:"dir"`
+	CursorVal   string `json:"cursor_val"`
+	CursorID    int64  `json:"cursor_id"`
+	ScopeAll    bool   `json:"scope_all"`
+	IsOwn       bool   `json:"is_own"`
+	Uid         *int64 `json:"uid"`
+	MineOnly    bool   `json:"mine_only"`
+	StageFilter string `json:"stage_filter"`
+	Search      string `json:"search"`
+	PageSize    int32  `json:"page_size"`
+}
+
+// BL-157e: sort by deal_name ("Deal"). deal_name TIDAK NULLABLE → kloning pola
+// ListLeadsSortByName (tanpa kerumitan NULL).
+func (q *Queries) ListDealsSortByName(ctx context.Context, arg ListDealsSortByNameParams) ([]Deal, error) {
+	rows, err := q.db.Query(ctx, listDealsSortByName,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StageFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deal{}
+	for rows.Next() {
+		var i Deal
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealOwner,
+			&i.AccountID,
+			&i.PrimaryContactID,
+			&i.PlanRequestedID,
+			&i.DealName,
+			&i.DealType,
+			&i.Stage,
+			&i.Amount,
+			&i.Probability,
+			&i.ExpectedCloseDate,
+			&i.ForecastCategory,
+			&i.NextStep,
+			&i.ClosedDate,
+			&i.WinLossReason,
+			&i.Competitor,
+			&i.LossNotes,
+			&i.SubscriptionTerm,
+			&i.CreatedSubscriptionID,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.LossReasonCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDealsSortByOwner = `-- name: ListDealsSortByOwner :many
+SELECT deals.id, deals.tenant_id, deals.entity_code, deals.deal_owner, deals.account_id, deals.primary_contact_id, deals.plan_requested_id, deals.deal_name, deals.deal_type, deals.stage, deals.amount, deals.probability, deals.expected_close_date, deals.forecast_category, deals.next_step, deals.closed_date, deals.win_loss_reason, deals.competitor, deals.loss_notes, deals.subscription_term, deals.created_subscription_id, deals.deleted_at, deals.created_by, deals.created_at, deals.updated_by, deals.updated_at, deals.loss_reason_code FROM deals
+LEFT JOIN users u ON u.id = deal_owner
+WHERE deals.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NULL
+                OR (COALESCE(NULLIF(u.name, ''), u.email), deals.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean
+              AND COALESCE(NULLIF(u.name, ''), u.email) IS NULL AND deals.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL OR deals.id < $5::bigint))
+          OR (NOT $3::boolean AND COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL
+              AND (COALESCE(NULLIF(u.name, ''), u.email), deals.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND deal_owner = $8)
+  )
+  AND (NOT $9::boolean OR deal_owner = $8)
+  AND ($10::text = '' OR stage = $10::text)
+  AND (
+      $11::text = ''
+      OR deal_name ILIKE '%' || $11 || '%'
+      OR entity_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN COALESCE(NULLIF(u.name, ''), u.email) END ASC,
+  CASE WHEN $2::text = 'desc' THEN COALESCE(NULLIF(u.name, ''), u.email) END DESC,
+  CASE WHEN $2::text = 'asc'  THEN deals.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN deals.id END DESC
+LIMIT $12
+`
+
+type ListDealsSortByOwnerParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	MineOnly     bool   `json:"mine_only"`
+	StageFilter  string `json:"stage_filter"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157e: sort by Pemilik (deal_owner). Kunci sort HARUS
+// COALESCE(NULLIF(u.name,”), u.email) — PERSIS logika tampil ownerName/
+// memberNameMap (nama bila terisi, else email) — agar urutan tak menyimpang
+// dari yang ditampilkan. NULLABLE (deal_owner ON DELETE SET NULL). LEFT JOIN
+// users: baris tanpa owner ATAU owner terhapus → owner_key NULL, masuk
+// kelompok NULL (default Postgres). Mirror PERSIS ListLeadsSortByOwner.
+func (q *Queries) ListDealsSortByOwner(ctx context.Context, arg ListDealsSortByOwnerParams) ([]Deal, error) {
+	rows, err := q.db.Query(ctx, listDealsSortByOwner,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StageFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deal{}
+	for rows.Next() {
+		var i Deal
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealOwner,
+			&i.AccountID,
+			&i.PrimaryContactID,
+			&i.PlanRequestedID,
+			&i.DealName,
+			&i.DealType,
+			&i.Stage,
+			&i.Amount,
+			&i.Probability,
+			&i.ExpectedCloseDate,
+			&i.ForecastCategory,
+			&i.NextStep,
+			&i.ClosedDate,
+			&i.WinLossReason,
+			&i.Competitor,
+			&i.LossNotes,
+			&i.SubscriptionTerm,
+			&i.CreatedSubscriptionID,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.LossReasonCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDealsSortByProbability = `-- name: ListDealsSortByProbability :many
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (probability IS NULL OR (probability, id) > ($4::smallint, $5::bigint)))
+          OR ($3::boolean AND probability IS NULL AND id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (probability IS NOT NULL OR id < $5::bigint))
+          OR (NOT $3::boolean AND probability IS NOT NULL
+              AND (probability, id) < ($4::smallint, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND deal_owner = $8)
+  )
+  AND (NOT $9::boolean OR deal_owner = $8)
+  AND ($10::text = '' OR stage = $10::text)
+  AND (
+      $11::text = ''
+      OR deal_name ILIKE '%' || $11 || '%'
+      OR entity_code ILIKE '%' || $11 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN probability END ASC,
+  CASE WHEN $2::text = 'desc' THEN probability END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $12
+`
+
+type ListDealsSortByProbabilityParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    int16  `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	MineOnly     bool   `json:"mine_only"`
+	StageFilter  string `json:"stage_filter"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+// BL-157e: sort by probability ("Peluang", %). NULLABLE smallint. Pola
+// null-aware SAMA dgn ListDealsSortByAmount, tipe kolom smallint.
+func (q *Queries) ListDealsSortByProbability(ctx context.Context, arg ListDealsSortByProbabilityParams) ([]Deal, error) {
+	rows, err := q.db.Query(ctx, listDealsSortByProbability,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StageFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deal{}
+	for rows.Next() {
+		var i Deal
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealOwner,
+			&i.AccountID,
+			&i.PrimaryContactID,
+			&i.PlanRequestedID,
+			&i.DealName,
+			&i.DealType,
+			&i.Stage,
+			&i.Amount,
+			&i.Probability,
+			&i.ExpectedCloseDate,
+			&i.ForecastCategory,
+			&i.NextStep,
+			&i.ClosedDate,
+			&i.WinLossReason,
+			&i.Competitor,
+			&i.LossNotes,
+			&i.SubscriptionTerm,
+			&i.CreatedSubscriptionID,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.LossReasonCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDealsSortByStage = `-- name: ListDealsSortByStage :many
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+WHERE deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (stage, id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (stage, id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND deal_owner = $7)
+  )
+  AND (NOT $8::boolean OR deal_owner = $7)
+  AND ($9::text = '' OR stage = $9::text)
+  AND (
+      $10::text = ''
+      OR deal_name ILIKE '%' || $10 || '%'
+      OR entity_code ILIKE '%' || $10 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN stage END ASC,
+  CASE WHEN $2::text = 'desc' THEN stage END DESC,
+  CASE WHEN $2::text = 'asc'  THEN id END ASC,
+  CASE WHEN $2::text = 'desc' THEN id END DESC
+LIMIT $11
+`
+
+type ListDealsSortByStageParams struct {
+	HasCursor   bool   `json:"has_cursor"`
+	Dir         string `json:"dir"`
+	CursorVal   string `json:"cursor_val"`
+	CursorID    int64  `json:"cursor_id"`
+	ScopeAll    bool   `json:"scope_all"`
+	IsOwn       bool   `json:"is_own"`
+	Uid         *int64 `json:"uid"`
+	MineOnly    bool   `json:"mine_only"`
+	StageFilter string `json:"stage_filter"`
+	Search      string `json:"search"`
+	PageSize    int32  `json:"page_size"`
+}
+
+// BL-157e: sort by stage ("Tahap" — RAW enum Prospecting/Qualification/…,
+// alfabetis; tak menduplikasi urutan pipeline ke SQL, mirror keputusan
+// "Status" Leads BL-157b). stage NOT NULL → kloning PERSIS pola
+// ListDealsSortByName.
+func (q *Queries) ListDealsSortByStage(ctx context.Context, arg ListDealsSortByStageParams) ([]Deal, error) {
+	rows, err := q.db.Query(ctx, listDealsSortByStage,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.MineOnly,
+		arg.StageFilter,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deal{}
+	for rows.Next() {
+		var i Deal
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealOwner,
+			&i.AccountID,
+			&i.PrimaryContactID,
+			&i.PlanRequestedID,
+			&i.DealName,
+			&i.DealType,
+			&i.Stage,
+			&i.Amount,
+			&i.Probability,
+			&i.ExpectedCloseDate,
+			&i.ForecastCategory,
+			&i.NextStep,
+			&i.ClosedDate,
+			&i.WinLossReason,
+			&i.Competitor,
+			&i.LossNotes,
+			&i.SubscriptionTerm,
+			&i.CreatedSubscriptionID,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.LossReasonCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setDealCreatedSubscription = `-- name: SetDealCreatedSubscription :exec
 UPDATE deals SET
     created_subscription_id = $1,
