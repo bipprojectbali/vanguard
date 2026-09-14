@@ -19,12 +19,12 @@ import (
 func ticketsTable(v TicketsListView) g.Node {
 	head := []g.Node{
 		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Tiket")),
-		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")),
-		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Subjek")),
-		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Prioritas")),
-		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("SLA")),
-		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Agen")),
-		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Status")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), ticketSortHeader(v, "village", "Desa")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), ticketSortHeader(v, "subject", "Subjek")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), ticketSortHeader(v, "priority", "Prioritas")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), ticketSortHeader(v, "sla", "SLA")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), ticketSortHeader(v, "agent", "Agen")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), ticketSortHeader(v, "status", "Status")),
 	}
 	if v.CanWrite {
 		head = append(head, h.Th(h.Class("py-2 font-medium"), g.Text("Aksi")))
