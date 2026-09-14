@@ -81,6 +81,8 @@ type ContactsAllView struct {
 	CanWrite bool
 	Err      string
 	Msg      string
+	Sort     string // BL-157d: kolom sort aktif ("" = default created_at DESC)
+	Dir      string // BL-157d: "asc"/"desc", hanya bermakna bila Sort != ""
 }
 
 // ContactsList merender daftar kontak satu desa: header + aksi tambah, alert,
@@ -115,7 +117,7 @@ func ContactsList(v ContactsListView) g.Node {
 	} else {
 		// Daftar per-desa: tanpa kolom Desa (redundan — sudah di judul halaman).
 		body = append(body, contactsTable(v.AccountBase, v.Items, false))
-		body = append(body, contactsPager(v.AccountBase+"/contacts", "", v.NextCursor, "", v.After, v.Trail))
+		body = append(body, contactsPager(v.AccountBase+"/contacts", "", v.NextCursor, "", v.After, v.Trail, "", ""))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
@@ -150,10 +152,12 @@ func ContactsAll(v ContactsAllView) g.Node {
 	if v.ShowTabs {
 		body = append(body, tabSearchRow(contactsTabs(v),
 			searchBoxInline(v.Base+"/contacts", v.Query,
-				"Cari kontak — nama atau desa…", "Cari kontak", hiddenField{"view", viewKeep})))
+				"Cari kontak — nama atau desa…", "Cari kontak",
+				hiddenField{"view", viewKeep}, hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir})))
 	} else {
 		body = append(body, searchBox(v.Base+"/contacts", v.Query,
-			"Cari kontak — nama atau desa…", "Cari kontak", hiddenField{"view", viewKeep}))
+			"Cari kontak — nama atau desa…", "Cari kontak",
+			hiddenField{"view", viewKeep}, hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir}))
 	}
 	if v.Err != "" {
 		body = append(body, ui.Toast(ui.VariantDestructive, "contacts-err", g.Text(v.Err)))
@@ -162,14 +166,15 @@ func ContactsAll(v ContactsAllView) g.Node {
 		body = append(body, ui.Toast(ui.VariantSuccess, "contacts-ok", g.Text(v.Msg)))
 	}
 	if len(v.Items) == 0 {
-		// backHref MEMBUANG q: tanpa tombol Reset, ini satu-satunya jalan keluar
-		// dari pencarian tanpa hasil, jadi ia harus mengosongkan kata kunci.
-		body = append(body, emptyContacts(contactsListHref(v.Base, v.ActiveView, ""),
+		// backHref MEMBUANG q DAN sort/dir: tanpa tombol Reset, ini satu-satunya
+		// jalan keluar dari pencarian/sort tanpa hasil, jadi ia harus kembali ke
+		// tampilan default (mirror emptyLeads BL-157b).
+		body = append(body, emptyContacts(contactsListHref(v.Base, v.ActiveView, "", "", ""),
 			v.NextCursor, "Belum ada kontak yang cocok."))
 	} else {
 		// base per-baris = URL desa induk masing-masing (dirakit dari AccountID).
-		body = append(body, contactsGlobalTable(v.Base, v.Items))
-		body = append(body, contactsPager(v.Base+"/contacts", v.ActiveView, v.NextCursor, v.Query, v.After, v.Trail))
+		body = append(body, contactsGlobalTable(v))
+		body = append(body, contactsPager(v.Base+"/contacts", v.ActiveView, v.NextCursor, v.Query, v.After, v.Trail, v.Sort, v.Dir))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
@@ -184,7 +189,7 @@ func contactsTabs(v ContactsAllView) g.Node {
 		if v.ActiveView == view {
 			cls += " tab-active"
 		}
-		return h.A(h.Href(contactsListHref(v.Base, view, v.Query)), h.Class(cls), g.Text(label))
+		return h.A(h.Href(contactsListHref(v.Base, view, v.Query, v.Sort, v.Dir)), h.Class(cls), g.Text(label))
 	}
 	return h.Div(
 		h.Role("tablist"),
@@ -194,35 +199,39 @@ func contactsTabs(v ContactsAllView) g.Node {
 	)
 }
 
-// contactsListHref merakit URL daftar global untuk sebuah view + q opsional.
-// all/"" = tanpa param view (URL kanonik); q kosong = tanpa param q. Urutan &
-// ditentukan url.Values.Encode (withQuery) — konsisten & ter-escape.
-func contactsListHref(base, view, query string) string {
+// contactsListHref merakit URL daftar global untuk sebuah view + q + sort/dir
+// opsional (BL-157d). all/"" = tanpa param view (URL kanonik); nilai kosong =
+// tanpa param itu. Urutan & ditentukan url.Values.Encode (withQuery) —
+// konsisten & ter-escape.
+func contactsListHref(base, view, query, sort, dir string) string {
 	viewKeep := ""
 	if view != "" && view != ContactViewAll {
 		viewKeep = view
 	}
-	return withQuery(base+"/contacts", query, hiddenField{"view", viewKeep})
+	return withQuery(base+"/contacts", query,
+		hiddenField{"view", viewKeep}, hiddenField{"sort", sort}, hiddenField{"dir", dir})
 }
 
-// emptyContacts = pesan kosong jujur. backHref menawarkan jalan kembali bila ini
-// bisa jadi halaman-setelah-cursor yang kebetulan habis.
+// emptyContacts = pesan kosong jujur. nextCursor == "" = kasus normal (halaman
+// awal/pencarian/sort tanpa hasil) → tawarkan jalan kembali via backHref
+// (mirror emptyAccounts/emptyLeads). nextCursor != "" = kasus langka
+// halaman-setelah-cursor yang kebetulan habis → pesan polos tanpa tautan.
 func emptyContacts(backHref, nextCursor, msg string) g.Node {
 	if nextCursor == "" {
 		return h.Div(
 			h.Class("card bg-base-100 border border-base-300"),
 			h.Div(h.Class("card-body items-start"),
-				h.P(h.Class("text-base-content/70"), g.Text(msg))),
+				h.P(h.Class("text-base-content/70"), g.Text(msg)),
+				h.A(h.Href(backHref), h.Class("btn btn-ghost btn-sm min-h-11"),
+					g.Text("« Kembali ke awal")),
+			),
 		)
 	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300"),
 		h.Div(h.Class("card-body items-start"),
 			h.P(h.Class("text-base-content/70"),
-				g.Text("Belum ada kontak yang cocok di halaman ini.")),
-			h.A(h.Href(backHref), h.Class("btn btn-ghost btn-sm min-h-11"),
-				g.Text("« Kembali ke awal")),
-		),
+				g.Text("Belum ada kontak yang cocok di halaman ini."))),
 	)
 }
 
@@ -230,12 +239,13 @@ func emptyContacts(backHref, nextCursor, msg string) g.Node {
 // bookmarkable + dimuat ulang, lolos gotcha #16), tap target 44px, flex-wrap 375px.
 // view (opsional, "" di daftar per-desa) diteruskan agar tab aktif bertahan antar
 // halaman: ?after= lebih dulu, lalu &view= (kembaran accountsPager).
-func contactsPager(listHref, view, nextCursor, query, after, trail string) g.Node {
+func contactsPager(listHref, view, nextCursor, query, after, trail, sort, dir string) g.Node {
 	viewKeep := ""
 	if view != "" && view != ContactViewAll {
 		viewKeep = view
 	}
-	base := panelListHref(listHref, [2]string{"view", viewKeep}, [2]string{"q", query})
+	base := panelListHref(listHref, [2]string{"view", viewKeep}, [2]string{"q", query},
+		[2]string{"sort", sort}, [2]string{"dir", dir})
 	return ui.KeysetPager(base, after, trail, nextCursor)
 }
 

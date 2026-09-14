@@ -441,6 +441,596 @@ func (q *Queries) ListContactsByAccount(ctx context.Context, arg ListContactsByA
 	return items, nil
 }
 
+const listContactsSortByCode = `-- name: ListContactsSortByCode :many
+SELECT c.id, c.tenant_id, c.account_id, c.contact_owner, c.reports_to_id, c.first_name, c.last_name, c.salutation, c.job_title, c.position_category, c.contact_role, c.is_primary_contact, c.is_technical_contact, c.term_period, c.mobile_phone, c.whatsapp_number, c.office_phone, c.email, c.preferred_channel, c.mailing_address, c.city, c.postal_code, c.email_opt_out, c.do_not_contact, c.deleted_at, c.created_by, c.created_at, c.updated_by, c.updated_at, c.entity_code, a.village_name FROM contacts c
+JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
+WHERE c.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (c.entity_code IS NULL OR (c.entity_code, c.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean AND c.entity_code IS NULL AND c.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (c.entity_code IS NOT NULL OR c.id < $5::bigint))
+          OR (NOT $3::boolean AND c.entity_code IS NOT NULL
+              AND (c.entity_code, c.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND a.account_owner = $8)
+      OR ($9::boolean AND (a.assigned_csm = $8 OR a.backup_csm = $8))
+  )
+  AND (
+      $10::text = ''
+      OR (c.first_name || ' ' || coalesce(c.last_name, '')) ILIKE '%' || $10 || '%'
+      OR a.village_name ILIKE '%' || $10 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN c.entity_code END ASC,
+  CASE WHEN $2::text = 'desc' THEN c.entity_code END DESC,
+  CASE WHEN $2::text = 'asc'  THEN c.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN c.id END DESC
+LIMIT $11
+`
+
+type ListContactsSortByCodeParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsSales      bool   `json:"is_sales"`
+	Uid          *int64 `json:"uid"`
+	IsCsm        bool   `json:"is_csm"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+type ListContactsSortByCodeRow struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	AccountID          int64              `json:"account_id"`
+	ContactOwner       *int64             `json:"contact_owner"`
+	ReportsToID        *int64             `json:"reports_to_id"`
+	FirstName          string             `json:"first_name"`
+	LastName           *string            `json:"last_name"`
+	Salutation         *string            `json:"salutation"`
+	JobTitle           *string            `json:"job_title"`
+	PositionCategory   *string            `json:"position_category"`
+	ContactRole        *string            `json:"contact_role"`
+	IsPrimaryContact   bool               `json:"is_primary_contact"`
+	IsTechnicalContact bool               `json:"is_technical_contact"`
+	TermPeriod         *string            `json:"term_period"`
+	MobilePhone        *string            `json:"mobile_phone"`
+	WhatsappNumber     *string            `json:"whatsapp_number"`
+	OfficePhone        *string            `json:"office_phone"`
+	Email              *string            `json:"email"`
+	PreferredChannel   *string            `json:"preferred_channel"`
+	MailingAddress     *string            `json:"mailing_address"`
+	City               *string            `json:"city"`
+	PostalCode         *string            `json:"postal_code"`
+	EmailOptOut        bool               `json:"email_opt_out"`
+	DoNotContact       bool               `json:"do_not_contact"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	EntityCode         *string            `json:"entity_code"`
+	VillageName        string             `json:"village_name"`
+}
+
+// BL-157d (fondasi sort per kolom Kontak global): SAMA PERSIS filter
+// ListContacts (JOIN desa induk + ownership F3 tiga-flag + search) — hanya
+// ORDER BY/keyset yang beda, diurut entity_code ("Kode"). entity_code
+// NULLABLE (BL-132, kolom lama tak di-backfill) → pola null-aware SAMA dgn
+// ListLeadsSortByCode: cursor_is_null menandai kelompok NULL/non-NULL, NULLS
+// default Postgres (ASC=LAST, DESC=FIRST).
+func (q *Queries) ListContactsSortByCode(ctx context.Context, arg ListContactsSortByCodeParams) ([]ListContactsSortByCodeRow, error) {
+	rows, err := q.db.Query(ctx, listContactsSortByCode,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListContactsSortByCodeRow{}
+	for rows.Next() {
+		var i ListContactsSortByCodeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AccountID,
+			&i.ContactOwner,
+			&i.ReportsToID,
+			&i.FirstName,
+			&i.LastName,
+			&i.Salutation,
+			&i.JobTitle,
+			&i.PositionCategory,
+			&i.ContactRole,
+			&i.IsPrimaryContact,
+			&i.IsTechnicalContact,
+			&i.TermPeriod,
+			&i.MobilePhone,
+			&i.WhatsappNumber,
+			&i.OfficePhone,
+			&i.Email,
+			&i.PreferredChannel,
+			&i.MailingAddress,
+			&i.City,
+			&i.PostalCode,
+			&i.EmailOptOut,
+			&i.DoNotContact,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.EntityCode,
+			&i.VillageName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listContactsSortByName = `-- name: ListContactsSortByName :many
+SELECT c.id, c.tenant_id, c.account_id, c.contact_owner, c.reports_to_id, c.first_name, c.last_name, c.salutation, c.job_title, c.position_category, c.contact_role, c.is_primary_contact, c.is_technical_contact, c.term_period, c.mobile_phone, c.whatsapp_number, c.office_phone, c.email, c.preferred_channel, c.mailing_address, c.city, c.postal_code, c.email_opt_out, c.do_not_contact, c.deleted_at, c.created_by, c.created_at, c.updated_by, c.updated_at, c.entity_code, a.village_name FROM contacts c
+JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
+WHERE c.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND ((c.first_name || ' ' || coalesce(c.last_name, '')), c.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND ((c.first_name || ' ' || coalesce(c.last_name, '')), c.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND a.account_owner = $7)
+      OR ($8::boolean AND (a.assigned_csm = $7 OR a.backup_csm = $7))
+  )
+  AND (
+      $9::text = ''
+      OR (c.first_name || ' ' || coalesce(c.last_name, '')) ILIKE '%' || $9 || '%'
+      OR a.village_name ILIKE '%' || $9 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN (c.first_name || ' ' || coalesce(c.last_name, '')) END ASC,
+  CASE WHEN $2::text = 'desc' THEN (c.first_name || ' ' || coalesce(c.last_name, '')) END DESC,
+  CASE WHEN $2::text = 'asc'  THEN c.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN c.id END DESC
+LIMIT $10
+`
+
+type ListContactsSortByNameParams struct {
+	HasCursor bool   `json:"has_cursor"`
+	Dir       string `json:"dir"`
+	CursorVal string `json:"cursor_val"`
+	CursorID  int64  `json:"cursor_id"`
+	ScopeAll  bool   `json:"scope_all"`
+	IsSales   bool   `json:"is_sales"`
+	Uid       *int64 `json:"uid"`
+	IsCsm     bool   `json:"is_csm"`
+	Search    string `json:"search"`
+	PageSize  int32  `json:"page_size"`
+}
+
+type ListContactsSortByNameRow struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	AccountID          int64              `json:"account_id"`
+	ContactOwner       *int64             `json:"contact_owner"`
+	ReportsToID        *int64             `json:"reports_to_id"`
+	FirstName          string             `json:"first_name"`
+	LastName           *string            `json:"last_name"`
+	Salutation         *string            `json:"salutation"`
+	JobTitle           *string            `json:"job_title"`
+	PositionCategory   *string            `json:"position_category"`
+	ContactRole        *string            `json:"contact_role"`
+	IsPrimaryContact   bool               `json:"is_primary_contact"`
+	IsTechnicalContact bool               `json:"is_technical_contact"`
+	TermPeriod         *string            `json:"term_period"`
+	MobilePhone        *string            `json:"mobile_phone"`
+	WhatsappNumber     *string            `json:"whatsapp_number"`
+	OfficePhone        *string            `json:"office_phone"`
+	Email              *string            `json:"email"`
+	PreferredChannel   *string            `json:"preferred_channel"`
+	MailingAddress     *string            `json:"mailing_address"`
+	City               *string            `json:"city"`
+	PostalCode         *string            `json:"postal_code"`
+	EmailOptOut        bool               `json:"email_opt_out"`
+	DoNotContact       bool               `json:"do_not_contact"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	EntityCode         *string            `json:"entity_code"`
+	VillageName        string             `json:"village_name"`
+}
+
+// BL-157d: sort by nama kontak (first_name + last_name, PERSIS ekspresi yang
+// dipakai search ListContacts). Ekspresi ini SELALU NOT NULL (first_name
+// NOT NULL, coalesce menutup last_name) → kloning pola sederhana
+// ListLeadsSortByName (tanpa kerumitan NULL), kolom expr bukan kolom polos.
+func (q *Queries) ListContactsSortByName(ctx context.Context, arg ListContactsSortByNameParams) ([]ListContactsSortByNameRow, error) {
+	rows, err := q.db.Query(ctx, listContactsSortByName,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListContactsSortByNameRow{}
+	for rows.Next() {
+		var i ListContactsSortByNameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AccountID,
+			&i.ContactOwner,
+			&i.ReportsToID,
+			&i.FirstName,
+			&i.LastName,
+			&i.Salutation,
+			&i.JobTitle,
+			&i.PositionCategory,
+			&i.ContactRole,
+			&i.IsPrimaryContact,
+			&i.IsTechnicalContact,
+			&i.TermPeriod,
+			&i.MobilePhone,
+			&i.WhatsappNumber,
+			&i.OfficePhone,
+			&i.Email,
+			&i.PreferredChannel,
+			&i.MailingAddress,
+			&i.City,
+			&i.PostalCode,
+			&i.EmailOptOut,
+			&i.DoNotContact,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.EntityCode,
+			&i.VillageName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listContactsSortByRole = `-- name: ListContactsSortByRole :many
+SELECT c.id, c.tenant_id, c.account_id, c.contact_owner, c.reports_to_id, c.first_name, c.last_name, c.salutation, c.job_title, c.position_category, c.contact_role, c.is_primary_contact, c.is_technical_contact, c.term_period, c.mobile_phone, c.whatsapp_number, c.office_phone, c.email, c.preferred_channel, c.mailing_address, c.city, c.postal_code, c.email_opt_out, c.do_not_contact, c.deleted_at, c.created_by, c.created_at, c.updated_by, c.updated_at, c.entity_code, a.village_name FROM contacts c
+JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
+WHERE c.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (c.contact_role IS NULL OR (c.contact_role, c.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean AND c.contact_role IS NULL AND c.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (c.contact_role IS NOT NULL OR c.id < $5::bigint))
+          OR (NOT $3::boolean AND c.contact_role IS NOT NULL
+              AND (c.contact_role, c.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND a.account_owner = $8)
+      OR ($9::boolean AND (a.assigned_csm = $8 OR a.backup_csm = $8))
+  )
+  AND (
+      $10::text = ''
+      OR (c.first_name || ' ' || coalesce(c.last_name, '')) ILIKE '%' || $10 || '%'
+      OR a.village_name ILIKE '%' || $10 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN c.contact_role END ASC,
+  CASE WHEN $2::text = 'desc' THEN c.contact_role END DESC,
+  CASE WHEN $2::text = 'asc'  THEN c.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN c.id END DESC
+LIMIT $11
+`
+
+type ListContactsSortByRoleParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsSales      bool   `json:"is_sales"`
+	Uid          *int64 `json:"uid"`
+	IsCsm        bool   `json:"is_csm"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+type ListContactsSortByRoleRow struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	AccountID          int64              `json:"account_id"`
+	ContactOwner       *int64             `json:"contact_owner"`
+	ReportsToID        *int64             `json:"reports_to_id"`
+	FirstName          string             `json:"first_name"`
+	LastName           *string            `json:"last_name"`
+	Salutation         *string            `json:"salutation"`
+	JobTitle           *string            `json:"job_title"`
+	PositionCategory   *string            `json:"position_category"`
+	ContactRole        *string            `json:"contact_role"`
+	IsPrimaryContact   bool               `json:"is_primary_contact"`
+	IsTechnicalContact bool               `json:"is_technical_contact"`
+	TermPeriod         *string            `json:"term_period"`
+	MobilePhone        *string            `json:"mobile_phone"`
+	WhatsappNumber     *string            `json:"whatsapp_number"`
+	OfficePhone        *string            `json:"office_phone"`
+	Email              *string            `json:"email"`
+	PreferredChannel   *string            `json:"preferred_channel"`
+	MailingAddress     *string            `json:"mailing_address"`
+	City               *string            `json:"city"`
+	PostalCode         *string            `json:"postal_code"`
+	EmailOptOut        bool               `json:"email_opt_out"`
+	DoNotContact       bool               `json:"do_not_contact"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	EntityCode         *string            `json:"entity_code"`
+	VillageName        string             `json:"village_name"`
+}
+
+// BL-157d: sort by contact_role ("Peran" — RAW enum alfabetis, mirror
+// keputusan "Status" Leads/"Tipe" Accounts: tak menduplikasi urutan tampil ke
+// SQL). NULLABLE → pola null-aware SAMA dgn ListContactsSortByCode, kolom beda.
+func (q *Queries) ListContactsSortByRole(ctx context.Context, arg ListContactsSortByRoleParams) ([]ListContactsSortByRoleRow, error) {
+	rows, err := q.db.Query(ctx, listContactsSortByRole,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListContactsSortByRoleRow{}
+	for rows.Next() {
+		var i ListContactsSortByRoleRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AccountID,
+			&i.ContactOwner,
+			&i.ReportsToID,
+			&i.FirstName,
+			&i.LastName,
+			&i.Salutation,
+			&i.JobTitle,
+			&i.PositionCategory,
+			&i.ContactRole,
+			&i.IsPrimaryContact,
+			&i.IsTechnicalContact,
+			&i.TermPeriod,
+			&i.MobilePhone,
+			&i.WhatsappNumber,
+			&i.OfficePhone,
+			&i.Email,
+			&i.PreferredChannel,
+			&i.MailingAddress,
+			&i.City,
+			&i.PostalCode,
+			&i.EmailOptOut,
+			&i.DoNotContact,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.EntityCode,
+			&i.VillageName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listContactsSortByVillage = `-- name: ListContactsSortByVillage :many
+SELECT c.id, c.tenant_id, c.account_id, c.contact_owner, c.reports_to_id, c.first_name, c.last_name, c.salutation, c.job_title, c.position_category, c.contact_role, c.is_primary_contact, c.is_technical_contact, c.term_period, c.mobile_phone, c.whatsapp_number, c.office_phone, c.email, c.preferred_channel, c.mailing_address, c.city, c.postal_code, c.email_opt_out, c.do_not_contact, c.deleted_at, c.created_by, c.created_at, c.updated_by, c.updated_at, c.entity_code, a.village_name FROM contacts c
+JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
+WHERE c.deleted_at IS NULL
+  AND (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (a.village_name, c.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (a.village_name, c.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND a.account_owner = $7)
+      OR ($8::boolean AND (a.assigned_csm = $7 OR a.backup_csm = $7))
+  )
+  AND (
+      $9::text = ''
+      OR (c.first_name || ' ' || coalesce(c.last_name, '')) ILIKE '%' || $9 || '%'
+      OR a.village_name ILIKE '%' || $9 || '%'
+  )
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN a.village_name END ASC,
+  CASE WHEN $2::text = 'desc' THEN a.village_name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN c.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN c.id END DESC
+LIMIT $10
+`
+
+type ListContactsSortByVillageParams struct {
+	HasCursor bool   `json:"has_cursor"`
+	Dir       string `json:"dir"`
+	CursorVal string `json:"cursor_val"`
+	CursorID  int64  `json:"cursor_id"`
+	ScopeAll  bool   `json:"scope_all"`
+	IsSales   bool   `json:"is_sales"`
+	Uid       *int64 `json:"uid"`
+	IsCsm     bool   `json:"is_csm"`
+	Search    string `json:"search"`
+	PageSize  int32  `json:"page_size"`
+}
+
+type ListContactsSortByVillageRow struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	AccountID          int64              `json:"account_id"`
+	ContactOwner       *int64             `json:"contact_owner"`
+	ReportsToID        *int64             `json:"reports_to_id"`
+	FirstName          string             `json:"first_name"`
+	LastName           *string            `json:"last_name"`
+	Salutation         *string            `json:"salutation"`
+	JobTitle           *string            `json:"job_title"`
+	PositionCategory   *string            `json:"position_category"`
+	ContactRole        *string            `json:"contact_role"`
+	IsPrimaryContact   bool               `json:"is_primary_contact"`
+	IsTechnicalContact bool               `json:"is_technical_contact"`
+	TermPeriod         *string            `json:"term_period"`
+	MobilePhone        *string            `json:"mobile_phone"`
+	WhatsappNumber     *string            `json:"whatsapp_number"`
+	OfficePhone        *string            `json:"office_phone"`
+	Email              *string            `json:"email"`
+	PreferredChannel   *string            `json:"preferred_channel"`
+	MailingAddress     *string            `json:"mailing_address"`
+	City               *string            `json:"city"`
+	PostalCode         *string            `json:"postal_code"`
+	EmailOptOut        bool               `json:"email_opt_out"`
+	DoNotContact       bool               `json:"do_not_contact"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	EntityCode         *string            `json:"entity_code"`
+	VillageName        string             `json:"village_name"`
+}
+
+// BL-157d: sort by Desa (a.village_name, desa induk). village_name TIDAK
+// NULLABLE (00005_crm_foundation.sql) → kloning pola sederhana
+// ListContactsSortByName (tanpa kerumitan NULL), kolom beda + dari JOIN.
+func (q *Queries) ListContactsSortByVillage(ctx context.Context, arg ListContactsSortByVillageParams) ([]ListContactsSortByVillageRow, error) {
+	rows, err := q.db.Query(ctx, listContactsSortByVillage,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListContactsSortByVillageRow{}
+	for rows.Next() {
+		var i ListContactsSortByVillageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AccountID,
+			&i.ContactOwner,
+			&i.ReportsToID,
+			&i.FirstName,
+			&i.LastName,
+			&i.Salutation,
+			&i.JobTitle,
+			&i.PositionCategory,
+			&i.ContactRole,
+			&i.IsPrimaryContact,
+			&i.IsTechnicalContact,
+			&i.TermPeriod,
+			&i.MobilePhone,
+			&i.WhatsappNumber,
+			&i.OfficePhone,
+			&i.Email,
+			&i.PreferredChannel,
+			&i.MailingAddress,
+			&i.City,
+			&i.PostalCode,
+			&i.EmailOptOut,
+			&i.DoNotContact,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.EntityCode,
+			&i.VillageName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setPrimaryContact = `-- name: SetPrimaryContact :exec
 UPDATE contacts SET is_primary_contact = true, updated_by = $1, updated_at = now()
 WHERE id = $2 AND account_id = $3 AND deleted_at IS NULL

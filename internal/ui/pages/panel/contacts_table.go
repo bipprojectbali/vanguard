@@ -15,44 +15,99 @@ import (
 // tetap di contacts.go — satu paket.
 
 // contactsTable = tabel kontak satu desa (showVillage=false → tanpa kolom Desa).
-// Dibungkus ui.TableScroll (scroll terkurung; tak mendorong lebar halaman di
-// mobile). Baris tertaut ke detail.
+// Header POLOS (tanpa sort — daftar per-desa selalu default created_at DESC,
+// BL-157d cuma menyentuh daftar global). Dibungkus ui.TableScroll (scroll
+// terkurung; tak mendorong lebar halaman di mobile). Baris tertaut ke detail.
 func contactsTable(accountBase string, items []ContactRow, showVillage bool) g.Node {
 	rows := make([]g.Node, 0, len(items))
 	for _, c := range items {
 		rows = append(rows, contactRow(accountBase, c, showVillage))
 	}
-	return contactsTableCard(showVillage, rows)
+	return contactsTableCard(contactPlainHeaders(showVillage), rows)
 }
 
 // contactsGlobalTable = tabel kontak lintas-desa (dengan kolom Desa). Tiap baris
 // menautkan ke desa induknya masing-masing (base per-baris dari AccountID).
-func contactsGlobalTable(wsBase string, items []ContactRow) g.Node {
-	rows := make([]g.Node, 0, len(items))
-	for _, c := range items {
-		accountBase := wsBase + "/accounts/" + strconv.FormatInt(c.AccountID, 10)
+// Header Kode/Nama/Peran/Desa BISA di-sort (BL-157d, klon accountsGlobalTable);
+// HP/WhatsApp (F4, side-channel risk bila sortable), Penanda (4 boolean lepas,
+// tak ada kunci sort tunggal wajar), Terakhir (placeholder DITUNDA, selalu "—")
+// SENGAJA tetap polos.
+func contactsGlobalTable(v ContactsAllView) g.Node {
+	rows := make([]g.Node, 0, len(v.Items))
+	for _, c := range v.Items {
+		accountBase := v.Base + "/accounts/" + strconv.FormatInt(c.AccountID, 10)
 		rows = append(rows, contactRow(accountBase, c, true))
 	}
-	return contactsTableCard(true, rows)
+	headers := append(contactSortableHeaders(v), contactTrailingHeaders()...)
+	return contactsTableCard(headers, rows)
 }
 
-// contactsTableCard membungkus header + baris dalam kartu ber-scroll. Kolom Desa
-// (showVillage) hanya di daftar global; "Terakhir" = ringkasan aktivitas (DITUNDA
-// modul Activities, kini "—").
-func contactsTableCard(showVillage bool, rows []g.Node) g.Node {
+// contactPlainHeaders = header tanpa sort (daftar per-desa). showVillage
+// (selalu false di sini, dipertahankan agar simetris dgn contactsTable) menambah
+// kolom Desa.
+func contactPlainHeaders(showVillage bool) []g.Node {
 	headers := []g.Node{
 		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Kode")),
 		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Nama")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Peran")),
 	}
-	headers = append(headers, h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Peran")))
 	if showVillage {
 		headers = append(headers, h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Desa")))
 	}
-	headers = append(headers,
+	return append(headers, contactTrailingHeaders()...)
+}
+
+// contactSortableHeaders = 4 kolom yang bisa di-sort (BL-157d): Kode, Nama,
+// Peran, Desa — hanya dipakai daftar global (contactsGlobalTable).
+func contactSortableHeaders(v ContactsAllView) []g.Node {
+	return []g.Node{
+		h.Th(h.Class("py-2 pr-4 font-medium"), contactSortHeader(v, "code", "Kode")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), contactSortHeader(v, "name", "Nama")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), contactSortHeader(v, "role", "Peran")),
+		h.Th(h.Class("py-2 pr-4 font-medium"), contactSortHeader(v, "village", "Desa")),
+	}
+}
+
+// contactTrailingHeaders = 3 kolom yang SENGAJA tetap polos (lihat rasional di
+// contactsGlobalTable): HP/WhatsApp, Penanda, Terakhir.
+func contactTrailingHeaders() []g.Node {
+	return []g.Node{
 		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("HP / WhatsApp")),
 		h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Penanda")),
 		h.Th(h.Class("py-2 font-medium"), g.Text("Terakhir")),
-	)
+	}
+}
+
+// contactSortHeader = header kolom jadi tautan sort (BL-157d, klon persis
+// leadSortHeader/accSortHeader). Native <a href> (bookmarkable, lolos gotcha
+// #16), BUKAN Datastar. Klik saat non-aktif → sort=col&dir=asc; klik saat aktif
+// → toggle arah. Tautan sort SENDIRI tak membawa after/trail (submit baru reset
+// ke hal 1). view/q dipertahankan.
+func contactSortHeader(v ContactsAllView, col, label string) g.Node {
+	active := v.Sort == col
+	nextDir := "asc"
+	if active && v.Dir == "asc" {
+		nextDir = "desc"
+	}
+	viewKeep := ""
+	if v.ActiveView != "" && v.ActiveView != ContactViewAll {
+		viewKeep = v.ActiveView
+	}
+	href := withQuery(v.Base+"/contacts", v.Query,
+		hiddenField{"view", viewKeep}, hiddenField{"sort", col}, hiddenField{"dir", nextDir})
+	text := label
+	if active {
+		arrow := "▲"
+		if v.Dir == "desc" {
+			arrow = "▼"
+		}
+		text = label + " " + arrow
+	}
+	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
+}
+
+// contactsTableCard membungkus header + baris dalam kartu ber-scroll.
+func contactsTableCard(headers []g.Node, rows []g.Node) g.Node {
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
 		h.Div(
