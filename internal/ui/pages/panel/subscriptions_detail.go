@@ -17,6 +17,12 @@ import (
 // SubDetailView = seluruh data satu langganan siap render. Village/Plan sudah
 // diresolusi handler (best-effort, label cadangan bila di luar tenant/terhapus).
 // Chain = riwayat rantai renewal (lama→baru), tiap periode ARR-nya disamarkan.
+//
+// BL-154: redesign kartu 2-kolom (Identitas · Status & Lifecycle · Financials ·
+// Renewal · System & Audit). Field baru dikelompokkan per kartu di bawah; field
+// lama (MRR/ARR/BillingCycle/Start/Seats/dll) tak berubah arti, hanya pindah
+// kartu. 3 field mockup TANPA kolom DB (Setup Fee, Payment Method, Last Invoice)
+// SENGAJA di-drop dari v1 (keputusan user, docs/crm/tasks.md BL-154).
 type SubDetailView struct {
 	Base       string
 	ID         int64
@@ -30,12 +36,43 @@ type SubDetailView struct {
 	MRR          string
 	ARR          string
 	BillingCycle string
-	AutoRenew    bool
 	Start        string
 	End          string
 	Seats        string
 	PaymentState string
 	Owner        string
+
+	// Kartu Identitas & Langganan (tambahan BL-154).
+	ContractTerm string
+
+	// Kartu Financials (tambahan BL-154). MRR/ARR/PaymentState di atas dipakai
+	// ulang di kartu ini.
+	Discount string
+
+	// Kartu Status & Lifecycle (BL-154, lintas-modul customer_success — BL-114).
+	// Kosong (baris customer_success belum ada) → "—" di view, bukan error.
+	HealthLabel        string
+	HealthBadgeClass   string
+	OnboardingStatus   string
+	OnboardingProgress string
+	ActivatedAt        string
+
+	// Kartu Renewal (BL-154). DaysToRenewal/RenewalTypeLabel/RenewalStatusLabel
+	// derivasi handler (reuse logika kartu/tab Renewals agar badge selaras).
+	DaysToRenewal      string
+	RenewalTypeLabel   string
+	RenewalStatusLabel string
+	RenewalStatusClass string
+	PrevToCurrent      string
+
+	// Kartu System & Audit (BL-154). SourceDealHref kosong → "—" tanpa tautan
+	// (langganan tak berasal dari deal).
+	CreatedByName   string
+	CreatedAt       string
+	UpdatedByName   string
+	UpdatedAt       string
+	SourceDealLabel string
+	SourceDealHref  string
 
 	Chain []SubChainRow
 
@@ -112,6 +149,24 @@ func SubDetail(v SubDetailView) g.Node {
 		h.Href(v.Base+"/accounts/"+strconv.FormatInt(v.AccountID, 10)),
 		h.Class("link link-hover"), g.Text(orDash(v.Village)))
 
+	// BL-154: grid 2-kolom (mobile 1-kolom) — pola sama accounts_detail.go
+	// (interleaved pairs supaya jatuh berdampingan di md:grid-cols-2). Kartu
+	// Financials gantikan "Nilai & Masa Berlaku" (4 field sesuai mockup: MRR,
+	// ARR, Diskon, Status Pembayaran — field lain pindah ke Identitas/Renewal).
+	cardsGrid := h.Div(
+		h.Class("grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0 items-stretch"),
+		subIdentityCard(v, villageLink),
+		subStatusLifecycleCard(v),
+		detailCard("Financials", []detailField{
+			{"MRR", v.MRR},
+			{"ARR", v.ARR},
+			{"Diskon (%)", v.Discount},
+			{"Status Pembayaran", v.PaymentState},
+		}),
+		subRenewalCard(v),
+		subSystemAuditCard(v),
+	)
+
 	return h.Div(
 		h.Class("grid gap-4 min-w-0"),
 		header,
@@ -119,17 +174,9 @@ func SubDetail(v SubDetailView) g.Node {
 			g.Text("« Kembali ke daftar langganan")),
 		ui.When(v.Msg != "", ui.Toast(ui.VariantSuccess, "subs-ok", g.Text(v.Msg))),
 		ui.When(v.Err != "", ui.Toast(ui.VariantDestructive, "subs-err", g.Text(v.Err))),
-		subIdentityCard(v, villageLink),
-		detailCard("Nilai & Masa Berlaku", []detailField{
-			{"MRR", v.MRR},
-			{"ARR", v.ARR},
-			{"Siklus Tagih", v.BillingCycle},
-			{"Perpanjang Otomatis", autoRenewLabel(v.AutoRenew)},
-			{"Mulai", v.Start},
-			{"Berakhir", v.End},
-			{"Jumlah Seat", v.Seats},
-			{"Status Pembayaran", v.PaymentState},
-		}),
+		cardsGrid,
+		// Tabel Items & Renewal Chain tetap penuh-lebar DI BAWAH grid kartu
+		// (bukan masuk salah satu kartu) — sudah dibungkus ui.TableScroll.
 		subItemsCard(v),
 		subRenewalChainCard(v),
 		// Modal aksi (BL-125): pemicunya di header; dialog checkbox-toggle disisipkan
@@ -186,28 +233,19 @@ func subItemsCard(v SubDetailView) g.Node {
 	)
 }
 
-// subIdentityCard = kartu inti; Desa dirender sebagai TAUTAN (membuka detail
-// desa), sisanya field biasa.
+// subIdentityCard = kartu "Identitas & Langganan" (BL-154: diperluas dgn Siklus
+// Tagih/Mulai/Termin Kontrak/Jumlah Seat — pindah dari bekas kartu "Nilai &
+// Masa Berlaku"). Desa dirender sebagai TAUTAN (membuka detail desa), sisanya
+// field biasa via detailRow (mendukung g.Node utk tautan).
 func subIdentityCard(v SubDetailView, villageLink g.Node) g.Node {
-	row := func(label string, value g.Node) g.Node {
-		return h.Div(
-			h.Class("grid gap-1 sm:grid-cols-3 sm:gap-2 py-2 border-b border-base-300/50 last:border-0"),
-			h.Dt(h.Class("text-sm text-base-content/60"), g.Text(label)),
-			h.Dd(h.Class("sm:col-span-2 break-words"), value),
-		)
-	}
-	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body min-w-0"),
-			h.H2(h.Class("font-semibold mb-2"), g.Text("Identitas Langganan")),
-			h.Dl(
-				h.Class("min-w-0"),
-				row("Desa", villageLink),
-				row("Paket", g.Text(orDash(v.Plan))),
-				row("Pemilik", g.Text(orDash(v.Owner))),
-			),
-		),
+	return cardRows("Identitas & Langganan", "",
+		detailRow("Desa", villageLink),
+		detailRow("Paket", g.Text(orDash(v.Plan))),
+		detailRow("Siklus Tagih", g.Text(orDash(v.BillingCycle))),
+		detailRow("Mulai", g.Text(orDash(v.Start))),
+		detailRow("Termin Kontrak (bulan)", g.Text(orDash(v.ContractTerm))),
+		detailRow("Jumlah Seat", g.Text(orDash(v.Seats))),
+		detailRow("Pemilik", g.Text(orDash(v.Owner))),
 	)
 }
 
@@ -267,12 +305,4 @@ func subChainRow(base string, c SubChainRow) g.Node {
 		h.Td(h.Class("py-2 pr-4"), g.Text(orDash(c.Start))),
 		h.Td(h.Class("py-2"), g.Text(orDash(c.End))),
 	)
-}
-
-// autoRenewLabel = tampilan boolean perpanjang-otomatis dalam bahasa manusia.
-func autoRenewLabel(on bool) string {
-	if on {
-		return "Ya"
-	}
-	return "Tidak"
 }
