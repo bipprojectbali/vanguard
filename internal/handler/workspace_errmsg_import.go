@@ -29,6 +29,22 @@ func wsErrMsgImport(code string) string {
 		return "Email pemilik pada salah satu baris tidak cocok dengan anggota workspace ini."
 	case "village_code_dup_file":
 		return "Kode desa ini dipakai lebih dari satu baris di file yang sama."
+	// BL-134 (impor Kontak): 5 kode di bawah baru utk jalur impor kontak —
+	// beda makna dgn kode BL-63 di atas walau sama-sama soal village_code
+	// (di sini MENAUTKAN ke akun sudah-ada, bukan mendeteksi duplikat
+	// sebelum membuat akun baru), jadi tak direuse dari yang sudah ada.
+	// "contact_primary_invalid" (15 Sep) — validasi CSV lebih ketat drpd
+	// optBool form manual, lihat normalizeContactPrimaryFlag.
+	case "contact_village_notfound":
+		return "Kode desa pada salah satu baris tidak ditemukan di data desa."
+	case "contact_village_forbidden":
+		return "Desa pada salah satu baris berada di luar cakupan akses Anda."
+	case "contact_primary_dup_file":
+		return "Lebih dari satu baris menandai kontak utama untuk desa yang sama."
+	case "contact_primary_exists":
+		return "Desa pada salah satu baris sudah memiliki kontak utama."
+	case "contact_primary_invalid":
+		return "Nilai kolom is_primary_contact pada salah satu baris tidak valid — isi dengan true, false, atau kosongkan."
 	default:
 		return ""
 	}

@@ -632,6 +632,16 @@ type Querier interface {
 	// Cek duplikat BANYAK village_code sekaligus (impor CSV) — kembaran batch dari
 	// GetAccountByVillageCode, hindari N+1. Hanya akun HIDUP (deleted_at IS NULL).
 	ListAccountsByVillageCodes(ctx context.Context, arg ListAccountsByVillageCodesParams) ([]ListAccountsByVillageCodesRow, error)
+	// Resolusi kode_desa → akun UTK IMPOR KONTAK (BL-134): id+nama desa SEKALIGUS
+	// flag `writable` F3 dalam SATU query batch (bukan N+1 — Rule 13), predikat
+	// ownership sama ListAccountsForSelect. Baris ABSEN dari hasil = kode desa tak
+	// dikenal (row error "contact_village_notfound"); hadir tapi writable=false =
+	// di luar cakupan aktor (row error "contact_village_forbidden") — resolver di
+	// Go yang memutuskan, query ini cuma menyediakan data. Nama BARU (bukan reuse
+	// ListAccountsByVillageCodes milik BL-63) karena kolom & tujuan beda (di sini
+	// utk MENAUTKAN kontak ke akun sudah-ada, bukan mendeteksi duplikat sebelum
+	// membuat akun baru) — menghindari regresi jalur impor Desa yang sudah ada.
+	ListAccountsByVillageCodesForContactImport(ctx context.Context, arg ListAccountsByVillageCodesForContactImportParams) ([]ListAccountsByVillageCodesForContactImportRow, error)
 	// Desa yang boleh DITULIS aktor (F3), untuk dropdown pemilih desa di form "Tambah
 	// Kontak" global. Predikat ownership IDENTIK ListAccounts (scope_all/is_sales/
 	// is_csm → fail-closed: ketiganya false = NOL baris), tapi TANPA keyset dan hanya
@@ -673,6 +683,12 @@ type Querier interface {
 	// beda, diurut village_name (bukan created_at). village_name TIDAK NULLABLE →
 	// kloning pola ListLeadsSortByName (tanpa kerumitan NULL).
 	ListAccountsSortByVillage(ctx context.Context, arg ListAccountsSortByVillageParams) ([]Account, error)
+	// Dari sekumpulan account_id, mana yang SUDAH punya kontak utama hidup — dipakai
+	// resolver impor kontak (BL-134) utk menolak baris yang klaim is_primary_contact
+	// pada desa yang primary-nya sudah terisi (idx_contacts_primary tak boleh
+	// dilanggar). Dipanggil HANYA dgn account_id yang sudah lolos resolusi F3 tahap
+	// sebelumnya (tetap satu query batch, tak bertambah dgn jumlah baris — Rule 13).
+	ListAccountsWithPrimaryContact(ctx context.Context, accountIds []int64) ([]int64, error)
 	// Daftar aktivitas (tampilan Tabel), keyset (created_at DESC, id DESC) + filter
 	// ownership F3 + filter context. Dua flag ownership (sumber SATU dengan
 	// ActivitiesListFilter): scope_all → semua; is_own → owner_id = uid; keduanya
