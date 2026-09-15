@@ -121,6 +121,29 @@ WHERE r.level = 3 AND r.code = sqlc.arg(code)
 ORDER BY district_name
 LIMIT sqlc.arg(page_size);
 
+-- name: SearchRegionsByDistrict :many
+-- BL-163 lanjutan: hasil tab "Wilayah" (cascading Provinsi→Kabupaten/Kota→
+-- Kecamatan) — Kecamatan yang dipilih user itu SENDIRI (baris pertama,
+-- village_name kosong, sama pola dgn SearchRegionsByCode) + SEMUA Desa
+-- anaknya. Bentuk kolom SAMA PERSIS dgn SearchRegionsByCode/ByName (kontrak
+-- dibaca ui.RegionSearchResults yang sama, tanpa perubahan UI).
+SELECT r.code, ''::text AS village_name, r.name AS district_name,
+       rgc.name AS regency_name, prov.name AS province_name
+FROM regions r
+JOIN regions rgc  ON rgc.id = r.parent_region_id
+JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE r.level = 3 AND r.id = sqlc.arg(district_id)
+UNION ALL
+SELECT r.code, r.name AS village_name, d.name AS district_name,
+       rgc.name AS regency_name, prov.name AS province_name
+FROM regions r
+JOIN regions d    ON d.id = r.parent_region_id
+JOIN regions rgc  ON rgc.id = d.parent_region_id
+JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE r.level = 4 AND r.parent_region_id = sqlc.arg(district_id)
+ORDER BY village_name
+LIMIT sqlc.arg(page_size);
+
 -- name: SearchRegionsByName :many
 -- BL-163: cabang pencarian nama (bukan kode) modal yang sama — ILIKE
 -- Kecamatan (level 3) ATAU Desa (level 4), hasil DICAMPUR satu daftar

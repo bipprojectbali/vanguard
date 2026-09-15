@@ -1893,6 +1893,12 @@ type Querier interface {
 	// lintas cabang UNION dgn benar, lihat commit ini) utk baris Kecamatan,
 	// handler render "-" saat kosong.
 	SearchRegionsByCode(ctx context.Context, arg SearchRegionsByCodeParams) ([]SearchRegionsByCodeRow, error)
+	// BL-163 lanjutan: hasil tab "Wilayah" (cascading Provinsi→Kabupaten/Kota→
+	// Kecamatan) — Kecamatan yang dipilih user itu SENDIRI (baris pertama,
+	// village_name kosong, sama pola dgn SearchRegionsByCode) + SEMUA Desa
+	// anaknya. Bentuk kolom SAMA PERSIS dgn SearchRegionsByCode/ByName (kontrak
+	// dibaca ui.RegionSearchResults yang sama, tanpa perubahan UI).
+	SearchRegionsByDistrict(ctx context.Context, arg SearchRegionsByDistrictParams) ([]SearchRegionsByDistrictRow, error)
 	// BL-163: cabang pencarian nama (bukan kode) modal yang sama — ILIKE
 	// Kecamatan (level 3) ATAU Desa (level 4), hasil DICAMPUR satu daftar
 	// (bukan dua seksi terpisah) sesuai keputusan desain BL-163. `name` TANPA

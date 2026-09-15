@@ -418,6 +418,69 @@ func (q *Queries) SearchRegionsByCode(ctx context.Context, arg SearchRegionsByCo
 	return items, nil
 }
 
+const searchRegionsByDistrict = `-- name: SearchRegionsByDistrict :many
+SELECT r.code, ''::text AS village_name, r.name AS district_name,
+       rgc.name AS regency_name, prov.name AS province_name
+FROM regions r
+JOIN regions rgc  ON rgc.id = r.parent_region_id
+JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE r.level = 3 AND r.id = $2
+UNION ALL
+SELECT r.code, r.name AS village_name, d.name AS district_name,
+       rgc.name AS regency_name, prov.name AS province_name
+FROM regions r
+JOIN regions d    ON d.id = r.parent_region_id
+JOIN regions rgc  ON rgc.id = d.parent_region_id
+JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE r.level = 4 AND r.parent_region_id = $2
+ORDER BY village_name
+LIMIT $1
+`
+
+type SearchRegionsByDistrictParams struct {
+	PageSize   int32 `json:"page_size"`
+	DistrictID int64 `json:"district_id"`
+}
+
+type SearchRegionsByDistrictRow struct {
+	Code         string `json:"code"`
+	VillageName  string `json:"village_name"`
+	DistrictName string `json:"district_name"`
+	RegencyName  string `json:"regency_name"`
+	ProvinceName string `json:"province_name"`
+}
+
+// BL-163 lanjutan: hasil tab "Wilayah" (cascading Provinsi→Kabupaten/Kota→
+// Kecamatan) — Kecamatan yang dipilih user itu SENDIRI (baris pertama,
+// village_name kosong, sama pola dgn SearchRegionsByCode) + SEMUA Desa
+// anaknya. Bentuk kolom SAMA PERSIS dgn SearchRegionsByCode/ByName (kontrak
+// dibaca ui.RegionSearchResults yang sama, tanpa perubahan UI).
+func (q *Queries) SearchRegionsByDistrict(ctx context.Context, arg SearchRegionsByDistrictParams) ([]SearchRegionsByDistrictRow, error) {
+	rows, err := q.db.Query(ctx, searchRegionsByDistrict, arg.PageSize, arg.DistrictID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchRegionsByDistrictRow{}
+	for rows.Next() {
+		var i SearchRegionsByDistrictRow
+		if err := rows.Scan(
+			&i.Code,
+			&i.VillageName,
+			&i.DistrictName,
+			&i.RegencyName,
+			&i.ProvinceName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchRegionsByName = `-- name: SearchRegionsByName :many
 SELECT code, village_name, district_name, regency_name, province_name, match_name FROM (
     SELECT r.code, r.name AS village_name, d.name AS district_name,
