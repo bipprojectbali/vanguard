@@ -48,3 +48,80 @@ func TestRegionSearchModal_EmptyBase(t *testing.T) {
 		t.Errorf("wsBase kosong harus tetap hasilkan \"/regions/search\" (bukan \"//regions/search\" atau kosong):\n%s", out)
 	}
 }
+
+// TestRegionSearchModal_TopPosition membuktikan backdrop diposisikan di ATAS
+// viewport (permintaan user), BUKAN center-viewport lagi (regresi posisi).
+func TestRegionSearchModal_TopPosition(t *testing.T) {
+	var sb strings.Builder
+	if err := RegionSearchModal("/w/desa-plus").Render(&sb); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := sb.String()
+	// Cek CLASS BACKDROP spesifik (bukan "items-center" bare — string itu
+	// juga dipakai header internal kartu utk flex-align tak terkait posisi
+	// modal, false positive bila dicek longgar).
+	if !strings.Contains(out, `class="fixed inset-0 z-50 flex items-start justify-center`) {
+		t.Errorf("class backdrop harus memuat \"items-start\" (posisi atas):\n%s", out)
+	}
+	if strings.Contains(out, `class="fixed inset-0 z-50 flex items-center justify-center`) {
+		t.Errorf("class backdrop TIDAK boleh lagi memuat \"items-center\" (posisi lama):\n%s", out)
+	}
+}
+
+// TestRegionSearchModal_Tabs membuktikan dua tombol tab ("Kode/Nama Desa" &
+// "Wilayah") ada, masing-masing meng-set regionSearchTab lewat klik.
+func TestRegionSearchModal_Tabs(t *testing.T) {
+	var sb strings.Builder
+	if err := RegionSearchModal("/w/desa-plus").Render(&sb); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := sb.String()
+	if !strings.Contains(out, "Kode/Nama Desa") {
+		t.Errorf("label tab \"Kode/Nama Desa\" tak ditemukan:\n%s", out)
+	}
+	if !strings.Contains(out, "Wilayah") {
+		t.Errorf("label tab \"Wilayah\" tak ditemukan:\n%s", out)
+	}
+	if !strings.Contains(out, "$regionSearchTab = &#39;kode&#39;") {
+		t.Errorf("tab \"kode\" harus set $regionSearchTab = 'kode':\n%s", out)
+	}
+	if !strings.Contains(out, "$regionSearchTab = &#39;wilayah&#39;") {
+		t.Errorf("tab \"wilayah\" harus set $regionSearchTab = 'wilayah':\n%s", out)
+	}
+}
+
+// TestRegionSearchModal_TreePanel_PostURLIncludesWorkspacePrefix membuktikan
+// select Kecamatan panel "Wilayah" merakit @post dgn prefix wsBase — sama
+// pola bug 404 diam-diam yang sudah diperbaiki di tab "kode"
+// (TestRegionSearchModal_PostURLIncludesWorkspacePrefix), regresi utk cabang
+// district= tab baru.
+func TestRegionSearchModal_TreePanel_PostURLIncludesWorkspacePrefix(t *testing.T) {
+	var sb strings.Builder
+	if err := RegionSearchModal("/w/desa-plus").Render(&sb); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := sb.String()
+	if !strings.Contains(out, "@post(&#39;/w/desa-plus/regions/search?district=&#39;") {
+		t.Errorf("expr @post select Kecamatan harus diawali prefix workspace \"/w/desa-plus\":\n%s", out)
+	}
+	if !strings.Contains(out, "data-tree-url=\"/w/desa-plus/regions/tree\"") {
+		t.Errorf("data-tree-url harus diawali prefix workspace \"/w/desa-plus\":\n%s", out)
+	}
+}
+
+// TestRegionSearchModal_TreePanel_EmptyBase: wsBase kosong tetap
+// menghasilkan URL valid (bukan "//regions/search"/"//regions/tree") — sama
+// alasan TestRegionSearchModal_EmptyBase, utk panel "Wilayah".
+func TestRegionSearchModal_TreePanel_EmptyBase(t *testing.T) {
+	var sb strings.Builder
+	if err := RegionSearchModal("").Render(&sb); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := sb.String()
+	if !strings.Contains(out, "@post(&#39;/regions/search?district=&#39;") {
+		t.Errorf("wsBase kosong harus tetap hasilkan \"/regions/search?district=\":\n%s", out)
+	}
+	if !strings.Contains(out, "data-tree-url=\"/regions/tree\"") {
+		t.Errorf("wsBase kosong harus tetap hasilkan data-tree-url=\"/regions/tree\":\n%s", out)
+	}
+}

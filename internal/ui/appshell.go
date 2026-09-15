@@ -107,6 +107,11 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 		h.Script(h.Src("/static/sidebar.js")),
 		// changelog.js DEFER: badge "ada pembaruan" dikelola setelah DOM siap.
 		h.Script(h.Src("/static/changelog.js"), h.Defer()),
+		// regiontree.js DEFER: cascading tab "Wilayah" modal RegionSearch
+		// (perluasan BL-163) — select kosong tetap valid sebelum JS jalan,
+		// tak ada risiko FOUC (beda dgn sidebar.js/theme.js yang set atribut
+		// <html> sebelum paint).
+		h.Script(h.Src("/static/regiontree.js"), h.Defer()),
 	)
 	return c.HTML5(c.HTML5Props{
 		Title:    d.Title,
@@ -118,7 +123,7 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 			h.Class("min-h-screen bg-base-200 text-base-content"),
 			data.Signals(map[string]any{
 				"sidebarOpen": false, "logoutConfirm": false, "changelogOpen": false,
-				regionSearchSignal: false,
+				regionSearchSignal: false, regionSearchTabSignal: "kode",
 			}),
 
 			// Backdrop mobile — inline display:none agar tak FOUC sebelum Datastar aktif.
