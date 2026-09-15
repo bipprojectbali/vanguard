@@ -134,10 +134,20 @@ func ContactsAll(v ContactsAllView) g.Node {
 				h.P(h.Class("text-base-content/70 truncate"),
 					g.Text("Semua kontak di desa yang Anda kelola.")),
 			),
-			ui.When(v.CanWrite, h.A(
-				h.Href(v.Base+"/contacts/new"), h.Class("btn btn-primary min-h-11"),
-				g.Text("Tambah Kontak"),
-			)),
+			h.Div(
+				h.Class("flex flex-wrap items-center gap-2"),
+				// BL-134: "Impor CSV" sibling tombol "Tambah Kontak" — gate SAMA
+				// (CanWrite), sudah mensyaratkan aktor boleh tulis DAN punya ≥1
+				// desa dalam cakupannya (lihat komentar field CanWrite di atas).
+				ui.When(v.CanWrite, h.A(
+					h.Href(v.Base+"/contacts/import"), h.Class("btn btn-outline min-h-11"),
+					g.Text("Impor CSV"),
+				)),
+				ui.When(v.CanWrite, h.A(
+					h.Href(v.Base+"/contacts/new"), h.Class("btn btn-primary min-h-11"),
+					g.Text("Tambah Kontak"),
+				)),
+			),
 		),
 	}
 	// Search hanya di daftar GLOBAL (per-desa gerbangnya desa induk). view aktif

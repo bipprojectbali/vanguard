@@ -335,6 +335,15 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/contacts/new", h.ContactNewGlobal)
 		r.Post("/contacts", h.ContactCreateGlobal)
 
+		// BL-134: impor massal Kontak via CSV, pola sama dgn impor Desa di atas
+		// (dry-run pratinjau → konfirmasi all-or-nothing). Beda kunci: butuh
+		// account_id (desa induk) YANG SUDAH ADA, diresolusi dari kode_desa
+		// per baris (bukan membuat akun baru).
+		r.Get("/contacts/import", h.ContactImportForm)
+		r.Post("/contacts/import", h.ContactImportPreview)
+		r.Post("/contacts/import/confirm", h.ContactImportConfirm)
+		r.Get("/contacts/import/template", h.ContactImportTemplate)
+
 		// Customer Success (Modul 6 slice B1): Health Score (6.1) + Journey/
 		// Onboarding (6.2) + Product Adoption (6.4) — SATU baris `customer_success`
 		// per desa, TIGA objek Casbin (crm:health/journey/adoption). F3 DIWARISI

@@ -226,6 +226,37 @@ func (q *Queries) GetContact(ctx context.Context, id int64) (Contact, error) {
 	return i, err
 }
 
+const listAccountsWithPrimaryContact = `-- name: ListAccountsWithPrimaryContact :many
+SELECT DISTINCT account_id FROM contacts
+WHERE deleted_at IS NULL AND is_primary_contact
+  AND account_id = ANY($1::bigint[])
+`
+
+// Dari sekumpulan account_id, mana yang SUDAH punya kontak utama hidup — dipakai
+// resolver impor kontak (BL-134) utk menolak baris yang klaim is_primary_contact
+// pada desa yang primary-nya sudah terisi (idx_contacts_primary tak boleh
+// dilanggar). Dipanggil HANYA dgn account_id yang sudah lolos resolusi F3 tahap
+// sebelumnya (tetap satu query batch, tak bertambah dgn jumlah baris — Rule 13).
+func (q *Queries) ListAccountsWithPrimaryContact(ctx context.Context, accountIds []int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listAccountsWithPrimaryContact, accountIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var account_id int64
+		if err := rows.Scan(&account_id); err != nil {
+			return nil, err
+		}
+		items = append(items, account_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listContacts = `-- name: ListContacts :many
 SELECT c.id, c.tenant_id, c.account_id, c.contact_owner, c.reports_to_id, c.first_name, c.last_name, c.salutation, c.job_title, c.position_category, c.contact_role, c.is_primary_contact, c.is_technical_contact, c.term_period, c.mobile_phone, c.whatsapp_number, c.office_phone, c.email, c.preferred_channel, c.mailing_address, c.city, c.postal_code, c.email_opt_out, c.do_not_contact, c.deleted_at, c.created_by, c.created_at, c.updated_by, c.updated_at, c.entity_code, a.village_name FROM contacts c
 JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL
