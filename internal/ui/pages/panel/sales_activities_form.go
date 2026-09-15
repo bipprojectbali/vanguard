@@ -34,6 +34,16 @@ type ActivityTargetOption struct {
 	Label string
 }
 
+// LeadContactInfoView = info kontak mentah Lead (BL-164), ditampilkan read-only
+// menggantikan dropdown Kontak saat Target = Lead. Field kosong ("") = data
+// tak diisi di Lead — ditampilkan sebagai "—" (lihat contactFieldNode).
+type LeadContactInfoView struct {
+	Name     string
+	Phone    string
+	WhatsApp string
+	Email    string
+}
+
 // ActivityFormView = data halaman form. Action = URL POST. IsEdit mengubah judul &
 // mengunci target. Field per-kind diisi sesuai Kind; opsi enum dari handler.
 type ActivityFormView struct {
@@ -64,6 +74,12 @@ type ActivityFormView struct {
 	Duration   string
 	CallResult string
 	Channel    string
+
+	// LeadContactInfo (BL-164): terisi HANYA saat Target = Lead — Lead tak
+	// punya relasi ke tabel contacts, jadi field Kontak diganti info mentah
+	// lead ini (read-only) alih-alih dropdown. nil = Target bukan Lead → field
+	// Kontak dropdown biasa dirender (lihat contactFieldNode).
+	LeadContactInfo *LeadContactInfoView
 
 	// Meeting
 	StartAt     string
@@ -201,6 +217,9 @@ func activityTargetField(v ActivityFormView) g.Node {
 		Required:    true,
 		Placeholder: "Ketik untuk mencari deal, desa, kontak, atau lead (nama/kode)…",
 		InvalidMsg:  "Pilih target dari daftar.",
+		// BL-164: reload SSE opsi Kontak saat Target berubah (create-mode saja —
+		// edit-mode target immutable, cabang di atas tak pernah sampai sini).
+		TriggerURL: v.Base + "/activities/contact-options",
 	})
 }
 
@@ -220,6 +239,68 @@ func activityKindFields(v ActivityFormView) g.Node {
 		showWhen("$kind == 'chat'", "min-w-0", activityKindFormCard(v, "chat")),
 		showWhen("$kind == 'note'", "min-w-0", activityKindFormCard(v, "note")),
 	})
+}
+
+// contactFieldNode (BL-164) merender field "Kontak" pada kartu Call/Chat:
+// dropdown biasa (memberSelect, accounts_form.go) bila v.LeadContactInfo nil,
+// atau blok info Lead read-only bila Target = Lead (Lead tak punya relasi ke
+// tabel contacts). Dibungkus <div id=wrapID> agar SSE PatchElements (reload
+// dinamis saat Target berubah) bisa menarget kartu Call & Chat SECARA TERPISAH
+// — wrapID WAJIB unik per kartu (keduanya dirender bersamaan di mode create).
+//
+// sm:col-span-2 KHUSUS varian info Lead (dilaporkan user: field "Arah" di
+// sebelahnya melar/misalign): wrapper ini duduk sebagai ITEM LANGSUNG grid
+// 2-kolom formCard (grid gap-3 sm:grid-cols-2), dan blok info Lead jauh lebih
+// tinggi dari field biasa — align-items:stretch bawaan grid memaksa sel
+// tetangga (mis. "Arah") ikut setinggi itu. Melebarkan blok Lead ke 2 kolom
+// membuatnya jadi satu-satunya penghuni barisnya → tak ada lagi sel tetangga
+// yang ikut melar. Varian dropdown (memberSelect) TETAP 1 kolom seperti field
+// lain — tak berubah.
+func contactFieldNode(wrapID string, v ActivityFormView) g.Node {
+	attrs := []g.Node{h.ID(wrapID)}
+	var inner g.Node
+	if v.LeadContactInfo != nil {
+		inner = leadContactInfoBlock(*v.LeadContactInfo)
+		attrs = append(attrs, h.Class("sm:col-span-2"))
+	} else {
+		inner = memberSelect("Kontak", "contact_id", v.ContactID, v.Contacts)
+	}
+	return h.Div(append(attrs, inner)...)
+}
+
+// ContactFieldFragment = versi diekspor contactFieldNode, dipanggil lintas-paket
+// dari internal/handler (sales_activities_contact_options.go) untuk merender
+// fragmen SSE saat Target berubah.
+func ContactFieldFragment(wrapID string, v ActivityFormView) g.Node {
+	return contactFieldNode(wrapID, v)
+}
+
+// leadContactInfoBlock merender info kontak mentah Lead sebagai kartu
+// read-only, menggantikan dropdown Kontak. Field kosong → "—".
+func leadContactInfoBlock(info LeadContactInfoView) g.Node {
+	row := func(label, value string) g.Node {
+		if value == "" {
+			value = "—"
+		}
+		return h.Div(
+			h.Class("flex justify-between gap-2 text-sm min-w-0"),
+			h.Span(h.Class("text-base-content/60"), g.Text(label)),
+			h.Span(h.Class("font-medium text-right break-words"), g.Text(value)),
+		)
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		h.Div(h.Class("text-sm text-base-content/70"), g.Text("Kontak")),
+		h.Div(
+			h.Class("card bg-base-200 p-3 grid gap-1 min-w-0"),
+			row("Nama", info.Name),
+			row("HP", info.Phone),
+			row("WhatsApp", info.WhatsApp),
+			row("Email", info.Email),
+		),
+		h.P(h.Class("text-xs text-base-content/60"),
+			g.Text("Lead belum terhubung ke kontak sistem — info di atas diambil langsung dari data lead.")),
+	)
 }
 
 // activityKindCard = kartu field untuk satu kind.
@@ -243,7 +324,7 @@ func activityKindFormCard(v ActivityFormView, kind string) g.Node {
 		)
 	case "call":
 		return formCard("Detail Panggilan",
-			memberSelect("Kontak", "contact_id", v.ContactID, v.Contacts),
+			contactFieldNode("contact-field-call", v),
 			selectField("Arah", "direction", v.Direction, v.Directions, false),
 			field("Waktu", "activity_at", v.ActivityAt, false, "datetime-local"),
 			field("Durasi (menit)", "duration_min", v.Duration, false, "number"),
@@ -252,7 +333,7 @@ func activityKindFormCard(v ActivityFormView, kind string) g.Node {
 		)
 	case "chat":
 		return formCard("Detail Chat",
-			memberSelect("Kontak", "contact_id", v.ContactID, v.Contacts),
+			contactFieldNode("contact-field-chat", v),
 			selectField("Arah", "direction", v.Direction, v.Directions, false),
 			selectField("Kanal", "channel", v.Channel, v.Channels, false),
 			field("Waktu", "activity_at", v.ActivityAt, false, "datetime-local"),
