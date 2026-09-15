@@ -770,6 +770,24 @@ type Querier interface {
 	// search '' → tak menyaring; selain itu MEMPERSEMPIT subject (BL-6, ILIKE case-
 	// insensitive) di ATAS F3 — tak pernah melebarkan baris di luar cakupan.
 	ListAllActivities(ctx context.Context, arg ListAllActivitiesParams) ([]Activity, error)
+	// BL-157k: sort by Tanggal (created_at), arah dinamis — kloning
+	// ListActivitiesSortByDate TANPA context_filter. Dipakai JUGA sebagai sumbu
+	// DEFAULT feed terpadu (dir=desc) agar seluruh /activity-log memakai SATU
+	// mekanisme cursor (lihat all_activities_cursor.go) — tak ada lagi jalur
+	// ListAllActivities/pageCursor lama terpisah.
+	ListAllActivitiesSortByDate(ctx context.Context, arg ListAllActivitiesSortByDateParams) ([]Activity, error)
+	// BL-157k (sort per kolom Activity Log /activity-log, lengan activities): sort
+	// by Jenis (kind), kloning ListActivitiesSortByKind TANPA context_filter — mirror
+	// persis relasi ListAllActivities↔ListActivities (lintas-context, F3 sama).
+	ListAllActivitiesSortByKind(ctx context.Context, arg ListAllActivitiesSortByKindParams) ([]Activity, error)
+	// BL-157k: sort by Pemilik, kloning ListActivitiesSortByOwner TANPA context_filter.
+	// Kunci sort SAMA (COALESCE(NULLIF(u.name,''), u.email)) — dipakai ownerName()
+	// Go-side utk aktivitas lintas-context juga (activityRowView, sama helper).
+	ListAllActivitiesSortByOwner(ctx context.Context, arg ListAllActivitiesSortByOwnerParams) ([]Activity, error)
+	// BL-157k: sort by Status, kloning ListActivitiesSortByStatus TANPA context_filter.
+	ListAllActivitiesSortByStatus(ctx context.Context, arg ListAllActivitiesSortByStatusParams) ([]Activity, error)
+	// BL-157k: sort by Subjek, kloning ListActivitiesSortBySubject TANPA context_filter.
+	ListAllActivitiesSortBySubject(ctx context.Context, arg ListAllActivitiesSortBySubjectParams) ([]Activity, error)
 	// Query sumbu RBAC bisnis (F2/F3) yang bisa diedit per-workspace. Dua tabel:
 	// business_roles (definisi peran + data_scope) & business_role_permissions
 	// (matriks obj/act). Enforcer Casbin di-load dari permissions; data_scope dibaca
@@ -992,6 +1010,26 @@ type Querier interface {
 	// MEMPERSEMPIT subject + village_name (BL-6, ILIKE). RLS mengurung tenant.
 	// Memakai idx_engagements_tenant_created (migrasi 00037), bukan full-scan.
 	ListEngagementsFeed(ctx context.Context, arg ListEngagementsFeedParams) ([]ListEngagementsFeedRow, error)
+	// BL-157k: sort by Tanggal (created_at), arah dinamis — dipakai juga sebagai
+	// sumbu DEFAULT feed terpadu (dir=desc), sejajar ListActivitiesSortByDate/
+	// ListAllActivitiesSortByDate.
+	ListEngagementsFeedSortByDate(ctx context.Context, arg ListEngagementsFeedSortByDateParams) ([]ListEngagementsFeedSortByDateRow, error)
+	// BL-157k: sort by Pemilik. Kunci sort = u.name MENTAH (BUKAN coalesce email
+	// seperti activities) — engagementFeedRowView menampilkan e.OwnerName (u.name)
+	// apa adanya tanpa fallback email, jadi kunci sort harus sama persis agar urutan
+	// tampil = urutan sort.
+	ListEngagementsFeedSortByOwner(ctx context.Context, arg ListEngagementsFeedSortByOwnerParams) ([]ListEngagementsFeedSortByOwnerRow, error)
+	// BL-157k: sort by Status, kunci = e.status MENTAH (enum, NOT NULL —
+	// beda dari activities.status yang nullable).
+	ListEngagementsFeedSortByStatus(ctx context.Context, arg ListEngagementsFeedSortByStatusParams) ([]ListEngagementsFeedSortByStatusRow, error)
+	// BL-157k: sort by Subjek, kloning ListEngagementsFeed dengan keyset/ORDER BY
+	// dinamis pada e.subject.
+	ListEngagementsFeedSortBySubject(ctx context.Context, arg ListEngagementsFeedSortBySubjectParams) ([]ListEngagementsFeedSortBySubjectRow, error)
+	// BL-157k (sort per kolom Activity Log /activity-log, lengan engagements/CS):
+	// sort by Jenis (engagement_type, RAW enum — sejajar "kind" activity yang juga
+	// disortir mentah, bukan label Indonesia). Sisanya (F3/search/JOIN) identik
+	// ListEngagementsFeed.
+	ListEngagementsFeedSortByType(ctx context.Context, arg ListEngagementsFeedSortByTypeParams) ([]ListEngagementsFeedSortByTypeRow, error)
 	// Kandidat purge permanen: terhapus melewati masa tenggang. Dipanggil perintah
 	// terjadwal, TAK PERNAH di jalur request (purge = kerja berat & tak reversibel).
 	ListExpiredTenants(ctx context.Context, deletedAt pgtype.Timestamptz) ([]Tenant, error)
@@ -1899,6 +1937,33 @@ type Querier interface {
 	// workspace yang dihapus saat ter-arsip pun kembali sebagai aktif — pemulihan
 	// harus meninggalkan keadaan yang bisa langsung dipakai, bukan setengah jalan.
 	RestoreTenant(ctx context.Context, id int64) error
+	// BL-163: modal pencarian global "Cari Kode Desa/Kecamatan" — pencocokan
+	// PERSIS Kode Kemendagri, Kecamatan (level 3) ATAU Desa (level 4). `code`
+	// UNIQUE (migrations/00026) jadi hasil praktis maks 1 baris, tapi kode
+	// sendiri tak menyimpan levelnya (format teks sama bentuknya utk level lain),
+	// jadi tetap dua cabang UNION ALL bukan cari level dulu. Kolom output SAMA
+	// persis dgn SearchRegionsByName (kontrak dibaca handler yang sama):
+	// village_name string KOSONG (bukan NULL — sqlc/pgx tak infer nullability
+	// lintas cabang UNION dgn benar, lihat commit ini) utk baris Kecamatan,
+	// handler render "-" saat kosong.
+	SearchRegionsByCode(ctx context.Context, arg SearchRegionsByCodeParams) ([]SearchRegionsByCodeRow, error)
+	// BL-163 lanjutan: hasil tab "Wilayah" (cascading Provinsi→Kabupaten/Kota→
+	// Kecamatan) — Kecamatan yang dipilih user itu SENDIRI (baris pertama,
+	// village_name kosong, sama pola dgn SearchRegionsByCode) + SEMUA Desa
+	// anaknya. Bentuk kolom SAMA PERSIS dgn SearchRegionsByCode/ByName (kontrak
+	// dibaca ui.RegionSearchResults yang sama, tanpa perubahan UI).
+	SearchRegionsByDistrict(ctx context.Context, arg SearchRegionsByDistrictParams) ([]SearchRegionsByDistrictRow, error)
+	// BL-163: cabang pencarian nama (bukan kode) modal yang sama — ILIKE
+	// Kecamatan (level 3) ATAU Desa (level 4), hasil DICAMPUR satu daftar
+	// (bukan dua seksi terpisah) sesuai keputusan desain BL-163. `name` TANPA
+	// indeks (ADR 0009: volume desa besar, tapi pencarian debounced/
+	// submit-triggered dianggap cukup) — seq scan ~91rb baris per panggilan,
+	// diterima sadar sbg trade-off keputusan BL-163 (bukan lupa index).
+	// Handler bertanggung jawab memangkas `pattern` ke >= 3 karakter sebelum
+	// panggil (guard server-side, lihat regions_search.go). village_name string
+	// kosong (bukan NULL, sama alasannya dgn SearchRegionsByCode) utk baris
+	// Kecamatan.
+	SearchRegionsByName(ctx context.Context, arg SearchRegionsByNameParams) ([]SearchRegionsByNameRow, error)
 	// Tautkan deal ke langganan hasil create-from-deal (deals.created_subscription_id;
 	// FK ditutup di migrasi 00012). Dipanggil dalam tx yang SAMA dgn CreateSubscription
 	// agar deal Closed Won selalu menunjuk langganan yang lahir darinya (atomik).

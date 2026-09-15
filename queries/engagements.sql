@@ -181,3 +181,197 @@ WHERE (e.created_at, e.id) < (sqlc.arg(cursor_created_at)::timestamptz, sqlc.arg
        OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
 ORDER BY e.created_at DESC, e.id DESC
 LIMIT sqlc.arg(page_size);
+
+-- name: ListEngagementsFeedSortByType :many
+-- BL-157k (sort per kolom Activity Log /activity-log, lengan engagements/CS):
+-- sort by Jenis (engagement_type, RAW enum — sejajar "kind" activity yang juga
+-- disortir mentah, bukan label Indonesia). Sisanya (F3/search/JOIN) identik
+-- ListEngagementsFeed.
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (e.engagement_type, e.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (e.engagement_type, e.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(search)::text = ''
+       OR e.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN e.engagement_type END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN e.engagement_type END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN e.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN e.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListEngagementsFeedSortBySubject :many
+-- BL-157k: sort by Subjek, kloning ListEngagementsFeed dengan keyset/ORDER BY
+-- dinamis pada e.subject.
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (e.subject, e.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (e.subject, e.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(search)::text = ''
+       OR e.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN e.subject END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN e.subject END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN e.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN e.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListEngagementsFeedSortByOwner :many
+-- BL-157k: sort by Pemilik. Kunci sort = u.name MENTAH (BUKAN coalesce email
+-- seperti activities) — engagementFeedRowView menampilkan e.OwnerName (u.name)
+-- apa adanya tanpa fallback email, jadi kunci sort harus sama persis agar urutan
+-- tampil = urutan sort.
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (u.name IS NULL
+                OR (u.name, e.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean
+              AND u.name IS NULL AND e.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (u.name IS NOT NULL OR e.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND u.name IS NOT NULL
+              AND (u.name, e.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(search)::text = ''
+       OR e.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN u.name END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN u.name END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN e.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN e.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListEngagementsFeedSortByStatus :many
+-- BL-157k: sort by Status, kunci = e.status MENTAH (enum, NOT NULL —
+-- beda dari activities.status yang nullable).
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (e.status, e.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (e.status, e.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(search)::text = ''
+       OR e.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN e.status END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN e.status END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN e.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN e.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListEngagementsFeedSortByDate :many
+-- BL-157k: sort by Tanggal (created_at), arah dinamis — dipakai juga sebagai
+-- sumbu DEFAULT feed terpadu (dir=desc), sejajar ListActivitiesSortByDate/
+-- ListAllActivitiesSortByDate.
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (e.created_at, e.id) > (sqlc.arg(cursor_val)::timestamptz, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (e.created_at, e.id) < (sqlc.arg(cursor_val)::timestamptz, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND (
+          a.account_owner = sqlc.arg(uid)
+          OR a.assigned_csm = sqlc.arg(uid)
+          OR a.backup_csm = sqlc.arg(uid)
+      ))
+  )
+  AND (sqlc.arg(search)::text = ''
+       OR e.subject ILIKE '%' || sqlc.arg(search) || '%'
+       OR a.village_name ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN e.created_at END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN e.created_at END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN e.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN e.id END DESC
+LIMIT sqlc.arg(page_size);
