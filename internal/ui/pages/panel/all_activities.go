@@ -27,6 +27,8 @@ type AllActivitiesListView struct {
 	After      string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
 	Trail      string // BL-7: jejak cursor halaman sebelumnya (?trail=)
 	Query      string // ?q= pencarian bebas (BL-6); "" = tak mencari
+	Sort       string // BL-157k: kolom sort aktif ("" = default sumbu Tanggal desc)
+	Dir        string // BL-157k: "asc"/"desc" — hanya bermakna saat Sort aktif
 }
 
 // AllActivitiesList merender halaman: header + tombol "Tambah Aktivitas" (pola
@@ -65,6 +67,10 @@ func AllActivitiesList(v AllActivitiesListView) g.Node {
 
 // allActivitiesTable = tabel aktivitas lintas-context. Menambah kolom "Konteks"
 // di samping kolom lain agar pengguna tahu dari modul mana aktivitas berasal.
+// Sortable (BL-157k, full parity dgn Sales Activities BL-157j): Jenis/Subjek/
+// Pemilik/Status/Tanggal. Target & Konteks TETAP teks polos — Target komposit
+// (tipe+id, sama alasan tiap modul BL-157 lain), Konteks di luar cakupan yang
+// disetujui user untuk fase ini.
 func allActivitiesTable(v AllActivitiesListView) g.Node {
 	rows := make([]g.Node, 0, len(v.Items))
 	for _, a := range v.Items {
@@ -78,18 +84,33 @@ func allActivitiesTable(v AllActivitiesListView) g.Node {
 				h.Class("w-full text-sm"),
 				h.THead(h.Tr(
 					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Jenis")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Subjek")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), allActivitySortHeader(v, "kind", "Jenis")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), allActivitySortHeader(v, "subject", "Subjek")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Target")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Konteks")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Pemilik")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Status")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("Tanggal")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), allActivitySortHeader(v, "owner", "Pemilik")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), allActivitySortHeader(v, "status", "Status")),
+					h.Th(h.Class("py-2 font-medium"), allActivitySortHeader(v, "date", "Tanggal")),
 				)),
 				h.TBody(g.Group(rows)),
 			)),
 		),
 	)
+}
+
+// allActivitySortHeader = header tabel yang bisa diklik untuk urut per kolom
+// (BL-157k), mirror activitySortHeader (sales_activities.go). Beda dari
+// varian Sales Activities: tak ada mode TargetFilter di halaman ini (feed
+// global tak punya filter per-entitas), jadi tanpa guard nonaktif.
+func allActivitySortHeader(v AllActivitiesListView, col, label string) g.Node {
+	active := v.Sort == col
+	nextDir := "asc"
+	if active && v.Dir == "asc" {
+		nextDir = "desc"
+	}
+	href := withQuery(v.Base+"/activity-log", v.Query,
+		hiddenField{"sort", col}, hiddenField{"dir", nextDir})
+	return sortHeaderLink(href, label, active, v.Dir)
 }
 
 // allActivityTableRow = satu baris tabel. Baris ACTIVITY (Sales/umum) sama dengan
@@ -227,6 +248,7 @@ func emptyAllActivities(v AllActivitiesListView) g.Node {
 }
 
 func allActivitiesPager(v AllActivitiesListView) g.Node {
-	base := panelListHref(v.Base+"/activity-log", [2]string{"q", v.Query})
+	base := panelListHref(v.Base+"/activity-log",
+		[2]string{"q", v.Query}, [2]string{"sort", v.Sort}, [2]string{"dir", v.Dir})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

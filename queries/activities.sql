@@ -252,6 +252,146 @@ WHERE deleted_at IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListAllActivitiesSortByKind :many
+-- BL-157k (sort per kolom Activity Log /activity-log, lengan activities): sort
+-- by Jenis (kind), kloning ListActivitiesSortByKind TANPA context_filter — mirror
+-- persis relasi ListAllActivities↔ListActivities (lintas-context, F3 sama).
+SELECT * FROM activities
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (kind, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (kind, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND owner_id = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(search)::text = '' OR subject ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN kind END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN kind END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListAllActivitiesSortBySubject :many
+-- BL-157k: sort by Subjek, kloning ListActivitiesSortBySubject TANPA context_filter.
+SELECT * FROM activities
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (subject, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (subject, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND owner_id = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(search)::text = '' OR subject ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN subject END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN subject END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListAllActivitiesSortByOwner :many
+-- BL-157k: sort by Pemilik, kloning ListActivitiesSortByOwner TANPA context_filter.
+-- Kunci sort SAMA (COALESCE(NULLIF(u.name,''), u.email)) — dipakai ownerName()
+-- Go-side utk aktivitas lintas-context juga (activityRowView, sama helper).
+SELECT activities.* FROM activities
+LEFT JOIN users u ON u.id = owner_id
+WHERE activities.deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NULL
+                OR (COALESCE(NULLIF(u.name, ''), u.email), activities.id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean
+              AND COALESCE(NULLIF(u.name, ''), u.email) IS NULL AND activities.id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL OR activities.id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL
+              AND (COALESCE(NULLIF(u.name, ''), u.email), activities.id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND owner_id = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(search)::text = '' OR subject ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN COALESCE(NULLIF(u.name, ''), u.email) END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN COALESCE(NULLIF(u.name, ''), u.email) END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN activities.id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN activities.id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListAllActivitiesSortByStatus :many
+-- BL-157k: sort by Status, kloning ListActivitiesSortByStatus TANPA context_filter.
+SELECT * FROM activities
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc' AND (
+          (NOT sqlc.arg(cursor_is_null)::boolean
+           AND (status IS NULL OR (status, id) > (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint)))
+          OR (sqlc.arg(cursor_is_null)::boolean AND status IS NULL AND id > sqlc.arg(cursor_id)::bigint)
+      ))
+      OR (sqlc.arg(dir)::text = 'desc' AND (
+          (sqlc.arg(cursor_is_null)::boolean
+           AND (status IS NOT NULL OR id < sqlc.arg(cursor_id)::bigint))
+          OR (NOT sqlc.arg(cursor_is_null)::boolean AND status IS NOT NULL
+              AND (status, id) < (sqlc.arg(cursor_val)::text, sqlc.arg(cursor_id)::bigint))
+      ))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND owner_id = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(search)::text = '' OR subject ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN status END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN status END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListAllActivitiesSortByDate :many
+-- BL-157k: sort by Tanggal (created_at), arah dinamis — kloning
+-- ListActivitiesSortByDate TANPA context_filter. Dipakai JUGA sebagai sumbu
+-- DEFAULT feed terpadu (dir=desc) agar seluruh /activity-log memakai SATU
+-- mekanisme cursor (lihat all_activities_cursor.go) — tak ada lagi jalur
+-- ListAllActivities/pageCursor lama terpisah.
+SELECT * FROM activities
+WHERE deleted_at IS NULL
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (sqlc.arg(dir)::text = 'asc'
+          AND (created_at, id) > (sqlc.arg(cursor_val)::timestamptz, sqlc.arg(cursor_id)::bigint))
+      OR (sqlc.arg(dir)::text = 'desc'
+          AND (created_at, id) < (sqlc.arg(cursor_val)::timestamptz, sqlc.arg(cursor_id)::bigint))
+  )
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND owner_id = sqlc.arg(uid))
+  )
+  AND (sqlc.arg(search)::text = '' OR subject ILIKE '%' || sqlc.arg(search) || '%')
+ORDER BY
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN created_at END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN created_at END DESC,
+  CASE WHEN sqlc.arg(dir)::text = 'asc'  THEN id END ASC,
+  CASE WHEN sqlc.arg(dir)::text = 'desc' THEN id END DESC
+LIMIT sqlc.arg(page_size);
+
 -- name: UpdateActivity :one
 -- Sunting aktivitas. kind & target TAK di sini: kind menentukan bentuk form
 -- (immutable saat edit), target ditetapkan saat create. status punya jalur
