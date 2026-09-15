@@ -69,6 +69,13 @@ type ShellData struct {
 	// handler (view murni-data), bukan diimpor logika di view.
 	ChangelogVersion  string
 	ChangelogReleases []changelog.Release
+
+	// WSBase = prefix workspace AKTIF ("/w/{slug}"), "" di luar konteks
+	// workspace (/dev, /notifications). Dipakai RegionSearchModal (BL-163)
+	// merakit URL @post yang benar — modal dirender SEKALI di sini tapi
+	// endpoint-nya ter-NEST di bawah rute workspace (routes.go), jadi tak
+	// bisa ditulis sebagai path absolut "/regions/search" begitu saja.
+	WSBase string
 }
 
 // NavBadge = entri menu dengan penghitung. Count 0 → badge disembunyikan (angka
@@ -152,8 +159,10 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 
 			// Modal global "Cari Kode Desa/Kecamatan" (BL-163) — dipicu
 			// ui.RegionSearchTrigger() dari halaman mana pun (form Akun, impor
-			// CSV, dst).
-			RegionSearchModal(),
+			// CSV, dst). d.WSBase "" (di luar konteks workspace, mis. /dev) →
+			// modal tetap dirender (markup konsisten di semua panel) tapi tak
+			// dipicu di sana (trigger belum dipasang di halaman /dev mana pun).
+			RegionSearchModal(d.WSBase),
 		},
 	})
 }

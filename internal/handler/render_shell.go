@@ -46,6 +46,14 @@ func (h *Handler) renderShell(w http.ResponseWriter, r *http.Request, title, bra
 	if fromSlug == "" {
 		fromSlug = r.URL.Query().Get("from")
 	}
+	// wsBase (BL-163): prefix workspace aktif untuk RegionSearchModal — ""
+	// di luar konteks workspace (/dev, /notifications), "/w/{slug}" bila
+	// path ini ADA {workspace} (slugFromRequest, bukan fromSlug/session —
+	// harus path ini sendiri, sama alasan wsRedirect di wspath.go).
+	wsBase := ""
+	if slug := slugFromRequest(r); slug != "" {
+		wsBase = wsPath(slug, "")
+	}
 	d := ui.ShellData{
 		Title:              title,
 		BrandLabel:         brand,
@@ -63,6 +71,7 @@ func (h *Handler) renderShell(w http.ResponseWriter, r *http.Request, title, bra
 		CanCreateWorkspace: canCreate,
 		ChangelogVersion:   changelog.Current(),
 		ChangelogReleases:  changelog.Releases,
+		WSBase:             wsBase,
 	}
 	if err := ui.AppShell(d, body).Render(w); err != nil {
 		h.Log.Error("render shell", "path", r.URL.Path, "err", err)

@@ -68,10 +68,14 @@ func RegionSearchTrigger() g.Node {
 
 // RegionSearchModal = dialog pencarian. Pola identik ConfirmModal/ChangelogModal
 // (signal + backdrop + stop-propagation kartu dalam), body berisi input
-// live-search + kontainer hasil yang di-patch handler.
-func RegionSearchModal() g.Node {
+// live-search + kontainer hasil yang di-patch handler. wsBase = prefix
+// workspace aktif ("/w/{slug}", dari ShellData.WSBase) — endpoint
+// /regions/search ter-NEST di bawah rute workspace (routes.go), BUKAN path
+// absolut; tanpa prefix ini @post 404 diam-diam (bug ditemukan user: ketikan
+// tak memicu perubahan apa pun karena request tak pernah sampai ke handler).
+func RegionSearchModal(wsBase string) g.Node {
 	openExpr := "$" + regionSearchSignal
-	searchURL := "/regions/search"
+	searchURL := wsBase + "/regions/search"
 	minChars := strconv.Itoa(RegionSearchMinChars)
 	// Guard panjang di EKSPRESI sendiri (bukan cuma placeholder): && pendek-
 	// sirkuit — di bawah minChars, @post tak pernah dievaluasi = tak ada
