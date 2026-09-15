@@ -335,6 +335,15 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/contacts/new", h.ContactNewGlobal)
 		r.Post("/contacts", h.ContactCreateGlobal)
 
+		// BL-134: impor massal Kontak via CSV, pola sama dgn impor Desa di atas
+		// (dry-run pratinjau → konfirmasi all-or-nothing). Beda kunci: butuh
+		// account_id (desa induk) YANG SUDAH ADA, diresolusi dari kode_desa
+		// per baris (bukan membuat akun baru).
+		r.Get("/contacts/import", h.ContactImportForm)
+		r.Post("/contacts/import", h.ContactImportPreview)
+		r.Post("/contacts/import/confirm", h.ContactImportConfirm)
+		r.Get("/contacts/import/template", h.ContactImportTemplate)
+
 		// Customer Success (Modul 6 slice B1): Health Score (6.1) + Journey/
 		// Onboarding (6.2) + Product Adoption (6.4) — SATU baris `customer_success`
 		// per desa, TIGA objek Casbin (crm:health/journey/adoption). F3 DIWARISI
@@ -390,6 +399,17 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// Gerbang sama (canWriteSalesActivity, di handler) — form create tak
 		// dilihat siapa pun yang tak boleh menulis aktivitas.
 		r.Post("/activities/contact-options", h.ActivityContactOptions)
+
+		// Modal global "Cari Kode Desa/Kecamatan" (BL-163) — anggota workspace
+		// mana pun (chain grup ini: RequireEnforce("user:home","read") sudah
+		// cukup; regions GLOBAL tanpa tenant_id, tak ada gerbang Casbin
+		// tambahan sesuai keputusan desain BL-163).
+		r.Post("/regions/search", h.RegionSearch)
+
+		// Lazy-fetch cascading Provinsi/Kabupaten/Kecamatan tab "Wilayah"
+		// modal di atas (perluasan BL-163) — gerbang sama, lihat komentar
+		// di atas.
+		r.Get("/regions/tree", h.RegionsTree)
 
 		// Daftar aktivitas LINTAS-CONTEXT (menu "Activities" top-level, M7). Reuse
 		// gate canViewSalesActivity; query ListAllActivities (tanpa context_filter).

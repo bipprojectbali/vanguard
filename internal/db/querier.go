@@ -632,6 +632,16 @@ type Querier interface {
 	// Cek duplikat BANYAK village_code sekaligus (impor CSV) — kembaran batch dari
 	// GetAccountByVillageCode, hindari N+1. Hanya akun HIDUP (deleted_at IS NULL).
 	ListAccountsByVillageCodes(ctx context.Context, arg ListAccountsByVillageCodesParams) ([]ListAccountsByVillageCodesRow, error)
+	// Resolusi kode_desa → akun UTK IMPOR KONTAK (BL-134): id+nama desa SEKALIGUS
+	// flag `writable` F3 dalam SATU query batch (bukan N+1 — Rule 13), predikat
+	// ownership sama ListAccountsForSelect. Baris ABSEN dari hasil = kode desa tak
+	// dikenal (row error "contact_village_notfound"); hadir tapi writable=false =
+	// di luar cakupan aktor (row error "contact_village_forbidden") — resolver di
+	// Go yang memutuskan, query ini cuma menyediakan data. Nama BARU (bukan reuse
+	// ListAccountsByVillageCodes milik BL-63) karena kolom & tujuan beda (di sini
+	// utk MENAUTKAN kontak ke akun sudah-ada, bukan mendeteksi duplikat sebelum
+	// membuat akun baru) — menghindari regresi jalur impor Desa yang sudah ada.
+	ListAccountsByVillageCodesForContactImport(ctx context.Context, arg ListAccountsByVillageCodesForContactImportParams) ([]ListAccountsByVillageCodesForContactImportRow, error)
 	// Desa yang boleh DITULIS aktor (F3), untuk dropdown pemilih desa di form "Tambah
 	// Kontak" global. Predikat ownership IDENTIK ListAccounts (scope_all/is_sales/
 	// is_csm → fail-closed: ketiganya false = NOL baris), tapi TANPA keyset dan hanya
@@ -673,6 +683,12 @@ type Querier interface {
 	// beda, diurut village_name (bukan created_at). village_name TIDAK NULLABLE →
 	// kloning pola ListLeadsSortByName (tanpa kerumitan NULL).
 	ListAccountsSortByVillage(ctx context.Context, arg ListAccountsSortByVillageParams) ([]Account, error)
+	// Dari sekumpulan account_id, mana yang SUDAH punya kontak utama hidup — dipakai
+	// resolver impor kontak (BL-134) utk menolak baris yang klaim is_primary_contact
+	// pada desa yang primary-nya sudah terisi (idx_contacts_primary tak boleh
+	// dilanggar). Dipanggil HANYA dgn account_id yang sudah lolos resolusi F3 tahap
+	// sebelumnya (tetap satu query batch, tak bertambah dgn jumlah baris — Rule 13).
+	ListAccountsWithPrimaryContact(ctx context.Context, accountIds []int64) ([]int64, error)
 	// Daftar aktivitas (tampilan Tabel), keyset (created_at DESC, id DESC) + filter
 	// ownership F3 + filter context. Dua flag ownership (sumber SATU dengan
 	// ActivitiesListFilter): scope_all → semua; is_own → owner_id = uid; keduanya
@@ -1921,6 +1937,33 @@ type Querier interface {
 	// workspace yang dihapus saat ter-arsip pun kembali sebagai aktif — pemulihan
 	// harus meninggalkan keadaan yang bisa langsung dipakai, bukan setengah jalan.
 	RestoreTenant(ctx context.Context, id int64) error
+	// BL-163: modal pencarian global "Cari Kode Desa/Kecamatan" — pencocokan
+	// PERSIS Kode Kemendagri, Kecamatan (level 3) ATAU Desa (level 4). `code`
+	// UNIQUE (migrations/00026) jadi hasil praktis maks 1 baris, tapi kode
+	// sendiri tak menyimpan levelnya (format teks sama bentuknya utk level lain),
+	// jadi tetap dua cabang UNION ALL bukan cari level dulu. Kolom output SAMA
+	// persis dgn SearchRegionsByName (kontrak dibaca handler yang sama):
+	// village_name string KOSONG (bukan NULL — sqlc/pgx tak infer nullability
+	// lintas cabang UNION dgn benar, lihat commit ini) utk baris Kecamatan,
+	// handler render "-" saat kosong.
+	SearchRegionsByCode(ctx context.Context, arg SearchRegionsByCodeParams) ([]SearchRegionsByCodeRow, error)
+	// BL-163 lanjutan: hasil tab "Wilayah" (cascading Provinsi→Kabupaten/Kota→
+	// Kecamatan) — Kecamatan yang dipilih user itu SENDIRI (baris pertama,
+	// village_name kosong, sama pola dgn SearchRegionsByCode) + SEMUA Desa
+	// anaknya. Bentuk kolom SAMA PERSIS dgn SearchRegionsByCode/ByName (kontrak
+	// dibaca ui.RegionSearchResults yang sama, tanpa perubahan UI).
+	SearchRegionsByDistrict(ctx context.Context, arg SearchRegionsByDistrictParams) ([]SearchRegionsByDistrictRow, error)
+	// BL-163: cabang pencarian nama (bukan kode) modal yang sama — ILIKE
+	// Kecamatan (level 3) ATAU Desa (level 4), hasil DICAMPUR satu daftar
+	// (bukan dua seksi terpisah) sesuai keputusan desain BL-163. `name` TANPA
+	// indeks (ADR 0009: volume desa besar, tapi pencarian debounced/
+	// submit-triggered dianggap cukup) — seq scan ~91rb baris per panggilan,
+	// diterima sadar sbg trade-off keputusan BL-163 (bukan lupa index).
+	// Handler bertanggung jawab memangkas `pattern` ke >= 3 karakter sebelum
+	// panggil (guard server-side, lihat regions_search.go). village_name string
+	// kosong (bukan NULL, sama alasannya dgn SearchRegionsByCode) utk baris
+	// Kecamatan.
+	SearchRegionsByName(ctx context.Context, arg SearchRegionsByNameParams) ([]SearchRegionsByNameRow, error)
 	// Tautkan deal ke langganan hasil create-from-deal (deals.created_subscription_id;
 	// FK ditutup di migrasi 00012). Dipanggil dalam tx yang SAMA dgn CreateSubscription
 	// agar deal Closed Won selalu menunjuk langganan yang lahir darinya (atomik).

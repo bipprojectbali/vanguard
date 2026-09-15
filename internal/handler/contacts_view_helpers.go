@@ -79,6 +79,8 @@ func contactsMsg(code string) string {
 		return "Kontak utama diperbarui."
 	case "deleted":
 		return "Kontak dihapus."
+	case "imported":
+		return "Kontak berhasil diimpor."
 	default:
 		return ""
 	}
