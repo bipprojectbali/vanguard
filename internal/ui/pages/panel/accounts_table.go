@@ -54,15 +54,7 @@ func accountSortHeader(v AccountsListView, col, label string) g.Node {
 		nextDir = "desc"
 	}
 	href := accountsListHref(v.Base, v.ActiveView, v.Query, col, nextDir)
-	text := label
-	if active {
-		arrow := "▲"
-		if v.Dir == "desc" {
-			arrow = "▼"
-		}
-		text = label + " " + arrow
-	}
-	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
+	return sortHeaderLink(href, label, active, v.Dir)
 }
 
 func accountRow(base string, a AccountRow) g.Node {

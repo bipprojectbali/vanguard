@@ -28,7 +28,6 @@ func (h *Handler) ActivitiesList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cursorAt, cursorID := pageCursor(r)
 	base := wsPath(slugFromRequest(r), "")
 	// q = pencarian bebas (BL-6): MEMPERSEMPIT subject di atas F3/target, tak melebar.
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -37,13 +36,33 @@ func (h *Handler) ActivitiesList(w http.ResponseWriter, r *http.Request) {
 	rawTarget := r.URL.Query().Get("target")
 	targetType, targetID, hasTarget := parseActivityTarget(rawTarget)
 
-	var rows []db.Activity
+	// sort/dir (BL-157j): whitelist 4 kolom sortable (activitySortableColumns).
+	// Berlaku HANYA mode normal — ListActivitiesByTarget tak punya varian sort.
+	// Kombinasi tak dikenal → jatuh ke default (created_at DESC), TAK error.
+	sortCol := r.URL.Query().Get("sort")
+	if !activitySortableColumns[sortCol] {
+		sortCol = ""
+	}
+	dir := r.URL.Query().Get("dir")
+	if dir != "asc" && dir != "desc" {
+		dir = "asc"
+	}
+
+	names, err := h.memberNameMap(ctx)
+	if err != nil {
+		h.Log.Error("activities: members", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	var shown []db.Activity
+	var nextCursor string
 	var targetLabel string
-	var err error
 
 	if hasTarget {
 		// Mode filter per-entitas: tampilkan semua aktivitas target ini lintas-context.
-		rows, err = h.q(ctx).ListActivitiesByTarget(ctx, db.ListActivitiesByTargetParams{
+		cursorAt, cursorID := pageCursor(r)
+		rows, err := h.q(ctx).ListActivitiesByTarget(ctx, db.ListActivitiesByTargetParams{
 			TargetType:      targetType,
 			TargetID:        targetID,
 			CursorCreatedAt: cursorAt,
@@ -56,38 +75,162 @@ func (h *Handler) ActivitiesList(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
+		shown, nextCursor = splitPage(rows, func(a db.Activity) (pgtype.Timestamptz, int64) {
+			return a.CreatedAt, a.ID
+		})
 		// Label best-effort: gagal lookup → nama fallback "Tipe #id".
 		targetLabel = h.targetLabel(ctx, targetType, targetID)
+		sortCol = ""
 	} else {
 		// Mode normal: daftar Sales Activities ber-F3 ownership.
 		filter := db.ActivitiesListFilterFor(session.BusinessDataScope(ctx))
 		uid := session.UserID(ctx)
-		rows, err = h.q(ctx).ListActivities(ctx, db.ListActivitiesParams{
-			ContextFilter:   activityContextSales,
-			CursorCreatedAt: cursorAt,
-			CursorID:        cursorID,
-			ScopeAll:        filter.ScopeAll,
-			IsOwn:           filter.IsOwn,
-			Uid:             &uid,
-			Search:          query,
-			PageSize:        pageSize + 1,
-		})
-		if err != nil {
-			h.Log.Error("activities: list", "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
+		switch sortCol {
+		case "kind":
+			cursorVal, cursorSortID, hasCursor := pageCursorText(r)
+			rows, err := h.q(ctx).ListActivitiesSortByKind(ctx, db.ListActivitiesSortByKindParams{
+				ContextFilter: activityContextSales,
+				HasCursor:     hasCursor,
+				Dir:           dir,
+				CursorVal:     cursorVal,
+				CursorID:      cursorSortID,
+				ScopeAll:      filter.ScopeAll,
+				IsOwn:         filter.IsOwn,
+				Uid:           &uid,
+				Search:        query,
+				PageSize:      pageSize + 1,
+			})
+			if err != nil {
+				h.Log.Error("activities: list sort kind", "err", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			shown, nextCursor = splitPageText(rows, func(a db.Activity) (string, int64) {
+				return a.Kind, a.ID
+			})
+		case "subject":
+			cursorVal, cursorSortID, hasCursor := pageCursorText(r)
+			rows, err := h.q(ctx).ListActivitiesSortBySubject(ctx, db.ListActivitiesSortBySubjectParams{
+				ContextFilter: activityContextSales,
+				HasCursor:     hasCursor,
+				Dir:           dir,
+				CursorVal:     cursorVal,
+				CursorID:      cursorSortID,
+				ScopeAll:      filter.ScopeAll,
+				IsOwn:         filter.IsOwn,
+				Uid:           &uid,
+				Search:        query,
+				PageSize:      pageSize + 1,
+			})
+			if err != nil {
+				h.Log.Error("activities: list sort subject", "err", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			shown, nextCursor = splitPageText(rows, func(a db.Activity) (string, int64) {
+				return a.Subject, a.ID
+			})
+		case "owner":
+			cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
+			rows, err := h.q(ctx).ListActivitiesSortByOwner(ctx, db.ListActivitiesSortByOwnerParams{
+				ContextFilter: activityContextSales,
+				HasCursor:     hasCursor,
+				Dir:           dir,
+				CursorIsNull:  isNull,
+				CursorVal:     cursorVal,
+				CursorID:      cursorSortID,
+				ScopeAll:      filter.ScopeAll,
+				IsOwn:         filter.IsOwn,
+				Uid:           &uid,
+				Search:        query,
+				PageSize:      pageSize + 1,
+			})
+			if err != nil {
+				h.Log.Error("activities: list sort owner", "err", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			// Kunci cursor Pemilik = nama/email resolusi peta anggota (ownerName),
+			// PERSIS yang ditampilkan — bukan owner_id mentah. NULL mengikuti
+			// owner_id asli (bukan string kosong hasil ownerName), sama dengan
+			// kondisi NULL di kunci sort SQL (LEFT JOIN users).
+			shown, nextCursor = splitPageTextNullable(rows, func(a db.Activity) (string, int64, bool) {
+				if a.OwnerID == nil {
+					return "", a.ID, true
+				}
+				return ownerName(a.OwnerID, names), a.ID, false
+			})
+		case "status":
+			cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
+			rows, err := h.q(ctx).ListActivitiesSortByStatus(ctx, db.ListActivitiesSortByStatusParams{
+				ContextFilter: activityContextSales,
+				HasCursor:     hasCursor,
+				Dir:           dir,
+				CursorIsNull:  isNull,
+				CursorVal:     cursorVal,
+				CursorID:      cursorSortID,
+				ScopeAll:      filter.ScopeAll,
+				IsOwn:         filter.IsOwn,
+				Uid:           &uid,
+				Search:        query,
+				PageSize:      pageSize + 1,
+			})
+			if err != nil {
+				h.Log.Error("activities: list sort status", "err", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			shown, nextCursor = splitPageTextNullable(rows, func(a db.Activity) (string, int64, bool) {
+				if a.Status == nil {
+					return "", a.ID, true
+				}
+				return *a.Status, a.ID, false
+			})
+		case "date":
+			cursorAt, cursorSortID, hasCursor := pageCursorTimestamp(r)
+			rows, err := h.q(ctx).ListActivitiesSortByDate(ctx, db.ListActivitiesSortByDateParams{
+				ContextFilter: activityContextSales,
+				HasCursor:     hasCursor,
+				Dir:           dir,
+				CursorVal:     cursorAt,
+				CursorID:      cursorSortID,
+				ScopeAll:      filter.ScopeAll,
+				IsOwn:         filter.IsOwn,
+				Uid:           &uid,
+				Search:        query,
+				PageSize:      pageSize + 1,
+			})
+			if err != nil {
+				h.Log.Error("activities: list sort date", "err", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			shown, nextCursor = splitPageTimestamp(rows, func(a db.Activity) (pgtype.Timestamptz, int64) {
+				return a.CreatedAt, a.ID
+			})
+		default:
+			cursorAt, cursorID := pageCursor(r)
+			rows, err := h.q(ctx).ListActivities(ctx, db.ListActivitiesParams{
+				ContextFilter:   activityContextSales,
+				CursorCreatedAt: cursorAt,
+				CursorID:        cursorID,
+				ScopeAll:        filter.ScopeAll,
+				IsOwn:           filter.IsOwn,
+				Uid:             &uid,
+				Search:          query,
+				PageSize:        pageSize + 1,
+			})
+			if err != nil {
+				h.Log.Error("activities: list", "err", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			shown, nextCursor = splitPage(rows, func(a db.Activity) (pgtype.Timestamptz, int64) {
+				return a.CreatedAt, a.ID
+			})
 		}
 	}
 
-	shown, nextCursor := splitPage(rows, func(a db.Activity) (pgtype.Timestamptz, int64) {
-		return a.CreatedAt, a.ID
-	})
-	names, err := h.memberNameMap(ctx)
-	if err != nil {
-		h.Log.Error("activities: members", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
 	items := make([]panel.ActivityRow, 0, len(shown))
 	for _, a := range shown {
 		items = append(items, activityRowView(a, names))
@@ -115,7 +258,24 @@ func (h *Handler) ActivitiesList(w http.ResponseWriter, r *http.Request) {
 			Query:        query,
 			TargetFilter: targetFilter,
 			TargetLabel:  targetLabel,
+			Sort:         sortCol,
+			Dir:          dir,
 		}))
+}
+
+// activitySortableColumns = whitelist kolom yang boleh diminta lewat ?sort=
+// (BL-157j: 5 kolom tabel Sales Activities). ?sort= di luar daftar ini
+// diperlakukan seolah absen (jatuh ke default created_at DESC), TAK error.
+// Target sengaja tak masuk: komposit (tipe+id), bukan skalar tunggal.
+// "date" (created_at) SUDAH jadi sumbu default (DESC) tanpa ?sort= —
+// dimasukkan whitelist toh supaya user bisa FLIP ke ASC & mengarahkan panah
+// aktif eksplisit di header, lewat ListActivitiesSortByDate (arah dinamis).
+var activitySortableColumns = map[string]bool{
+	"kind":    true,
+	"subject": true,
+	"owner":   true,
+	"status":  true,
+	"date":    true,
 }
 
 // renderActivitiesForbidden — 403 + penjelasan bagi anggota tanpa izin

@@ -120,6 +120,30 @@ func appendQuery(href, q string) string {
 	return href + "&q=" + url.QueryEscape(q)
 }
 
+// sortHeaderLink merender tautan <Th> sortable BERSAMA untuk SEMUA modul BL-157
+// (a-j, 10 file *SortHeader) — sebelumnya tiap modul menduplikasi persis logika
+// ini (arrow aktif ▲/▼, teks polos saat tak aktif). User eksplisit minta ikon
+// sortir juga muncul pada kolom yang BISA disortir tapi BELUM aktif (bukan cuma
+// saat aktif) — "⇅" muram (text-base-content/40, dibungkus <span>) sebagai
+// isyarat "bisa diklik", tak menyaingi warna label. Kolom AKTIF sengaja TETAP
+// teks polos "label ▲/▼" (BUKAN dibungkus span) — sejumlah test *_sort_test.go
+// lintas modul (accounts/contacts/quotes/leads/deals/subscriptions) mencocokkan
+// substring persis `label + " ▲"`/`" ▼"` tanpa tag di antaranya; membungkusnya
+// akan memutus kontinuitas string itu. href & label tetap dirakit tiap
+// pemanggil (query-builder beda per modul: withQuery+hiddenField vs
+// accountsListHref) — hanya potongan render-ikon yang dibagi.
+func sortHeaderLink(href, label string, active bool, dir string) g.Node {
+	if active {
+		arrow := "▲"
+		if dir == "desc" {
+			arrow = "▼"
+		}
+		return h.A(h.Href(href), h.Class("hover:underline"), g.Text(label+" "+arrow))
+	}
+	return h.A(h.Href(href), h.Class("hover:underline"),
+		g.Text(label+" "), h.Span(h.Class("text-base-content/40"), g.Text("⇅")))
+}
+
 // panelListHref merakit URL kanonik daftar untuk baseHref ui.KeysetPager (BL-7):
 // path diikuti param filter non-kosong dengan pemisah ?/& yang benar, TANPA
 // after/trail (ditambah helper pager sendiri). Nilai di-escape; berbeda dari

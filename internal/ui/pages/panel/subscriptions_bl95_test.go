@@ -46,8 +46,15 @@ func TestSubList_SlimColumns(t *testing.T) {
 		}},
 	}))
 	// Header baru hadir (BL-157a: label kini dibungkus <a> sort header, jadi
-	// anchor label</a></th> — bukan lagi label</th> polos).
-	for _, want := range []string{"Renewal Date</a></th>", "CSM</a></th>", "MRR</a></th>", "Masa Berlaku</a></th>"} {
+	// anchor label ...</a></th>; sejak ikon sortir netral "⇅" ditambahkan lintas
+	// modul, kolom tak-aktif diakhiri <span>⇅</span></a></th> alih-alih label
+	// telanjang persis di depan </a>).
+	for _, want := range []string{
+		"Renewal Date <span class=\"text-base-content/40\">⇅</span></a></th>",
+		"CSM <span class=\"text-base-content/40\">⇅</span></a></th>",
+		"MRR <span class=\"text-base-content/40\">⇅</span></a></th>",
+		"Masa Berlaku <span class=\"text-base-content/40\">⇅</span></a></th>",
+	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("header %q harus hadir:\n%s", want, out)
 		}

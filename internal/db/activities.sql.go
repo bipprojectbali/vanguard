@@ -390,6 +390,581 @@ func (q *Queries) ListActivitiesByTarget(ctx context.Context, arg ListActivities
 	return items, nil
 }
 
+const listActivitiesSortByDate = `-- name: ListActivitiesSortByDate :many
+SELECT id, tenant_id, kind, subject, target_type, target_id, owner_id, activity_context, status, notes, due_date, priority, reminder_at, start_at, end_at, all_day, location, meeting_type, contact_id, direction, activity_at, duration_min, call_result, email_from, email_to, email_status, body, engagement_type, frequency, channel, scheduled_date, next_due_date, deleted_at, created_by, created_at, updated_by, updated_at FROM activities
+WHERE deleted_at IS NULL
+  AND activity_context = $1::text
+  AND (
+      NOT $2::boolean
+      OR ($3::text = 'asc'
+          AND (created_at, id) > ($4::timestamptz, $5::bigint))
+      OR ($3::text = 'desc'
+          AND (created_at, id) < ($4::timestamptz, $5::bigint))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND owner_id = $8)
+  )
+  AND ($9::text = '' OR subject ILIKE '%' || $9 || '%')
+ORDER BY
+  CASE WHEN $3::text = 'asc'  THEN created_at END ASC,
+  CASE WHEN $3::text = 'desc' THEN created_at END DESC,
+  CASE WHEN $3::text = 'asc'  THEN id END ASC,
+  CASE WHEN $3::text = 'desc' THEN id END DESC
+LIMIT $10
+`
+
+type ListActivitiesSortByDateParams struct {
+	ContextFilter string             `json:"context_filter"`
+	HasCursor     bool               `json:"has_cursor"`
+	Dir           string             `json:"dir"`
+	CursorVal     pgtype.Timestamptz `json:"cursor_val"`
+	CursorID      int64              `json:"cursor_id"`
+	ScopeAll      bool               `json:"scope_all"`
+	IsOwn         bool               `json:"is_own"`
+	Uid           *int64             `json:"uid"`
+	Search        string             `json:"search"`
+	PageSize      int32              `json:"page_size"`
+}
+
+// BL-157j (lanjutan): sort by Tanggal (created_at) — NOT NULL, tapi BEDA dari
+// ListActivities: arah DINAMIS (bisa asc, bukan desc tetap), jadi tak bisa
+// pakai pageCursor/splitPage biasa (sentinel ±Infinity, arah tetap). Kolom ini
+// SUDAH jadi sumbu default (created_at DESC via ListActivities) — varian ini
+// HANYA menambah kemampuan flip ke ASC & jadi target klik header eksplisit;
+// SAMA PERSIS filter ListActivities (context+F3+search), cuma keyset+ORDER BY
+// beda arah.
+func (q *Queries) ListActivitiesSortByDate(ctx context.Context, arg ListActivitiesSortByDateParams) ([]Activity, error) {
+	rows, err := q.db.Query(ctx, listActivitiesSortByDate,
+		arg.ContextFilter,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Activity{}
+	for rows.Next() {
+		var i Activity
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Kind,
+			&i.Subject,
+			&i.TargetType,
+			&i.TargetID,
+			&i.OwnerID,
+			&i.ActivityContext,
+			&i.Status,
+			&i.Notes,
+			&i.DueDate,
+			&i.Priority,
+			&i.ReminderAt,
+			&i.StartAt,
+			&i.EndAt,
+			&i.AllDay,
+			&i.Location,
+			&i.MeetingType,
+			&i.ContactID,
+			&i.Direction,
+			&i.ActivityAt,
+			&i.DurationMin,
+			&i.CallResult,
+			&i.EmailFrom,
+			&i.EmailTo,
+			&i.EmailStatus,
+			&i.Body,
+			&i.EngagementType,
+			&i.Frequency,
+			&i.Channel,
+			&i.ScheduledDate,
+			&i.NextDueDate,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActivitiesSortByKind = `-- name: ListActivitiesSortByKind :many
+SELECT id, tenant_id, kind, subject, target_type, target_id, owner_id, activity_context, status, notes, due_date, priority, reminder_at, start_at, end_at, all_day, location, meeting_type, contact_id, direction, activity_at, duration_min, call_result, email_from, email_to, email_status, body, engagement_type, frequency, channel, scheduled_date, next_due_date, deleted_at, created_by, created_at, updated_by, updated_at FROM activities
+WHERE deleted_at IS NULL
+  AND activity_context = $1::text
+  AND (
+      NOT $2::boolean
+      OR ($3::text = 'asc'
+          AND (kind, id) > ($4::text, $5::bigint))
+      OR ($3::text = 'desc'
+          AND (kind, id) < ($4::text, $5::bigint))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND owner_id = $8)
+  )
+  AND ($9::text = '' OR subject ILIKE '%' || $9 || '%')
+ORDER BY
+  CASE WHEN $3::text = 'asc'  THEN kind END ASC,
+  CASE WHEN $3::text = 'desc' THEN kind END DESC,
+  CASE WHEN $3::text = 'asc'  THEN id END ASC,
+  CASE WHEN $3::text = 'desc' THEN id END DESC
+LIMIT $10
+`
+
+type ListActivitiesSortByKindParams struct {
+	ContextFilter string `json:"context_filter"`
+	HasCursor     bool   `json:"has_cursor"`
+	Dir           string `json:"dir"`
+	CursorVal     string `json:"cursor_val"`
+	CursorID      int64  `json:"cursor_id"`
+	ScopeAll      bool   `json:"scope_all"`
+	IsOwn         bool   `json:"is_own"`
+	Uid           *int64 `json:"uid"`
+	Search        string `json:"search"`
+	PageSize      int32  `json:"page_size"`
+}
+
+// BL-157j (sort per kolom Sales Activities): sort by Jenis (kind), RAW enum
+// alfabetis (task/meeting/call/chat/note) — mirror keputusan "Status" Leads/
+// "Tipe" Accounts: tak menduplikasi urutan tampil ke SQL. NOT NULL → kloning
+// pola sederhana ListContactsSortByName (tanpa kerumitan NULL). SAMA PERSIS
+// filter ListActivities (context+F3+search) — hanya ORDER BY/keyset beda.
+func (q *Queries) ListActivitiesSortByKind(ctx context.Context, arg ListActivitiesSortByKindParams) ([]Activity, error) {
+	rows, err := q.db.Query(ctx, listActivitiesSortByKind,
+		arg.ContextFilter,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Activity{}
+	for rows.Next() {
+		var i Activity
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Kind,
+			&i.Subject,
+			&i.TargetType,
+			&i.TargetID,
+			&i.OwnerID,
+			&i.ActivityContext,
+			&i.Status,
+			&i.Notes,
+			&i.DueDate,
+			&i.Priority,
+			&i.ReminderAt,
+			&i.StartAt,
+			&i.EndAt,
+			&i.AllDay,
+			&i.Location,
+			&i.MeetingType,
+			&i.ContactID,
+			&i.Direction,
+			&i.ActivityAt,
+			&i.DurationMin,
+			&i.CallResult,
+			&i.EmailFrom,
+			&i.EmailTo,
+			&i.EmailStatus,
+			&i.Body,
+			&i.EngagementType,
+			&i.Frequency,
+			&i.Channel,
+			&i.ScheduledDate,
+			&i.NextDueDate,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActivitiesSortByOwner = `-- name: ListActivitiesSortByOwner :many
+SELECT activities.id, activities.tenant_id, activities.kind, activities.subject, activities.target_type, activities.target_id, activities.owner_id, activities.activity_context, activities.status, activities.notes, activities.due_date, activities.priority, activities.reminder_at, activities.start_at, activities.end_at, activities.all_day, activities.location, activities.meeting_type, activities.contact_id, activities.direction, activities.activity_at, activities.duration_min, activities.call_result, activities.email_from, activities.email_to, activities.email_status, activities.body, activities.engagement_type, activities.frequency, activities.channel, activities.scheduled_date, activities.next_due_date, activities.deleted_at, activities.created_by, activities.created_at, activities.updated_by, activities.updated_at FROM activities
+LEFT JOIN users u ON u.id = owner_id
+WHERE activities.deleted_at IS NULL
+  AND activities.activity_context = $1::text
+  AND (
+      NOT $2::boolean
+      OR ($3::text = 'asc' AND (
+          (NOT $4::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NULL
+                OR (COALESCE(NULLIF(u.name, ''), u.email), activities.id) > ($5::text, $6::bigint)))
+          OR ($4::boolean
+              AND COALESCE(NULLIF(u.name, ''), u.email) IS NULL AND activities.id > $6::bigint)
+      ))
+      OR ($3::text = 'desc' AND (
+          ($4::boolean
+           AND (COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL OR activities.id < $6::bigint))
+          OR (NOT $4::boolean AND COALESCE(NULLIF(u.name, ''), u.email) IS NOT NULL
+              AND (COALESCE(NULLIF(u.name, ''), u.email), activities.id) < ($5::text, $6::bigint))
+      ))
+  )
+  AND (
+      $7::boolean
+      OR ($8::boolean AND owner_id = $9)
+  )
+  AND ($10::text = '' OR subject ILIKE '%' || $10 || '%')
+ORDER BY
+  CASE WHEN $3::text = 'asc'  THEN COALESCE(NULLIF(u.name, ''), u.email) END ASC,
+  CASE WHEN $3::text = 'desc' THEN COALESCE(NULLIF(u.name, ''), u.email) END DESC,
+  CASE WHEN $3::text = 'asc'  THEN activities.id END ASC,
+  CASE WHEN $3::text = 'desc' THEN activities.id END DESC
+LIMIT $11
+`
+
+type ListActivitiesSortByOwnerParams struct {
+	ContextFilter string `json:"context_filter"`
+	HasCursor     bool   `json:"has_cursor"`
+	Dir           string `json:"dir"`
+	CursorIsNull  bool   `json:"cursor_is_null"`
+	CursorVal     string `json:"cursor_val"`
+	CursorID      int64  `json:"cursor_id"`
+	ScopeAll      bool   `json:"scope_all"`
+	IsOwn         bool   `json:"is_own"`
+	Uid           *int64 `json:"uid"`
+	Search        string `json:"search"`
+	PageSize      int32  `json:"page_size"`
+}
+
+// BL-157j: sort by Pemilik (owner_id). Kunci sort HARUS
+// COALESCE(NULLIF(u.name,”), u.email) — PERSIS logika tampil ownerName/
+// memberNameMap (nama bila terisi, else email) — agar urutan tak menyimpang
+// dari yang ditampilkan. NULLABLE (owner_id ON DELETE SET NULL). LEFT JOIN
+// users: baris tanpa owner ATAU owner terhapus → owner_key NULL, masuk
+// kelompok NULL (default Postgres). Mirror PERSIS ListDealsSortByOwner.
+func (q *Queries) ListActivitiesSortByOwner(ctx context.Context, arg ListActivitiesSortByOwnerParams) ([]Activity, error) {
+	rows, err := q.db.Query(ctx, listActivitiesSortByOwner,
+		arg.ContextFilter,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Activity{}
+	for rows.Next() {
+		var i Activity
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Kind,
+			&i.Subject,
+			&i.TargetType,
+			&i.TargetID,
+			&i.OwnerID,
+			&i.ActivityContext,
+			&i.Status,
+			&i.Notes,
+			&i.DueDate,
+			&i.Priority,
+			&i.ReminderAt,
+			&i.StartAt,
+			&i.EndAt,
+			&i.AllDay,
+			&i.Location,
+			&i.MeetingType,
+			&i.ContactID,
+			&i.Direction,
+			&i.ActivityAt,
+			&i.DurationMin,
+			&i.CallResult,
+			&i.EmailFrom,
+			&i.EmailTo,
+			&i.EmailStatus,
+			&i.Body,
+			&i.EngagementType,
+			&i.Frequency,
+			&i.Channel,
+			&i.ScheduledDate,
+			&i.NextDueDate,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActivitiesSortByStatus = `-- name: ListActivitiesSortByStatus :many
+SELECT id, tenant_id, kind, subject, target_type, target_id, owner_id, activity_context, status, notes, due_date, priority, reminder_at, start_at, end_at, all_day, location, meeting_type, contact_id, direction, activity_at, duration_min, call_result, email_from, email_to, email_status, body, engagement_type, frequency, channel, scheduled_date, next_due_date, deleted_at, created_by, created_at, updated_by, updated_at FROM activities
+WHERE deleted_at IS NULL
+  AND activity_context = $1::text
+  AND (
+      NOT $2::boolean
+      OR ($3::text = 'asc' AND (
+          (NOT $4::boolean
+           AND (status IS NULL OR (status, id) > ($5::text, $6::bigint)))
+          OR ($4::boolean AND status IS NULL AND id > $6::bigint)
+      ))
+      OR ($3::text = 'desc' AND (
+          ($4::boolean
+           AND (status IS NOT NULL OR id < $6::bigint))
+          OR (NOT $4::boolean AND status IS NOT NULL
+              AND (status, id) < ($5::text, $6::bigint))
+      ))
+  )
+  AND (
+      $7::boolean
+      OR ($8::boolean AND owner_id = $9)
+  )
+  AND ($10::text = '' OR subject ILIKE '%' || $10 || '%')
+ORDER BY
+  CASE WHEN $3::text = 'asc'  THEN status END ASC,
+  CASE WHEN $3::text = 'desc' THEN status END DESC,
+  CASE WHEN $3::text = 'asc'  THEN id END ASC,
+  CASE WHEN $3::text = 'desc' THEN id END DESC
+LIMIT $11
+`
+
+type ListActivitiesSortByStatusParams struct {
+	ContextFilter string `json:"context_filter"`
+	HasCursor     bool   `json:"has_cursor"`
+	Dir           string `json:"dir"`
+	CursorIsNull  bool   `json:"cursor_is_null"`
+	CursorVal     string `json:"cursor_val"`
+	CursorID      int64  `json:"cursor_id"`
+	ScopeAll      bool   `json:"scope_all"`
+	IsOwn         bool   `json:"is_own"`
+	Uid           *int64 `json:"uid"`
+	Search        string `json:"search"`
+	PageSize      int32  `json:"page_size"`
+}
+
+// BL-157j: sort by Status, RAW enum alfabetis — kolom mentah aktivitas, BUKAN
+// derivasi seperti Renewals; mirror keputusan Tickets (Status sortable karena
+// raw, bukan derivasi penuh). NULLABLE (call/note tanpa status) → pola
+// null-aware SAMA dgn ListContactsSortByRole.
+func (q *Queries) ListActivitiesSortByStatus(ctx context.Context, arg ListActivitiesSortByStatusParams) ([]Activity, error) {
+	rows, err := q.db.Query(ctx, listActivitiesSortByStatus,
+		arg.ContextFilter,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Activity{}
+	for rows.Next() {
+		var i Activity
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Kind,
+			&i.Subject,
+			&i.TargetType,
+			&i.TargetID,
+			&i.OwnerID,
+			&i.ActivityContext,
+			&i.Status,
+			&i.Notes,
+			&i.DueDate,
+			&i.Priority,
+			&i.ReminderAt,
+			&i.StartAt,
+			&i.EndAt,
+			&i.AllDay,
+			&i.Location,
+			&i.MeetingType,
+			&i.ContactID,
+			&i.Direction,
+			&i.ActivityAt,
+			&i.DurationMin,
+			&i.CallResult,
+			&i.EmailFrom,
+			&i.EmailTo,
+			&i.EmailStatus,
+			&i.Body,
+			&i.EngagementType,
+			&i.Frequency,
+			&i.Channel,
+			&i.ScheduledDate,
+			&i.NextDueDate,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActivitiesSortBySubject = `-- name: ListActivitiesSortBySubject :many
+SELECT id, tenant_id, kind, subject, target_type, target_id, owner_id, activity_context, status, notes, due_date, priority, reminder_at, start_at, end_at, all_day, location, meeting_type, contact_id, direction, activity_at, duration_min, call_result, email_from, email_to, email_status, body, engagement_type, frequency, channel, scheduled_date, next_due_date, deleted_at, created_by, created_at, updated_by, updated_at FROM activities
+WHERE deleted_at IS NULL
+  AND activity_context = $1::text
+  AND (
+      NOT $2::boolean
+      OR ($3::text = 'asc'
+          AND (subject, id) > ($4::text, $5::bigint))
+      OR ($3::text = 'desc'
+          AND (subject, id) < ($4::text, $5::bigint))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND owner_id = $8)
+  )
+  AND ($9::text = '' OR subject ILIKE '%' || $9 || '%')
+ORDER BY
+  CASE WHEN $3::text = 'asc'  THEN subject END ASC,
+  CASE WHEN $3::text = 'desc' THEN subject END DESC,
+  CASE WHEN $3::text = 'asc'  THEN id END ASC,
+  CASE WHEN $3::text = 'desc' THEN id END DESC
+LIMIT $10
+`
+
+type ListActivitiesSortBySubjectParams struct {
+	ContextFilter string `json:"context_filter"`
+	HasCursor     bool   `json:"has_cursor"`
+	Dir           string `json:"dir"`
+	CursorVal     string `json:"cursor_val"`
+	CursorID      int64  `json:"cursor_id"`
+	ScopeAll      bool   `json:"scope_all"`
+	IsOwn         bool   `json:"is_own"`
+	Uid           *int64 `json:"uid"`
+	Search        string `json:"search"`
+	PageSize      int32  `json:"page_size"`
+}
+
+// BL-157j: sort by Subjek (subject), NOT NULL → kloning sederhana sama pola
+// ListActivitiesSortByKind, kolom beda.
+func (q *Queries) ListActivitiesSortBySubject(ctx context.Context, arg ListActivitiesSortBySubjectParams) ([]Activity, error) {
+	rows, err := q.db.Query(ctx, listActivitiesSortBySubject,
+		arg.ContextFilter,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Activity{}
+	for rows.Next() {
+		var i Activity
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Kind,
+			&i.Subject,
+			&i.TargetType,
+			&i.TargetID,
+			&i.OwnerID,
+			&i.ActivityContext,
+			&i.Status,
+			&i.Notes,
+			&i.DueDate,
+			&i.Priority,
+			&i.ReminderAt,
+			&i.StartAt,
+			&i.EndAt,
+			&i.AllDay,
+			&i.Location,
+			&i.MeetingType,
+			&i.ContactID,
+			&i.Direction,
+			&i.ActivityAt,
+			&i.DurationMin,
+			&i.CallResult,
+			&i.EmailFrom,
+			&i.EmailTo,
+			&i.EmailStatus,
+			&i.Body,
+			&i.EngagementType,
+			&i.Frequency,
+			&i.Channel,
+			&i.ScheduledDate,
+			&i.NextDueDate,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAllActivities = `-- name: ListAllActivities :many
 SELECT id, tenant_id, kind, subject, target_type, target_id, owner_id, activity_context, status, notes, due_date, priority, reminder_at, start_at, end_at, all_day, location, meeting_type, contact_id, direction, activity_at, duration_min, call_result, email_from, email_to, email_status, body, engagement_type, frequency, channel, scheduled_date, next_due_date, deleted_at, created_by, created_at, updated_by, updated_at FROM activities
 WHERE deleted_at IS NULL
