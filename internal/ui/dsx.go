@@ -58,6 +58,23 @@ func FormPostSelect(postURL, name string, opts ...g.Node) g.Node {
 // FormPostSelectWith = FormPostSelect + field TERSEMBUNYI ikut terkirim (mis.
 // tenant_id saat role per-workspace). hidden: nama→nilai. Tetap satu <form> yang
 // dirender helper → gotcha #6 tetap mustahil terjadi.
+// OnChangePostQuery memicu @post saat event "change", mengirim NILAI ELEMEN itu
+// sendiri (el.value) sebagai query string `?<param>=<value>` — untuk elemen yang
+// SUDAH ada di dalam <form> lain (mis. hidden input picker target di form
+// aktivitas, BL-164) TANPA membuat <form> baru.
+//
+// BUKAN {contentType:'form'} (kebalikan niat awal, ditemukan lewat bug laporan
+// user: Target berubah, Kontak tak ikut berubah): Datastar men-checkValidity()
+// SELURUH <form> terdekat sebelum kirim (bukan cuma elemen ybs) — di form
+// aktivitas dengan field required lain (mis. Subjek) yang masih kosong saat
+// Target baru dipilih, itu bikin @post GAGAL DIAM-DIAM (`reportValidity()` +
+// return, tanpa error terlihat). contentType default 'json' (dipakai di sini)
+// TAK memvalidasi apa pun — bodinya (signal JSON) diabaikan backend; nilai
+// dikirim lewat query string yang kita rakit sendiri di URL.
+func OnChangePostQuery(url, param string) g.Node {
+	return data.On("change", "@post('"+url+"?"+param+"='+encodeURIComponent(el.value))")
+}
+
 func FormPostSelectWith(postURL, name string, hidden map[string]string, opts ...g.Node) g.Node {
 	attrs := []g.Node{
 		h.Class("select select-sm"),

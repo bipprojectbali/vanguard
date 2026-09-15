@@ -50,11 +50,16 @@
           }
         }
       }
+      // Dispatch native "change" HANYA saat nilai berubah (BL-164) — dipakai
+      // picker Target aktivitas (OnChangePostForm) buat memicu reload SSE opsi
+      // Kontak. Aman utk picker lain: dispatch tanpa listener = no-op.
+      var changed = hidden.value !== id;
       hidden.value = id;
       // Ada ketikan tapi tak ada opsi cocok → tandai invalid agar form tak
       // ter-submit dgn desa yang bukan pilihan sah. Kosong dibiarkan ke
       // required bawaan (pesan "wajib diisi" browser).
       search.setCustomValidity(typed && !id ? invalidMsg : "");
+      if (changed) hidden.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
     search.addEventListener("input", sync);

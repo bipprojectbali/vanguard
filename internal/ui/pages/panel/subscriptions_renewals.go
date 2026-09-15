@@ -197,15 +197,7 @@ func renewalSortHeader(v RenewalsView, col, label string) g.Node {
 	}
 	href := withQuery(v.Base+"/subscriptions/renewals", "",
 		hiddenField{"window", v.Window}, hiddenField{"sort", col}, hiddenField{"dir", nextDir})
-	text := label
-	if active {
-		arrow := "▲"
-		if v.Dir == "desc" {
-			arrow = "▼"
-		}
-		text = label + " " + arrow
-	}
-	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
+	return sortHeaderLink(href, label, active, v.Dir)
 }
 
 func renewalTableRow(base string, s RenewalRow) g.Node {

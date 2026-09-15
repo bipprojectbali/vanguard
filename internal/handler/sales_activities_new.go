@@ -44,13 +44,22 @@ func (h *Handler) ActivityNew(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	// Form tunggal: grup field "call" bisa dipilih klien → opsi kontak WAJIB dimuat
-	// walau kind awal "task" (pass "call" agar loader tak melewatinya).
-	contacts, err := h.activityContactOptions(ctx, "call")
-	if err != nil {
-		h.Log.Error("activities: contact options", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+
+	// Kontak difilter mengikuti Target (BL-164): hanya bisa diresolusi bila
+	// preTarget terisi (dari "+ Log Aktivitas" di timeline entitas). Target
+	// dipilih SETELAH halaman dimuat (alur menu global) → Kontak mulai kosong,
+	// direfresh via SSE saat Target berubah (ActivityContactOptions).
+	var contacts []panel.AccountMemberOption
+	var contactID string
+	var leadInfo *panel.LeadContactInfoView
+	if preTarget != "" {
+		targetType, id, _ := parseActivityTarget(preTarget)
+		contacts, contactID, leadInfo, err = h.activityContactsForTarget(ctx, targetType, id)
+		if err != nil {
+			h.Log.Error("activities: contact options", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	base := wsPath(slugFromRequest(r), "")
@@ -64,7 +73,9 @@ func (h *Handler) ActivityNew(w http.ResponseWriter, r *http.Request) {
 			Kinds:           activityKindOptions,
 			TargetValue:     preTarget,
 			Targets:         targets,
+			ContactID:       contactID,
 			Contacts:        contacts,
+			LeadContactInfo: leadInfo,
 			Priorities:      activityPriorityOptions,
 			Statuses:        taskStatusOptions,
 			MeetingStatuses: meetingStatusOptions,
@@ -100,11 +111,19 @@ func (h *Handler) ActivityEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	br := session.BusinessRole(ctx)
 
-	contacts, err := h.activityContactOptions(ctx, a.Kind)
-	if err != nil {
-		h.Log.Error("activities: contact options", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+	// Kontak difilter mengikuti Target (BL-164), hanya dimuat bila kind call/chat
+	// (optimisasi, sama seperti guard lama). ContactID TETAP dari a.ContactID
+	// tersimpan (JANGAN ditimpa preselect resolver — itu untuk create-mode).
+	var contacts []panel.AccountMemberOption
+	var leadInfo *panel.LeadContactInfoView
+	if a.Kind == "call" || a.Kind == "chat" {
+		var err error
+		contacts, _, leadInfo, err = h.activityContactsForTarget(ctx, a.TargetType, a.TargetID)
+		if err != nil {
+			h.Log.Error("activities: contact options", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	base := wsPath(slugFromRequest(r), "")
@@ -124,6 +143,7 @@ func (h *Handler) ActivityEdit(w http.ResponseWriter, r *http.Request) {
 			Status:          deref(a.Status),
 			ContactID:       int32ContactStr(a.ContactID),
 			Contacts:        contacts,
+			LeadContactInfo: leadInfo,
 			Direction:       deref(a.Direction),
 			ActivityAt:      dateTimeStr(a.ActivityAt),
 			Duration:        int32PtrStr(a.DurationMin),

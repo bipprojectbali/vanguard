@@ -95,15 +95,7 @@ func contactSortHeader(v ContactsAllView, col, label string) g.Node {
 	}
 	href := withQuery(v.Base+"/contacts", v.Query,
 		hiddenField{"view", viewKeep}, hiddenField{"sort", col}, hiddenField{"dir", nextDir})
-	text := label
-	if active {
-		arrow := "▲"
-		if v.Dir == "desc" {
-			arrow = "▼"
-		}
-		text = label + " " + arrow
-	}
-	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
+	return sortHeaderLink(href, label, active, v.Dir)
 }
 
 // contactsTableCard membungkus header + baris dalam kartu ber-scroll.

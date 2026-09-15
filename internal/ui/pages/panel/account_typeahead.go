@@ -39,6 +39,15 @@ type typeaheadPickerConfig struct {
 	Placeholder  string // placeholder input
 	Help         string // teks bantuan di bawah field (kosong = baris bantuan tak dirender; BL-85)
 	InvalidMsg   string // pesan validity kustom (kosong = default JS)
+
+	// TriggerURL (BL-164): bila diisi, hidden input men-@post ke URL ini
+	// (nilainya sendiri dikirim via query string `?<Name>=<value>`, BUKAN
+	// {contentType:'form'} — itu memvalidasi SELURUH <form> pembungkus, gagal
+	// diam-diam bila field required lain di form masih kosong) saat event
+	// "change" (accountpicker.js dispatch-nya ketika nilai berubah) — dipakai
+	// target picker aktivitas utk reload SSE opsi Kontak. Kosong (default) →
+	// tak ada perilaku tambahan, picker lain tak terpengaruh.
+	TriggerURL string
 }
 
 // typeaheadPickerField merender markup picker sesuai kontrak accountpicker.js.
@@ -95,6 +104,9 @@ func typeaheadPickerField(cfg typeaheadPickerConfig) g.Node {
 	}
 	if cfg.Current != "" {
 		hidden = append(hidden, h.Value(cfg.Current))
+	}
+	if cfg.TriggerURL != "" {
+		hidden = append(hidden, ui.OnChangePostQuery(cfg.TriggerURL, cfg.Name))
 	}
 
 	wrapClass := "grid gap-1 min-w-0"

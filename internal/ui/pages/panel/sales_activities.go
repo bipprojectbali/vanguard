@@ -62,6 +62,8 @@ type ActivitiesListView struct {
 	Query        string // ?q= pencarian bebas (BL-6); "" = tak mencari
 	TargetFilter string // "type:id" saat difilter per-entitas; "" = semua
 	TargetLabel  string // nama entitas yang di-resolve handler (best-effort)
+	Sort         string // BL-157j: kolom sort aktif ("" = default created_at DESC)
+	Dir          string // "asc"/"desc"; kosong hanya saat Sort kosong
 }
 
 // ActivitiesList merender halaman: header + tombol buat per-kind + alert + tabel
@@ -93,7 +95,8 @@ func ActivitiesList(v ActivitiesListView) g.Node {
 			ui.When(v.CanWrite, activityNewButton(v.Base, v.TargetFilter, false)),
 		),
 		searchBox(v.Base+"/activities", v.Query, "Cari aktivitas — subjek…", "Cari aktivitas",
-			hiddenField{"target", v.TargetFilter}),
+			hiddenField{"target", v.TargetFilter},
+			hiddenField{"sort", v.Sort}, hiddenField{"dir", v.Dir}),
 	}
 	if v.Err != "" {
 		body = append(body, ui.Toast(ui.VariantDestructive, "act-err", g.Text(v.Err)))
@@ -154,17 +157,36 @@ func activitiesTable(v ActivitiesListView) g.Node {
 				h.Class("w-full text-sm"),
 				h.THead(h.Tr(
 					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Jenis")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Subjek")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), activitySortHeader(v, "kind", "Jenis")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), activitySortHeader(v, "subject", "Subjek")),
 					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Target")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Pemilik")),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Status")),
-					h.Th(h.Class("py-2 font-medium"), g.Text("Tanggal")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), activitySortHeader(v, "owner", "Pemilik")),
+					h.Th(h.Class("py-2 pr-4 font-medium"), activitySortHeader(v, "status", "Status")),
+					h.Th(h.Class("py-2 font-medium"), activitySortHeader(v, "date", "Tanggal")),
 				)),
 				h.TBody(g.Group(rows)),
 			)),
 		),
 	)
+}
+
+// activitySortHeader = header tabel yang bisa diklik untuk urut per kolom
+// (BL-157j), mirror dealSortHeader (sales_deals.go). Nonaktif (teks polos)
+// saat TargetFilter aktif — mode filter per-entitas pakai
+// ListActivitiesByTarget, yang tak punya varian sort.
+func activitySortHeader(v ActivitiesListView, col, label string) g.Node {
+	if v.TargetFilter != "" {
+		return g.Text(label)
+	}
+	active := v.Sort == col
+	nextDir := "asc"
+	if active && v.Dir == "asc" {
+		nextDir = "desc"
+	}
+	href := withQuery(v.Base+"/activities", v.Query,
+		hiddenField{"target", v.TargetFilter},
+		hiddenField{"sort", col}, hiddenField{"dir", nextDir})
+	return sortHeaderLink(href, label, active, v.Dir)
 }
 
 func activityTableRow(base string, a ActivityRow) g.Node {
@@ -308,6 +330,7 @@ func emptyActivities(v ActivitiesListView) g.Node {
 // activitiesPager = navigasi halaman berikutnya. Saat TargetFilter aktif,
 // menyertakan ?target= agar halaman berikut tetap terfilter entitas yang sama.
 func activitiesPager(v ActivitiesListView) g.Node {
-	base := panelListHref(v.Base+"/activities", [2]string{"target", v.TargetFilter}, [2]string{"q", v.Query})
+	base := panelListHref(v.Base+"/activities", [2]string{"target", v.TargetFilter}, [2]string{"q", v.Query},
+		[2]string{"sort", v.Sort}, [2]string{"dir", v.Dir})
 	return ui.KeysetPager(base, v.After, v.Trail, v.NextCursor)
 }

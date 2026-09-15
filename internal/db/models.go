@@ -546,6 +546,7 @@ type Subscription struct {
 	ApprovalStatus         *string            `json:"approval_status"`
 	ApprovedBy             *int64             `json:"approved_by"`
 	ApprovedAt             pgtype.Timestamptz `json:"approved_at"`
+	LastReminderDaysSent   *int32             `json:"last_reminder_days_sent"`
 }
 
 type SubscriptionItem struct {
