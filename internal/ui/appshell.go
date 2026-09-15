@@ -109,7 +109,10 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 			// Latar dasar = base-200; sidebar & card = base-100 (permukaan
 			// menonjol). Hierarki relatif ini benar otomatis di semua tema.
 			h.Class("min-h-screen bg-base-200 text-base-content"),
-			data.Signals(map[string]any{"sidebarOpen": false, "logoutConfirm": false, "changelogOpen": false}),
+			data.Signals(map[string]any{
+				"sidebarOpen": false, "logoutConfirm": false, "changelogOpen": false,
+				regionSearchSignal: false,
+			}),
 
 			// Backdrop mobile — inline display:none agar tak FOUC sebelum Datastar aktif.
 			h.Div(
@@ -146,6 +149,11 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 
 			// Modal Pembaruan (dipicu tombol Pembaruan di footer sidebar).
 			ChangelogModal(d.ChangelogReleases),
+
+			// Modal global "Cari Kode Desa/Kecamatan" (BL-163) — dipicu
+			// ui.RegionSearchTrigger() dari halaman mana pun (form Akun, impor
+			// CSV, dst).
+			RegionSearchModal(),
 		},
 	})
 }

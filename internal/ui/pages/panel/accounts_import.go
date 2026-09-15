@@ -39,6 +39,10 @@ func AccountImportUploadCard(v AccountImportFormView) g.Node {
 			g.Text(". Unduh template untuk daftar lengkap kolom opsional & format nilainya.")),
 		h.A(h.Href(v.TemplateURL), h.Class("link link-primary text-sm w-fit"),
 			g.Text("Unduh Template CSV")),
+		// BL-163: rujukan cepat kode Kemendagri saat menyiapkan file CSV di
+		// luar aplikasi (kode_desa wajib per baris, operator sering perlu
+		// mencari kodenya dulu sebelum mengisi spreadsheet).
+		ui.RegionSearchTrigger(),
 		h.FormEl(
 			h.Method("post"), h.Action(v.Action), h.EncType("multipart/form-data"),
 			h.Class("grid gap-4 min-w-0"),
