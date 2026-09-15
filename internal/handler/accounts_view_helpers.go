@@ -62,6 +62,8 @@ func accountsMsg(code string) string {
 		return "Penugasan diperbarui."
 	case "deleted":
 		return "Desa dihapus."
+	case "imported":
+		return "Impor CSV selesai — desa baru ditambahkan."
 	default:
 		return ""
 	}

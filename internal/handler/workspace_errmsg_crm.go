@@ -137,7 +137,6 @@ func wsErrMsgCRM(code string) string {
 		return "Tipe churn tidak valid."
 	case "failed":
 		return "Tindakan gagal. Coba lagi."
-	default:
-		return ""
 	}
+	return wsErrMsgImport(code)
 }

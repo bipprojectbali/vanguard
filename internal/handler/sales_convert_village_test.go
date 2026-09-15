@@ -184,7 +184,7 @@ func TestLeadConvertPage_DuplicateVillageCode_RendersLink(t *testing.T) {
 		t.Fatalf("LeadConvertPage status %d\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "sudah dipakai desa lain") {
+	if !strings.Contains(body, "telah terdaftar di sistem") {
 		t.Errorf("harus menampilkan pesan village_code_dup, body:\n%s", body)
 	}
 	if !strings.Contains(body, "/accounts/"+strconv.FormatInt(existing.ID, 10)) {

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -299,6 +300,32 @@ func withVillage(f url.Values, v villageRow) url.Values {
 func withField(v url.Values, key, val string) url.Values {
 	v.Set(key, val)
 	return v
+}
+
+// newMultipartUploadRequest membangun request unggah file multipart (BL-63,
+// belum ada presedan di repo sebelum ini) + param slug chi, SEJAJAR pola
+// accountsReq (form biasa) agar test import tak perlu merakit
+// multipart.Writer sendiri di tiap file test.
+func newMultipartUploadRequest(t *testing.T, target, fieldName, filename, content string) *http.Request {
+	t.Helper()
+	var buf strings.Builder
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile(fieldName, filename)
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := fw.Write([]byte(content)); err != nil {
+		t.Fatalf("write form file: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(buf.String()))
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add(slugURLParam, "test")
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }
 
 var afterRe = regexp.MustCompile(`accounts\?after=([0-9]+_[0-9]+)`)

@@ -76,9 +76,16 @@ func AccountsList(v AccountsListView) g.Node {
 				h.P(h.Class("text-base-content/70"),
 					g.Text("Direktori desa & kelurahan yang Anda kelola.")),
 			),
-			ui.When(v.CanWrite, h.A(
-				h.Href(v.Base+"/accounts/new"), h.Class("btn btn-primary min-h-11"),
-				g.Text("Tambah Desa"),
+			ui.When(v.CanWrite, h.Div(
+				h.Class("flex flex-wrap items-center gap-2"),
+				h.A(
+					h.Href(v.Base+"/accounts/import"), h.Class("btn btn-outline min-h-11"),
+					g.Text("Impor CSV"),
+				),
+				h.A(
+					h.Href(v.Base+"/accounts/new"), h.Class("btn btn-primary min-h-11"),
+					g.Text("Tambah Desa"),
+				),
 			)),
 		),
 	}

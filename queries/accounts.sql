@@ -421,6 +421,14 @@ WHERE tenant_id = sqlc.arg(tenant_id)
   AND village_code = sqlc.arg(village_code)
   AND deleted_at IS NULL;
 
+-- name: ListAccountsByVillageCodes :many
+-- Cek duplikat BANYAK village_code sekaligus (impor CSV) — kembaran batch dari
+-- GetAccountByVillageCode, hindari N+1. Hanya akun HIDUP (deleted_at IS NULL).
+SELECT village_code, id, entity_code FROM accounts
+WHERE tenant_id = sqlc.arg(tenant_id)
+  AND village_code = ANY(sqlc.arg(codes)::text[])
+  AND deleted_at IS NULL;
+
 -- name: AccountEntityCodeExists :one
 -- Apakah entity_code (kode sistem, mis. "DESA-001") ini sudah dipakai di tenant
 -- (SEMUA baris). Dipakai allocEntityCode agar jalur OTOMATIS melewati slot yang
