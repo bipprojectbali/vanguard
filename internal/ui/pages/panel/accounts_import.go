@@ -37,12 +37,18 @@ func AccountImportUploadCard(v AccountImportFormView) g.Node {
 		h.P(h.Class("text-sm"),
 			g.Text("Kolom wajib: "), h.Code(g.Text("kode_desa")), g.Text(", "), h.Code(g.Text("tipe_akun")),
 			g.Text(". Unduh template untuk daftar lengkap kolom opsional & format nilainya.")),
-		h.A(h.Href(v.TemplateURL), h.Class("link link-primary text-sm w-fit"),
-			g.Text("Unduh Template CSV")),
-		// BL-163: rujukan cepat kode Kemendagri saat menyiapkan file CSV di
-		// luar aplikasi (kode_desa wajib per baris, operator sering perlu
-		// mencari kodenya dulu sebelum mengisi spreadsheet).
-		ui.RegionSearchTrigger(),
+		// Tautan template & trigger pencarian kode wilayah digrup satu baris
+		// flex (bukan dua child terpisah langsung di card-body flex-col) agar
+		// sejajar, bukan tertumpuk vertikal dgn gap-6 besar. flex-wrap wajib
+		// (konvensi mobile-first CLAUDE.md — baris tombol horizontal).
+		h.Div(h.Class("flex flex-wrap items-center gap-x-4 gap-y-2"),
+			h.A(h.Href(v.TemplateURL), h.Class("link link-primary text-sm w-fit"),
+				g.Text("Unduh Template CSV")),
+			// BL-163: rujukan cepat kode Kemendagri saat menyiapkan file CSV di
+			// luar aplikasi (kode_desa wajib per baris, operator sering perlu
+			// mencari kodenya dulu sebelum mengisi spreadsheet).
+			ui.RegionSearchTrigger(),
+		),
 		h.FormEl(
 			h.Method("post"), h.Action(v.Action), h.EncType("multipart/form-data"),
 			h.Class("grid gap-4 min-w-0"),
