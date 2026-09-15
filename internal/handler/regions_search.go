@@ -29,26 +29,53 @@ var regionCodePattern = regexp.MustCompile(`^\d{1,2}(\.\d{1,4}){1,3}$`)
 // RegionSearch — POST /w/{slug}/regions/search?q=.... Ketikan < RegionSearchMinChars
 // → fragmen "belum cukup ketikan" TANPA query DB (guard server-side; client
 // sudah skip @post di bawah panjang ini, ini pertahanan kedua bila dilewati).
+//
+// Perluasan BL-163: ?district=<id> (dari select Kecamatan tab "Wilayah",
+// internal/ui/region_search.go regionSearchTreePanel) mem-BYPASS jalur "q" —
+// cabang district DICEK LEBIH DULU sebab keduanya bisa muncul di request
+// yang sama secara teori (query string lama tersisa) tapi hanya satu tab yang
+// bisa aktif di client; district = sinyal eksplisit "user memilih Kecamatan",
+// diprioritaskan drpd sisa "q" basi.
 func (h *Handler) RegionSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	districtID, districtRaw := optInt64(r.URL.Query().Get("district"))
 
 	var rows []ui.RegionSearchRow
 	emptyHint := ""
-	if len([]rune(q)) >= ui.RegionSearchMinChars {
+	switch {
+	case districtRaw != "" && districtID == nil:
+		// district terisi tapi bukan int64 sah → 400 (bukan fallback diam-diam
+		// ke jalur q, supaya kesalahan client/manipulasi kelihatan jelas).
+		http.Error(w, "parameter district tidak valid", http.StatusBadRequest)
+		return
+	case districtID != nil:
 		var err error
-		if regionCodePattern.MatchString(q) {
-			rows, err = h.searchRegionsByCode(ctx, q)
-		} else {
-			rows, err = h.searchRegionsByName(ctx, q)
-		}
+		rows, err = h.searchRegionsByDistrict(ctx, *districtID)
 		if err != nil {
-			h.Log.Error("regions: search", "err", err)
+			h.Log.Error("regions: search by district", "err", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 		if len(rows) == 0 {
 			emptyHint = ui.RegionSearchHintNoResults
+		}
+	default:
+		q := strings.TrimSpace(r.URL.Query().Get("q"))
+		if len([]rune(q)) >= ui.RegionSearchMinChars {
+			var err error
+			if regionCodePattern.MatchString(q) {
+				rows, err = h.searchRegionsByCode(ctx, q)
+			} else {
+				rows, err = h.searchRegionsByName(ctx, q)
+			}
+			if err != nil {
+				h.Log.Error("regions: search", "err", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			if len(rows) == 0 {
+				emptyHint = ui.RegionSearchHintNoResults
+			}
 		}
 	}
 

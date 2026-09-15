@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -19,6 +20,12 @@ import (
 // form — handler membacanya dari r.URL.Query(), lihat regions_search.go).
 func regionSearchReq(q string) *http.Request {
 	return accountsReq(http.MethodGet, "/w/test/regions/search?q="+url.QueryEscape(q), nil, "")
+}
+
+// regionSearchDistrictReq membangun request cabang tab "Wilayah" (perluasan
+// BL-163): "district" di QUERY STRING, bukan "q".
+func regionSearchDistrictReq(district string) *http.Request {
+	return accountsReq(http.MethodGet, "/w/test/regions/search?district="+url.QueryEscape(district), nil, "")
 }
 
 // codeCellCount menghitung jumlah baris hasil di fragmen — kolom Kode
@@ -246,6 +253,88 @@ func TestRegionSearch_NameSearch_LimitEnforced(t *testing.T) {
 
 	if got := codeCellCount(rec.Body.String()); got != pageSize {
 		t.Errorf("hasil harus dipangkas ke %d baris (dari %d match), got %d", pageSize, total, got)
+	}
+}
+
+// TestRegionSearch_District_ReturnsDistrictAndVillages: cabang baru tab
+// "Wilayah" (perluasan BL-163) — district=<id> Kecamatan sah harus
+// menghasilkan baris Kecamatan itu sendiri (Desa "-") + semua Desa anaknya,
+// dicocokkan terhadap query DB langsung (SearchRegionsByDistrict) sama pola
+// TestRegionSearch_NameSearch_MixedLevels.
+func TestRegionSearch_District_ReturnsDistrictAndVillages(t *testing.T) {
+	env, uid := setupAccounts(t)
+	v := firstVillage(t, env)
+
+	dbRows, err := env.q.SearchRegionsByDistrict(t.Context(), db.SearchRegionsByDistrictParams{
+		DistrictID: v.DistrictID, PageSize: int32(pageSize),
+	})
+	if err != nil {
+		t.Fatalf("SearchRegionsByDistrict langsung: %v", err)
+	}
+	if len(dbRows) == 0 {
+		t.Fatalf("kecamatan fixture %d harus >=1 baris (dirinya sendiri)", v.DistrictID)
+	}
+
+	req := regionSearchDistrictReq(strconv.FormatInt(v.DistrictID, 10))
+	rec := env.runAccount(uid, "member", "sales", req, env.h.RegionSearch)
+	body := rec.Body.String()
+
+	if got := codeCellCount(body); got != len(dbRows) {
+		t.Fatalf("jumlah baris respons (%d) tak cocok query DB langsung (%d)", got, len(dbRows))
+	}
+	for _, r := range dbRows {
+		if !strings.Contains(body, r.Code) {
+			t.Errorf("respons HTTP tak memuat kode %q dari query DB langsung", r.Code)
+		}
+	}
+}
+
+// TestRegionSearch_District_Prioritized_OverQ: district= DICEK LEBIH DULU
+// (komentar RegionSearch) — "q" basi yang tersisa di query string harus
+// diabaikan bila district juga terisi.
+func TestRegionSearch_District_Prioritized_OverQ(t *testing.T) {
+	env, uid := setupAccounts(t)
+	v := firstVillage(t, env)
+
+	req := accountsReq(http.MethodGet,
+		"/w/test/regions/search?q=xx&district="+url.QueryEscape(strconv.FormatInt(v.DistrictID, 10)), nil, "")
+	rec := env.runAccount(uid, "member", "sales", req, env.h.RegionSearch)
+	body := rec.Body.String()
+
+	// "xx" (2 karakter) < RegionSearchMinChars — bila jalur "q" yang dipakai,
+	// hint akan "belum cukup ketikan", BUKAN tabel hasil kecamatan.
+	if !strings.Contains(body, "<table") {
+		t.Errorf("district= harus diprioritaskan drpd q= basi (harus tabel hasil, bukan hint):\n%s", body)
+	}
+}
+
+// TestRegionSearch_District_Invalid_400: district bukan int64 sah → 400
+// (bukan fallback diam-diam ke jalur q).
+func TestRegionSearch_District_Invalid_400(t *testing.T) {
+	env, uid := setupAccounts(t)
+
+	req := regionSearchDistrictReq("bukan-angka")
+	rec := env.runAccount(uid, "member", "sales", req, env.h.RegionSearch)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("district tak valid harus 400, got %d", rec.Code)
+	}
+}
+
+// TestRegionSearch_District_NonNavigating: sama kontrak SSE fragmen dgn
+// cabang "q" (TestRegionSearch_NonNavigating) — modal TETAP TERBUKA.
+func TestRegionSearch_District_NonNavigating(t *testing.T) {
+	env, uid := setupAccounts(t)
+	v := firstVillage(t, env)
+
+	req := regionSearchDistrictReq(strconv.FormatInt(v.DistrictID, 10))
+	rec := env.runAccount(uid, "member", "sales", req, env.h.RegionSearch)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("respons harus 200 (fragmen SSE), got %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
+		t.Errorf("Content-Type harus text/event-stream (fragmen, bukan navigasi), got %q", ct)
 	}
 }
 
