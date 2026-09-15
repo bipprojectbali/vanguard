@@ -380,6 +380,11 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/activities/{id}/status", h.ActivityStatus)
 		r.Post("/activities/{id}/delete", h.ActivityDelete)
 
+		// Reload SSE opsi Kontak saat Target berubah di form create (BL-164).
+		// Gerbang sama (canWriteSalesActivity, di handler) — form create tak
+		// dilihat siapa pun yang tak boleh menulis aktivitas.
+		r.Post("/activities/contact-options", h.ActivityContactOptions)
+
 		// Daftar aktivitas LINTAS-CONTEXT (menu "Activities" top-level, M7). Reuse
 		// gate canViewSalesActivity; query ListAllActivities (tanpa context_filter).
 		// TODO(activities): ganti ke crm:activities saat permission pass M9.
