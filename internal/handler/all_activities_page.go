@@ -31,13 +31,25 @@ func (h *Handler) AllActivitiesList(w http.ResponseWriter, r *http.Request) {
 	// q = pencarian bebas (BL-6): MEMPERSEMPIT subject di atas F3, tak melebarkan.
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
+	// sort/dir (BL-157k): whitelist 5 kolom sortable (allActivitySortableColumns),
+	// mirror activitySortableColumns (sales_activities_page.go). ?sort= tak
+	// dikenal → jatuh ke default (sumbu Tanggal desc), TAK error.
+	sortCol := r.URL.Query().Get("sort")
+	if !allActivitySortableColumns[sortCol] {
+		sortCol = ""
+	}
+	dir := r.URL.Query().Get("dir")
+	if dir != "asc" && dir != "desc" {
+		dir = "asc"
+	}
+
 	names, err := h.memberNameMap(ctx)
 	if err != nil {
 		h.Log.Error("all-activities: members", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	items, nextCursor, err := h.buildUnifiedActivityFeed(ctx, r, names)
+	items, nextCursor, err := h.buildUnifiedActivityFeed(ctx, r, names, sortCol, dir)
 	if err != nil {
 		h.Log.Error("all-activities: feed", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -56,7 +68,23 @@ func (h *Handler) AllActivitiesList(w http.ResponseWriter, r *http.Request) {
 			After:      r.URL.Query().Get("after"),
 			Trail:      pageTrail(r),
 			Query:      query,
+			Sort:       sortCol,
+			Dir:        dir,
 		}))
+}
+
+// allActivitySortableColumns = whitelist kolom yang boleh diminta lewat
+// ?sort= (BL-157k: 5 kolom feed terpadu, sama set dgn Sales Activities
+// BL-157j). Dijaga TERPISAH dari activitySortableColumns (bukan var
+// dibagi) — pola sudah mapan: tiap modul BL-157 punya whitelist page-local
+// sendiri. Target & Konteks sengaja tak masuk (Target komposit tipe+id;
+// Konteks di luar cakupan scope yang disetujui user untuk BL-157k).
+var allActivitySortableColumns = map[string]bool{
+	"kind":    true,
+	"subject": true,
+	"owner":   true,
+	"status":  true,
+	"date":    true,
 }
 
 // renderAllActivitiesForbidden — 403 + penjelasan bagi anggota tanpa izin

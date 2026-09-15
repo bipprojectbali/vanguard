@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"math"
 	"net/http"
 	"regexp"
 	"strings"
@@ -9,8 +8,6 @@ import (
 	"time"
 
 	"go_starter/internal/db"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // all_activities_unified_test.go — linimasa TERPADU halaman Activities GLOBAL
@@ -141,49 +138,65 @@ func TestUnifiedFeed_EngagementF3_IsOwn(t *testing.T) {
 	}
 }
 
-// TestUnifiedFeed_CompositeCursorCodec: codec cursor komposit — round-trip murni
-// (tak menyentuh DB). Menjaga: sentinel awal "0_0"; token digit_digit (lolos
-// ui.validTrailToken); nilai (created_at, id) tiap sumber pulih presisi-nano;
-// masukan rusak jatuh ke halaman pertama (fail-open, sejalan pageCursor).
+// TestUnifiedFeed_CompositeCursorCodec: codec cursor komposit GENERALISASI
+// (BL-157k) — round-trip murni (tak menyentuh DB). Format lama hanya
+// membawa (created_at, id); format baru membawa (isNull, val, id) per sumber
+// agar satu codec melayani kelima sumbu sort. Menjaga: sentinel halaman-1
+// (hasCursor=false di kedua sisi); token hex_0 (lolos ui.validTrailToken —
+// grammar <hexdigits>_<decimaldigits>); nilai (val, id, isNull) tiap sumber
+// pulih presisi; val bisa memuat karakter bebas (subjek user); masukan rusak
+// jatuh ke halaman pertama (fail-open, sejalan pageCursor).
 func TestUnifiedFeed_CompositeCursorCodec(t *testing.T) {
-	tokenRe := regexp.MustCompile(`^[0-9]+_[0-9]+$`)
+	tokenRe := regexp.MustCompile(`^[0-9a-f]+_0$`)
 
-	// Halaman pertama → kedua sub-sumber sentinel.
-	if got := encodeDualCursor(firstDualCursor()); got != "0_0" {
-		t.Errorf("firstDualCursor harus mengkode ke %q, got %q", "0_0", got)
+	// Halaman pertama → kedua sub-sumber sentinel (hasCursor=false).
+	firstTok := encodeDualCursorGen(firstDualCursorGen())
+	if !tokenRe.MatchString(firstTok) {
+		t.Fatalf("token halaman-1 %q harus hex_0 (lolos validTrailToken)", firstTok)
 	}
-	first := decodeDualCursor("0_0")
-	for _, sc := range []subCursor{first.act, first.eng} {
-		if sc.at.InfinityModifier != pgtype.Infinity || sc.id != math.MaxInt64 {
-			t.Errorf("decode %q harus firstSubCursor (Infinity, MaxInt64), got %+v", "0_0", sc)
+	first := decodeDualCursorGen(firstTok)
+	for _, sc := range []genSubCursor{first.act, first.eng} {
+		if sc.hasCursor {
+			t.Errorf("decode token halaman-1 harus hasCursor=false, got %+v", sc)
 		}
 	}
 
-	// Baris nyata: round-trip presisi.
-	t1 := time.Date(2026, 9, 4, 12, 0, 0, 123, time.UTC)
-	t2 := time.Date(2026, 8, 1, 6, 30, 0, 0, time.UTC)
-	in := dualCursor{
-		act: subCursor{at: pgtype.Timestamptz{Time: t1, Valid: true, InfinityModifier: pgtype.Finite}, id: 42},
-		eng: subCursor{at: pgtype.Timestamptz{Time: t2, Valid: true, InfinityModifier: pgtype.Finite}, id: 7},
+	// Baris nyata: round-trip presisi, termasuk val berisi karakter bebas
+	// (mis. subjek dengan spasi/simbol) dan sub-cursor ber-NULL (mis. owner
+	// kosong pada satu sumber).
+	in := dualCursorGen{
+		act: genSubCursor{hasCursor: true, isNull: false, val: "Kunjungan & tindak-lanjut", id: 42},
+		eng: genSubCursor{hasCursor: true, isNull: true, val: "", id: 7},
 	}
-	tok := encodeDualCursor(in)
+	tok := encodeDualCursorGen(in)
 	if !tokenRe.MatchString(tok) {
-		t.Fatalf("token komposit %q harus digit_digit (lolos validTrailToken)", tok)
+		t.Fatalf("token komposit %q harus hex_0 (lolos validTrailToken)", tok)
 	}
-	out := decodeDualCursor(tok)
-	if out.act.at.Time.UnixNano() != t1.UnixNano() || out.act.id != 42 {
-		t.Errorf("sub-cursor act tak pulih: got (%d,%d) want (%d,42)",
-			out.act.at.Time.UnixNano(), out.act.id, t1.UnixNano())
+	out := decodeDualCursorGen(tok)
+	if !out.act.hasCursor || out.act.isNull || out.act.val != "Kunjungan & tindak-lanjut" || out.act.id != 42 {
+		t.Errorf("sub-cursor act tak pulih: got %+v", out.act)
 	}
-	if out.eng.at.Time.UnixNano() != t2.UnixNano() || out.eng.id != 7 {
-		t.Errorf("sub-cursor eng tak pulih: got (%d,%d) want (%d,7)",
-			out.eng.at.Time.UnixNano(), out.eng.id, t2.UnixNano())
+	if !out.eng.hasCursor || !out.eng.isNull || out.eng.id != 7 {
+		t.Errorf("sub-cursor eng tak pulih: got %+v", out.eng)
+	}
+
+	// Sumbu Tanggal: nilai waktu diencode via subCursorTimeVal (19-digit
+	// zero-pad UnixNano) — round-trip presisi-nano lewat val string biasa.
+	t1 := time.Date(2026, 9, 4, 12, 0, 0, 123, time.UTC)
+	dateTok := encodeDualCursorGen(dualCursorGen{
+		act: genSubCursor{hasCursor: true, val: subCursorTimeVal(t1.UnixNano()), id: 1},
+		eng: firstGenSubCursor(),
+	})
+	dateOut := decodeDualCursorGen(dateTok)
+	if parseSubCursorTimeVal(dateOut.act.val) != t1.UnixNano() {
+		t.Errorf("nilai Tanggal tak pulih presisi-nano: got %d want %d",
+			parseSubCursorTimeVal(dateOut.act.val), t1.UnixNano())
 	}
 
 	// Rusak / kosong → halaman pertama (bukan panic / halaman kosong).
-	for _, raw := range []string{"", "rusak", "abc_def", "0_0"} {
-		dc := decodeDualCursor(raw)
-		if dc.act.id != math.MaxInt64 || dc.eng.id != math.MaxInt64 {
+	for _, raw := range []string{"", "rusak", "abc_def", "0_0", "zz_0"} {
+		dc := decodeDualCursorGen(raw)
+		if dc.act.hasCursor || dc.eng.hasCursor {
 			t.Errorf("decode %q harus jatuh ke halaman pertama, got %+v", raw, dc)
 		}
 	}
@@ -193,6 +206,11 @@ func TestUnifiedFeed_CompositeCursorCodec(t *testing.T) {
 // >pageSize baris campuran (activities + engagements), walk semua halaman lewat
 // cursor komposit yang DIBACA dari HTML — tiap baris terjangkau TEPAT sekali
 // (tak ada skip, tak ada duplikat), dan baris tertua hanya lewat halaman kedua.
+//
+// Pakai sortAfter (bukan nextAfter): sejak BL-157k pager halaman ini SELALU
+// menyertakan ?sort=&dir= (dir default "asc", mirror activitiesPager BL-157j) —
+// "after=" tak lagi persis mengikuti "?", jadi pola nextAfter yang lebih ketat
+// (path+"?after=") tak lagi cocok di sini.
 func TestUnifiedFeed_CrossSourcePagination(t *testing.T) {
 	env, admin := setupAccounts(t)
 
@@ -228,7 +246,7 @@ func TestUnifiedFeed_CrossSourcePagination(t *testing.T) {
 				seen[m]++
 			}
 		}
-		after = nextAfter(html, path)
+		after = sortAfter(html, path)
 		if after == "" {
 			break
 		}
