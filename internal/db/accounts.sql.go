@@ -483,6 +483,46 @@ func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]A
 	return items, nil
 }
 
+const listAccountsByVillageCodes = `-- name: ListAccountsByVillageCodes :many
+SELECT village_code, id, entity_code FROM accounts
+WHERE tenant_id = $1
+  AND village_code = ANY($2::text[])
+  AND deleted_at IS NULL
+`
+
+type ListAccountsByVillageCodesParams struct {
+	TenantID int64    `json:"tenant_id"`
+	Codes    []string `json:"codes"`
+}
+
+type ListAccountsByVillageCodesRow struct {
+	VillageCode *string `json:"village_code"`
+	ID          int64   `json:"id"`
+	EntityCode  *string `json:"entity_code"`
+}
+
+// Cek duplikat BANYAK village_code sekaligus (impor CSV) — kembaran batch dari
+// GetAccountByVillageCode, hindari N+1. Hanya akun HIDUP (deleted_at IS NULL).
+func (q *Queries) ListAccountsByVillageCodes(ctx context.Context, arg ListAccountsByVillageCodesParams) ([]ListAccountsByVillageCodesRow, error) {
+	rows, err := q.db.Query(ctx, listAccountsByVillageCodes, arg.TenantID, arg.Codes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAccountsByVillageCodesRow{}
+	for rows.Next() {
+		var i ListAccountsByVillageCodesRow
+		if err := rows.Scan(&i.VillageCode, &i.ID, &i.EntityCode); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAccountsForSelect = `-- name: ListAccountsForSelect :many
 SELECT id, village_name, village_code FROM accounts
 WHERE deleted_at IS NULL

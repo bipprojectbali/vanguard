@@ -66,7 +66,12 @@ func TestCodeFormats_SembunyikanAccount(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body:\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if strings.Contains(body, "Desa (Akun)") {
+	// Cek KARTU-nya (id field khas entitas "account", mis. id="account-prefix"),
+	// BUKAN substring label "Desa (Akun)" saja — label itu juga muncul apa
+	// adanya di teks prosa modal Changelog global (AppShell, tampil di semua
+	// halaman workspace termasuk /codes), jadi substring longgar false-positive
+	// begitu ada entry changelog yang menyebut "Desa (Akun)".
+	if strings.Contains(body, `id="account-prefix"`) {
 		t.Error("kartu 'Desa (Akun)' (EntityAccount) tak boleh dirender di /codes")
 	}
 	// Entitas lain tetap ada — pastikan bukan halaman kosong. Kontak (BL-132)

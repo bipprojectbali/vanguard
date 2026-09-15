@@ -63,7 +63,7 @@ func wsErrMsg(code string) string {
 	case "budget":
 		return "Anggaran desa harus berupa angka."
 	case "village_code_dup":
-		return "Kode desa (Kemendagri) itu sudah dipakai desa lain di workspace ini."
+		return "Data desa telah terdaftar di sistem ini."
 	case "entity_code":
 		return "Kode sistem tidak valid (maks 32 karakter)."
 	case "entity_code_dup":

@@ -86,3 +86,10 @@ WHERE id = sqlc.arg(id) AND level = 4;
 -- (kode akun lama non-Kemendagri) → pgx.ErrNoRows, pemanggil biarkan dropdown kosong.
 SELECT id, code, name, parent_region_id FROM regions
 WHERE code = sqlc.arg(code) AND level = 4;
+
+-- name: ListVillagesByCodes :many
+-- Resolusi BANYAK kode Desa sekaligus (impor CSV) — hindari N+1 SELECT per
+-- baris. Baris yang kodenya tak ketemu tak muncul di hasil; pemanggil
+-- mencocokkan balik by code utk tahu yang hilang.
+SELECT id, code, name, parent_region_id FROM regions
+WHERE code = ANY(sqlc.arg(codes)::text[]) AND level = 4;

@@ -273,6 +273,46 @@ func (q *Queries) ListRegenciesByProvince(ctx context.Context, parentRegionID *i
 	return items, nil
 }
 
+const listVillagesByCodes = `-- name: ListVillagesByCodes :many
+SELECT id, code, name, parent_region_id FROM regions
+WHERE code = ANY($1::text[]) AND level = 4
+`
+
+type ListVillagesByCodesRow struct {
+	ID             int64  `json:"id"`
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	ParentRegionID *int64 `json:"parent_region_id"`
+}
+
+// Resolusi BANYAK kode Desa sekaligus (impor CSV) — hindari N+1 SELECT per
+// baris. Baris yang kodenya tak ketemu tak muncul di hasil; pemanggil
+// mencocokkan balik by code utk tahu yang hilang.
+func (q *Queries) ListVillagesByCodes(ctx context.Context, codes []string) ([]ListVillagesByCodesRow, error) {
+	rows, err := q.db.Query(ctx, listVillagesByCodes, codes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListVillagesByCodesRow{}
+	for rows.Next() {
+		var i ListVillagesByCodesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Code,
+			&i.Name,
+			&i.ParentRegionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVillagesByDistrict = `-- name: ListVillagesByDistrict :many
 SELECT id, code, name FROM regions
 WHERE level = 4 AND parent_region_id = $1

@@ -629,6 +629,9 @@ type Querier interface {
 	// tak pernah memperluas — RLS+F3 tetap gerbang cakupan. Tetap keyset+LIMIT (bukan
 	// full scan tak berbatas). Indeks trigram ditunda (lihat catatan handler).
 	ListAccounts(ctx context.Context, arg ListAccountsParams) ([]Account, error)
+	// Cek duplikat BANYAK village_code sekaligus (impor CSV) — kembaran batch dari
+	// GetAccountByVillageCode, hindari N+1. Hanya akun HIDUP (deleted_at IS NULL).
+	ListAccountsByVillageCodes(ctx context.Context, arg ListAccountsByVillageCodesParams) ([]ListAccountsByVillageCodesRow, error)
 	// Desa yang boleh DITULIS aktor (F3), untuk dropdown pemilih desa di form "Tambah
 	// Kontak" global. Predikat ownership IDENTIK ListAccounts (scope_all/is_sales/
 	// is_csm → fail-closed: ketiganya false = NOL baris), tapi TANPA keyset dan hanya
@@ -1422,6 +1425,10 @@ type Querier interface {
 	ListTicketsSortByVillage(ctx context.Context, arg ListTicketsSortByVillageParams) ([]ListTicketsSortByVillageRow, error)
 	// Panel /dev: keyset pagination, hanya user aktif (belum soft-delete).
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	// Resolusi BANYAK kode Desa sekaligus (impor CSV) — hindari N+1 SELECT per
+	// baris. Baris yang kodenya tak ketemu tak muncul di hasil; pemanggil
+	// mencocokkan balik by code utk tahu yang hilang.
+	ListVillagesByCodes(ctx context.Context, codes []string) ([]ListVillagesByCodesRow, error)
 	// Daftar Desa/Kelurahan (level 4) di bawah SATU Kecamatan (level 3) — dipakai
 	// endpoint server GET /accounts/villages (BL-66). TAK di-embed ke payload
 	// dropdown seperti 3 level di atas karena volume desa se-Indonesia (~83rb baris,

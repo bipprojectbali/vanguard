@@ -297,6 +297,12 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// WAJIB sebelum "/accounts/{id}" — chi cocokkan statis dulu, tapi urutan
 		// eksplisit menjaga niat tetap terbaca.
 		r.Get("/accounts/villages", h.AccountVillages)
+		// BL-63: impor massal via CSV. Statis, jadi WAJIB sebelum "/accounts/{id}"
+		// (alasan sama komentar di atas).
+		r.Get("/accounts/import", h.AccountImportForm)
+		r.Post("/accounts/import", h.AccountImportPreview)
+		r.Post("/accounts/import/confirm", h.AccountImportConfirm)
+		r.Get("/accounts/import/template", h.AccountImportTemplate)
 		r.Post("/accounts", h.AccountCreate)
 		r.Get("/accounts/{id}", h.AccountDetail)
 		r.Get("/accounts/{id}/edit", h.AccountEdit)
