@@ -687,6 +687,35 @@ type Querier interface {
 	// tak menyaring; selain itu MEMPERSEMPIT subject (BL-6, ILIKE case-insensitive)
 	// di ATAS filter target — tak menembus ke entitas lain.
 	ListActivitiesByTarget(ctx context.Context, arg ListActivitiesByTargetParams) ([]Activity, error)
+	// BL-157j (lanjutan): sort by Tanggal (created_at) — NOT NULL, tapi BEDA dari
+	// ListActivities: arah DINAMIS (bisa asc, bukan desc tetap), jadi tak bisa
+	// pakai pageCursor/splitPage biasa (sentinel ±Infinity, arah tetap). Kolom ini
+	// SUDAH jadi sumbu default (created_at DESC via ListActivities) — varian ini
+	// HANYA menambah kemampuan flip ke ASC & jadi target klik header eksplisit;
+	// SAMA PERSIS filter ListActivities (context+F3+search), cuma keyset+ORDER BY
+	// beda arah.
+	ListActivitiesSortByDate(ctx context.Context, arg ListActivitiesSortByDateParams) ([]Activity, error)
+	// BL-157j (sort per kolom Sales Activities): sort by Jenis (kind), RAW enum
+	// alfabetis (task/meeting/call/chat/note) — mirror keputusan "Status" Leads/
+	// "Tipe" Accounts: tak menduplikasi urutan tampil ke SQL. NOT NULL → kloning
+	// pola sederhana ListContactsSortByName (tanpa kerumitan NULL). SAMA PERSIS
+	// filter ListActivities (context+F3+search) — hanya ORDER BY/keyset beda.
+	ListActivitiesSortByKind(ctx context.Context, arg ListActivitiesSortByKindParams) ([]Activity, error)
+	// BL-157j: sort by Pemilik (owner_id). Kunci sort HARUS
+	// COALESCE(NULLIF(u.name,''), u.email) — PERSIS logika tampil ownerName/
+	// memberNameMap (nama bila terisi, else email) — agar urutan tak menyimpang
+	// dari yang ditampilkan. NULLABLE (owner_id ON DELETE SET NULL). LEFT JOIN
+	// users: baris tanpa owner ATAU owner terhapus → owner_key NULL, masuk
+	// kelompok NULL (default Postgres). Mirror PERSIS ListDealsSortByOwner.
+	ListActivitiesSortByOwner(ctx context.Context, arg ListActivitiesSortByOwnerParams) ([]Activity, error)
+	// BL-157j: sort by Status, RAW enum alfabetis — kolom mentah aktivitas, BUKAN
+	// derivasi seperti Renewals; mirror keputusan Tickets (Status sortable karena
+	// raw, bukan derivasi penuh). NULLABLE (call/note tanpa status) → pola
+	// null-aware SAMA dgn ListContactsSortByRole.
+	ListActivitiesSortByStatus(ctx context.Context, arg ListActivitiesSortByStatusParams) ([]Activity, error)
+	// BL-157j: sort by Subjek (subject), NOT NULL → kloning sederhana sama pola
+	// ListActivitiesSortByKind, kolom beda.
+	ListActivitiesSortBySubject(ctx context.Context, arg ListActivitiesSortBySubjectParams) ([]Activity, error)
 	// Orang yang punya jejak pada rentang ini — isi dropdown "filter per-orang".
 	//
 	// Diturunkan dari DATA, bukan dari daftar user: memilih orang yang tak punya

@@ -254,15 +254,7 @@ func dealSortHeader(v DealPipelineView, col, label string) g.Node {
 		hiddenField{"view", "table"}, hiddenField{"stage", v.StageFilter},
 		hiddenField{"mine", dealMineParam(v.Mine)},
 		hiddenField{"sort", col}, hiddenField{"dir", nextDir})
-	text := label
-	if active {
-		arrow := "▲"
-		if v.Dir == "desc" {
-			arrow = "▼"
-		}
-		text = label + " " + arrow
-	}
-	return h.A(h.Href(href), h.Class("hover:underline"), g.Text(text))
+	return sortHeaderLink(href, label, active, v.Dir)
 }
 
 func dealsPager(v DealPipelineView) g.Node {
