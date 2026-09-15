@@ -69,6 +69,13 @@ type ShellData struct {
 	// handler (view murni-data), bukan diimpor logika di view.
 	ChangelogVersion  string
 	ChangelogReleases []changelog.Release
+
+	// WSBase = prefix workspace AKTIF ("/w/{slug}"), "" di luar konteks
+	// workspace (/dev, /notifications). Dipakai RegionSearchModal (BL-163)
+	// merakit URL @post yang benar — modal dirender SEKALI di sini tapi
+	// endpoint-nya ter-NEST di bawah rute workspace (routes.go), jadi tak
+	// bisa ditulis sebagai path absolut "/regions/search" begitu saja.
+	WSBase string
 }
 
 // NavBadge = entri menu dengan penghitung. Count 0 → badge disembunyikan (angka
@@ -100,6 +107,11 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 		h.Script(h.Src("/static/sidebar.js")),
 		// changelog.js DEFER: badge "ada pembaruan" dikelola setelah DOM siap.
 		h.Script(h.Src("/static/changelog.js"), h.Defer()),
+		// regiontree.js DEFER: cascading tab "Wilayah" modal RegionSearch
+		// (perluasan BL-163) — select kosong tetap valid sebelum JS jalan,
+		// tak ada risiko FOUC (beda dgn sidebar.js/theme.js yang set atribut
+		// <html> sebelum paint).
+		h.Script(h.Src("/static/regiontree.js"), h.Defer()),
 	)
 	return c.HTML5(c.HTML5Props{
 		Title:    d.Title,
@@ -109,7 +121,10 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 			// Latar dasar = base-200; sidebar & card = base-100 (permukaan
 			// menonjol). Hierarki relatif ini benar otomatis di semua tema.
 			h.Class("min-h-screen bg-base-200 text-base-content"),
-			data.Signals(map[string]any{"sidebarOpen": false, "logoutConfirm": false, "changelogOpen": false}),
+			data.Signals(map[string]any{
+				"sidebarOpen": false, "logoutConfirm": false, "changelogOpen": false,
+				regionSearchSignal: false, regionSearchTabSignal: "kode",
+			}),
 
 			// Backdrop mobile — inline display:none agar tak FOUC sebelum Datastar aktif.
 			h.Div(
@@ -146,6 +161,13 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 
 			// Modal Pembaruan (dipicu tombol Pembaruan di footer sidebar).
 			ChangelogModal(d.ChangelogReleases),
+
+			// Modal global "Cari Kode Desa/Kecamatan" (BL-163) — dipicu
+			// ui.RegionSearchTrigger() dari halaman mana pun (form Akun, impor
+			// CSV, dst). d.WSBase "" (di luar konteks workspace, mis. /dev) →
+			// modal tetap dirender (markup konsisten di semua panel) tapi tak
+			// dipicu di sana (trigger belum dipasang di halaman /dev mana pun).
+			RegionSearchModal(d.WSBase),
 		},
 	})
 }

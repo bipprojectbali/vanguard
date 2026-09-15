@@ -391,6 +391,17 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// dilihat siapa pun yang tak boleh menulis aktivitas.
 		r.Post("/activities/contact-options", h.ActivityContactOptions)
 
+		// Modal global "Cari Kode Desa/Kecamatan" (BL-163) — anggota workspace
+		// mana pun (chain grup ini: RequireEnforce("user:home","read") sudah
+		// cukup; regions GLOBAL tanpa tenant_id, tak ada gerbang Casbin
+		// tambahan sesuai keputusan desain BL-163).
+		r.Post("/regions/search", h.RegionSearch)
+
+		// Lazy-fetch cascading Provinsi/Kabupaten/Kecamatan tab "Wilayah"
+		// modal di atas (perluasan BL-163) — gerbang sama, lihat komentar
+		// di atas.
+		r.Get("/regions/tree", h.RegionsTree)
+
 		// Daftar aktivitas LINTAS-CONTEXT (menu "Activities" top-level, M7). Reuse
 		// gate canViewSalesActivity; query ListAllActivities (tanpa context_filter).
 		// TODO(activities): ganti ke crm:activities saat permission pass M9.
