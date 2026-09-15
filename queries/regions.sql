@@ -93,3 +93,62 @@ WHERE code = sqlc.arg(code) AND level = 4;
 -- mencocokkan balik by code utk tahu yang hilang.
 SELECT id, code, name, parent_region_id FROM regions
 WHERE code = ANY(sqlc.arg(codes)::text[]) AND level = 4;
+
+-- name: SearchRegionsByCode :many
+-- BL-163: modal pencarian global "Cari Kode Desa/Kecamatan" — pencocokan
+-- PERSIS Kode Kemendagri, Kecamatan (level 3) ATAU Desa (level 4). `code`
+-- UNIQUE (migrations/00026) jadi hasil praktis maks 1 baris, tapi kode
+-- sendiri tak menyimpan levelnya (format teks sama bentuknya utk level lain),
+-- jadi tetap dua cabang UNION ALL bukan cari level dulu. Kolom output SAMA
+-- persis dgn SearchRegionsByName (kontrak dibaca handler yang sama):
+-- village_name string KOSONG (bukan NULL — sqlc/pgx tak infer nullability
+-- lintas cabang UNION dgn benar, lihat commit ini) utk baris Kecamatan,
+-- handler render "-" saat kosong.
+SELECT r.code, r.name AS village_name, d.name AS district_name,
+       rgc.name AS regency_name, prov.name AS province_name
+FROM regions r
+JOIN regions d    ON d.id = r.parent_region_id
+JOIN regions rgc  ON rgc.id = d.parent_region_id
+JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE r.level = 4 AND r.code = sqlc.arg(code)
+UNION ALL
+SELECT r.code, ''::text AS village_name, r.name AS district_name,
+       rgc.name AS regency_name, prov.name AS province_name
+FROM regions r
+JOIN regions rgc  ON rgc.id = r.parent_region_id
+JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE r.level = 3 AND r.code = sqlc.arg(code)
+ORDER BY district_name
+LIMIT sqlc.arg(page_size);
+
+-- name: SearchRegionsByName :many
+-- BL-163: cabang pencarian nama (bukan kode) modal yang sama — ILIKE
+-- Kecamatan (level 3) ATAU Desa (level 4), hasil DICAMPUR satu daftar
+-- (bukan dua seksi terpisah) sesuai keputusan desain BL-163. `name` TANPA
+-- indeks (ADR 0009: volume desa besar, tapi pencarian debounced/
+-- submit-triggered dianggap cukup) — seq scan ~91rb baris per panggilan,
+-- diterima sadar sbg trade-off keputusan BL-163 (bukan lupa index).
+-- Handler bertanggung jawab memangkas `pattern` ke >= 3 karakter sebelum
+-- panggil (guard server-side, lihat regions_search.go). village_name string
+-- kosong (bukan NULL, sama alasannya dgn SearchRegionsByCode) utk baris
+-- Kecamatan.
+SELECT * FROM (
+    SELECT r.code, r.name AS village_name, d.name AS district_name,
+           rgc.name AS regency_name, prov.name AS province_name,
+           r.name AS match_name
+    FROM regions r
+    JOIN regions d    ON d.id = r.parent_region_id
+    JOIN regions rgc  ON rgc.id = d.parent_region_id
+    JOIN regions prov ON prov.id = rgc.parent_region_id
+    WHERE r.level = 4 AND r.name ILIKE sqlc.arg(pattern)
+    UNION ALL
+    SELECT r.code, ''::text AS village_name, r.name AS district_name,
+           rgc.name AS regency_name, prov.name AS province_name,
+           r.name AS match_name
+    FROM regions r
+    JOIN regions rgc  ON rgc.id = r.parent_region_id
+    JOIN regions prov ON prov.id = rgc.parent_region_id
+    WHERE r.level = 3 AND r.name ILIKE sqlc.arg(pattern)
+) matches
+ORDER BY match_name
+LIMIT sqlc.arg(page_size);
