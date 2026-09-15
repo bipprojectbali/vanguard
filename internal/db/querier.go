@@ -1344,6 +1344,14 @@ type Querier interface {
 	// kolom tak-tersamar yang TAMPIL di tabel jadi kunci cari (desa, paket, kode
 	// entitas); nilai MRR/ARR tersamar TIDAK dijadikan kunci cari (BL-6).
 	ListSubscriptions(ctx context.Context, arg ListSubscriptionsParams) ([]ListSubscriptionsRow, error)
+	// BL-158: subscription dgn sisa hari TEPAT 30/14/7/0 (bukan rentang — tiap
+	// ambang trigger SATU kali per siklus, cegah notif beruntun) yang BELUM
+	// dikirim reminder utk ambang itu (last_reminder_days_sent IS DISTINCT FROM
+	// ambang saat ini). subscription_owner NULL dikecualikan (keputusan user:
+	// penerima HANYA subscription_owner, tanpa fallback ke tenant admin/owner).
+	// today dihitung di Go via cfg.Location() (gotcha #14 — hindari AT TIME ZONE
+	// di SELECT list, sama pola ListRenewals).
+	ListSubscriptionsDueForReminder(ctx context.Context, today pgtype.Date) ([]ListSubscriptionsDueForReminderRow, error)
 	// Daftar langganan satu desa (detail account → langganannya), keyset. Account sudah
 	// ter-scope ownership di handler; di sini cukup filter account_id + baris hidup.
 	// plan_name dibawa untuk kolom "Paket".
@@ -1467,6 +1475,9 @@ type Querier interface {
 	// disimpan di tabel ini (sumber kebenarannya tetap `invites`), sehingga undangan
 	// pending tetap terhitung di badge sampai benar-benar ditindak.
 	MarkNotificationsRead(ctx context.Context, userID int64) error
+	// Menandai ambang yang baru saja dikirim, agar siklus berikutnya (hari sama
+	// atau restart proses) tak mengirim ulang utk ambang yang sama (BL-158).
+	MarkSubscriptionReminderSent(ctx context.Context, arg MarkSubscriptionReminderSentParams) error
 	// Nomor urut (segmen ke-4) TERTINGGI yang sudah dipakai village_code otomatis
 	// untuk satu tenant + prefix Kecamatan (mis. prefix "32.01.01."). Dihitung atas
 	// SEMUA baris — termasuk yang ter-soft-delete — supaya nomor desa yang pernah ada
