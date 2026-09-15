@@ -1025,3 +1025,29 @@ FROM subscription_items si
 LEFT JOIN plans p ON p.id = si.plan_id
 WHERE si.subscription_id = sqlc.arg(subscription_id)
 ORDER BY si.line_no ASC NULLS LAST, si.id ASC;
+
+-- name: ListSubscriptionsDueForReminder :many
+-- BL-158: subscription dgn sisa hari TEPAT 30/14/7/0 (bukan rentang — tiap
+-- ambang trigger SATU kali per siklus, cegah notif beruntun) yang BELUM
+-- dikirim reminder utk ambang itu (last_reminder_days_sent IS DISTINCT FROM
+-- ambang saat ini). subscription_owner NULL dikecualikan (keputusan user:
+-- penerima HANYA subscription_owner, tanpa fallback ke tenant admin/owner).
+-- today dihitung di Go via cfg.Location() (gotcha #14 — hindari AT TIME ZONE
+-- di SELECT list, sama pola ListRenewals).
+SELECT s.id, s.tenant_id, s.subscription_owner, s.entity_code, a.village_name,
+    (s.end_date - sqlc.arg(today)::date)::int AS days_left
+FROM subscriptions s
+JOIN accounts a ON a.id = s.account_id
+WHERE s.deleted_at IS NULL
+  AND a.deleted_at IS NULL
+  AND s.status IN ('Active','PendingApproval')
+  AND s.subscription_owner IS NOT NULL
+  AND s.end_date IS NOT NULL
+  AND (s.end_date - sqlc.arg(today)::date) IN (30,14,7,0)
+  AND s.last_reminder_days_sent IS DISTINCT FROM (s.end_date - sqlc.arg(today)::date);
+
+-- name: MarkSubscriptionReminderSent :exec
+-- Menandai ambang yang baru saja dikirim, agar siklus berikutnya (hari sama
+-- atau restart proses) tak mengirim ulang utk ambang yang sama (BL-158).
+UPDATE subscriptions SET last_reminder_days_sent = sqlc.arg(days_left)
+WHERE id = sqlc.arg(id);
