@@ -94,6 +94,17 @@ WHERE code = sqlc.arg(code) AND level = 4;
 SELECT id, code, name, parent_region_id FROM regions
 WHERE code = ANY(sqlc.arg(codes)::text[]) AND level = 4;
 
+-- name: ListDistrictsByCodes :many
+-- Resolusi BANYAK kode Kecamatan (level 3) sekaligus — impor CSV Lead
+-- (BL-133), hindari N+1 (Rule 13). Pola SAMA ListVillagesByCodes di atas
+-- tapi level = 3. Nama BEDA dari "GetDistrictByCode" yang disebut draf
+-- tasks.md BL-133 (yang menulis "pola sama GetVillageByCode" — versi :one)
+-- — dipilih versi BATCH krn satu file CSV bisa berisi ratusan baris; query
+-- :one per baris akan jadi N+1. Baris yang kodenya tak ketemu tak muncul di
+-- hasil; pemanggil mencocokkan balik by code utk tahu yang hilang.
+SELECT id, code, name FROM regions
+WHERE code = ANY(sqlc.arg(codes)::text[]) AND level = 3;
+
 -- name: SearchRegionsByCode :many
 -- BL-163: modal pencarian global "Cari Kode Desa/Kecamatan" — pencocokan
 -- PERSIS Kode Kemendagri, Kecamatan (level 3) ATAU Desa (level 4). `code`

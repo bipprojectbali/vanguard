@@ -269,6 +269,59 @@ func (q *Queries) ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, e
 	return items, nil
 }
 
+const listLeadsByNameDistrictCI = `-- name: ListLeadsByNameDistrictCI :many
+SELECT lower(trim(lead_name))::text AS name_ci, district_id FROM leads
+WHERE tenant_id = $1
+  AND deleted_at IS NULL
+  AND lower(trim(lead_name)) = ANY($2::text[])
+  AND district_id = ANY($3::bigint[])
+`
+
+type ListLeadsByNameDistrictCIParams struct {
+	TenantID    int64    `json:"tenant_id"`
+	Names       []string `json:"names"`
+	DistrictIds []int64  `json:"district_ids"`
+}
+
+type ListLeadsByNameDistrictCIRow struct {
+	NameCi     string `json:"name_ci"`
+	DistrictID *int64 `json:"district_id"`
+}
+
+// BL-133 follow-up — cek KOMBINASI lead_name + district_id sekaligus
+// (pratinjau impor CSV, hindari N+1 Rule 13, mirror pola batch
+// ListAccountsByVillageCodes). SOFT-WARNING saja (leadImportRowWarnings,
+// sales_leads_import_warn.go): satu peringatan gabungan HANYA muncul bila
+// nama DAN kecamatan baris CSV itu SAMA-SAMA cocok dgn satu lead lain yang
+// hidup di tenant ini — nama-sama-saja atau kecamatan-sama-saja TIDAK
+// cukup (revisi user 16 Sep: bukan dua peringatan independen). Filter
+// `= ANY(names)` DAN `= ANY(district_ids)` sekadar MEMPERSEMPIT baris
+// kandidat lewat kedua index (idx_leads_name_ci migrasi 00048 +
+// idx_leads_district migrasi 00027) — HASIL BUKAN cross-product, tiap baris
+// balikan adalah kombinasi ASLI yang benar-benar tersimpan bersama di satu
+// baris `leads`; pencocokan kombinasi PERSIS per baris CSV dilakukan ULANG
+// di Go. Pemanggil mengoper `names` yang SUDAH dinormalisasi (lower+trim
+// di Go).
+func (q *Queries) ListLeadsByNameDistrictCI(ctx context.Context, arg ListLeadsByNameDistrictCIParams) ([]ListLeadsByNameDistrictCIRow, error) {
+	rows, err := q.db.Query(ctx, listLeadsByNameDistrictCI, arg.TenantID, arg.Names, arg.DistrictIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLeadsByNameDistrictCIRow{}
+	for rows.Next() {
+		var i ListLeadsByNameDistrictCIRow
+		if err := rows.Scan(&i.NameCi, &i.DistrictID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLeadsSortByCode = `-- name: ListLeadsSortByCode :many
 SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id FROM leads
 WHERE deleted_at IS NULL

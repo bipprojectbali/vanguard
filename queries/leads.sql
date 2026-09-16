@@ -393,3 +393,24 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL
 -- converted_* tak putus). Idempotent: hanya baris hidup.
 UPDATE leads SET deleted_at = now(), updated_by = sqlc.narg(updated_by)
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
+
+-- name: ListLeadsByNameDistrictCI :many
+-- BL-133 follow-up — cek KOMBINASI lead_name + district_id sekaligus
+-- (pratinjau impor CSV, hindari N+1 Rule 13, mirror pola batch
+-- ListAccountsByVillageCodes). SOFT-WARNING saja (leadImportRowWarnings,
+-- sales_leads_import_warn.go): satu peringatan gabungan HANYA muncul bila
+-- nama DAN kecamatan baris CSV itu SAMA-SAMA cocok dgn satu lead lain yang
+-- hidup di tenant ini — nama-sama-saja atau kecamatan-sama-saja TIDAK
+-- cukup (revisi user 16 Sep: bukan dua peringatan independen). Filter
+-- `= ANY(names)` DAN `= ANY(district_ids)` sekadar MEMPERSEMPIT baris
+-- kandidat lewat kedua index (idx_leads_name_ci migrasi 00048 +
+-- idx_leads_district migrasi 00027) — HASIL BUKAN cross-product, tiap baris
+-- balikan adalah kombinasi ASLI yang benar-benar tersimpan bersama di satu
+-- baris `leads`; pencocokan kombinasi PERSIS per baris CSV dilakukan ULANG
+-- di Go. Pemanggil mengoper `names` yang SUDAH dinormalisasi (lower+trim
+-- di Go).
+SELECT lower(trim(lead_name))::text AS name_ci, district_id FROM leads
+WHERE tenant_id = sqlc.arg(tenant_id)
+  AND deleted_at IS NULL
+  AND lower(trim(lead_name)) = ANY(sqlc.arg(names)::text[])
+  AND district_id = ANY(sqlc.arg(district_ids)::bigint[]);

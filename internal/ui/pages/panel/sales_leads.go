@@ -70,9 +70,16 @@ func LeadsList(v LeadsListView) g.Node {
 				h.P(h.Class("text-base-content/70"),
 					g.Text("Prospek yang belum jadi pelanggan — kualifikasi lalu konversi.")),
 			),
-			ui.When(v.CanWrite, h.A(
-				h.Href(v.Base+"/leads/new"), h.Class("btn btn-primary min-h-11"),
-				g.Text("Lead Baru"),
+			ui.When(v.CanWrite, h.Div(
+				h.Class("flex flex-wrap items-center gap-2"),
+				h.A(
+					h.Href(v.Base+"/leads/import"), h.Class("btn btn-outline min-h-11"),
+					g.Text("Impor CSV"),
+				),
+				h.A(
+					h.Href(v.Base+"/leads/new"), h.Class("btn btn-primary min-h-11"),
+					g.Text("Lead Baru"),
+				),
 			)),
 		),
 		// BL-68: tab + kotak cari sebaris (search terdorong ke pojok kanan), varian
