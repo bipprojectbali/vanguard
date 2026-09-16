@@ -27,6 +27,7 @@ func TestRoles_UpdateMatrixAndReload(t *testing.T) {
 
 	form := roleFormValues("Keuangan", "all")
 	form.Set("level.crm:accounts", "write")
+	form.Set("level.crm:deals", "read") // floor approve (BL-145 subtask 0): "read" cukup, TAK butuh "write"
 	form.Set("approve.crm:deals", "1")
 	req := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleUpdate)

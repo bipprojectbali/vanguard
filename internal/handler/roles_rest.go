@@ -79,20 +79,30 @@ type rolePerm struct{ Obj, Act string }
 //
 // write TAK menulis read tambahan: matcher bisnis membuat write mencakup read
 // (business.conf), jadi satu baris (obj,write) sudah memberi keduanya.
+//
+// hasLevel (BL-145 subtask 0): approve/arr HANYA ditulis bila modul yg sama
+// punya level read/write. Tanpa guard ini form bisa kirim level=none +
+// approve/arr=1 (state form stale, replay) → tersimpan kapabilitas approve/arr
+// tanpa akses baca sama sekali ke modulnya — kelas celah sama dgn BL-166
+// (mismatch mekanisme F2), tapi di sisi TULIS kebijakan. Floor-nya sama utk
+// approve maupun arr: blokir hanya di "none", bebas di "read" MAUPUN "write"
+// (approve sengaja tak butuh "write" — pola maker-checker, business.conf).
 func readRoleMatrix(r *http.Request) []rolePerm {
 	mods := authz.CRMModules()
 	perms := make([]rolePerm, 0, len(mods))
 	for _, m := range mods {
-		switch r.FormValue("level." + m.Obj) {
+		level := r.FormValue("level." + m.Obj)
+		switch level {
 		case "read":
 			perms = append(perms, rolePerm{m.Obj, "read"})
 		case "write":
 			perms = append(perms, rolePerm{m.Obj, "write"})
 		}
-		if m.CanApprove && r.FormValue("approve."+m.Obj) == "1" {
+		hasLevel := level == "read" || level == "write"
+		if hasLevel && m.CanApprove && r.FormValue("approve."+m.Obj) == "1" {
 			perms = append(perms, rolePerm{m.Obj, "approve"})
 		}
-		if m.CanARR && r.FormValue("arr."+m.Obj) == "1" {
+		if hasLevel && m.CanARR && r.FormValue("arr."+m.Obj) == "1" {
 			perms = append(perms, rolePerm{m.Obj, "arr"})
 		}
 	}

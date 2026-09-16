@@ -291,3 +291,80 @@ func TestRoles_CreateDuplicate(t *testing.T) {
 }
 
 // --- update + reload -------------------------------------------------------
+
+// matrixFormValues = form update peran minimal + satu sel matriks (level/approve/
+// arr) untuk satu modul. Dipakai tes guard hasLevel (BL-145 subtask 0).
+func matrixFormValues(display, scope, obj, level string, approve, arr bool) url.Values {
+	f := roleFormValues(display, scope)
+	f.Set("level."+obj, level)
+	if approve {
+		f.Set("approve."+obj, "1")
+	}
+	if arr {
+		f.Set("arr."+obj, "1")
+	}
+	return f
+}
+
+// TestRoleUpdate_BlocksApproveWithoutLevel: form kirim level=none + approve=1
+// utk modul ber-CanApprove (renewal_mgmt) — readRoleMatrix HARUS menolak baris
+// approve krn modulnya sendiri nol akses baca/tulis (celah kelas BL-166, sisi
+// tulis kebijakan: tanpa guard ini, approve/arr bisa tersimpan tanpa read/write).
+func TestRoleUpdate_BlocksApproveWithoutLevel(t *testing.T) {
+	env, uid := setupRoles(t)
+	env.seedRole(t, "finance", "Keuangan", "all", false)
+
+	form := matrixFormValues("Keuangan", "all", "crm:renewal_mgmt", "none", true, false)
+	req := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleUpdate)
+
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=saved") {
+		t.Fatalf("harus ok=saved, got %q (status %d)\n%s", loc, rec.Code, rec.Body.String())
+	}
+	if env.hasPerm(t, "finance", "crm:renewal_mgmt", "approve") {
+		t.Error("approve tak boleh tersimpan saat level=none")
+	}
+	if env.hasPerm(t, "finance", "crm:renewal_mgmt", "read") || env.hasPerm(t, "finance", "crm:renewal_mgmt", "write") {
+		t.Error("level none tak boleh menyimpan read/write apa pun")
+	}
+}
+
+// TestRoleUpdate_BlocksARRWithoutLevel: sama seperti approve, utk modul
+// ber-CanARR (subscriptions) — arr=1 dgn level=none harus ditolak.
+func TestRoleUpdate_BlocksARRWithoutLevel(t *testing.T) {
+	env, uid := setupRoles(t)
+	env.seedRole(t, "finance", "Keuangan", "all", false)
+
+	form := matrixFormValues("Keuangan", "all", "crm:subscriptions", "none", false, true)
+	req := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleUpdate)
+
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=saved") {
+		t.Fatalf("harus ok=saved, got %q (status %d)\n%s", loc, rec.Code, rec.Body.String())
+	}
+	if env.hasPerm(t, "finance", "crm:subscriptions", "arr") {
+		t.Error("arr tak boleh tersimpan saat level=none")
+	}
+}
+
+// TestRoleUpdate_AllowsApproveWithReadOnly: floor approve/arr adalah "read"
+// (BUKAN "write") — pola maker-checker sengaja tak butuh hak sunting utk
+// menyetujui (business.conf). level="read" + approve=1 harus TERSIMPAN.
+func TestRoleUpdate_AllowsApproveWithReadOnly(t *testing.T) {
+	env, uid := setupRoles(t)
+	env.seedRole(t, "finance", "Keuangan", "all", false)
+
+	form := matrixFormValues("Keuangan", "all", "crm:renewal_mgmt", "read", true, false)
+	req := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleUpdate)
+
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=saved") {
+		t.Fatalf("harus ok=saved, got %q (status %d)\n%s", loc, rec.Code, rec.Body.String())
+	}
+	if !env.hasPerm(t, "finance", "crm:renewal_mgmt", "read") {
+		t.Error("read harus tersimpan")
+	}
+	if !env.hasPerm(t, "finance", "crm:renewal_mgmt", "approve") {
+		t.Error("approve dgn level=read harus tersimpan (floor bukan write)")
+	}
+}
