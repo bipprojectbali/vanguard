@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"go_starter/internal/authz"
+	"go_starter/internal/db"
 	"go_starter/internal/fls"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
@@ -65,4 +66,24 @@ func (h *Handler) fieldSecurityViewFor(r *http.Request) (*panel.FieldSecurityVie
 		CanEdit: !IsReadOnly(ctx),
 		Roles:   rows,
 	}, nil
+}
+
+// contractValueViewFor menyiapkan data kartu "Nilai Kontrak / MRR" (blok D
+// bagian kedua) — gerbang SAMA dengan Field Security (crm:field_security),
+// nil bila peninjau tak berwenang. roles dioper pemanggil (RolesPage sudah
+// fetch ListBusinessRoles) agar tak query dua kali untuk data yang sama.
+func (h *Handler) contractValueViewFor(ctx context.Context, roles []db.ListBusinessRolesRow) *panel.ContractValueView {
+	if !canManageFieldSecurity(ctx) {
+		return nil
+	}
+	rows := make([]panel.ContractValueRow, 0, len(roles))
+	for _, role := range roles {
+		rows = append(rows, panel.ContractValueRow{
+			Name:        role.Name,
+			DisplayName: role.DisplayName,
+			IsSystem:    role.IsSystem,
+			Visible:     canSeeARR(role.Name),
+		})
+	}
+	return &panel.ContractValueView{Roles: rows}
 }

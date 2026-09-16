@@ -13,10 +13,11 @@ import (
 // cakupan sudah diterjemahkan), view tak memanggil authz.
 
 // RoleRow = satu baris tabel daftar peran (wireframe 9.2): identitas + deskripsi +
-// jumlah pemegang + penanda sistem. Matriks izin & cakupan data TAK di sini — ada
-// di halaman detail (RoleEdit), agar daftar tetap satu query ringan & tabelnya tak
-// melebar. ScopeLabel dipertahankan handler (bisa dipakai kelak) tapi tak jadi
-// kolom: wireframe menaruh cakupan di kartu Record Ownership Rules, bukan tabel.
+// jumlah pemegang + penanda sistem. Matriks izin TAK di sini — ada di halaman
+// detail (RoleEdit) & di blok B (Permission Sets, presentasional). ScopeLabel
+// jadi kolom badge "Permission Set" (BL-145 subtask 6) — cakupan detail tetap
+// dijelaskan di kartu Record Ownership Rules (blok C), tapi ringkasannya kini
+// juga tampak langsung di tabel.
 type RoleRow struct {
 	Name        string
 	DisplayName string
@@ -32,14 +33,15 @@ type ScopeOption struct {
 	Label string
 }
 
-// Roles merender panel daftar: alert, form tambah peran (bila canEdit), tabel
-// peran, lalu — bila handler menyertakan fsec — section Field Security (ADR 0012
-// opsi B: sumbu F4 digabung ke halaman ini, form/POST/gerbang tetap terpisah).
-// base = prefix URL workspace (dioper handler — view tak merakit path sendiri,
-// konvensi 0004). canEdit=false (workspace read-only/arsip) → form tambah & aksi
-// hapus disembunyikan; daftar tetap bisa dibuka (Detail). fsec nil = peninjau tak
-// berwenang atas Field Security (crm:field_security) → section tak dirender.
-func Roles(base string, rows []RoleRow, scopes []ScopeOption, canEdit bool, errMsg, okMsg string, fsec *FieldSecurityView) g.Node {
+// Roles merender panel daftar dalam 4 blok berurut (BL-145 subtask 6): A tabel
+// peran (+ form tambah), B Permission Sets (matriks presentasional + pemilih
+// peran), C Record Ownership Rules (cakupan data peran tersorot), D Field
+// Security (HP/WhatsApp + Nilai Kontrak/MRR). base = prefix URL workspace
+// (dioper handler — view tak merakit path sendiri, konvensi 0004). canEdit=false
+// (workspace read-only/arsip) → form tambah & aksi hapus disembunyikan; daftar
+// tetap bisa dibuka. psv/fsec/cvv nil → blok terkait tak dirender (peninjau tak
+// berwenang, atau — psv — daftar peran kosong, mustahil di praktik).
+func Roles(base string, rows []RoleRow, scopes []ScopeOption, canEdit bool, errMsg, okMsg string, psv *PermissionSetView, fsec *FieldSecurityView, cvv *ContractValueView) g.Node {
 	body := []g.Node{
 		h.H1(h.Class("text-xl font-semibold mb-2"), g.Text("Peran CRM")),
 		h.P(h.Class("text-base-content/70 mb-1"),
@@ -57,9 +59,18 @@ func Roles(base string, rows []RoleRow, scopes []ScopeOption, canEdit bool, errM
 	if canEdit {
 		body = append(body, roleCreateForm(base, scopes))
 	}
+	// A — tabel peran.
 	body = append(body, rolesTableCard(base, rows, canEdit))
+	// B — Permission Sets (modal, blok C ikut di dalamnya — lihat permissionSetsSection).
+	if psv != nil {
+		body = append(body, permissionSetsSection(*psv))
+	}
+	// D — Field Security: HP/WhatsApp lalu Nilai Kontrak/MRR.
 	if fsec != nil {
 		body = append(body, fieldSecuritySection(*fsec))
+	}
+	if cvv != nil {
+		body = append(body, contractValueCard(*cvv))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }
@@ -100,9 +111,11 @@ func rolesTableCard(base string, rows []RoleRow, canEdit bool) g.Node {
 
 // rolesTable = daftar peran sebagai tabel. Dibungkus ui.TableScroll (WAJIB tiap
 // <table>, konvensi mobile-first): overflow terkurung, tak mendorong lebar
-// halaman di 375px. Aksi per baris: "Detail" (link GET — bookmarkable, lolos
-// gotcha #16) selalu ada; "Hapus" hanya peran kustom saat workspace bisa ditulis.
-// Peran sistem tak bisa dihapus → form-nya TAK dirender (bukan disembunyikan CSS).
+// halaman di 375px. Aksi per baris (BL-145 subtask 6): "Lihat" menyorot peran
+// ini di blok B/C tanpa masuk editor (link ke halaman yg sama, ?role=+anchor);
+// "Edit" (dulu "Detail") membuka halaman detail/edit sungguhan; "Hapus" hanya
+// peran kustom saat workspace bisa ditulis. Peran sistem tak bisa dihapus →
+// form-nya TAK dirender (bukan disembunyikan CSS).
 func rolesTable(base string, rows []RoleRow, canEdit bool) g.Node {
 	trs := make([]g.Node, 0, len(rows))
 	for _, r := range rows {
@@ -117,15 +130,17 @@ func rolesTable(base string, rows []RoleRow, canEdit bool) g.Node {
 			desc = h.Span(h.Class("text-sm text-base-content/70"), g.Text(r.Description))
 		}
 		actions := []g.Node{
+			h.A(h.Href(base+"/roles?role="+r.Name+"#permission-sets"),
+				h.Class("btn btn-sm btn-ghost min-h-11"), g.Text("Lihat")),
 			h.A(h.Href(base+"/roles/"+r.Name),
-				h.Class("btn btn-sm btn-ghost min-h-11"), g.Text("Detail")),
+				h.Class("btn btn-sm btn-ghost min-h-11"), g.Text("Edit")),
 		}
 		if canEdit && !r.IsSystem {
 			actions = append(actions, roleDeleteForm(base, r.Name, "Hapus"))
 		}
 		trs = append(trs, h.Tr(
 			h.Class("border-b border-base-300/50"),
-			h.Td(h.Class("py-2 pr-4"),
+			h.Td(h.Class("py-2 pr-4 align-top"),
 				h.Div(h.Class("flex flex-col gap-1"),
 					h.Div(h.Class("flex items-center gap-2"),
 						h.Span(h.Class("font-medium"), g.Text(r.DisplayName)),
@@ -133,10 +148,12 @@ func rolesTable(base string, rows []RoleRow, canEdit bool) g.Node {
 					),
 					h.Span(h.Class("font-mono text-xs text-base-content/60"), g.Text(r.Name)),
 				)),
-			h.Td(h.Class("py-2 pr-4 max-w-xs"), desc),
-			h.Td(h.Class("py-2 pr-4 text-sm whitespace-nowrap"), g.Textf("%d user", r.MemberCount)),
-			h.Td(h.Class("py-2"),
-				h.Div(h.Class("flex flex-wrap gap-2 justify-end"), g.Group(actions))),
+			h.Td(h.Class("py-2 pr-4 align-top"),
+				h.Span(h.Class("badge badge-outline h-auto whitespace-normal text-left leading-snug py-1"), g.Text(r.ScopeLabel))),
+			h.Td(h.Class("py-2 pr-4 max-w-xs align-top"), desc),
+			h.Td(h.Class("py-2 pr-4 text-sm whitespace-nowrap align-top"), g.Textf("%d user", r.MemberCount)),
+			h.Td(h.Class("py-2 align-top"),
+				h.Div(h.Class("flex flex-nowrap gap-2 justify-end"), g.Group(actions))),
 		))
 	}
 	return ui.TableScroll(h.Table(
@@ -144,6 +161,7 @@ func rolesTable(base string, rows []RoleRow, canEdit bool) g.Node {
 		h.THead(h.Tr(
 			h.Class("border-b border-base-300 text-left text-base-content/70"),
 			h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Peran")),
+			h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Permission Set")),
 			h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Deskripsi")),
 			h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Jumlah User")),
 			h.Th(h.Class("py-2 font-medium text-right"), g.Text("Aksi")),

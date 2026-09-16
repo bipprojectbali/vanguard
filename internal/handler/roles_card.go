@@ -2,6 +2,7 @@ package handler
 
 import (
 	"go_starter/internal/authz"
+	"go_starter/internal/db"
 	"go_starter/internal/ui/pages/panel"
 )
 
@@ -80,6 +81,94 @@ func roleModuleRows(cells map[string]*permCell) []panel.RoleModulePerm {
 		})
 	}
 	return rows
+}
+
+// permissionSetRows menurunkan matriks presentasional blok B (View/Create/
+// Edit/Delete per modul) untuk SATU peran. Peran sistem (admin, diwakili glob
+// crm:* — byRole["admin"] KOSONG karena tak tersimpan per-modul) → semua sel
+// penuh, TANPA memeriksa cells (memeriksanya akan keliru tampil "semua ✗").
+// Peran biasa: level "none" → semua ✗; "read" → View saja (bertanda); "write"
+// → View/Create/Edit/Delete semua bertanda. Tanda ✓ diganti ~ SERAGAM bila
+// DataScope peran "own" (presentasional, bukan CRUD granular sungguhan — lihat
+// memory bl-145-roles-redesign.md).
+func permissionSetRows(role db.ListBusinessRolesRow, cells map[string]*permCell) []panel.PermissionSetRow {
+	mods := authz.CRMModules()
+	rows := make([]panel.PermissionSetRow, 0, len(mods))
+	if role.IsSystem {
+		for _, m := range mods {
+			rows = append(rows, panel.PermissionSetRow{
+				Label:  m.Label,
+				View:   panel.PermMarkFull,
+				Create: panel.PermMarkFull,
+				Edit:   panel.PermMarkFull,
+				Delete: panel.PermMarkFull,
+			})
+		}
+		return rows
+	}
+	own := role.DataScope == authz.DataScopeOwn
+	for _, m := range mods {
+		level := "none"
+		if c := cells[m.Obj]; c != nil {
+			switch {
+			case c.write:
+				level = "write"
+			case c.read:
+				level = "read"
+			}
+		}
+		rows = append(rows, panel.PermissionSetRow{
+			Label:  m.Label,
+			View:   crudMark(level != "none", own),
+			Create: crudMark(level == "write", own),
+			Edit:   crudMark(level == "write", own),
+			Delete: crudMark(level == "write", own),
+		})
+	}
+	return rows
+}
+
+// crudMark = satu sel blok B: tak diberi → ✗; diberi & cakupan "own" → ~;
+// diberi & cakupan lain (all/none) → ✓.
+func crudMark(granted, own bool) panel.PermMark {
+	if !granted {
+		return panel.PermMarkNone
+	}
+	if own {
+		return panel.PermMarkOwnOnly
+	}
+	return panel.PermMarkFull
+}
+
+// buildPermissionSetView merakit data blok B untuk halaman /roles: memilih
+// peran yang disorot (selectedName, dari query ?role=) — tak cocok/kosong →
+// default roles[0] (pemanggil WAJIB memastikan roles tak kosong; peran sistem
+// "admin" selalu ter-seed jadi ini bukan jalur nyata). SelectedScope dipakai
+// ulang oleh blok C (satu sumber, tak fetch ganda).
+func buildPermissionSetView(base string, roles []db.ListBusinessRolesRow, byRole map[string]map[string]*permCell, selectedName string) panel.PermissionSetView {
+	selected := roles[0]
+	for _, r := range roles {
+		if r.Name == selectedName {
+			selected = r
+			break
+		}
+	}
+	opts := make([]panel.RoleSwitchOption, 0, len(roles))
+	for _, r := range roles {
+		opts = append(opts, panel.RoleSwitchOption{
+			Name:        r.Name,
+			DisplayName: r.DisplayName,
+			Selected:    r.Name == selected.Name,
+		})
+	}
+	return panel.PermissionSetView{
+		Base:               base,
+		Roles:              opts,
+		SelectedRole:       selected.DisplayName,
+		SelectedScopeValue: selected.DataScope,
+		SelectedScopeLabel: scopeLabel(selected.DataScope),
+		Rows:               permissionSetRows(selected, byRole[selected.Name]),
+	}
 }
 
 // businessScopeOptions = tiga tingkat cakupan data F3 + labelnya (Bahasa

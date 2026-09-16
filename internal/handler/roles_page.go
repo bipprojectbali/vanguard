@@ -37,24 +37,45 @@ func (h *Handler) RolesPage(w http.ResponseWriter, r *http.Request) {
 	// Daftar (arsip/read-only) tetap tampil; form tambah & aksi hapus disembunyikan.
 	canEdit := !IsReadOnly(ctx)
 
-	// Section Field Security (sumbu F4, ADR 0012 opsi B) ditanam di bawah tabel peran
-	// bila peninjau berwenang (crm:field_security); nil → tak dirender. Kegagalan
-	// baca kebijakan tak boleh merobohkan halaman peran — log & lanjut tanpa section.
+	// Blok B (Permission Sets, BL-145 subtask 6): matriks presentasional peran
+	// yang disorot lewat ?role= (default roles[0] — admin selalu ter-seed, jadi
+	// roles kosong bukan jalur nyata). Butuh matriks izin tenant yang sama dgn
+	// RoleEditPage (permsByRole), belum di-fetch di halaman ini sebelum ini.
+	base := wsPath(slugFromRequest(r), "")
+	var psv *panel.PermissionSetView
+	if len(roles) > 0 {
+		perms, err := h.q(ctx).ListBusinessRolePermissionsByTenant(ctx, tenantID)
+		if err != nil {
+			h.Log.Error("roles: list perms", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		v := buildPermissionSetView(base, roles, permsByRole(perms), r.URL.Query().Get("role"))
+		psv = &v
+	}
+
+	// Blok D (Field Security: HP/WhatsApp + Nilai Kontrak/MRR, ADR 0012 opsi B)
+	// ditanam di bawah blok B/C bila peninjau berwenang (crm:field_security);
+	// nil → tak dirender. Kegagalan baca kebijakan tak boleh merobohkan halaman
+	// peran — log & lanjut tanpa section.
 	fsec, err := h.fieldSecurityViewFor(r)
 	if err != nil {
 		h.Log.Error("roles: field-security section", "err", err)
 		fsec = nil
 	}
+	cvv := h.contractValueViewFor(ctx, roles)
 
 	h.renderWorkspaceShell(w, r, "Peran CRM", "/roles",
 		panel.Roles(
-			wsPath(slugFromRequest(r), ""),
+			base,
 			roleRows(roles),
 			businessScopeOptions(),
 			canEdit,
 			wsErrMsg(r.URL.Query().Get("err")),
 			rolesMsg(r.URL.Query().Get("ok")),
+			psv,
 			fsec,
+			cvv,
 		))
 }
 
