@@ -354,17 +354,17 @@ func TestRoleUpdate_AllowsApproveWithReadOnly(t *testing.T) {
 	env, uid := setupRoles(t)
 	env.seedRole(t, "finance", "Keuangan", "all", false)
 
-	form := matrixFormValues("Keuangan", "all", "crm:renewal_mgmt", "read", true, false)
+	form := matrixFormValues("Keuangan", "all", "crm:renewals", "read", true, false)
 	req := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleUpdate)
 
 	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=saved") {
 		t.Fatalf("harus ok=saved, got %q (status %d)\n%s", loc, rec.Code, rec.Body.String())
 	}
-	if !env.hasPerm(t, "finance", "crm:renewal_mgmt", "read") {
+	if !env.hasPerm(t, "finance", "crm:renewals", "read") {
 		t.Error("read harus tersimpan")
 	}
-	if !env.hasPerm(t, "finance", "crm:renewal_mgmt", "approve") {
+	if !env.hasPerm(t, "finance", "crm:renewals", "approve") {
 		t.Error("approve dgn level=read harus tersimpan (floor bukan write)")
 	}
 }

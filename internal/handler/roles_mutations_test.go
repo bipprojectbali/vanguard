@@ -27,8 +27,8 @@ func TestRoles_UpdateMatrixAndReload(t *testing.T) {
 
 	form := roleFormValues("Keuangan", "all")
 	form.Set("level.crm:accounts", "write")
-	form.Set("level.crm:renewal_mgmt", "read") // floor approve (BL-145 subtask 0): "read" cukup, TAK butuh "write"
-	form.Set("approve.crm:renewal_mgmt", "1")
+	form.Set("level.crm:renewals", "read") // floor approve (BL-145 subtask 0): "read" cukup, TAK butuh "write"
+	form.Set("approve.crm:renewals", "1")  // approve pindah rumah ke Renewals (BL-145 subtask 2)
 	req := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
 	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleUpdate)
 
@@ -39,8 +39,8 @@ func TestRoles_UpdateMatrixAndReload(t *testing.T) {
 	if !env.hasPerm(t, "finance", "crm:accounts", "write") {
 		t.Error("crm:accounts write harus tersimpan")
 	}
-	if !env.hasPerm(t, "finance", "crm:renewal_mgmt", "approve") {
-		t.Error("crm:renewal_mgmt approve harus tersimpan")
+	if !env.hasPerm(t, "finance", "crm:renewals", "approve") {
+		t.Error("crm:renewals approve harus tersimpan")
 	}
 	got, _ := env.q.GetBusinessRole(t.Context(), db.GetBusinessRoleParams{
 		TenantID: env.tenantID, Name: "finance",
@@ -55,8 +55,8 @@ func TestRoles_UpdateMatrixAndReload(t *testing.T) {
 	if !env.canBiz(uid, "finance", "crm:accounts", "read") {
 		t.Error("write harus mencakup read (matcher bisnis)")
 	}
-	if !env.canBiz(uid, "finance", "crm:renewal_mgmt", "approve") {
-		t.Error("approve crm:renewal_mgmt harus berlaku setelah reload")
+	if !env.canBiz(uid, "finance", "crm:renewals", "approve") {
+		t.Error("approve crm:renewals harus berlaku setelah reload")
 	}
 	// Peran default lain TAK terhapus oleh reload set-penuh.
 	if !env.canBiz(uid, "sales", "crm:accounts", "read") {
