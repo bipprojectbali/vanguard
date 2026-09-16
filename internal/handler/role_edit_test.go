@@ -122,6 +122,39 @@ func TestRoleEdit_RenewalApproveMovedToRenewals(t *testing.T) {
 	}
 }
 
+// TestRoleEdit_ApproveARRReactiveToLevel: kolom "Setujui" (baris Renewals,
+// satu-satunya CanApprove sejak subtask 2) & "Lihat ARR" (Subscriptions,
+// satu-satunya CanARR) ter-render reaktif Datastar (BL-145 subtask 4/5) — level
+// select ter-bind signal per baris, checkbox terkait ter-bind signal SENDIRI +
+// dinonaktifkan kondisional saat level baris itu "none", dan handler on:change
+// level memaksa signal checkbox itu balik ke false saat level diganti ke
+// "none". Reaktivitas ini murni UX klien — backend (readRoleMatrix guard
+// hasLevel, BL-145 subtask 0) tetap penjaga sesungguhnya, tak diuji ulang di
+// sini.
+func TestRoleEdit_ApproveARRReactiveToLevel(t *testing.T) {
+	env, uid := setupRoles(t)
+	req := rolesReq(http.MethodGet, "/w/test/roles/manager", nil, "manager")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleEditPage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("harus 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`data-bind="lvl_renewals"`, // level select baris Renewals ter-bind
+		`data-bind="apv_renewals"`, // checkbox Setujui ter-bind signal sendiri
+		`data-attr="{disabled: $lvl_renewals == &#39;none&#39;}"`,
+		`data-on:change="evt.target.value===&#39;none&#39;&amp;&amp;($apv_renewals=false)"`,
+		`data-bind="lvl_subscriptions"`, // level select baris Subscriptions ter-bind
+		`data-bind="arr_subscriptions"`, // checkbox Lihat ARR ter-bind signal sendiri
+		`data-attr="{disabled: $lvl_subscriptions == &#39;none&#39;}"`,
+		`data-on:change="evt.target.value===&#39;none&#39;&amp;&amp;($arr_subscriptions=false)"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("matriks harus memuat %q (reaktivitas approve/arr ↔ level):\n%s", want, body)
+		}
+	}
+}
+
 // TestRoleEdit_SystemLocked: peran sistem (admin) → keterangan terkunci, TANPA
 // tombol simpan — admin diwakili glob crm:* yang tak terpetakan ke matriks.
 func TestRoleEdit_SystemLocked(t *testing.T) {
