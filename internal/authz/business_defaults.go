@@ -76,7 +76,7 @@ func DefaultBusinessRoles() []DefaultRole {
 				{"crm:health", "write"}, {"crm:journey", "write"},
 				{"crm:success_plans", "write"}, {"crm:adoption", "write"},
 				{"crm:engagements", "write"},
-				{"crm:renewal_mgmt", "write"}, {"crm:renewal_mgmt", "approve"},
+				{"crm:renewal_mgmt", "write"}, {"crm:renewals", "approve"},
 				{"crm:playbooks", "write"},
 				{"crm:tickets", "write"}, {"crm:kb", "write"},
 				{"crm:sla", "write"}, {"crm:activities", "write"},
@@ -143,7 +143,7 @@ func DefaultBusinessRoles() []DefaultRole {
 type ModuleDef struct {
 	Obj        string // objek Casbin, mis. "crm:accounts"
 	Label      string // label layar (docs/crm/sistem-dan-role.md §4)
-	CanApprove bool   // true → kolom "approve" aktif (hanya Deals/Renewal Mgmt)
+	CanApprove bool   // true → kolom "approve" aktif (hanya Deals/Renewals)
 	CanARR     bool   // true → kolom "Lihat ARR" aktif (hanya Subscriptions, BL-58)
 }
 
@@ -151,8 +151,7 @@ type ModuleDef struct {
 // §4 (Dashboard … Reports). Settings (§9) & Customer Portal (§6.12) SENGAJA tak
 // di sini: Settings ditegakkan sumbu tenant (canEditWorkspace), Portal di luar
 // lingkup internal. "approve" hanya untuk dua modul yang punya alur persetujuan
-// (Deals, Renewal Management) — sel approve modul lain tak bermakna dan tak
-// dirender.
+// (Deals, Renewals) — sel approve modul lain tak bermakna dan tak dirender.
 //
 // crm:roles TIDAK di daftar ini: ia gerbang panel manajemen peran itu sendiri
 // (dimiliki admin lewat glob crm:*), bukan modul yang matriksnya disunting orang
@@ -164,7 +163,18 @@ type ModuleDef struct {
 // tak ada satu pun CanBusiness(ctx,"crm:quotes",…)) → kolomnya inert; dibuang
 // agar editor tak menawarkan toggle tanpa efek. VoC: modulnya belum dibangun
 // (nol route/handler/menu) → dikembalikan ke daftar ini saat modul VoC dibangun.
-// Kolom (Obj, Label, CanApprove, CanARR). CanApprove hanya Deals/Renewal Mgmt
+//
+// crm:renewal_mgmt CanApprove=false, crm:renewals CanApprove=true (BL-145
+// subtask 2, dipindahkan dari Renewal Mgmt): tombol Setujui/Reject renewal
+// upsell HANYA muncul di halaman Subscription detail (dunia Renewals), NOL
+// kemunculan di halaman Renewal Management manapun (verifikasi UI nyata, bukan
+// cuma nama objek Casbin) — kolom "Setujui" di baris Renewal Mgmt dulu
+// menyesatkan admin yang mengira mencentangnya mengizinkan approve DI HALAMAN
+// itu. crm:renewal_mgmt TETAP di daftar ini utk read/write (gate halaman
+// Renewal Management CS sendiri, cs_renewals_view.go) — hanya act approve yang
+// pindah rumah objek. canApproveRenewal (subscriptions_view.go) & default grant
+// Manager ikut disesuaikan; migrasi 00048 memindah baris existing.
+// Kolom (Obj, Label, CanApprove, CanARR). CanApprove hanya Deals/Renewals
 // (punya alur persetujuan). CanARR hanya Subscriptions (BL-58): visibilitas ARR
 // = kapabilitas ter-matriks (crm:subscriptions/arr), bukan cek nama role.
 var crmModules = []ModuleDef{
@@ -175,7 +185,7 @@ var crmModules = []ModuleDef{
 	{"crm:deals", "Deals", true, false},
 	{"crm:sales_activity", "Sales Activity Log", false, false},
 	{"crm:subscriptions", "Active Subscriptions", false, true},
-	{"crm:renewals", "Renewals", false, false},
+	{"crm:renewals", "Renewals", true, false},
 	{"crm:plans", "Plans & Pricing", false, false},
 	{"crm:churn", "Churn / Cancellations", false, false},
 	{"crm:health", "Health Score", false, false},
@@ -183,7 +193,7 @@ var crmModules = []ModuleDef{
 	{"crm:success_plans", "Success Plans", false, false},
 	{"crm:adoption", "Product Adoption", false, false},
 	{"crm:engagements", "Engagements", false, false},
-	{"crm:renewal_mgmt", "Renewal Management", true, false},
+	{"crm:renewal_mgmt", "Renewal Management", false, false},
 	{"crm:playbooks", "Playbooks", false, false},
 	{"crm:tickets", "Tickets / Cases", false, false},
 	{"crm:kb", "Knowledge Base", false, false},

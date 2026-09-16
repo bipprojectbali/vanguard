@@ -12,7 +12,7 @@ import (
 )
 
 // subscriptions_approve.go — keputusan Manager atas renewal Upsell yang menunggu
-// (M5-3c). Gerbang = canApproveRenewal (crm:renewal_mgmt approve; hanya admin/
+// (M5-3c). Gerbang = canApproveRenewal (crm:renewals approve; hanya admin/
 // manager). Approve → Expired baris lama LALU baris Pending jadi Active (satu tx,
 // invarian idx_subs_one_active). Reject → baris Pending jadi Cancelled; baris lama
 // tetap Active. Kedua jalur memberi tahu pemilik langganan (fail-soft).

@@ -78,6 +78,28 @@ func TestRoleEdit_RendersCustom(t *testing.T) {
 	}
 }
 
+// TestRoleEdit_RenewalApproveMovedToRenewals: kolom "Setujui" tampil di baris
+// Renewals, TAK di baris Renewal Management (BL-145 subtask 2 — approve renewal
+// upsell cuma pernah muncul di halaman Subscription detail/dunia Renewals, nol
+// kemunculan di halaman Renewal Management manapun). Pembanding negatif+positif
+// sekaligus, agar bukti flag CanApprove benar-benar TERTUKAR posisi (bukan cuma
+// ditambah di satu sisi lalu lupa dicabut di sisi lain).
+func TestRoleEdit_RenewalApproveMovedToRenewals(t *testing.T) {
+	env, uid := setupRoles(t)
+	req := rolesReq(http.MethodGet, "/w/test/roles/manager", nil, "manager")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleEditPage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("harus 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `name="approve.crm:renewals"`) {
+		t.Error("kolom Setujui baris Renewals harus tampil (CanApprove=true)")
+	}
+	if strings.Contains(body, `name="approve.crm:renewal_mgmt"`) {
+		t.Error("kolom Setujui baris Renewal Management harus disembunyikan (CanApprove=false)")
+	}
+}
+
 // TestRoleEdit_SystemLocked: peran sistem (admin) → keterangan terkunci, TANPA
 // tombol simpan — admin diwakili glob crm:* yang tak terpetakan ke matriks.
 func TestRoleEdit_SystemLocked(t *testing.T) {

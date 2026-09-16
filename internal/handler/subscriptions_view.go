@@ -72,8 +72,11 @@ func canViewChurn(ctx context.Context) bool {
 
 // canApproveRenewal = gerbang APPROVE renewal Upsell yang menunggu. HANYA admin &
 // manager (aksi approve, bukan write); csm punya write renewal_mgmt tapi TAK approve.
+// Objek "crm:renewals" (BL-145 subtask 2, dipindah dari crm:renewal_mgmt) —
+// approve hanya pernah muncul di halaman Subscription detail (dunia Renewals),
+// bukan halaman Renewal Management.
 func canApproveRenewal(ctx context.Context) bool {
-	return authz.CanBusiness(ctx, "crm:renewal_mgmt", "approve")
+	return authz.CanBusiness(ctx, "crm:renewals", "approve")
 }
 
 // subscriptionsMsg memetakan kode sukses PRG (`?ok=CODE`) → kalimat konfirmasi di

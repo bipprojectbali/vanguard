@@ -94,7 +94,8 @@ func TestBusinessPolicy_MatrixEnforcement(t *testing.T) {
 		{"sales", "crm:deals", "write", true, "sales BUAT deal (◐)"},
 		{"sales", "crm:deals", "approve", false, "sales TAK approve deal — itu Manager"},
 		{"manager", "crm:deals", "approve", true, "manager approve deal (✓ approve)"},
-		{"manager", "crm:renewal_mgmt", "approve", true, "manager approve renewal"},
+		{"manager", "crm:renewals", "approve", true, "manager approve renewal (BL-145: pindah dari renewal_mgmt)"},
+		{"manager", "crm:renewal_mgmt", "approve", false, "approve TAK lagi di renewal_mgmt sejak BL-145 subtask 2"},
 
 		// --- CSM = pemilik Customer Success; Sales nol di CS ---
 		{"csm", "crm:success_plans", "write", true, "csm pemilik success plans (◐✓)"},
@@ -260,9 +261,12 @@ func TestHasBusinessRole(t *testing.T) {
 }
 
 // TestDefaultRolesMatchLegacyCSV mengunci regresi PALING mahal: matriks efektif
-// DefaultBusinessRoles() HARUS setara business_policy.csv lama (satu-satunya beda
-// yang DISENGAJA: baris admin `crm:roles write` untuk panel manajemen peran).
-// Kalau meleset, M2/M3 (Accounts/Contacts) bisa diam-diam kehilangan akses.
+// DefaultBusinessRoles() HARUS setara business_policy.csv lama, KECUALI dua beda
+// yang DISENGAJA: (1) baris admin `crm:roles write` untuk panel manajemen peran,
+// (2) manager `crm:renewal_mgmt approve` dipindah ke `crm:renewals approve`
+// (BL-145 subtask 2 — approve renewal cuma pernah muncul di halaman Subscription
+// detail, nol kemunculan di halaman Renewal Management). Kalau meleset di luar
+// dua itu, M2/M3 (Accounts/Contacts) bisa diam-diam kehilangan akses.
 func TestDefaultRolesMatchLegacyCSV(t *testing.T) {
 	legacy := parseLegacyMatrix(t, BusinessPolicy)
 	got := map[string]bool{}
@@ -273,6 +277,10 @@ func TestDefaultRolesMatchLegacyCSV(t *testing.T) {
 	}
 	// Beda yang disengaja: crm:roles write pada admin tak ada di CSV lama.
 	delete(got, "admin|crm:roles|write")
+	// Beda yang disengaja (BL-145 subtask 2): approve renewal pindah objek dari
+	// crm:renewal_mgmt ke crm:renewals — CSV lama masih pakai nama objek lama.
+	delete(legacy, "manager|crm:renewal_mgmt|approve")
+	delete(got, "manager|crm:renewals|approve")
 
 	if len(got) != len(legacy) {
 		t.Errorf("jumlah izin beda: default=%d legacy=%d", len(got), len(legacy))
