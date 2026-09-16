@@ -469,7 +469,7 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/subscriptions/{id}", h.SubscriptionDetail)
 		// Mutasi langganan (M5-3c), native POST → 303 (gotcha #16). Gerbang bisnis
 		// terpisah: renew & activate (crm:renewals write), approve/reject
-		// (crm:renewal_mgmt approve — hanya manager/admin), churn (crm:churn write).
+		// (crm:renewals approve — hanya manager/admin), churn (crm:churn write).
 		// F3 ownership ditegakkan per-baris di handler (loadOwnedSubscription).
 		r.Post("/subscriptions/{id}/renew", h.SubscriptionRenew)
 		r.Post("/subscriptions/{id}/activate", h.SubscriptionActivate)
