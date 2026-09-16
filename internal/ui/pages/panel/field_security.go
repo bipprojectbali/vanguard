@@ -129,6 +129,70 @@ func fieldSecurityMatrix(v FieldSecurityView) g.Node {
 	))
 }
 
+// ContractValueRow = satu peran siap-render blok D bagian kedua (Nilai
+// Kontrak/MRR): identitas + apakah peran ini melihat nilai kontrak/ARR.
+type ContractValueRow struct {
+	Name        string
+	DisplayName string
+	IsSystem    bool
+	Visible     bool
+}
+
+// ContractValueView = data siap-render kartu Nilai Kontrak/MRR. Gerbangnya
+// SAMA dengan Field Security (crm:field_security) — nil bila peninjau tak
+// berwenang, sama seperti FieldSecurityView.
+type ContractValueView struct {
+	Roles []ContractValueRow
+}
+
+// contractValueCard merender kartu "Nilai Kontrak / MRR": daftar peran + ✓/✗
+// apakah masing-masing melihat nilai kontrak/ARR pelanggan (canSeeARR, F4,
+// fls.go — hardcoded di kode, BUKAN tabel config). Presentasional MURNI, TANPA
+// form/POST: menampilkan checkbox yang bisa disunting akan menyesatkan admin
+// mengira ini kebijakan yang bisa diubah dari sini.
+func contractValueCard(v ContractValueView) g.Node {
+	rows := make([]g.Node, 0, len(v.Roles))
+	for _, r := range v.Roles {
+		jenis := g.Node(g.Text(""))
+		if r.IsSystem {
+			jenis = h.Span(h.Class("badge badge-warning badge-sm ml-2"), g.Text("Sistem"))
+		}
+		mark := h.Span(h.Class("text-base-content/30"), g.Text("✗"))
+		if r.Visible {
+			mark = h.Span(h.Class("text-success font-semibold"), g.Text("✓"))
+		}
+		rows = append(rows, h.Tr(
+			h.Class("border-b border-base-300/50"),
+			h.Td(h.Class("py-2 pr-4"),
+				h.Div(h.Class("flex items-center"),
+					h.Span(h.Class("font-medium"), g.Text(r.DisplayName)),
+					jenis,
+				)),
+			h.Td(h.Class("py-2 text-center"), mark),
+		))
+	}
+	table := ui.TableScroll(h.Table(
+		h.Class("w-full text-sm"),
+		h.THead(h.Tr(
+			h.Class("border-b border-base-300 text-left text-base-content/70"),
+			h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Peran")),
+			h.Th(h.Class("py-2 font-medium text-center"), g.Text("Lihat Nilai Kontrak/MRR")),
+		)),
+		h.TBody(g.Group(rows)),
+	))
+	return h.Div(
+		h.Class("card bg-base-100 border border-base-300 min-w-0 mt-2"),
+		h.Div(
+			h.Class("card-body min-w-0 gap-3"),
+			h.H2(h.Class("font-semibold"), g.Text("Nilai Kontrak / MRR")),
+			h.P(h.Class("text-sm text-base-content/70"),
+				g.Text("Peran mana yang melihat nilai kontrak & ARR pelanggan. Aturan ini "+
+					"tetap di kode (bukan kebijakan yang bisa disunting di sini).")),
+			table,
+		),
+	)
+}
+
 // fieldSecurityCheck = satu kotak-centang matriks (name=view.<role>/edit.<role>,
 // value=1). Terkunci saat !canEdit. Tap target ≥44px lewat padding baris + ukuran
 // checkbox (konvensi mobile-first).

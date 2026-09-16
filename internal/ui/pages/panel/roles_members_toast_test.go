@@ -14,8 +14,8 @@ import (
 
 func TestRoles_ToastNotAlert(t *testing.T) {
 	var errOut, okOut strings.Builder
-	Roles("/w/acme", nil, nil, true, "Nama peran itu sudah dipakai di workspace ini.", "", nil).Render(&errOut)
-	Roles("/w/acme", nil, nil, true, "", "Peran ditambahkan.", nil).Render(&okOut)
+	Roles("/w/acme", nil, nil, true, "Nama peran itu sudah dipakai di workspace ini.", "", nil, nil, nil).Render(&errOut)
+	Roles("/w/acme", nil, nil, true, "", "Peran ditambahkan.", nil, nil, nil).Render(&okOut)
 
 	assertToast(t, errOut.String(), "err", "Nama peran itu sudah dipakai di workspace ini.")
 	assertToast(t, okOut.String(), "ok", "Peran ditambahkan.")
