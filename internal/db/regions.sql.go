@@ -164,6 +164,44 @@ func (q *Queries) ListAllRegions(ctx context.Context) ([]ListAllRegionsRow, erro
 	return items, nil
 }
 
+const listDistrictsByCodes = `-- name: ListDistrictsByCodes :many
+SELECT id, code, name FROM regions
+WHERE code = ANY($1::text[]) AND level = 3
+`
+
+type ListDistrictsByCodesRow struct {
+	ID   int64  `json:"id"`
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// Resolusi BANYAK kode Kecamatan (level 3) sekaligus — impor CSV Lead
+// (BL-133), hindari N+1 (Rule 13). Pola SAMA ListVillagesByCodes di atas
+// tapi level = 3. Nama BEDA dari "GetDistrictByCode" yang disebut draf
+// tasks.md BL-133 (yang menulis "pola sama GetVillageByCode" — versi :one)
+// — dipilih versi BATCH krn satu file CSV bisa berisi ratusan baris; query
+// :one per baris akan jadi N+1. Baris yang kodenya tak ketemu tak muncul di
+// hasil; pemanggil mencocokkan balik by code utk tahu yang hilang.
+func (q *Queries) ListDistrictsByCodes(ctx context.Context, codes []string) ([]ListDistrictsByCodesRow, error) {
+	rows, err := q.db.Query(ctx, listDistrictsByCodes, codes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDistrictsByCodesRow{}
+	for rows.Next() {
+		var i ListDistrictsByCodesRow
+		if err := rows.Scan(&i.ID, &i.Code, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDistrictsByRegency = `-- name: ListDistrictsByRegency :many
 SELECT id, parent_region_id, level, code, name FROM regions
 WHERE level = 3 AND parent_region_id = $1

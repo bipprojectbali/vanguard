@@ -974,6 +974,14 @@ type Querier interface {
 	// "Status" Leads BL-157b). stage NOT NULL → kloning PERSIS pola
 	// ListDealsSortByName.
 	ListDealsSortByStage(ctx context.Context, arg ListDealsSortByStageParams) ([]Deal, error)
+	// Resolusi BANYAK kode Kecamatan (level 3) sekaligus — impor CSV Lead
+	// (BL-133), hindari N+1 (Rule 13). Pola SAMA ListVillagesByCodes di atas
+	// tapi level = 3. Nama BEDA dari "GetDistrictByCode" yang disebut draf
+	// tasks.md BL-133 (yang menulis "pola sama GetVillageByCode" — versi :one)
+	// — dipilih versi BATCH krn satu file CSV bisa berisi ratusan baris; query
+	// :one per baris akan jadi N+1. Baris yang kodenya tak ketemu tak muncul di
+	// hasil; pemanggil mencocokkan balik by code utk tahu yang hilang.
+	ListDistrictsByCodes(ctx context.Context, codes []string) ([]ListDistrictsByCodesRow, error)
 	// Level 3 (Kecamatan) di bawah satu kabupaten/kota. Sama alasannya dgn
 	// ListRegenciesByProvince — bukan jalur utama (JS-side), cadangan validasi.
 	ListDistrictsByRegency(ctx context.Context, parentRegionID *int64) ([]Region, error)
@@ -1122,6 +1130,21 @@ type Querier interface {
 	// entity_code); PII (telepon/email) tak ikut agar search bukan jalur enumerasi
 	// data tersamar. Tetap keyset+LIMIT. Trigram/index ditunda (dataset kecil).
 	ListLeads(ctx context.Context, arg ListLeadsParams) ([]Lead, error)
+	// BL-133 follow-up — cek KOMBINASI lead_name + district_id sekaligus
+	// (pratinjau impor CSV, hindari N+1 Rule 13, mirror pola batch
+	// ListAccountsByVillageCodes). SOFT-WARNING saja (leadImportRowWarnings,
+	// sales_leads_import_warn.go): satu peringatan gabungan HANYA muncul bila
+	// nama DAN kecamatan baris CSV itu SAMA-SAMA cocok dgn satu lead lain yang
+	// hidup di tenant ini — nama-sama-saja atau kecamatan-sama-saja TIDAK
+	// cukup (revisi user 16 Sep: bukan dua peringatan independen). Filter
+	// `= ANY(names)` DAN `= ANY(district_ids)` sekadar MEMPERSEMPIT baris
+	// kandidat lewat kedua index (idx_leads_name_ci migrasi 00048 +
+	// idx_leads_district migrasi 00027) — HASIL BUKAN cross-product, tiap baris
+	// balikan adalah kombinasi ASLI yang benar-benar tersimpan bersama di satu
+	// baris `leads`; pencocokan kombinasi PERSIS per baris CSV dilakukan ULANG
+	// di Go. Pemanggil mengoper `names` yang SUDAH dinormalisasi (lower+trim
+	// di Go).
+	ListLeadsByNameDistrictCI(ctx context.Context, arg ListLeadsByNameDistrictCIParams) ([]ListLeadsByNameDistrictCIRow, error)
 	// BL-157b: sort by entity_code ("Kode"). NULLABLE (entity_code diisi
 	// GenerateEntityCode saat create, tapi kolom tetap nullable di skema). Pola
 	// null-aware SAMA dgn ListSubscriptionsSortByPlan — cursor_is_null menandai

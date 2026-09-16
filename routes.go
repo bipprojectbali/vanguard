@@ -361,6 +361,12 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/leads", h.LeadsList)
 		r.Get("/leads/new", h.LeadNew)
 		r.Post("/leads", h.LeadCreate)
+		// BL-133: impor massal via CSV. Statis, jadi WAJIB sebelum "/leads/{id}"
+		// (alasan sama komentar BL-63 di atas untuk accounts/import).
+		r.Get("/leads/import", h.LeadImportForm)
+		r.Post("/leads/import", h.LeadImportPreview)
+		r.Post("/leads/import/confirm", h.LeadImportConfirm)
+		r.Get("/leads/import/template", h.LeadImportTemplate)
 		r.Get("/leads/{id}", h.LeadDetail)
 		r.Get("/leads/{id}/edit", h.LeadEdit)
 		r.Post("/leads/{id}", h.LeadUpdate)
