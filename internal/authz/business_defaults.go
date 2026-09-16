@@ -164,15 +164,27 @@ type ModuleDef struct {
 // tak ada satu pun CanBusiness(ctx,"crm:quotes",…)) → kolomnya inert; dibuang
 // agar editor tak menawarkan toggle tanpa efek. VoC: modulnya belum dibangun
 // (nol route/handler/menu) → dikembalikan ke daftar ini saat modul VoC dibangun.
-// Kolom (Obj, Label, CanApprove, CanARR). CanApprove hanya Deals/Renewal Mgmt
-// (punya alur persetujuan). CanARR hanya Subscriptions (BL-58): visibilitas ARR
-// = kapabilitas ter-matriks (crm:subscriptions/arr), bukan cek nama role.
+// Kolom (Obj, Label, CanApprove, CanARR). CanApprove hanya Renewal Mgmt (punya
+// alur persetujuan nyata, tombol Setujui/Reject di Subscription detail). Deals
+// SENGAJA CanApprove=false (BL-145 subtask 1) walau objek crm:deals/approve
+// TETAP ada di enforcer & default grant Manager TETAP dipertahankan
+// (canApproveDeals, sales_view.go, sudah diekspos sbg sumber tunggal utk alur
+// approval Deal yg menyusul) — kolom di editor DISEMBUNYIKAN krn nol
+// enforcement point hari ini (belum dipakai di slice manapun), jadi checkbox
+// aktif akan menyesatkan admin yg mengira sudah ada alur approval Deal. Pola
+// SAMA dgn crm:quotes/crm:voc di bawah: readRoleMatrix full-replace per role
+// (bukan patch), jadi kapabilitas yg tak terwakili di editor (di luar daftar,
+// ATAU CanApprove/CanARR=false) ikut TERHAPUS begitu role itu disunting ULANG
+// lewat UI — bukan permanen aman, tapi konsisten dgn invarian existing
+// (TestRoles_UpdateIgnoresDroppedColumns), bukan risiko baru. CanARR hanya
+// Subscriptions (BL-58): visibilitas ARR = kapabilitas ter-matriks
+// (crm:subscriptions/arr), bukan cek nama role.
 var crmModules = []ModuleDef{
 	{"crm:dashboard", "Dashboard", false, false},
 	{"crm:accounts", "Accounts (Desa)", false, false},
 	{"crm:contacts", "Contacts", false, false},
 	{"crm:leads", "Leads", false, false},
-	{"crm:deals", "Deals", true, false},
+	{"crm:deals", "Deals", false, false},
 	{"crm:sales_activity", "Sales Activity Log", false, false},
 	{"crm:subscriptions", "Active Subscriptions", false, true},
 	{"crm:renewals", "Renewals", false, false},

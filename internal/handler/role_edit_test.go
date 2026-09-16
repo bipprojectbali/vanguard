@@ -78,6 +78,28 @@ func TestRoleEdit_RendersCustom(t *testing.T) {
 	}
 }
 
+// TestRoleEdit_DealsApproveColumnHidden: kolom "Setujui" TAK tampil sbg
+// checkbox di baris Deals (BL-145 subtask 1, CanApprove=false — nol enforcement
+// point hari ini), walau Manager punya default grant crm:deals approve
+// (business_defaults.go). Baris Renewal Management TETAP tampil checkbox-nya
+// (CanApprove=true, fiturnya nyata) — pembanding negatif agar bukti kolom lain
+// tak ikut disembunyikan.
+func TestRoleEdit_DealsApproveColumnHidden(t *testing.T) {
+	env, uid := setupRoles(t)
+	req := rolesReq(http.MethodGet, "/w/test/roles/manager", nil, "manager")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleEditPage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("harus 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, `name="approve.crm:deals"`) {
+		t.Error("kolom Setujui baris Deals harus disembunyikan (CanApprove=false)")
+	}
+	if !strings.Contains(body, `name="approve.crm:renewal_mgmt"`) {
+		t.Error("kolom Setujui baris Renewal Management harus tetap tampil (CanApprove=true)")
+	}
+}
+
 // TestRoleEdit_SystemLocked: peran sistem (admin) → keterangan terkunci, TANPA
 // tombol simpan — admin diwakili glob crm:* yang tak terpetakan ke matriks.
 func TestRoleEdit_SystemLocked(t *testing.T) {
