@@ -1,9 +1,12 @@
 package panel
 
 import (
+	"strings"
+
 	"go_starter/internal/ui"
 
 	g "maragu.dev/gomponents"
+	data "maragu.dev/gomponents-datastar"
 	h "maragu.dev/gomponents/html"
 )
 
@@ -154,13 +157,7 @@ func roleEditShell(inner []g.Node) g.Node {
 func roleMatrix(rc RoleCard, canEdit bool) g.Node {
 	rows := make([]g.Node, 0, len(rc.Modules))
 	for _, m := range rc.Modules {
-		rows = append(rows, h.Tr(
-			h.Class("border-b border-base-300/50"),
-			h.Td(h.Class("py-2 pr-4"), g.Text(m.Label)),
-			h.Td(h.Class("py-2 pr-4"), levelSelect(m.Obj, m.Level, !canEdit)),
-			h.Td(h.Class("py-2 pr-4 text-center"), permCheckCell("approve."+m.Obj, m.CanApprove, m.Approve, canEdit)),
-			h.Td(h.Class("py-2 text-center"), permCheckCell("arr."+m.Obj, m.CanARR, m.ARR, canEdit)),
-		))
+		rows = append(rows, roleMatrixRow(m, canEdit))
 	}
 	return ui.TableScroll(h.Table(
 		h.Class("w-full text-sm"),
@@ -175,10 +172,73 @@ func roleMatrix(rc RoleCard, canEdit bool) g.Node {
 	))
 }
 
-// permCheckCell = satu sel kotak-centang matriks (approve/arr). show=false →
-// "—" (modul tak mendukung kapabilitas ini); show=true → checkbox name=name,
-// value=1, tercentang bila checked, terkunci bila !canEdit. Menyatukan pola
-// approve & arr (BL-58) agar tak ada dua salinan builder yang bisa menyimpang.
+// roleMatrixRow merender satu baris matriks modul. Saat canEdit & modul punya
+// approve/arr, level select DAN checkbox terkait saling reaktif tanpa
+// round-trip (BL-145 subtask 4/5, Datastar): level "Tak ada" otomatis
+// mematikan+mengunci checkbox approve/arr baris itu (signalnya sendiri ikut
+// dipaksa false — bukan cuma abu-abu tapi tetap tercentang); level "Lihat"
+// ATAU "Kelola" membebaskannya lagi (approve SENGAJA tak butuh "Kelola" —
+// pola maker-checker, lihat memory bl-145-roles-redesign.md). Signal per baris
+// (lvl_/apv_/arr_ + nama objek tanpa prefix "crm:") unik agar tak bertabrakan
+// lintas baris (pola sama engagements_actions.go done{id}/resc{id}). Backend
+// (readRoleMatrix, guard hasLevel BL-145 subtask 0) TETAP penjaga
+// sesungguhnya — reaktivitas ini murni UX, bukan pengganti validasi server.
+func roleMatrixRow(m RoleModulePerm, canEdit bool) g.Node {
+	approveCell := permCheckCell("approve."+m.Obj, m.CanApprove, m.Approve, canEdit)
+	arrCell := permCheckCell("arr."+m.Obj, m.CanARR, m.ARR, canEdit)
+	levelCell := levelSelect(m.Obj, m.Level, !canEdit)
+	var rowAttrs []g.Node
+
+	if canEdit && (m.CanApprove || m.CanARR) {
+		suffix := moduleSignal(m.Obj)
+		lvlSig := "lvl_" + suffix
+		hasLevel := m.Level != "none"
+		signals := map[string]any{lvlSig: m.Level}
+		var resets []string
+		if m.CanApprove {
+			apvSig := "apv_" + suffix
+			signals[apvSig] = m.Approve && hasLevel
+			resets = append(resets, "$"+apvSig+"=false")
+			approveCell = reactiveCheckbox("approve."+m.Obj, apvSig, lvlSig)
+		}
+		if m.CanARR {
+			arrSig := "arr_" + suffix
+			signals[arrSig] = m.ARR && hasLevel
+			resets = append(resets, "$"+arrSig+"=false")
+			arrCell = reactiveCheckbox("arr."+m.Obj, arrSig, lvlSig)
+		}
+		levelCell = h.Select(
+			h.Class("select select-sm"), h.Name("level."+m.Obj),
+			data.Bind(lvlSig),
+			data.On("change", "evt.target.value==='none'&&("+strings.Join(resets, ",")+")"),
+			g.Group(levelOpts(m.Level)),
+		)
+		rowAttrs = append(rowAttrs, data.Signals(signals))
+	}
+
+	return h.Tr(append(rowAttrs,
+		h.Class("border-b border-base-300/50"),
+		h.Td(h.Class("py-2 pr-4"), g.Text(m.Label)),
+		h.Td(h.Class("py-2 pr-4"), levelCell),
+		h.Td(h.Class("py-2 pr-4 text-center"), approveCell),
+		h.Td(h.Class("py-2 text-center"), arrCell),
+	)...)
+}
+
+// moduleSignal mengubah objek Casbin ("crm:renewals") jadi sufiks aman-sinyal
+// ("renewals") — objek modul CRM SELALU berawalan "crm:" (crmModules,
+// business_defaults.go), sisanya huruf kecil+underscore saja, jadi aman jadi
+// identifier Datastar tanpa escaping tambahan.
+func moduleSignal(obj string) string {
+	return strings.TrimPrefix(obj, "crm:")
+}
+
+// permCheckCell = satu sel kotak-centang matriks (approve/arr) versi STATIS
+// (tanpa reaktivitas — dipakai saat !canEdit, atau saat modul tak punya
+// approve/arr sama sekali). show=false → "—" (modul tak mendukung kapabilitas
+// ini); show=true → checkbox name=name, value=1, tercentang bila checked,
+// terkunci bila !canEdit. Menyatukan pola approve & arr (BL-58) agar tak ada
+// dua salinan builder yang bisa menyimpang.
 func permCheckCell(name string, show, checked, canEdit bool) g.Node {
 	if !show {
 		return h.Span(h.Class("text-base-content/40"), g.Text("—"))
@@ -196,17 +256,40 @@ func permCheckCell(name string, show, checked, canEdit bool) g.Node {
 	return h.Input(attrs...)
 }
 
-// levelSelect = dropdown tingkat izin satu modul (name="level.<obj>").
+// reactiveCheckbox = checkbox approve/arr versi REAKTIF (BL-145 subtask 4/5):
+// checked-nya di-bind dua-arah ke signal sig (bukan h.Checked() statis) —
+// dinonaktifkan reaktif saat level baris (lvlSig) = "none", dan DIPAKSA false
+// oleh handler on:change level select (roleMatrixRow) saat itu terjadi. name/
+// value TETAP native agar form ter-submit apa adanya (checkbox nonaktif tak
+// ikut terkirim, sama seperti checkbox biasa).
+func reactiveCheckbox(name, sig, lvlSig string) g.Node {
+	return h.Input(
+		h.Type("checkbox"), h.Class("checkbox checkbox-sm"),
+		h.Name(name), h.Value("1"),
+		data.Bind(sig),
+		data.Attr("disabled", "$"+lvlSig+" == 'none'"),
+	)
+}
+
+// levelSelect = dropdown tingkat izin satu modul (name="level.<obj>"), versi
+// STATIS (tanpa Datastar) — dipakai saat !canEdit atau baris tak reaktif.
 func levelSelect(obj, current string, disabled bool) g.Node {
 	attrs := []g.Node{h.Class("select select-sm"), h.Name("level." + obj)}
 	if disabled {
 		attrs = append(attrs, h.Disabled())
 	}
+	return h.Select(append(attrs, g.Group(levelOpts(current)))...)
+}
+
+// levelOpts = daftar <option> levelOptions, current terpilih. Dipakai
+// levelSelect (statis) & roleMatrixRow (varian reaktif) agar daftar opsi tak
+// dua kali diketik.
+func levelOpts(current string) []g.Node {
 	opts := make([]g.Node, 0, len(levelOptions))
 	for _, o := range levelOptions {
 		opts = append(opts, optionSel(o.Value, o.Label, current))
 	}
-	return h.Select(append(attrs, g.Group(opts))...)
+	return opts
 }
 
 // roleDeleteForm = hapus peran (form POST terpisah agar submit tak tertukar
