@@ -16,6 +16,14 @@ import (
 // wajib berbeda domain ("kode_desa, first_name" vs "kode_desa, tipe_akun").
 // ContactImportUploadCard dipakai bersama oleh halaman form kosong
 // (ContactImportForm) DAN halaman pratinjau (contacts_import_preview.go).
+//
+// Follow-up (16 Sep, diminta user): tautan template digrup dgn
+// ui.RegionSearchTrigger() (modal global BL-163) — sama pola persis
+// sales_leads_import.go (LeadImportUploadCard). Kolom wajib kontak
+// (`kode_desa`, Kemendagri level 4) DAN kecamatan (level 3, konteks
+// desa) sama-sama tercakup SATU modal yg sama (dua tab: Kode/Nama +
+// Wilayah cascading), jadi trigger generik ini reusable apa adanya
+// tanpa parameter level.
 
 // ContactImportFormView = data form unggah (dipakai halaman kosong maupun
 // sebagai bagian atas halaman pratinjau).
@@ -37,8 +45,16 @@ func ContactImportUploadCard(v ContactImportFormView) g.Node {
 		h.P(h.Class("text-sm"),
 			g.Text("Kolom wajib: "), h.Code(g.Text("kode_desa")), g.Text(", "), h.Code(g.Text("first_name")),
 			g.Text(". Unduh template untuk daftar lengkap kolom opsional & format nilainya.")),
-		h.A(h.Href(v.TemplateURL), h.Class("link link-primary text-sm w-fit"),
-			g.Text("Unduh Template CSV")),
+		// Tautan template & trigger pencarian kode wilayah digrup satu baris
+		// flex (konvensi mobile-first — baris tombol horizontal wajib
+		// flex-wrap), pola sama sales_leads_import.go/accounts_import.go.
+		h.Div(h.Class("flex flex-wrap items-center gap-x-4 gap-y-2"),
+			h.A(h.Href(v.TemplateURL), h.Class("link link-primary text-sm w-fit"),
+				g.Text("Unduh Template CSV")),
+			// BL-163: rujukan cepat kode Kemendagri Desa (kode_desa, WAJIB)
+			// saat menyiapkan file CSV di luar aplikasi.
+			ui.RegionSearchTrigger(),
+		),
 		h.FormEl(
 			h.Method("post"), h.Action(v.Action), h.EncType("multipart/form-data"),
 			h.Class("grid gap-4 min-w-0"),
