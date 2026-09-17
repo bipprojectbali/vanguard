@@ -22,6 +22,12 @@ import (
 // seperti kb_articles/playbooks/sla_policies TANPA F3, tapi di sini lewat account
 // bukan lewat RLS/workspace polos (mirip contacts.go).
 
+// csImplTrackerEntryEnabled (BL-167) = kill-switch tombol entry point
+// "Implementation Tracker" di kartu Journey & Onboarding. false = DIPAUSE atas
+// permintaan user (17 Sep) — bukan dihapus; route/handler/tabel/gate tetap hidup,
+// hanya jalur masuk dari halaman ini yang disembunyikan sementara.
+const csImplTrackerEntryEnabled = false
+
 // CustomerSuccessDetail — GET /w/{workspace}/accounts/{id}/customer-success.
 // F3 via loadOwnedAccount; F2 minimal-satu-section via canReadCS. Baris CS
 // absen (pgx.ErrNoRows) → empty-state, BUKAN 404: desanya tetap ada, cuma
@@ -81,8 +87,16 @@ func (h *Handler) CustomerSuccessDetail(w http.ResponseWriter, r *http.Request) 
 	// aksi kerja onboarding/adopsi — hanya relevan untuk PELANGGAN aktif (hasLiveSub),
 	// sama seperti CanWrite; desa non-pelanggan (prospek/churned) tak melihatnya
 	// walau berhak baca crm:journey.
+	//
+	// BL-167 (paused, 17 Sep — keputusan user, screenshot desa "Parang Loe"):
+	// tombol "Implementation Tracker" DISEMBUNYIKAN sementara — LEVEL A, sama pola
+	// BL-78 (hide-only, bukan hapus): route/handler/tabel `cs_impl_tasks`/gate
+	// `canViewImplTasks`/`crm:journey` TETAP hidup, URL /impl-tasks?account={id}
+	// masih bisa diakses langsung. "Training Schedule" TAK terdampak — tetap
+	// tampil (di luar cakupan permintaan). Untuk mengaktifkan lagi: set
+	// csImplTrackerEntryEnabled = true.
 	idStr := strconv.FormatInt(accountID, 10)
-	if canViewImplTasks(ctx) && hasLiveSub {
+	if csImplTrackerEntryEnabled && canViewImplTasks(ctx) && hasLiveSub {
 		v.CanViewImplTasks = true
 		v.ImplTasksHref = base + "/impl-tasks?account=" + idStr
 	}
