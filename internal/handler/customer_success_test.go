@@ -318,6 +318,38 @@ func TestCustomerSuccess_AssignCardDitampilkan(t *testing.T) {
 // begini yang lolos F3 lewat HTTP (support ber-accounts-read ditolak F3;
 // sales/csm/admin/manager semua ber-accounts-write).
 
+// TestCustomerSuccess_ImplTrackerEntryLinkDipause (BL-167): tombol entry point
+// "Implementation Tracker" DISEMBUNYIKAN dari halaman detail Customer Success
+// atas permintaan user (17 Sep, screenshot desa "Parang Loe") — level A, sama
+// pola BL-78: hanya UI yang dipause (csImplTrackerEntryEnabled = false), rute
+// /impl-tasks + gate crm:journey TETAP hidup (tak diuji di sini). "Training
+// Schedule" TAK terdampak — harus tetap tampil untuk aktor yang sama. csm =
+// role dgn F2 penuh (crm:journey write) + F3 binaan sendiri, jadi kalau
+// tombol Implementation Tracker tetap absen di kondisi PALING longgar ini,
+// ia absen untuk semua role.
+func TestCustomerSuccess_ImplTrackerEntryLinkDipause(t *testing.T) {
+	env, uid := setupAccounts(t)
+	a := env.seedAccount(t, "Parang Loe", nil, &uid, nil) // csm = binaan sendiri
+	env.makeCustomer(t, a.ID, "Active")                   // BL-146: hasLiveSub, gerbang pelanggan lolos
+
+	req := accountsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/customer-success", nil, itoa(a.ID))
+	rec := env.runAccount(uid, "member", "csm", req, env.h.CustomerSuccessDetail)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("harus 200, got %d\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	// Cek href tombol, BUKAN teks polos "Implementation Tracker" — string itu
+	// juga muncul di widget CHANGELOG yang ikut dirender di shell (entri BL-146
+	// menyebut nama fitur ini apa adanya), jadi assert teks polos akan salah
+	// positif lolos meski tombolnya benar tersembunyi.
+	if strings.Contains(body, "/impl-tasks?account="+itoa(a.ID)) {
+		t.Error("BL-167: link ke /impl-tasks?account={id} harus DIPAUSE (tak dirender) di halaman detail Customer Success")
+	}
+	if !strings.Contains(body, "/trainings?account="+itoa(a.ID)) {
+		t.Error("BL-167: link Training Schedule (/trainings?account={id}) TAK terdampak, harus tetap tampil")
+	}
+}
+
 // TestAccounts_EditFormTanpaKartuAssign: form SUNTING desa TAK lagi memuat kartu
 // Penugasan CS (BL-108 memindahkannya ke halaman Customer Success) — mencegah
 // dua pintu penugasan yang sama.
