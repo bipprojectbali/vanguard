@@ -271,13 +271,6 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/codes", h.WorkspaceCodeFormats)
 		r.Post("/codes", h.WorkspaceCodeFormatUpdate)
 
-		// Field Security (BL-107, sumbu F4): matriks business_role × {lihat, sunting}
-		// nomor HP/WhatsApp untuk Kontak/Lead/Konversi. Sejak opsi B (ADR 0012) matriks
-		// DIRENDER sebagai section di halaman /roles (RolesPage) — tak ada GET tersendiri;
-		// hanya AKSI simpan yang punya rute, PRG-nya kembali ke /roles. Gerbang di HANDLER
-		// (canManageFieldSecurity, objek crm:field_security) — bukan role tenant.
-		r.Post("/field-security", h.WorkspaceFieldSecurityUpdate)
-
 		// Anggota (model membership). Lihat = semua anggota; ubah/keluarkan/undang
 		// = owner/admin (di-guard handler via canManageMembers).
 		r.Get("/members", h.MembersPage)
@@ -620,5 +613,14 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/roles/{name}", h.RoleEditPage)
 		r.Post("/roles/{name}", h.RoleUpdate)
 		r.Post("/roles/{name}/delete", h.RoleDelete)
+
+		// Field Security (BL-107, sumbu F4): {lihat, sunting} nomor HP/WhatsApp
+		// SATU peran. Sejak BL-145 subtask 3, matriks ini hidup di halaman
+		// DETAIL peran (bukan section tenant-wide di /roles) agar signal
+		// Datastar-nya bisa bereaksi thd level Contacts/Leads (F2) peran yang
+		// SAMA — keduanya wajib satu page load. PRG-nya kembali ke /roles/{name}.
+		// Gerbang di HANDLER (canManageFieldSecurity, objek crm:field_security)
+		// — TERPISAH dari canManageRoles, dan berlaku juga utk peran sistem.
+		r.Post("/roles/{name}/field-security", h.RoleFieldSecurityUpdate)
 	})
 }

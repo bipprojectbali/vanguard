@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"context"
-	"net/http"
 	"testing"
 
 	"go_starter/internal/authz"
@@ -11,12 +9,14 @@ import (
 )
 
 // roles_permission_sets_test.go — turunan presentasional blok B (Permission
-// Sets), blok C (Record Ownership Rules) & blok D bagian kedua (Nilai
-// Kontrak/MRR) dari halaman /roles (BL-145 subtask 6). Unit test langsung atas
-// fungsi murni handler (permissionSetRows/buildPermissionSetView/
-// contractValueViewFor), bukan lewat HTTP round-trip — cakupan blok A (kolom +
-// aksi tabel) & nil-guard render sudah diuji di paket panel
-// (roles_page_test.go); di sini yang dijaga adalah TURUNAN datanya benar.
+// Sets) & blok C (Record Ownership Rules) dari halaman /roles (BL-145 subtask
+// 6). Unit test langsung atas fungsi murni handler
+// (permissionSetRows/buildPermissionSetView), bukan lewat HTTP round-trip —
+// cakupan blok A (kolom + aksi tabel) & nil-guard render sudah diuji di paket
+// panel (roles_page_test.go); di sini yang dijaga adalah TURUNAN datanya
+// benar. Indikator Nilai Kontrak/MRR (dulu blok D, contractValueViewFor)
+// pindah ke halaman detail peran (BL-145 subtask 3) — lihat
+// contract_value_test.go (paket panel).
 
 func roleRow(name, display, scope string, system bool) db.ListBusinessRolesRow {
 	return db.ListBusinessRolesRow{Name: name, DisplayName: display, DataScope: scope, IsSystem: system}
@@ -142,57 +142,5 @@ func TestBuildPermissionSetView_SwitchesToSelectedRole(t *testing.T) {
 	}
 	if selectedCount != 1 {
 		t.Errorf("tepat satu opsi harus Selected, got %d", selectedCount)
-	}
-}
-
-// --- contractValueViewFor ----------------------------------------------------
-
-// ctxAs menjalankan sebuah request kosong dalam sesi (uid, tenantRole,
-// businessRole) dan mengembalikan ctx-nya — untuk memanggil fungsi handler
-// yang butuh authz.CanBusiness tanpa menempuh HTTP round-trip penuh.
-func (e *testEnv) ctxAs(uid int64, tenantRole, businessRole string) context.Context {
-	req := rolesReq(http.MethodGet, "/w/test/roles", nil, "")
-	var out context.Context
-	e.runAccount(uid, tenantRole, businessRole, req, func(w http.ResponseWriter, r *http.Request) {
-		out = r.Context()
-	})
-	return out
-}
-
-// TestContractValueViewFor_GateNilWhenUnauthorized: peninjau tanpa
-// crm:field_security (sama gerbang Field Security HP/WA) → nil, section tak
-// dirender.
-func TestContractValueViewFor_GateNilWhenUnauthorized(t *testing.T) {
-	env, uid := setupRoles(t)
-	ctx := env.ctxAs(uid, "owner", "sales")
-	if v := env.h.contractValueViewFor(ctx, nil); v != nil {
-		t.Errorf("peninjau tanpa crm:field_security harus dapat nil, got %+v", v)
-	}
-}
-
-// TestContractValueViewFor_VisiblePerRole: admin berwenang → satu baris per
-// peran, Visible mengikuti canSeeARR (Support ✗ satu-satunya yang false,
-// Sales/Manager/CSM/Admin ✓).
-func TestContractValueViewFor_VisiblePerRole(t *testing.T) {
-	env, uid := setupRoles(t)
-	ctx := env.ctxAs(uid, "owner", "admin")
-	roles := []db.ListBusinessRolesRow{
-		roleRow(authz.BusinessRoleAdmin, "Administrator", authz.DataScopeAll, true),
-		roleRow(authz.BusinessRoleSales, "Sales", authz.DataScopeOwn, false),
-		roleRow(authz.BusinessRoleSupport, "Support", authz.DataScopeNone, false),
-	}
-	v := env.h.contractValueViewFor(ctx, roles)
-	if v == nil {
-		t.Fatal("admin berwenang harus dapat view non-nil")
-	}
-	got := make(map[string]bool, len(v.Roles))
-	for _, r := range v.Roles {
-		got[r.Name] = r.Visible
-	}
-	if !got[authz.BusinessRoleSales] {
-		t.Error("Sales harus melihat Nilai Kontrak/MRR (canSeeARR true)")
-	}
-	if got[authz.BusinessRoleSupport] {
-		t.Error("Support tak boleh melihat Nilai Kontrak/MRR (canSeeARR false)")
 	}
 }

@@ -33,15 +33,17 @@ type ScopeOption struct {
 	Label string
 }
 
-// Roles merender panel daftar dalam 4 blok berurut (BL-145 subtask 6): A tabel
+// Roles merender panel daftar dalam 3 blok berurut (BL-145 subtask 6): A tabel
 // peran (+ form tambah), B Permission Sets (matriks presentasional + pemilih
-// peran), C Record Ownership Rules (cakupan data peran tersorot), D Field
-// Security (HP/WhatsApp + Nilai Kontrak/MRR). base = prefix URL workspace
-// (dioper handler — view tak merakit path sendiri, konvensi 0004). canEdit=false
-// (workspace read-only/arsip) → form tambah & aksi hapus disembunyikan; daftar
-// tetap bisa dibuka. psv/fsec/cvv nil → blok terkait tak dirender (peninjau tak
-// berwenang, atau — psv — daftar peran kosong, mustahil di praktik).
-func Roles(base string, rows []RoleRow, scopes []ScopeOption, canEdit bool, errMsg, okMsg string, psv *PermissionSetView, fsec *FieldSecurityView, cvv *ContractValueView) g.Node {
+// peran), C Record Ownership Rules (cakupan data peran tersorot). Field
+// Security (HP/WhatsApp) & indikator Nilai Kontrak/MRR — dulu blok D di sini —
+// pindah ke halaman DETAIL peran (/roles/{name}, BL-145 subtask 3) agar
+// reaktif thd level Contacts/Leads (F2) peran yang sama; lihat role_edit.go.
+// base = prefix URL workspace (dioper handler — view tak merakit path sendiri,
+// konvensi 0004). canEdit=false (workspace read-only/arsip) → form tambah &
+// aksi hapus disembunyikan; daftar tetap bisa dibuka. psv nil → blok B/C tak
+// dirender (daftar peran kosong, mustahil di praktik).
+func Roles(base string, rows []RoleRow, scopes []ScopeOption, canEdit bool, errMsg, okMsg string, psv *PermissionSetView) g.Node {
 	body := []g.Node{
 		h.H1(h.Class("text-xl font-semibold mb-2"), g.Text("Peran CRM")),
 		h.P(h.Class("text-base-content/70 mb-1"),
@@ -64,13 +66,6 @@ func Roles(base string, rows []RoleRow, scopes []ScopeOption, canEdit bool, errM
 	// B — Permission Sets (modal, blok C ikut di dalamnya — lihat permissionSetsSection).
 	if psv != nil {
 		body = append(body, permissionSetsSection(*psv))
-	}
-	// D — Field Security: HP/WhatsApp lalu Nilai Kontrak/MRR.
-	if fsec != nil {
-		body = append(body, fieldSecuritySection(*fsec))
-	}
-	if cvv != nil {
-		body = append(body, contractValueCard(*cvv))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }

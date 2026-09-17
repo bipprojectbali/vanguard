@@ -192,7 +192,7 @@ var crmModules = []ModuleDef{
 	{"crm:accounts", "Accounts (Desa)", false, false},
 	{"crm:contacts", "Contacts", false, false},
 	{"crm:leads", "Leads", false, false},
-	{"crm:deals", "Deals", false, false},
+	{"crm:deals", "Deals dan Quotes", false, false},
 	{"crm:sales_activity", "Sales Activity Log", false, false},
 	{"crm:subscriptions", "Active Subscriptions", false, true},
 	{"crm:renewals", "Renewals", true, false},

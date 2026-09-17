@@ -5,43 +5,46 @@ import (
 	"testing"
 )
 
-// contract_value_test.go — kartu "Nilai Kontrak / MRR" (blok D bagian kedua,
-// BL-145 subtask 6): ✓/✗ per peran, murni presentasional (tanpa form/POST).
+// contract_value_test.go — indikator "Nilai Kontrak/MRR" SATU peran (BL-145
+// subtask 3): sejak dipindah ke halaman detail peran, axis ini sepenuhnya
+// mengikuti F2 (checkbox "Lihat ARR" baris Subscriptions), bukan lagi kartu
+// F4 tenant-wide — lihat field_security.go.
 
-func TestContractValueCard_MarksPerRole(t *testing.T) {
-	v := ContractValueView{Roles: []ContractValueRow{
-		{Name: "admin", DisplayName: "Administrator", IsSystem: true, Visible: true},
-		{Name: "sales", DisplayName: "Sales", Visible: true},
-		{Name: "support", DisplayName: "Support", Visible: false},
-	}}
+func TestContractValueIndicator_Static(t *testing.T) {
 	var out strings.Builder
-	if err := contractValueCard(v).Render(&out); err != nil {
+	if err := contractValueIndicator(true, false).Render(&out); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	body := out.String()
-
-	if !strings.Contains(body, "Nilai Kontrak / MRR") {
-		t.Error("kartu harus berjudul Nilai Kontrak / MRR")
-	}
 	if strings.Contains(body, "<form") || strings.Contains(body, `method="post"`) {
-		t.Error("kartu harus presentasional murni, tanpa form/POST")
+		t.Error("indikator harus presentasional murni, tanpa form/POST")
+	}
+	if !strings.Contains(body, "Terlihat") {
+		t.Error("visible=true harus tampil \"Terlihat\"")
+	}
+	if strings.Contains(body, "data-show") {
+		t.Error("varian statis tak boleh punya data-show")
 	}
 
-	supportIdx := strings.Index(body, "Support")
-	nextRowIdx := len(body)
-	if i := strings.Index(body[supportIdx+1:], "</tr>"); i >= 0 {
-		nextRowIdx = supportIdx + 1 + i
+	out.Reset()
+	if err := contractValueIndicator(false, false).Render(&out); err != nil {
+		t.Fatalf("render: %v", err)
 	}
-	if supportIdx < 0 || !strings.Contains(body[supportIdx:nextRowIdx], "✗") {
-		t.Error("baris Support harus bertanda ✗ (canSeeARR false)")
+	if !strings.Contains(out.String(), "Tersembunyi") {
+		t.Error("visible=false harus tampil \"Tersembunyi\"")
 	}
+}
 
-	salesIdx := strings.Index(body, ">Sales<")
-	salesNextRow := len(body)
-	if i := strings.Index(body[salesIdx+1:], "</tr>"); i >= 0 {
-		salesNextRow = salesIdx + 1 + i
+func TestContractValueIndicator_Reactive(t *testing.T) {
+	var out strings.Builder
+	if err := contractValueIndicator(true, true).Render(&out); err != nil {
+		t.Fatalf("render: %v", err)
 	}
-	if salesIdx < 0 || !strings.Contains(body[salesIdx:salesNextRow], "✓") {
-		t.Error("baris Sales harus bertanda ✓ (canSeeARR true)")
+	body := out.String()
+	if !strings.Contains(body, "arr_subscriptions") {
+		t.Error("varian reaktif harus merujuk signal arr_subscriptions")
+	}
+	if !strings.Contains(body, "Terlihat") || !strings.Contains(body, "Tersembunyi") {
+		t.Error("varian reaktif harus merender KEDUA span (toggle via data-show)")
 	}
 }

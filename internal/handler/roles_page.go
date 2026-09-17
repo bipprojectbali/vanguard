@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"go_starter/internal/db"
+	"go_starter/internal/fls"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 
@@ -54,17 +55,6 @@ func (h *Handler) RolesPage(w http.ResponseWriter, r *http.Request) {
 		psv = &v
 	}
 
-	// Blok D (Field Security: HP/WhatsApp + Nilai Kontrak/MRR, ADR 0012 opsi B)
-	// ditanam di bawah blok B/C bila peninjau berwenang (crm:field_security);
-	// nil → tak dirender. Kegagalan baca kebijakan tak boleh merobohkan halaman
-	// peran — log & lanjut tanpa section.
-	fsec, err := h.fieldSecurityViewFor(r)
-	if err != nil {
-		h.Log.Error("roles: field-security section", "err", err)
-		fsec = nil
-	}
-	cvv := h.contractValueViewFor(ctx, roles)
-
 	h.renderWorkspaceShell(w, r, "Peran CRM", "/roles",
 		panel.Roles(
 			base,
@@ -74,8 +64,6 @@ func (h *Handler) RolesPage(w http.ResponseWriter, r *http.Request) {
 			wsErrMsg(r.URL.Query().Get("err")),
 			rolesMsg(r.URL.Query().Get("ok")),
 			psv,
-			fsec,
-			cvv,
 		))
 }
 
@@ -110,14 +98,32 @@ func (h *Handler) RoleEditPage(w http.ResponseWriter, r *http.Request) {
 	canEdit := !IsReadOnly(ctx)
 	card := buildRoleCard(role.Name, role.DisplayName, role.Description, role.DataScope, role.IsSystem, permsByRole(perms))
 
+	// fsec nil → peninjau tak berwenang crm:field_security: section Field
+	// Security tak dirender sama sekali (RoleEdit, ADR 0012 F4 tetap gerbang
+	// terpisah dari canManageRoles F2). Reactive=false utk peran sistem (admin
+	// diwakili glob crm:*, tak ada matriks Contacts/Leads utk direaksikan).
+	base := wsPath(slugFromRequest(r), "")
+	var fsec *panel.FieldSecurityRoleView
+	if canManageFieldSecurity(ctx) {
+		fsec = &panel.FieldSecurityRoleView{
+			Base:         base,
+			Name:         role.Name,
+			CanEdit:      canEdit,
+			CanViewPhone: fls.CanViewPhone(tenantID, role.Name),
+			CanEditPhone: fls.CanEditPhone(tenantID, role.Name),
+			Reactive:     !role.IsSystem,
+		}
+	}
+
 	h.renderWorkspaceShell(w, r, "Peran CRM", "/roles",
 		panel.RoleEdit(
-			wsPath(slugFromRequest(r), ""),
+			base,
 			card,
 			businessScopeOptions(),
 			canEdit,
 			wsErrMsg(r.URL.Query().Get("err")),
 			rolesMsg(r.URL.Query().Get("ok")),
+			fsec,
 		))
 }
 

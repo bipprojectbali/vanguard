@@ -183,12 +183,13 @@ func TestContactDetailView_PhoneMasked_Support(t *testing.T) {
 	}
 }
 
-// TestContacts_F4_OverrideLewatSettings: BL-107 end-to-end. Manager default TAK
-// melihat nomor; setelah admin memberi Manager "lihat" lewat halaman Field Security,
-// permintaan detail Manager BERIKUTNYA menampilkan nomor utuh — bukti config
-// per-tenant mengalir dari POST Settings → cache → masking handler, tanpa restart.
-// Pakai setupRoles: WorkspaceFieldSecurityUpdate menulis baris ber-FK ke
-// business_roles, jadi peran wajib tertanam di DB.
+// TestContacts_F4_OverrideLewatSettings: BL-107 end-to-end (BL-145 subtask 3:
+// kini lewat halaman DETAIL peran, bukan lagi Settings tenant-wide). Manager
+// default TAK melihat nomor; setelah admin memberi Manager "lihat" lewat
+// halaman /roles/manager, permintaan detail Manager BERIKUTNYA menampilkan
+// nomor utuh — bukti config per-tenant mengalir dari POST → cache → masking
+// handler, tanpa restart. Pakai setupRoles: RoleFieldSecurityUpdate menulis
+// baris ber-FK ke business_roles, jadi peran wajib tertanam di DB.
 func TestContacts_F4_OverrideLewatSettings(t *testing.T) {
 	env, uid := setupRoles(t)
 	mobile, whatsapp, office := "0812-3456-7890", "0813-0000-1111", "021-555-0000"
@@ -206,10 +207,10 @@ func TestContacts_F4_OverrideLewatSettings(t *testing.T) {
 		t.Fatal("prakondisi: Manager default harus menerima mask")
 	}
 
-	// Admin memberi Manager "lihat" lewat halaman Settings.
-	form := url.Values{"view.manager": {"1"}}
-	post := rolesReq(http.MethodPost, "/w/test/field-security", form, "")
-	if rec := env.runAccount(uid, "owner", "admin", post, env.h.WorkspaceFieldSecurityUpdate); rec.Code != http.StatusSeeOther {
+	// Admin memberi Manager "lihat" lewat halaman detail perannya sendiri.
+	form := url.Values{"view": {"1"}}
+	post := rolesReq(http.MethodPost, "/w/test/roles/manager/field-security", form, "manager")
+	if rec := env.runAccount(uid, "owner", "admin", post, env.h.RoleFieldSecurityUpdate); rec.Code != http.StatusSeeOther {
 		t.Fatalf("simpan kebijakan gagal: %d", rec.Code)
 	}
 
@@ -222,12 +223,17 @@ func TestContacts_F4_OverrideLewatSettings(t *testing.T) {
 	if !strings.Contains(body, office) {
 		t.Error("telepon kantor tak boleh disamarkan")
 	}
-	// Sales TAK dicentang → tenant kini terkonfigurasi → Sales fail-closed di detail.
+	// Sales tak disentuh sama sekali (form per-peran BL-145 subtask 3 hanya
+	// menulis Manager) → nilai efektifnya dibekukan ke default lama (Sales bisa
+	// lihat), BUKAN fail-closed: beda dari bulk-form lama (dihapus) yang
+	// mewajibkan submit eksplisit tiap peran tiap kali, sehingga "tak dicentang"
+	// di sana = vote false yang nyata. Lihat
+	// TestRoleFieldSecurity_ReplaceAllPreservesOtherRoles & ADR 0012 (revisi).
 	sReq := contactsReq(http.MethodGet, "/w/test/accounts/"+itoa(a.ID)+"/contacts/"+itoa(c.ID),
 		nil, itoa(a.ID), itoa(c.ID))
 	sBody := env.runAccount(uid, "owner", "sales", sReq, env.h.ContactDetail).Body.String()
-	if strings.Contains(sBody, mobile) {
-		t.Error("tenant terkonfigurasi: Sales tak dicentang harus fail-closed (mask), bukan default lama")
+	if !strings.Contains(sBody, mobile) {
+		t.Error("Sales tak disentuh: harus tetap melihat nomor (dibekukan ke default lama, bukan fail-closed)")
 	}
 }
 

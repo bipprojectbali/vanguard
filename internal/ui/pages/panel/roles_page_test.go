@@ -6,8 +6,10 @@ import (
 )
 
 // roles_page_test.go — render halaman /roles: kolom "Permission Set" + aksi
-// Lihat/Edit/Hapus tabel peran (blok A), dan gerbang render blok B/C/D lewat
-// nil-guard psv/fsec/cvv (BL-145 subtask 6).
+// Lihat/Edit/Hapus tabel peran (blok A), dan gerbang render blok B/C lewat
+// nil-guard psv (BL-145 subtask 6). Field Security & Nilai Kontrak/MRR (dulu
+// blok D di sini) pindah ke halaman detail peran (BL-145 subtask 3) — lihat
+// field_security_test.go/contract_value_test.go.
 
 func sampleRoleRows() []RoleRow {
 	return []RoleRow{
@@ -20,7 +22,7 @@ func sampleRoleRows() []RoleRow {
 // aksi Lihat (anchor blok B)/Edit (halaman detail)/Hapus (kustom saja).
 func TestRolesTable_PermissionSetColumnAndActions(t *testing.T) {
 	var out strings.Builder
-	err := Roles("/w/acme", sampleRoleRows(), nil, true, "", "", nil, nil, nil).Render(&out)
+	err := Roles("/w/acme", sampleRoleRows(), nil, true, "", "", nil).Render(&out)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -51,10 +53,10 @@ func TestRolesTable_PermissionSetColumnAndActions(t *testing.T) {
 // hapus sama sekali (bukan disembunyikan CSS).
 func TestRolesTable_HapusOnlyCustomWhenEditable(t *testing.T) {
 	var editable, readOnly strings.Builder
-	if err := Roles("/w/acme", sampleRoleRows(), nil, true, "", "", nil, nil, nil).Render(&editable); err != nil {
+	if err := Roles("/w/acme", sampleRoleRows(), nil, true, "", "", nil).Render(&editable); err != nil {
 		t.Fatalf("render editable: %v", err)
 	}
-	if err := Roles("/w/acme", sampleRoleRows(), nil, false, "", "", nil, nil, nil).Render(&readOnly); err != nil {
+	if err := Roles("/w/acme", sampleRoleRows(), nil, false, "", "", nil).Render(&readOnly); err != nil {
 		t.Fatalf("render read-only: %v", err)
 	}
 
@@ -69,18 +71,18 @@ func TestRolesTable_HapusOnlyCustomWhenEditable(t *testing.T) {
 	}
 }
 
-// TestRoles_BlockNilGuards: psv/fsec/cvv nil → blok B/C/D tak dirender; semua
-// terisi → semua blok tampil. Menjaga kontrak "nil = peninjau tak berwenang /
-// data tak tersedia" yang dipakai handler (pola sama fsec sebelumnya).
+// TestRoles_BlockNilGuards: psv nil → blok B/C tak dirender; terisi → blok
+// tampil. Menjaga kontrak "nil = peninjau tak berwenang / data tak tersedia"
+// yang dipakai handler.
 func TestRoles_BlockNilGuards(t *testing.T) {
 	rows := sampleRoleRows()
 
 	var without strings.Builder
-	if err := Roles("/w/acme", rows, nil, true, "", "", nil, nil, nil).Render(&without); err != nil {
+	if err := Roles("/w/acme", rows, nil, true, "", "", nil).Render(&without); err != nil {
 		t.Fatalf("render tanpa blok: %v", err)
 	}
 	body := without.String()
-	for _, absent := range []string{"Permission Sets", "Record Ownership Rules", "Field Security", "Nilai Kontrak / MRR"} {
+	for _, absent := range []string{"Permission Sets", "Record Ownership Rules"} {
 		if strings.Contains(body, absent) {
 			t.Errorf("nil guard: %q tak boleh muncul saat view-model nil", absent)
 		}
@@ -94,15 +96,13 @@ func TestRoles_BlockNilGuards(t *testing.T) {
 		SelectedScopeLabel: "Semua desa di workspace",
 		Rows:               []PermissionSetRow{{Label: "Dashboard", View: PermMarkFull, Create: PermMarkFull, Edit: PermMarkFull, Delete: PermMarkFull}},
 	}
-	fsec := &FieldSecurityView{Base: "/w/acme", CanEdit: true, Roles: []FieldSecurityRoleRow{{Name: "admin", DisplayName: "Administrator"}}}
-	cvv := &ContractValueView{Roles: []ContractValueRow{{Name: "admin", DisplayName: "Administrator", Visible: true}}}
 
 	var with strings.Builder
-	if err := Roles("/w/acme", rows, nil, true, "", "", psv, fsec, cvv).Render(&with); err != nil {
+	if err := Roles("/w/acme", rows, nil, true, "", "", psv).Render(&with); err != nil {
 		t.Fatalf("render dgn blok: %v", err)
 	}
 	body = with.String()
-	for _, present := range []string{"Permission Sets", "Record Ownership Rules", "Field Security", "Nilai Kontrak / MRR"} {
+	for _, present := range []string{"Permission Sets", "Record Ownership Rules"} {
 		if !strings.Contains(body, present) {
 			t.Errorf("dgn view-model terisi: %q harus muncul", present)
 		}

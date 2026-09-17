@@ -1,201 +1,96 @@
 package panel
 
 import (
-	"go_starter/internal/ui"
-
 	g "maragu.dev/gomponents"
+	data "maragu.dev/gomponents-datastar"
 	h "maragu.dev/gomponents/html"
 )
 
-// field_security.go — SECTION "Field Security" di dalam halaman Peran CBM (/roles,
-// ADR 0012 opsi B): matriks business_role × {lihat nomor penuh, boleh sunting} untuk
-// HP & WhatsApp. SATU form replace-all (pola RoleUpdate, bukan satu-form-per-baris
-// seperti code_formats): kebijakan semua peran disimpan sebagai satu transaksi
-// ganti-total, jadi wajar dikirim sekali. Native POST ke /field-security → 303
-// (gotcha #16). Murni-data: handler menyiapkan state kotak centang (dari kebijakan
-// yang BERLAKU), view tak memanggil authz/fls.
-//
-// Digabung ke halaman /roles (bukan halaman Settings tersendiri) demi satu pintu
-// pengaturan per-peran; tapi FORM, POST, penyimpanan (field_security_policies), &
-// gerbang (crm:field_security) tetap TERPISAH dari matriks Casbin /roles — sumbu F4
-// & F2 tak dicampur di satu transaksi (fls.go:11-32). fieldSecuritySection dipanggil
-// dari view roles.go, bukan dirender sebagai halaman sendiri.
-//
-// Dua kolom = dua sumbu terpisah (edit⇒view): peran bisa "lihat" tanpa "sunting"
-// (mempertahankan realita Admin=lihat-saja). Backend meng-coerce view=view||edit,
-// jadi "sunting tanpa lihat" tak pernah tersimpan; enhancement JS opsional bisa
-// auto-centang view saat edit dicentang, tapi kebenaran tetap di backend.
+// field_security.go — section Field Security (F4, HP/WhatsApp) DAN indikator
+// Nilai Kontrak/MRR, keduanya kini ditanam di halaman DETAIL satu peran
+// (/roles/{name}, BL-145 subtask 3) — bukan lagi section/kartu tenant-wide di
+// /roles. Dipindah agar signal Datastar-nya bisa bereaksi thd level
+// Contacts/Leads (F2) peran yang SAMA (ADR 0012: sumbu F2/F4 tetap tak
+// dicampur satu TRANSAKSI, tapi kini satu PAGE LOAD demi reaktivitas klien).
+// Dipanggil dari role_edit.go, bukan dirender sebagai halaman sendiri.
 
-// FieldSecurityRoleRow = satu baris peran siap-render: identitas + state awal dua
-// kotak centang. IsSystem hanya penanda tampilan (peran "admin" terkunci) — admin
-// tetap bisa disimpan barisnya (defaultnya lihat+—), tak diperlakukan khusus di form.
-type FieldSecurityRoleRow struct {
-	Name         string // nilai mesin business_role — dikirim di nama field (view.<Name>)
-	DisplayName  string // label layar
-	IsSystem     bool
+// FieldSecurityRoleView = data siap-render form Field Security SATU peran.
+// Name = identitas mesin peran (dipakai merakit action form). Reactive=true
+// untuk peran kustom (ada matriks Contacts/Leads utk direaksikan, signal
+// lvl_contacts/lvl_leads sudah dideklarasikan roleMatrixRow di halaman yang
+// sama); false untuk peran sistem (admin diwakili glob crm:*, tak ada matriks
+// — checkbox statis biasa, tanpa guard).
+type FieldSecurityRoleView struct {
+	Base         string
+	Name         string
+	CanEdit      bool
 	CanViewPhone bool
 	CanEditPhone bool
+	Reactive     bool
 }
 
-// FieldSecurityView = data siap-render section. Tanpa Msg/Err: alert dirender oleh
-// halaman /roles yang menampungnya (satu region alert bersama), bukan section ini.
-type FieldSecurityView struct {
-	Base    string // prefix URL workspace ("/w/acme") — dari handler, view tak merakit path
-	CanEdit bool   // read-only/arsip → matriks tampil, tombol simpan disembunyikan
-	Roles   []FieldSecurityRoleRow
-}
+// fieldSecurityRoleSection merender kartu kecil Field Security SATU peran:
+// form TERPISAH dari form matriks Casbin (ADR 0012 — F2/F4 tak dicampur satu
+// transaksi walau kini satu halaman), dua checkbox (name="view"/"edit", TANPA
+// suffix ".role" — beda dari matriks lama tenant-wide karena kini satu peran
+// per form). v.Reactive && v.CanEdit → checkbox dibind ke signal Datastar
+// $fls_view/$fls_edit, dinonaktifkan+dipaksa-mati reaktif mengikuti level
+// gabungan Contacts/Leads (signal lvl_contacts/lvl_leads, dideklarasikan
+// roleMatrixRow — role_edit.go). Selain itu → checkbox statis (v.CanEdit saja
+// menentukan disabled non-reaktif, pola fieldSecurityCheck lama).
+func fieldSecurityRoleSection(v FieldSecurityRoleView) g.Node {
+	var viewCell, editCell g.Node
+	var formAttrs []g.Node
+	if v.CanEdit && v.Reactive {
+		formAttrs = append(formAttrs, data.Signals(map[string]any{
+			"fls_view": v.CanViewPhone,
+			"fls_edit": v.CanEditPhone,
+		}))
+		viewCell = reactiveFieldSecurityCheck("view", "fls_view",
+			"($lvl_contacts==='none'&&$lvl_leads==='none')||$fls_edit")
+		editCell = reactiveFieldSecurityCheck("edit", "fls_edit",
+			"!($lvl_contacts==='write'||$lvl_leads==='write')",
+			"evt.target.checked&&($fls_view=true)")
+	} else {
+		viewCell = fieldSecurityCheck("view", v.CanViewPhone, v.CanEdit)
+		editCell = fieldSecurityCheck("edit", v.CanEditPhone, v.CanEdit)
+	}
 
-// fieldSecuritySection merender BLOK Field Security untuk ditanam di halaman /roles
-// (di bawah tabel peran). Judul section (h2) + penjelasan + kartu form matriks; TANPA
-// H1 & TANPA alert — halaman /roles sudah punya satu region alert bersama (sukses
-// fsec_saved & galat lewat okMsg/errMsg-nya), jadi menaruh alert kedua di sini akan
-// menggandakannya. Dipanggil dari Roles() bila handler menyertakan *FieldSecurityView.
-func fieldSecuritySection(v FieldSecurityView) g.Node {
-	return h.Div(
-		h.Class("grid gap-2 min-w-0 mt-2"),
-		h.H2(h.Class("text-lg font-semibold"), g.Text("Field Security")),
-		h.P(h.Class("text-base-content/70 mb-1"),
-			g.Text("Atur peran bisnis mana yang boleh melihat nomor HP & WhatsApp secara "+
-				"penuh, dan mana yang boleh menyuntingnya. Berlaku untuk Kontak, Prospek "+
-				"(Lead), dan formulir Konversi Lead.")),
-		h.P(h.Class("text-xs text-base-content/60 mb-2"),
-			g.Text("Peran yang tak boleh melihat nomor akan menerima tampilan tersamar "+
-				"(•••). \"Boleh sunting\" otomatis mengikutkan \"lihat nomor penuh\" — nomor "+
-				"yang tak terlihat mustahil disunting.")),
-		fieldSecurityCard(v),
+	rows := h.Div(
+		h.Class("grid gap-2"),
+		h.Label(h.Class("flex items-center gap-2 text-sm"),
+			viewCell, g.Text("Lihat nomor HP/WhatsApp penuh")),
+		h.Label(h.Class("flex items-center gap-2 text-sm"),
+			editCell, g.Text("Boleh menyunting nomor")),
 	)
-}
-
-// fieldSecurityCard = kartu berisi tabel matriks. canEdit=false → tabel tampil
-// (kotak disabled), tanpa <form>/tombol simpan (pola codeFormatCard hanya-lihat).
-func fieldSecurityCard(v FieldSecurityView) g.Node {
-	table := fieldSecurityMatrix(v)
 	inner := []g.Node{
-		h.H2(h.Class("font-semibold"), g.Text("Matriks Peran")),
-		table,
+		h.H2(h.Class("font-semibold"), g.Text("Field Security")),
+		h.P(h.Class("text-xs text-base-content/60 mb-1"),
+			g.Text("Berlaku untuk nomor HP & WhatsApp di Kontak, Prospek (Lead), "+
+				"dan formulir Konversi Lead. \"Boleh sunting\" otomatis mengikutkan "+
+				"\"lihat nomor penuh\".")),
+		rows,
 	}
 	if v.CanEdit {
-		inner = append(inner,
-			h.Div(h.Class("flex flex-wrap items-center gap-2 mt-1 min-w-0"),
-				h.Button(h.Type("submit"), h.Class("btn btn-primary btn-sm min-h-11"),
-					g.Text("Simpan")),
-			),
-		)
-		return h.FormEl(
-			h.Method("post"), h.Action(v.Base+"/field-security"),
-			h.Class("card bg-base-100 border border-base-300 min-w-0"),
-			h.Div(append([]g.Node{h.Class("card-body min-w-0 gap-3")}, inner...)...),
-		)
+		inner = append(inner, h.Div(h.Class("flex flex-wrap items-center gap-2 mt-1"),
+			h.Button(h.Type("submit"), h.Class("btn btn-primary btn-sm min-h-11"),
+				g.Text("Simpan"))))
+		return h.FormEl(append(
+			append([]g.Node{
+				h.Method("post"), h.Action(v.Base + "/roles/" + v.Name + "/field-security"),
+				h.Class("card bg-base-100 border border-base-300 min-w-0 mt-2"),
+			}, formAttrs...),
+			h.Div(append([]g.Node{h.Class("card-body min-w-0 gap-2")}, inner...)...),
+		)...)
 	}
-	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(append([]g.Node{h.Class("card-body min-w-0 gap-3")}, inner...)...),
-	)
-}
-
-// fieldSecurityMatrix = tabel peran × {lihat, sunting}. Dibungkus ui.TableScroll
-// (WAJIB tiap <table>, konvensi mobile-first) agar tak mendorong lebar di 375px.
-func fieldSecurityMatrix(v FieldSecurityView) g.Node {
-	rows := make([]g.Node, 0, len(v.Roles))
-	for _, r := range v.Roles {
-		jenis := g.Node(g.Text(""))
-		if r.IsSystem {
-			jenis = h.Span(h.Class("badge badge-warning badge-sm ml-2"), g.Text("Sistem"))
-		}
-		rows = append(rows, h.Tr(
-			h.Class("border-b border-base-300/50"),
-			h.Td(h.Class("py-2 pr-4"),
-				h.Div(h.Class("flex items-center"),
-					h.Span(h.Class("font-medium"), g.Text(r.DisplayName)),
-					jenis,
-				),
-				h.Div(h.Class("font-mono text-xs text-base-content/60"), g.Text(r.Name)),
-			),
-			h.Td(h.Class("py-2 pr-4 text-center"),
-				fieldSecurityCheck("view."+r.Name, r.CanViewPhone, v.CanEdit)),
-			h.Td(h.Class("py-2 text-center"),
-				fieldSecurityCheck("edit."+r.Name, r.CanEditPhone, v.CanEdit)),
-		))
-	}
-	return ui.TableScroll(h.Table(
-		h.Class("w-full text-sm"),
-		h.THead(h.Tr(
-			h.Class("border-b border-base-300 text-left text-base-content/70"),
-			h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Peran")),
-			h.Th(h.Class("py-2 pr-4 font-medium text-center"), g.Text("Lihat nomor penuh")),
-			h.Th(h.Class("py-2 font-medium text-center"), g.Text("Boleh sunting")),
-		)),
-		h.TBody(g.Group(rows)),
-	))
-}
-
-// ContractValueRow = satu peran siap-render blok D bagian kedua (Nilai
-// Kontrak/MRR): identitas + apakah peran ini melihat nilai kontrak/ARR.
-type ContractValueRow struct {
-	Name        string
-	DisplayName string
-	IsSystem    bool
-	Visible     bool
-}
-
-// ContractValueView = data siap-render kartu Nilai Kontrak/MRR. Gerbangnya
-// SAMA dengan Field Security (crm:field_security) — nil bila peninjau tak
-// berwenang, sama seperti FieldSecurityView.
-type ContractValueView struct {
-	Roles []ContractValueRow
-}
-
-// contractValueCard merender kartu "Nilai Kontrak / MRR": daftar peran + ✓/✗
-// apakah masing-masing melihat nilai kontrak/ARR pelanggan (canSeeARR, F4,
-// fls.go — hardcoded di kode, BUKAN tabel config). Presentasional MURNI, TANPA
-// form/POST: menampilkan checkbox yang bisa disunting akan menyesatkan admin
-// mengira ini kebijakan yang bisa diubah dari sini.
-func contractValueCard(v ContractValueView) g.Node {
-	rows := make([]g.Node, 0, len(v.Roles))
-	for _, r := range v.Roles {
-		jenis := g.Node(g.Text(""))
-		if r.IsSystem {
-			jenis = h.Span(h.Class("badge badge-warning badge-sm ml-2"), g.Text("Sistem"))
-		}
-		mark := h.Span(h.Class("text-base-content/30"), g.Text("✗"))
-		if r.Visible {
-			mark = h.Span(h.Class("text-success font-semibold"), g.Text("✓"))
-		}
-		rows = append(rows, h.Tr(
-			h.Class("border-b border-base-300/50"),
-			h.Td(h.Class("py-2 pr-4"),
-				h.Div(h.Class("flex items-center"),
-					h.Span(h.Class("font-medium"), g.Text(r.DisplayName)),
-					jenis,
-				)),
-			h.Td(h.Class("py-2 text-center"), mark),
-		))
-	}
-	table := ui.TableScroll(h.Table(
-		h.Class("w-full text-sm"),
-		h.THead(h.Tr(
-			h.Class("border-b border-base-300 text-left text-base-content/70"),
-			h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Peran")),
-			h.Th(h.Class("py-2 font-medium text-center"), g.Text("Lihat Nilai Kontrak/MRR")),
-		)),
-		h.TBody(g.Group(rows)),
-	))
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0 mt-2"),
-		h.Div(
-			h.Class("card-body min-w-0 gap-3"),
-			h.H2(h.Class("font-semibold"), g.Text("Nilai Kontrak / MRR")),
-			h.P(h.Class("text-sm text-base-content/70"),
-				g.Text("Peran mana yang melihat nilai kontrak & ARR pelanggan. Aturan ini "+
-					"tetap di kode (bukan kebijakan yang bisa disunting di sini).")),
-			table,
-		),
+		h.Div(append([]g.Node{h.Class("card-body min-w-0 gap-2")}, inner...)...),
 	)
 }
 
-// fieldSecurityCheck = satu kotak-centang matriks (name=view.<role>/edit.<role>,
-// value=1). Terkunci saat !canEdit. Tap target ≥44px lewat padding baris + ukuran
-// checkbox (konvensi mobile-first).
+// fieldSecurityCheck = kotak-centang FLS versi STATIS (tanpa Datastar) — peran
+// sistem (bebas centang, tanpa guard) atau workspace read-only (dikunci).
 func fieldSecurityCheck(name string, checked, canEdit bool) g.Node {
 	attrs := []g.Node{
 		h.Type("checkbox"), h.Class("checkbox checkbox-sm"),
@@ -208,4 +103,57 @@ func fieldSecurityCheck(name string, checked, canEdit bool) g.Node {
 		attrs = append(attrs, h.Disabled())
 	}
 	return h.Input(attrs...)
+}
+
+// reactiveFieldSecurityCheck = kotak-centang FLS versi REAKTIF (BL-145
+// subtask 3, pola reactiveCheckbox di role_edit.go tapi disabledExpr bebas —
+// FLS bereaksi thd KOMBINASI dua signal lvl_contacts & lvl_leads, bukan satu
+// signal baris seperti approve/arr). Signal sig DIPAKSA false oleh handler
+// on:change kedua level select (roleMatrixRow) saat kondisi disabledExpr
+// terpenuhi — disabled attribute di sini murni presentasi (Datastar re-eval
+// otomatis tiap signal rujukan berubah), penegak sesungguhnya tetap backend
+// (coercion server-side, role_field_security.go). onChange (opsional,
+// variadic) = ekspresi tambahan dieksekusi saat checkbox berubah — dipakai
+// checkbox "edit" memaksa $fls_view=true saat dicentang (2026-09-17: UI
+// sebelumnya cuma menjanjikan via teks tap-info "Boleh sunting otomatis
+// mengikutkan lihat nomor penuh" tanpa benar-benar reaktif; evt.target.checked
+// dipakai, bukan $fls_edit, pola sama roleMatrixRow — hindari race dgn
+// listener data.Bind pada event 'change' yang sama).
+func reactiveFieldSecurityCheck(name, sig, disabledExpr string, onChange ...string) g.Node {
+	attrs := []g.Node{
+		h.Type("checkbox"), h.Class("checkbox checkbox-sm"),
+		h.Name(name), h.Value("1"),
+		data.Bind(sig),
+		data.Attr("disabled", disabledExpr),
+	}
+	if len(onChange) > 0 && onChange[0] != "" {
+		attrs = append(attrs, data.On("change", onChange[0]))
+	}
+	return h.Input(attrs...)
+}
+
+// contractValueIndicator merender indikator baca-saja "Nilai Kontrak/MRR"
+// untuk satu peran: apakah peran ini melihat nilai kontrak/ARR pelanggan.
+// TANPA form/POST (presentasional murni, pola kartu lama) — sejak BL-145
+// subtask 3 axis ini SEPENUHNYA mengikuti F2 (checkbox "Lihat ARR" baris
+// Subscriptions, signal arr_subscriptions yang sudah reaktif sejak subtask
+// 4/5), bukan lagi F4 tersendiri. reactive=true (peran kustom, canEdit) →
+// dua <span> toggle live via data.Show mengikuti signal yang SAMA, tanpa
+// submit; else → statis dari nilai visible yang dihitung handler.
+func contractValueIndicator(visible, reactive bool) g.Node {
+	label := h.Span(h.Class("text-base-content/70"), g.Text("Nilai Kontrak/MRR: "))
+	if reactive {
+		return h.Div(h.Class("flex items-center gap-2 text-sm mt-2"),
+			label,
+			h.Span(h.Class("text-success font-semibold"), data.Show("$arr_subscriptions"),
+				g.Text("Terlihat")),
+			h.Span(h.Class("text-base-content/40"), data.Show("!$arr_subscriptions"),
+				g.Text("Tersembunyi")),
+		)
+	}
+	mark := h.Span(h.Class("text-base-content/40"), g.Text("Tersembunyi"))
+	if visible {
+		mark = h.Span(h.Class("text-success font-semibold"), g.Text("Terlihat"))
+	}
+	return h.Div(h.Class("flex items-center gap-2 text-sm mt-2"), label, mark)
 }

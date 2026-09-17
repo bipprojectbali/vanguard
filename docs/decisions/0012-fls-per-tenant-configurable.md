@@ -15,6 +15,36 @@ preseden matriks-kapabilitas [BL-58 `crm:subscriptions/arr`].
 > dalam satu transaksi. Rute GET `/field-security` dihapus (section menumpang GET
 > `/roles`); POST `/field-security` tetap, PRG balik ke `/roles?ok=fsec_saved`.
 
+> **Revisi (BL-145 subtask 3, per-peran, 2026-09-16):** matriks tenant-wide (semua
+> peran satu form, satu POST `WorkspaceFieldSecurityUpdate`) dipecah jadi form PER-PERAN
+> di halaman detail `/roles/{name}` (`RoleFieldSecurityUpdate`) agar signal Datastar-nya
+> bisa bereaksi thd level Contacts/Leads peran YANG SAMA. Konsekuensi pada invarian
+> **"Fail-closed sekali terkonfigurasi"** di bawah: invarian itu benar untuk desain LAMA
+> karena form lama mewajibkan submit eksplisit SETIAP peran tiap kali menyimpan (checkbox
+> absen = vote false yang nyata, bukan "tak disentuh"). Form baru per-peran tak lagi
+> punya konsep itu — satu POST hanya membawa nilai SATU peran. `writeFieldSecurity`
+> (`internal/handler/role_field_security.go`) karena itu membekukan peran LAIN ke nilai
+> EFEKTIF saat ini (baris tersimpan bila tenant sudah pernah dikonfigurasi; kalau belum,
+> `fls.CanViewPhone`/`CanEditPhone` — default lama) alih-alih fail-closed blangko. Ini
+> yang benar dipertahankan test `TestRoleFieldSecurity_ReplaceAllPreservesOtherRoles`;
+> lihat juga koreksi asersi basi di `TestContacts_F4_OverrideLewatSettings` yang sempat
+> ikut ter-port dari asumsi form lama. Invarian "peran baru pasca-konfigurasi ikut
+> fail-closed" (Konsekuensi §2) TETAP berlaku APA ADANYA — begitu tenant sudah punya ≥1
+> baris tersimpan, peran yang sungguh tak punya baris (baru dibuat, atau replace-all
+> penuh lewat `writeFieldSecurity` dgn `existing` kosong utknya) → `roles[role]` zero
+> value → fail-closed; hanya "peran ADA baris ATAU tenant belum terkonfigurasi sama
+> sekali" yang dibekukan ke efektif-saat-ini, bukan blangko-false.
+>
+> Form gabungan `/roles/{name}` (BL-145 subtask 7, peran kustom) menulis FLS lewat
+> `db.WithSavepoint` — SAVEPOINT bersarang di tx yang SAMA dengan tulis matriks Casbin
+> (`h.q(ctx)`), bukan transaksi kedua independen: coercion di `writeFieldSecurity`
+> (mis. "level none → view/edit paksa false") jadi membaca matriks yang BARU SAJA
+> ditulis pada request yang sama (read-your-writes dlm satu tx), sekaligus tulis FLS
+> gagal-lunak (ROLLBACK TO SAVEPOINT) tanpa merusak tulis matriks yang sudah sukses.
+> Pemisahan sumbu F2/F4 (keputusan #3 di atas) tetap tegak: dua QUERY SET/gate berbeda,
+> cuma tak lagi dua TRANSAKSI berbeda — "dua transaksi" di bawah dibaca sebagai
+> "dua unit tulis logis", bukan literal `BEGIN`/`COMMIT` terpisah.
+
 ## Konteks
 
 Field-Level Security (F4, sumbu ketiga di `internal/handler/fls.go:11-32`) memutuskan
