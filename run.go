@@ -224,10 +224,11 @@ func run() (err error) {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	// Pemeliharaan berkala: buang jejak audit kedaluwarsa & purge workspace yang
-	// masa tenggangnya habis. Keduanya sudah punya fungsinya sejak lama tapi tak
-	// pernah punya PEMICU — jadi audit_logs tumbuh selamanya dan workspace
-	// terhapus menumpuk beserta slug-nya yang tak pernah bebas.
+	// Pemeliharaan berkala: buang jejak audit kedaluwarsa, purge workspace yang
+	// masa tenggangnya habis, & kirim pengingat renewal terjadwal (BL-158). Dua
+	// yang pertama sudah punya fungsinya sejak lama tapi tak pernah punya
+	// PEMICU — jadi audit_logs tumbuh selamanya dan workspace terhapus menumpuk
+	// beserta slug-nya yang tak pernah bebas.
 	//
 	// In-process, sebab ini single-binary: menuntut cron di host berarti
 	// pemeliharaan yang "seharusnya sudah dipasang", yaitu yang tak pernah
@@ -241,6 +242,8 @@ func run() (err error) {
 			{Name: "purge_audit_logs", Run: maintenance.PurgeAuditLogs(pool)},
 			{Name: "purge_expired_tenants", Run: maintenance.PurgeExpiredTenants(
 				pool, handler.GracePeriodDays*24*time.Hour, log)},
+			{Name: "subscription_renewal_reminders", Run: maintenance.SubscriptionRenewalReminders(
+				pool, cfg.Location(), log)},
 		},
 	}).Start(ctx)
 

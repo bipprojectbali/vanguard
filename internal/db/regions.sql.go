@@ -273,6 +273,46 @@ func (q *Queries) ListRegenciesByProvince(ctx context.Context, parentRegionID *i
 	return items, nil
 }
 
+const listVillagesByCodes = `-- name: ListVillagesByCodes :many
+SELECT id, code, name, parent_region_id FROM regions
+WHERE code = ANY($1::text[]) AND level = 4
+`
+
+type ListVillagesByCodesRow struct {
+	ID             int64  `json:"id"`
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	ParentRegionID *int64 `json:"parent_region_id"`
+}
+
+// Resolusi BANYAK kode Desa sekaligus (impor CSV) — hindari N+1 SELECT per
+// baris. Baris yang kodenya tak ketemu tak muncul di hasil; pemanggil
+// mencocokkan balik by code utk tahu yang hilang.
+func (q *Queries) ListVillagesByCodes(ctx context.Context, codes []string) ([]ListVillagesByCodesRow, error) {
+	rows, err := q.db.Query(ctx, listVillagesByCodes, codes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListVillagesByCodesRow{}
+	for rows.Next() {
+		var i ListVillagesByCodesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Code,
+			&i.Name,
+			&i.ParentRegionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVillagesByDistrict = `-- name: ListVillagesByDistrict :many
 SELECT id, code, name FROM regions
 WHERE level = 4 AND parent_region_id = $1
@@ -301,6 +341,210 @@ func (q *Queries) ListVillagesByDistrict(ctx context.Context, parentRegionID *in
 	for rows.Next() {
 		var i ListVillagesByDistrictRow
 		if err := rows.Scan(&i.ID, &i.Code, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchRegionsByCode = `-- name: SearchRegionsByCode :many
+SELECT r.code, r.name AS village_name, d.name AS district_name,
+       rgc.name AS regency_name, prov.name AS province_name
+FROM regions r
+JOIN regions d    ON d.id = r.parent_region_id
+JOIN regions rgc  ON rgc.id = d.parent_region_id
+JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE r.level = 4 AND r.code = $2
+UNION ALL
+SELECT r.code, ''::text AS village_name, r.name AS district_name,
+       rgc.name AS regency_name, prov.name AS province_name
+FROM regions r
+JOIN regions rgc  ON rgc.id = r.parent_region_id
+JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE r.level = 3 AND r.code = $2
+ORDER BY district_name
+LIMIT $1
+`
+
+type SearchRegionsByCodeParams struct {
+	PageSize int32  `json:"page_size"`
+	Code     string `json:"code"`
+}
+
+type SearchRegionsByCodeRow struct {
+	Code         string `json:"code"`
+	VillageName  string `json:"village_name"`
+	DistrictName string `json:"district_name"`
+	RegencyName  string `json:"regency_name"`
+	ProvinceName string `json:"province_name"`
+}
+
+// BL-163: modal pencarian global "Cari Kode Desa/Kecamatan" — pencocokan
+// PERSIS Kode Kemendagri, Kecamatan (level 3) ATAU Desa (level 4). `code`
+// UNIQUE (migrations/00026) jadi hasil praktis maks 1 baris, tapi kode
+// sendiri tak menyimpan levelnya (format teks sama bentuknya utk level lain),
+// jadi tetap dua cabang UNION ALL bukan cari level dulu. Kolom output SAMA
+// persis dgn SearchRegionsByName (kontrak dibaca handler yang sama):
+// village_name string KOSONG (bukan NULL — sqlc/pgx tak infer nullability
+// lintas cabang UNION dgn benar, lihat commit ini) utk baris Kecamatan,
+// handler render "-" saat kosong.
+func (q *Queries) SearchRegionsByCode(ctx context.Context, arg SearchRegionsByCodeParams) ([]SearchRegionsByCodeRow, error) {
+	rows, err := q.db.Query(ctx, searchRegionsByCode, arg.PageSize, arg.Code)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchRegionsByCodeRow{}
+	for rows.Next() {
+		var i SearchRegionsByCodeRow
+		if err := rows.Scan(
+			&i.Code,
+			&i.VillageName,
+			&i.DistrictName,
+			&i.RegencyName,
+			&i.ProvinceName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchRegionsByDistrict = `-- name: SearchRegionsByDistrict :many
+SELECT r.code, ''::text AS village_name, r.name AS district_name,
+       rgc.name AS regency_name, prov.name AS province_name
+FROM regions r
+JOIN regions rgc  ON rgc.id = r.parent_region_id
+JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE r.level = 3 AND r.id = $2
+UNION ALL
+SELECT r.code, r.name AS village_name, d.name AS district_name,
+       rgc.name AS regency_name, prov.name AS province_name
+FROM regions r
+JOIN regions d    ON d.id = r.parent_region_id
+JOIN regions rgc  ON rgc.id = d.parent_region_id
+JOIN regions prov ON prov.id = rgc.parent_region_id
+WHERE r.level = 4 AND r.parent_region_id = $2
+ORDER BY village_name
+LIMIT $1
+`
+
+type SearchRegionsByDistrictParams struct {
+	PageSize   int32 `json:"page_size"`
+	DistrictID int64 `json:"district_id"`
+}
+
+type SearchRegionsByDistrictRow struct {
+	Code         string `json:"code"`
+	VillageName  string `json:"village_name"`
+	DistrictName string `json:"district_name"`
+	RegencyName  string `json:"regency_name"`
+	ProvinceName string `json:"province_name"`
+}
+
+// BL-163 lanjutan: hasil tab "Wilayah" (cascading Provinsi→Kabupaten/Kota→
+// Kecamatan) — Kecamatan yang dipilih user itu SENDIRI (baris pertama,
+// village_name kosong, sama pola dgn SearchRegionsByCode) + SEMUA Desa
+// anaknya. Bentuk kolom SAMA PERSIS dgn SearchRegionsByCode/ByName (kontrak
+// dibaca ui.RegionSearchResults yang sama, tanpa perubahan UI).
+func (q *Queries) SearchRegionsByDistrict(ctx context.Context, arg SearchRegionsByDistrictParams) ([]SearchRegionsByDistrictRow, error) {
+	rows, err := q.db.Query(ctx, searchRegionsByDistrict, arg.PageSize, arg.DistrictID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchRegionsByDistrictRow{}
+	for rows.Next() {
+		var i SearchRegionsByDistrictRow
+		if err := rows.Scan(
+			&i.Code,
+			&i.VillageName,
+			&i.DistrictName,
+			&i.RegencyName,
+			&i.ProvinceName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchRegionsByName = `-- name: SearchRegionsByName :many
+SELECT code, village_name, district_name, regency_name, province_name, match_name FROM (
+    SELECT r.code, r.name AS village_name, d.name AS district_name,
+           rgc.name AS regency_name, prov.name AS province_name,
+           r.name AS match_name
+    FROM regions r
+    JOIN regions d    ON d.id = r.parent_region_id
+    JOIN regions rgc  ON rgc.id = d.parent_region_id
+    JOIN regions prov ON prov.id = rgc.parent_region_id
+    WHERE r.level = 4 AND r.name ILIKE $1
+    UNION ALL
+    SELECT r.code, ''::text AS village_name, r.name AS district_name,
+           rgc.name AS regency_name, prov.name AS province_name,
+           r.name AS match_name
+    FROM regions r
+    JOIN regions rgc  ON rgc.id = r.parent_region_id
+    JOIN regions prov ON prov.id = rgc.parent_region_id
+    WHERE r.level = 3 AND r.name ILIKE $1
+) matches
+ORDER BY match_name
+LIMIT $2
+`
+
+type SearchRegionsByNameParams struct {
+	Pattern  string `json:"pattern"`
+	PageSize int32  `json:"page_size"`
+}
+
+type SearchRegionsByNameRow struct {
+	Code         string `json:"code"`
+	VillageName  string `json:"village_name"`
+	DistrictName string `json:"district_name"`
+	RegencyName  string `json:"regency_name"`
+	ProvinceName string `json:"province_name"`
+	MatchName    string `json:"match_name"`
+}
+
+// BL-163: cabang pencarian nama (bukan kode) modal yang sama — ILIKE
+// Kecamatan (level 3) ATAU Desa (level 4), hasil DICAMPUR satu daftar
+// (bukan dua seksi terpisah) sesuai keputusan desain BL-163. `name` TANPA
+// indeks (ADR 0009: volume desa besar, tapi pencarian debounced/
+// submit-triggered dianggap cukup) — seq scan ~91rb baris per panggilan,
+// diterima sadar sbg trade-off keputusan BL-163 (bukan lupa index).
+// Handler bertanggung jawab memangkas `pattern` ke >= 3 karakter sebelum
+// panggil (guard server-side, lihat regions_search.go). village_name string
+// kosong (bukan NULL, sama alasannya dgn SearchRegionsByCode) utk baris
+// Kecamatan.
+func (q *Queries) SearchRegionsByName(ctx context.Context, arg SearchRegionsByNameParams) ([]SearchRegionsByNameRow, error) {
+	rows, err := q.db.Query(ctx, searchRegionsByName, arg.Pattern, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchRegionsByNameRow{}
+	for rows.Next() {
+		var i SearchRegionsByNameRow
+		if err := rows.Scan(
+			&i.Code,
+			&i.VillageName,
+			&i.DistrictName,
+			&i.RegencyName,
+			&i.ProvinceName,
+			&i.MatchName,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

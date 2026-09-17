@@ -271,13 +271,6 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/codes", h.WorkspaceCodeFormats)
 		r.Post("/codes", h.WorkspaceCodeFormatUpdate)
 
-		// Field Security (BL-107, sumbu F4): matriks business_role × {lihat, sunting}
-		// nomor HP/WhatsApp untuk Kontak/Lead/Konversi. Sejak opsi B (ADR 0012) matriks
-		// DIRENDER sebagai section di halaman /roles (RolesPage) — tak ada GET tersendiri;
-		// hanya AKSI simpan yang punya rute, PRG-nya kembali ke /roles. Gerbang di HANDLER
-		// (canManageFieldSecurity, objek crm:field_security) — bukan role tenant.
-		r.Post("/field-security", h.WorkspaceFieldSecurityUpdate)
-
 		// Anggota (model membership). Lihat = semua anggota; ubah/keluarkan/undang
 		// = owner/admin (di-guard handler via canManageMembers).
 		r.Get("/members", h.MembersPage)
@@ -297,6 +290,12 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// WAJIB sebelum "/accounts/{id}" — chi cocokkan statis dulu, tapi urutan
 		// eksplisit menjaga niat tetap terbaca.
 		r.Get("/accounts/villages", h.AccountVillages)
+		// BL-63: impor massal via CSV. Statis, jadi WAJIB sebelum "/accounts/{id}"
+		// (alasan sama komentar di atas).
+		r.Get("/accounts/import", h.AccountImportForm)
+		r.Post("/accounts/import", h.AccountImportPreview)
+		r.Post("/accounts/import/confirm", h.AccountImportConfirm)
+		r.Get("/accounts/import/template", h.AccountImportTemplate)
 		r.Post("/accounts", h.AccountCreate)
 		r.Get("/accounts/{id}", h.AccountDetail)
 		r.Get("/accounts/{id}/edit", h.AccountEdit)
@@ -328,6 +327,15 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/contacts", h.ContactsAll)
 		r.Get("/contacts/new", h.ContactNewGlobal)
 		r.Post("/contacts", h.ContactCreateGlobal)
+
+		// BL-134: impor massal Kontak via CSV, pola sama dgn impor Desa di atas
+		// (dry-run pratinjau → konfirmasi all-or-nothing). Beda kunci: butuh
+		// account_id (desa induk) YANG SUDAH ADA, diresolusi dari kode_desa
+		// per baris (bukan membuat akun baru).
+		r.Get("/contacts/import", h.ContactImportForm)
+		r.Post("/contacts/import", h.ContactImportPreview)
+		r.Post("/contacts/import/confirm", h.ContactImportConfirm)
+		r.Get("/contacts/import/template", h.ContactImportTemplate)
 
 		// Customer Success (Modul 6 slice B1): Health Score (6.1) + Journey/
 		// Onboarding (6.2) + Product Adoption (6.4) — SATU baris `customer_success`
@@ -379,6 +387,22 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Post("/activities/{id}", h.ActivityUpdate)
 		r.Post("/activities/{id}/status", h.ActivityStatus)
 		r.Post("/activities/{id}/delete", h.ActivityDelete)
+
+		// Reload SSE opsi Kontak saat Target berubah di form create (BL-164).
+		// Gerbang sama (canWriteSalesActivity, di handler) — form create tak
+		// dilihat siapa pun yang tak boleh menulis aktivitas.
+		r.Post("/activities/contact-options", h.ActivityContactOptions)
+
+		// Modal global "Cari Kode Desa/Kecamatan" (BL-163) — anggota workspace
+		// mana pun (chain grup ini: RequireEnforce("user:home","read") sudah
+		// cukup; regions GLOBAL tanpa tenant_id, tak ada gerbang Casbin
+		// tambahan sesuai keputusan desain BL-163).
+		r.Post("/regions/search", h.RegionSearch)
+
+		// Lazy-fetch cascading Provinsi/Kabupaten/Kecamatan tab "Wilayah"
+		// modal di atas (perluasan BL-163) — gerbang sama, lihat komentar
+		// di atas.
+		r.Get("/regions/tree", h.RegionsTree)
 
 		// Daftar aktivitas LINTAS-CONTEXT (menu "Activities" top-level, M7). Reuse
 		// gate canViewSalesActivity; query ListAllActivities (tanpa context_filter).
@@ -438,7 +462,7 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/subscriptions/{id}", h.SubscriptionDetail)
 		// Mutasi langganan (M5-3c), native POST → 303 (gotcha #16). Gerbang bisnis
 		// terpisah: renew & activate (crm:renewals write), approve/reject
-		// (crm:renewal_mgmt approve — hanya manager/admin), churn (crm:churn write).
+		// (crm:renewals approve — hanya manager/admin), churn (crm:churn write).
 		// F3 ownership ditegakkan per-baris di handler (loadOwnedSubscription).
 		r.Post("/subscriptions/{id}/renew", h.SubscriptionRenew)
 		r.Post("/subscriptions/{id}/activate", h.SubscriptionActivate)
@@ -589,5 +613,14 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/roles/{name}", h.RoleEditPage)
 		r.Post("/roles/{name}", h.RoleUpdate)
 		r.Post("/roles/{name}/delete", h.RoleDelete)
+
+		// Field Security (BL-107, sumbu F4): {lihat, sunting} nomor HP/WhatsApp
+		// SATU peran. Sejak BL-145 subtask 3, matriks ini hidup di halaman
+		// DETAIL peran (bukan section tenant-wide di /roles) agar signal
+		// Datastar-nya bisa bereaksi thd level Contacts/Leads (F2) peran yang
+		// SAMA — keduanya wajib satu page load. PRG-nya kembali ke /roles/{name}.
+		// Gerbang di HANDLER (canManageFieldSecurity, objek crm:field_security)
+		// — TERPISAH dari canManageRoles, dan berlaku juga utk peran sistem.
+		r.Post("/roles/{name}/field-security", h.RoleFieldSecurityUpdate)
 	})
 }

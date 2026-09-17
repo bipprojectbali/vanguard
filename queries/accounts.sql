@@ -421,6 +421,14 @@ WHERE tenant_id = sqlc.arg(tenant_id)
   AND village_code = sqlc.arg(village_code)
   AND deleted_at IS NULL;
 
+-- name: ListAccountsByVillageCodes :many
+-- Cek duplikat BANYAK village_code sekaligus (impor CSV) — kembaran batch dari
+-- GetAccountByVillageCode, hindari N+1. Hanya akun HIDUP (deleted_at IS NULL).
+SELECT village_code, id, entity_code FROM accounts
+WHERE tenant_id = sqlc.arg(tenant_id)
+  AND village_code = ANY(sqlc.arg(codes)::text[])
+  AND deleted_at IS NULL;
+
 -- name: AccountEntityCodeExists :one
 -- Apakah entity_code (kode sistem, mis. "DESA-001") ini sudah dipakai di tenant
 -- (SEMUA baris). Dipakai allocEntityCode agar jalur OTOMATIS melewati slot yang
@@ -459,3 +467,22 @@ WHERE deleted_at IS NULL
       OR (sqlc.arg(is_sales)::boolean AND account_owner = sqlc.arg(uid))
       OR (sqlc.arg(is_csm)::boolean AND (assigned_csm = sqlc.arg(uid) OR backup_csm = sqlc.arg(uid)))
   );
+
+-- name: ListAccountsByVillageCodesForContactImport :many
+-- Resolusi kode_desa → akun UTK IMPOR KONTAK (BL-134): id+nama desa SEKALIGUS
+-- flag `writable` F3 dalam SATU query batch (bukan N+1 — Rule 13), predikat
+-- ownership sama ListAccountsForSelect. Baris ABSEN dari hasil = kode desa tak
+-- dikenal (row error "contact_village_notfound"); hadir tapi writable=false =
+-- di luar cakupan aktor (row error "contact_village_forbidden") — resolver di
+-- Go yang memutuskan, query ini cuma menyediakan data. Nama BARU (bukan reuse
+-- ListAccountsByVillageCodes milik BL-63) karena kolom & tujuan beda (di sini
+-- utk MENAUTKAN kontak ke akun sudah-ada, bukan mendeteksi duplikat sebelum
+-- membuat akun baru) — menghindari regresi jalur impor Desa yang sudah ada.
+SELECT id, village_code, village_name,
+    (
+        sqlc.arg(scope_all)::boolean
+        OR (sqlc.arg(is_sales)::boolean AND account_owner = sqlc.arg(uid))
+        OR (sqlc.arg(is_csm)::boolean AND (assigned_csm = sqlc.arg(uid) OR backup_csm = sqlc.arg(uid)))
+    )::boolean AS writable
+FROM accounts
+WHERE deleted_at IS NULL AND village_code = ANY(sqlc.arg(village_codes)::text[]);

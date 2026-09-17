@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"go_starter/internal/db"
+	"go_starter/internal/fls"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 
@@ -37,24 +38,32 @@ func (h *Handler) RolesPage(w http.ResponseWriter, r *http.Request) {
 	// Daftar (arsip/read-only) tetap tampil; form tambah & aksi hapus disembunyikan.
 	canEdit := !IsReadOnly(ctx)
 
-	// Section Field Security (sumbu F4, ADR 0012 opsi B) ditanam di bawah tabel peran
-	// bila peninjau berwenang (crm:field_security); nil → tak dirender. Kegagalan
-	// baca kebijakan tak boleh merobohkan halaman peran — log & lanjut tanpa section.
-	fsec, err := h.fieldSecurityViewFor(r)
-	if err != nil {
-		h.Log.Error("roles: field-security section", "err", err)
-		fsec = nil
+	// Blok B (Permission Sets, BL-145 subtask 6): matriks presentasional peran
+	// yang disorot lewat ?role= (default roles[0] — admin selalu ter-seed, jadi
+	// roles kosong bukan jalur nyata). Butuh matriks izin tenant yang sama dgn
+	// RoleEditPage (permsByRole), belum di-fetch di halaman ini sebelum ini.
+	base := wsPath(slugFromRequest(r), "")
+	var psv *panel.PermissionSetView
+	if len(roles) > 0 {
+		perms, err := h.q(ctx).ListBusinessRolePermissionsByTenant(ctx, tenantID)
+		if err != nil {
+			h.Log.Error("roles: list perms", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		v := buildPermissionSetView(base, roles, permsByRole(perms), r.URL.Query().Get("role"))
+		psv = &v
 	}
 
 	h.renderWorkspaceShell(w, r, "Peran CRM", "/roles",
 		panel.Roles(
-			wsPath(slugFromRequest(r), ""),
+			base,
 			roleRows(roles),
 			businessScopeOptions(),
 			canEdit,
 			wsErrMsg(r.URL.Query().Get("err")),
 			rolesMsg(r.URL.Query().Get("ok")),
-			fsec,
+			psv,
 		))
 }
 
@@ -89,14 +98,32 @@ func (h *Handler) RoleEditPage(w http.ResponseWriter, r *http.Request) {
 	canEdit := !IsReadOnly(ctx)
 	card := buildRoleCard(role.Name, role.DisplayName, role.Description, role.DataScope, role.IsSystem, permsByRole(perms))
 
+	// fsec nil → peninjau tak berwenang crm:field_security: section Field
+	// Security tak dirender sama sekali (RoleEdit, ADR 0012 F4 tetap gerbang
+	// terpisah dari canManageRoles F2). Reactive=false utk peran sistem (admin
+	// diwakili glob crm:*, tak ada matriks Contacts/Leads utk direaksikan).
+	base := wsPath(slugFromRequest(r), "")
+	var fsec *panel.FieldSecurityRoleView
+	if canManageFieldSecurity(ctx) {
+		fsec = &panel.FieldSecurityRoleView{
+			Base:         base,
+			Name:         role.Name,
+			CanEdit:      canEdit,
+			CanViewPhone: fls.CanViewPhone(tenantID, role.Name),
+			CanEditPhone: fls.CanEditPhone(tenantID, role.Name),
+			Reactive:     !role.IsSystem,
+		}
+	}
+
 	h.renderWorkspaceShell(w, r, "Peran CRM", "/roles",
 		panel.RoleEdit(
-			wsPath(slugFromRequest(r), ""),
+			base,
 			card,
 			businessScopeOptions(),
 			canEdit,
 			wsErrMsg(r.URL.Query().Get("err")),
 			rolesMsg(r.URL.Query().Get("ok")),
+			fsec,
 		))
 }
 

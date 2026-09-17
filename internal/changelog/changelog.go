@@ -28,6 +28,29 @@ type Release struct {
 // Nomor versi teratas menjadi acuan badge "ada pembaruan".
 var Releases = []Release{
 	{
+		Version: "1.7.0",
+		Date:    "2026-09-15",
+		Summary: "Desa dan Kontak kini bisa diimpor massal lewat CSV, pencarian cepat kode wilayah Kemendagri hadir di banyak halaman, notifikasi otomatis mengingatkan perpanjangan langganan, sort kolom melengkapi Sales Activities & Activity Log, dan dropdown Kontak di form Aktivitas kini mengikuti Target yang dipilih.",
+		Sections: []Section{
+			{
+				Title: "Baru",
+				Items: []string{
+					"Impor Desa massal lewat unggah CSV — alur dua langkah (unggah → pratinjau seluruh baris → Konfirmasi Impor), identifikasi tiap baris pakai kode wilayah Kemendagri. Desa yang kodenya sudah terdaftar (duplikat) ditandai jelas dengan tautan ke data yang sudah ada; kepemilikan desa opsional diisi lewat email anggota tim. Satu baris tak valid membatalkan seluruh file.",
+					"Impor Kontak massal lewat unggah CSV — pola sama dengan impor Desa: alur dua langkah (unggah → pratinjau seluruh baris → Konfirmasi Impor). Kode Desa wajib diisi per baris; satu baris tak valid (desa tak dikenal/di luar akses, atau lebih dari satu kontak utama per desa) membatalkan seluruh file, bukan hanya baris itu.",
+					"Modal pencarian cepat kode wilayah Kemendagri (Kecamatan & Desa) — bisa dibuka dari banyak halaman (form Akun/Lead/Kontak, halaman impor CSV) tanpa kehilangan isian yang sedang diketik di halaman itu. Ketik nama (minimal 3 huruf) atau kode persis untuk hasil instan, plus tab \"Wilayah\" untuk menelusuri berjenjang Provinsi → Kabupaten/Kota → Kecamatan.",
+					"Notifikasi otomatis mengingatkan perpanjangan langganan — pemilik langganan kini mendapat notifikasi saat masa berlaku tersisa 30, 14, 7 hari, dan tepat pada hari-H, sehingga follow-up perpanjangan tak lagi mengandalkan pengecekan manual berkala.",
+					"Sort kolom (klik header untuk urutkan naik/turun) kini menjangkau Sales Activities dan Activity Log, termasuk kolom Tanggal — melengkapi seluruh modul lain yang sudah bisa diurutkan. Kolom yang bisa disortir namun belum aktif kini menampilkan ikon \"⇅\" di semua tabel agar terlihat jelas bisa diklik.",
+				},
+			},
+			{
+				Title: "Diubah",
+				Items: []string{
+					"Dropdown Kontak pada form Tambah/Ubah Aktivitas (jenis Panggilan/Chat) kini mengikuti Target yang dipilih: memilih Akun menampilkan kontak desa itu saja, memilih Deal atau Kontak otomatis memilih kontak terkait, dan memilih Lead menampilkan info kontak lead langsung (nama/HP/WhatsApp/email) karena Lead belum tercatat sebagai Kontak.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.6.0",
 		Date:    "2026-09-14",
 		Summary: "Sort kolom kini tersedia di hampir semua tabel CRM, Lead bisa dicatat aktivitasnya, Beranda dapat grafik ringkas per-modul, perubahan tahap Deal jadi berurutan, detail Langganan didesain ulang, dan badge Perpanjangan diperbaiki.",

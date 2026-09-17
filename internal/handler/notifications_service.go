@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 
 	"go_starter/internal/db"
 	"go_starter/internal/ui/pages/panel"
@@ -15,9 +16,11 @@ import (
 // notifPayload = bentuk payload JSONB yang kita tulis. Disimpan sebagai SNAPSHOT
 // (lihat migrasi 00009): pesan lama tetap terbaca walau role/nama berubah lagi.
 type notifPayload struct {
-	Role       string `json:"role,omitempty"`        // role BARU (member.role.changed)
-	Actor      string `json:"actor,omitempty"`       // yang melakukan, sudah aman ditampilkan
-	EntityCode string `json:"entity_code,omitempty"` // kode entitas (mis. SUB-0007); BUKAN PII
+	Role        string `json:"role,omitempty"`         // role BARU (member.role.changed)
+	Actor       string `json:"actor,omitempty"`        // yang melakukan, sudah aman ditampilkan
+	EntityCode  string `json:"entity_code,omitempty"`  // kode entitas (mis. SUB-0007); BUKAN PII
+	VillageName string `json:"village_name,omitempty"` // nama desa/akun (BL-158, subscription.renewal.reminder)
+	DaysLeft    *int   `json:"days_left,omitempty"`    // sisa hari ke end_date (BL-158); pointer agar 0 (hari-H) terbedakan dari absen
 }
 
 // buildNotifRows memetakan peristiwa ke baris view + menyusun kalimatnya.
@@ -70,6 +73,18 @@ func notifText(kind, workspace string, p notifPayload) string {
 		return "Renewal " + orDefault(p.EntityCode, "langganan") + " Anda ditolak."
 	case "subscription.created.from_deal":
 		return "Langganan " + orDefault(p.EntityCode, "baru") + " dibuat dari deal yang dimenangkan."
+	case "subscription.renewal.reminder":
+		// BL-158: pengingat terjadwal H-30/H-14/H-7/hari-H. VillageName = akun
+		// pemilik langganan (bukan workspace platform); DaysLeft nil = payload
+		// lama/rusak → kalimat generik, fail-soft konsisten default lain.
+		village := orDefault(p.VillageName, "Langganan Anda")
+		if p.DaysLeft == nil {
+			return "Langganan " + village + " mendekati masa jatuh tempo."
+		}
+		if *p.DaysLeft == 0 {
+			return "Langganan " + village + " jatuh tempo hari ini."
+		}
+		return "Langganan " + village + " akan jatuh tempo dalam " + strconv.Itoa(*p.DaysLeft) + " hari."
 	default:
 		return "Ada pembaruan pada keanggotaan Anda."
 	}

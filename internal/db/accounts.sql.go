@@ -483,6 +483,112 @@ func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]A
 	return items, nil
 }
 
+const listAccountsByVillageCodes = `-- name: ListAccountsByVillageCodes :many
+SELECT village_code, id, entity_code FROM accounts
+WHERE tenant_id = $1
+  AND village_code = ANY($2::text[])
+  AND deleted_at IS NULL
+`
+
+type ListAccountsByVillageCodesParams struct {
+	TenantID int64    `json:"tenant_id"`
+	Codes    []string `json:"codes"`
+}
+
+type ListAccountsByVillageCodesRow struct {
+	VillageCode *string `json:"village_code"`
+	ID          int64   `json:"id"`
+	EntityCode  *string `json:"entity_code"`
+}
+
+// Cek duplikat BANYAK village_code sekaligus (impor CSV) — kembaran batch dari
+// GetAccountByVillageCode, hindari N+1. Hanya akun HIDUP (deleted_at IS NULL).
+func (q *Queries) ListAccountsByVillageCodes(ctx context.Context, arg ListAccountsByVillageCodesParams) ([]ListAccountsByVillageCodesRow, error) {
+	rows, err := q.db.Query(ctx, listAccountsByVillageCodes, arg.TenantID, arg.Codes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAccountsByVillageCodesRow{}
+	for rows.Next() {
+		var i ListAccountsByVillageCodesRow
+		if err := rows.Scan(&i.VillageCode, &i.ID, &i.EntityCode); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccountsByVillageCodesForContactImport = `-- name: ListAccountsByVillageCodesForContactImport :many
+SELECT id, village_code, village_name,
+    (
+        $1::boolean
+        OR ($2::boolean AND account_owner = $3)
+        OR ($4::boolean AND (assigned_csm = $3 OR backup_csm = $3))
+    )::boolean AS writable
+FROM accounts
+WHERE deleted_at IS NULL AND village_code = ANY($5::text[])
+`
+
+type ListAccountsByVillageCodesForContactImportParams struct {
+	ScopeAll     bool     `json:"scope_all"`
+	IsSales      bool     `json:"is_sales"`
+	Uid          *int64   `json:"uid"`
+	IsCsm        bool     `json:"is_csm"`
+	VillageCodes []string `json:"village_codes"`
+}
+
+type ListAccountsByVillageCodesForContactImportRow struct {
+	ID          int64   `json:"id"`
+	VillageCode *string `json:"village_code"`
+	VillageName string  `json:"village_name"`
+	Writable    bool    `json:"writable"`
+}
+
+// Resolusi kode_desa → akun UTK IMPOR KONTAK (BL-134): id+nama desa SEKALIGUS
+// flag `writable` F3 dalam SATU query batch (bukan N+1 — Rule 13), predikat
+// ownership sama ListAccountsForSelect. Baris ABSEN dari hasil = kode desa tak
+// dikenal (row error "contact_village_notfound"); hadir tapi writable=false =
+// di luar cakupan aktor (row error "contact_village_forbidden") — resolver di
+// Go yang memutuskan, query ini cuma menyediakan data. Nama BARU (bukan reuse
+// ListAccountsByVillageCodes milik BL-63) karena kolom & tujuan beda (di sini
+// utk MENAUTKAN kontak ke akun sudah-ada, bukan mendeteksi duplikat sebelum
+// membuat akun baru) — menghindari regresi jalur impor Desa yang sudah ada.
+func (q *Queries) ListAccountsByVillageCodesForContactImport(ctx context.Context, arg ListAccountsByVillageCodesForContactImportParams) ([]ListAccountsByVillageCodesForContactImportRow, error) {
+	rows, err := q.db.Query(ctx, listAccountsByVillageCodesForContactImport,
+		arg.ScopeAll,
+		arg.IsSales,
+		arg.Uid,
+		arg.IsCsm,
+		arg.VillageCodes,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAccountsByVillageCodesForContactImportRow{}
+	for rows.Next() {
+		var i ListAccountsByVillageCodesForContactImportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.VillageCode,
+			&i.VillageName,
+			&i.Writable,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAccountsForSelect = `-- name: ListAccountsForSelect :many
 SELECT id, village_name, village_code FROM accounts
 WHERE deleted_at IS NULL

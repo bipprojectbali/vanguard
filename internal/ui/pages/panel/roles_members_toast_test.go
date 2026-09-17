@@ -24,8 +24,8 @@ func TestRoles_ToastNotAlert(t *testing.T) {
 func TestRoleEdit_ToastNotAlert(t *testing.T) {
 	rc := RoleCard{Name: "finance", DisplayName: "Keuangan"}
 	var errOut, okOut strings.Builder
-	RoleEdit("/w/acme", rc, nil, true, "Role tidak valid.", "").Render(&errOut)
-	RoleEdit("/w/acme", rc, nil, true, "", "Peran disimpan.").Render(&okOut)
+	RoleEdit("/w/acme", rc, nil, true, "Role tidak valid.", "", nil).Render(&errOut)
+	RoleEdit("/w/acme", rc, nil, true, "", "Peran disimpan.", nil).Render(&okOut)
 
 	assertToast(t, errOut.String(), "err", "Role tidak valid.")
 	assertToast(t, okOut.String(), "ok", "Peran disimpan.")

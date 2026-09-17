@@ -541,6 +541,517 @@ func (q *Queries) ListEngagementsFeed(ctx context.Context, arg ListEngagementsFe
 	return items, nil
 }
 
+const listEngagementsFeedSortByDate = `-- name: ListEngagementsFeedSortByDate :many
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (e.created_at, e.id) > ($3::timestamptz, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (e.created_at, e.id) < ($3::timestamptz, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND (
+          a.account_owner = $7
+          OR a.assigned_csm = $7
+          OR a.backup_csm = $7
+      ))
+  )
+  AND ($8::text = ''
+       OR e.subject ILIKE '%' || $8 || '%'
+       OR a.village_name ILIKE '%' || $8 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN e.created_at END ASC,
+  CASE WHEN $2::text = 'desc' THEN e.created_at END DESC,
+  CASE WHEN $2::text = 'asc'  THEN e.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN e.id END DESC
+LIMIT $9
+`
+
+type ListEngagementsFeedSortByDateParams struct {
+	HasCursor bool               `json:"has_cursor"`
+	Dir       string             `json:"dir"`
+	CursorVal pgtype.Timestamptz `json:"cursor_val"`
+	CursorID  int64              `json:"cursor_id"`
+	ScopeAll  bool               `json:"scope_all"`
+	IsOwn     bool               `json:"is_own"`
+	Uid       *int64             `json:"uid"`
+	Search    string             `json:"search"`
+	PageSize  int32              `json:"page_size"`
+}
+
+type ListEngagementsFeedSortByDateRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	EngagementType string             `json:"engagement_type"`
+	Status         string             `json:"status"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	AccountName    string             `json:"account_name"`
+	OwnerName      *string            `json:"owner_name"`
+}
+
+// BL-157k: sort by Tanggal (created_at), arah dinamis — dipakai juga sebagai
+// sumbu DEFAULT feed terpadu (dir=desc), sejajar ListActivitiesSortByDate/
+// ListAllActivitiesSortByDate.
+func (q *Queries) ListEngagementsFeedSortByDate(ctx context.Context, arg ListEngagementsFeedSortByDateParams) ([]ListEngagementsFeedSortByDateRow, error) {
+	rows, err := q.db.Query(ctx, listEngagementsFeedSortByDate,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEngagementsFeedSortByDateRow{}
+	for rows.Next() {
+		var i ListEngagementsFeedSortByDateRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.EngagementType,
+			&i.Status,
+			&i.CreatedAt,
+			&i.AccountName,
+			&i.OwnerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEngagementsFeedSortByOwner = `-- name: ListEngagementsFeedSortByOwner :many
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (
+      NOT $1::boolean
+      OR ($2::text = 'asc' AND (
+          (NOT $3::boolean
+           AND (u.name IS NULL
+                OR (u.name, e.id) > ($4::text, $5::bigint)))
+          OR ($3::boolean
+              AND u.name IS NULL AND e.id > $5::bigint)
+      ))
+      OR ($2::text = 'desc' AND (
+          ($3::boolean
+           AND (u.name IS NOT NULL OR e.id < $5::bigint))
+          OR (NOT $3::boolean AND u.name IS NOT NULL
+              AND (u.name, e.id) < ($4::text, $5::bigint))
+      ))
+  )
+  AND (
+      $6::boolean
+      OR ($7::boolean AND (
+          a.account_owner = $8
+          OR a.assigned_csm = $8
+          OR a.backup_csm = $8
+      ))
+  )
+  AND ($9::text = ''
+       OR e.subject ILIKE '%' || $9 || '%'
+       OR a.village_name ILIKE '%' || $9 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN u.name END ASC,
+  CASE WHEN $2::text = 'desc' THEN u.name END DESC,
+  CASE WHEN $2::text = 'asc'  THEN e.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN e.id END DESC
+LIMIT $10
+`
+
+type ListEngagementsFeedSortByOwnerParams struct {
+	HasCursor    bool   `json:"has_cursor"`
+	Dir          string `json:"dir"`
+	CursorIsNull bool   `json:"cursor_is_null"`
+	CursorVal    string `json:"cursor_val"`
+	CursorID     int64  `json:"cursor_id"`
+	ScopeAll     bool   `json:"scope_all"`
+	IsOwn        bool   `json:"is_own"`
+	Uid          *int64 `json:"uid"`
+	Search       string `json:"search"`
+	PageSize     int32  `json:"page_size"`
+}
+
+type ListEngagementsFeedSortByOwnerRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	EngagementType string             `json:"engagement_type"`
+	Status         string             `json:"status"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	AccountName    string             `json:"account_name"`
+	OwnerName      *string            `json:"owner_name"`
+}
+
+// BL-157k: sort by Pemilik. Kunci sort = u.name MENTAH (BUKAN coalesce email
+// seperti activities) — engagementFeedRowView menampilkan e.OwnerName (u.name)
+// apa adanya tanpa fallback email, jadi kunci sort harus sama persis agar urutan
+// tampil = urutan sort.
+func (q *Queries) ListEngagementsFeedSortByOwner(ctx context.Context, arg ListEngagementsFeedSortByOwnerParams) ([]ListEngagementsFeedSortByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listEngagementsFeedSortByOwner,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorIsNull,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEngagementsFeedSortByOwnerRow{}
+	for rows.Next() {
+		var i ListEngagementsFeedSortByOwnerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.EngagementType,
+			&i.Status,
+			&i.CreatedAt,
+			&i.AccountName,
+			&i.OwnerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEngagementsFeedSortByStatus = `-- name: ListEngagementsFeedSortByStatus :many
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (e.status, e.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (e.status, e.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND (
+          a.account_owner = $7
+          OR a.assigned_csm = $7
+          OR a.backup_csm = $7
+      ))
+  )
+  AND ($8::text = ''
+       OR e.subject ILIKE '%' || $8 || '%'
+       OR a.village_name ILIKE '%' || $8 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN e.status END ASC,
+  CASE WHEN $2::text = 'desc' THEN e.status END DESC,
+  CASE WHEN $2::text = 'asc'  THEN e.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN e.id END DESC
+LIMIT $9
+`
+
+type ListEngagementsFeedSortByStatusParams struct {
+	HasCursor bool   `json:"has_cursor"`
+	Dir       string `json:"dir"`
+	CursorVal string `json:"cursor_val"`
+	CursorID  int64  `json:"cursor_id"`
+	ScopeAll  bool   `json:"scope_all"`
+	IsOwn     bool   `json:"is_own"`
+	Uid       *int64 `json:"uid"`
+	Search    string `json:"search"`
+	PageSize  int32  `json:"page_size"`
+}
+
+type ListEngagementsFeedSortByStatusRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	EngagementType string             `json:"engagement_type"`
+	Status         string             `json:"status"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	AccountName    string             `json:"account_name"`
+	OwnerName      *string            `json:"owner_name"`
+}
+
+// BL-157k: sort by Status, kunci = e.status MENTAH (enum, NOT NULL —
+// beda dari activities.status yang nullable).
+func (q *Queries) ListEngagementsFeedSortByStatus(ctx context.Context, arg ListEngagementsFeedSortByStatusParams) ([]ListEngagementsFeedSortByStatusRow, error) {
+	rows, err := q.db.Query(ctx, listEngagementsFeedSortByStatus,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEngagementsFeedSortByStatusRow{}
+	for rows.Next() {
+		var i ListEngagementsFeedSortByStatusRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.EngagementType,
+			&i.Status,
+			&i.CreatedAt,
+			&i.AccountName,
+			&i.OwnerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEngagementsFeedSortBySubject = `-- name: ListEngagementsFeedSortBySubject :many
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (e.subject, e.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (e.subject, e.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND (
+          a.account_owner = $7
+          OR a.assigned_csm = $7
+          OR a.backup_csm = $7
+      ))
+  )
+  AND ($8::text = ''
+       OR e.subject ILIKE '%' || $8 || '%'
+       OR a.village_name ILIKE '%' || $8 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN e.subject END ASC,
+  CASE WHEN $2::text = 'desc' THEN e.subject END DESC,
+  CASE WHEN $2::text = 'asc'  THEN e.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN e.id END DESC
+LIMIT $9
+`
+
+type ListEngagementsFeedSortBySubjectParams struct {
+	HasCursor bool   `json:"has_cursor"`
+	Dir       string `json:"dir"`
+	CursorVal string `json:"cursor_val"`
+	CursorID  int64  `json:"cursor_id"`
+	ScopeAll  bool   `json:"scope_all"`
+	IsOwn     bool   `json:"is_own"`
+	Uid       *int64 `json:"uid"`
+	Search    string `json:"search"`
+	PageSize  int32  `json:"page_size"`
+}
+
+type ListEngagementsFeedSortBySubjectRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	EngagementType string             `json:"engagement_type"`
+	Status         string             `json:"status"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	AccountName    string             `json:"account_name"`
+	OwnerName      *string            `json:"owner_name"`
+}
+
+// BL-157k: sort by Subjek, kloning ListEngagementsFeed dengan keyset/ORDER BY
+// dinamis pada e.subject.
+func (q *Queries) ListEngagementsFeedSortBySubject(ctx context.Context, arg ListEngagementsFeedSortBySubjectParams) ([]ListEngagementsFeedSortBySubjectRow, error) {
+	rows, err := q.db.Query(ctx, listEngagementsFeedSortBySubject,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEngagementsFeedSortBySubjectRow{}
+	for rows.Next() {
+		var i ListEngagementsFeedSortBySubjectRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.EngagementType,
+			&i.Status,
+			&i.CreatedAt,
+			&i.AccountName,
+			&i.OwnerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEngagementsFeedSortByType = `-- name: ListEngagementsFeedSortByType :many
+SELECT
+    e.id, e.account_id, e.subject, e.engagement_type, e.status,
+    e.created_at,
+    a.village_name AS account_name,
+    u.name AS owner_name
+FROM engagements e
+JOIN accounts a ON e.account_id = a.id AND a.deleted_at IS NULL
+LEFT JOIN users u ON e.owner_id = u.id
+WHERE (
+      NOT $1::boolean
+      OR ($2::text = 'asc'
+          AND (e.engagement_type, e.id) > ($3::text, $4::bigint))
+      OR ($2::text = 'desc'
+          AND (e.engagement_type, e.id) < ($3::text, $4::bigint))
+  )
+  AND (
+      $5::boolean
+      OR ($6::boolean AND (
+          a.account_owner = $7
+          OR a.assigned_csm = $7
+          OR a.backup_csm = $7
+      ))
+  )
+  AND ($8::text = ''
+       OR e.subject ILIKE '%' || $8 || '%'
+       OR a.village_name ILIKE '%' || $8 || '%')
+ORDER BY
+  CASE WHEN $2::text = 'asc'  THEN e.engagement_type END ASC,
+  CASE WHEN $2::text = 'desc' THEN e.engagement_type END DESC,
+  CASE WHEN $2::text = 'asc'  THEN e.id END ASC,
+  CASE WHEN $2::text = 'desc' THEN e.id END DESC
+LIMIT $9
+`
+
+type ListEngagementsFeedSortByTypeParams struct {
+	HasCursor bool   `json:"has_cursor"`
+	Dir       string `json:"dir"`
+	CursorVal string `json:"cursor_val"`
+	CursorID  int64  `json:"cursor_id"`
+	ScopeAll  bool   `json:"scope_all"`
+	IsOwn     bool   `json:"is_own"`
+	Uid       *int64 `json:"uid"`
+	Search    string `json:"search"`
+	PageSize  int32  `json:"page_size"`
+}
+
+type ListEngagementsFeedSortByTypeRow struct {
+	ID             int64              `json:"id"`
+	AccountID      int64              `json:"account_id"`
+	Subject        string             `json:"subject"`
+	EngagementType string             `json:"engagement_type"`
+	Status         string             `json:"status"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	AccountName    string             `json:"account_name"`
+	OwnerName      *string            `json:"owner_name"`
+}
+
+// BL-157k (sort per kolom Activity Log /activity-log, lengan engagements/CS):
+// sort by Jenis (engagement_type, RAW enum — sejajar "kind" activity yang juga
+// disortir mentah, bukan label Indonesia). Sisanya (F3/search/JOIN) identik
+// ListEngagementsFeed.
+func (q *Queries) ListEngagementsFeedSortByType(ctx context.Context, arg ListEngagementsFeedSortByTypeParams) ([]ListEngagementsFeedSortByTypeRow, error) {
+	rows, err := q.db.Query(ctx, listEngagementsFeedSortByType,
+		arg.HasCursor,
+		arg.Dir,
+		arg.CursorVal,
+		arg.CursorID,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEngagementsFeedSortByTypeRow{}
+	for rows.Next() {
+		var i ListEngagementsFeedSortByTypeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.Subject,
+			&i.EngagementType,
+			&i.Status,
+			&i.CreatedAt,
+			&i.AccountName,
+			&i.OwnerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateEngagementStatus = `-- name: UpdateEngagementStatus :one
 UPDATE engagements
 SET

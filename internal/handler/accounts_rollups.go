@@ -22,8 +22,15 @@ import (
 const relatedRecordsPreviewLimit = 3
 
 // subscriptionSummaryFor merakit kartu "Ringkasan Langganan" (langganan
-// TERBARU satu desa). MRR/ARR disamarkan F4 via maskARR — kelas sensitivitas
-// sama dgn VillageBudget/deal Amount, tersembunyi hanya utk Support.
+// TERBARU satu desa). MRR tetap disamarkan F4 via maskARR — kelas sensitivitas
+// sama dgn VillageBudget/deal Amount, tersembunyi hanya utk Support. ARR
+// disamarkan F2 via maskSubscriptionARR/canSeeSubscriptionARR (BL-166 fix):
+// sebelumnya ikut F4 juga, tapi itu tak sinkron dgn halaman Subscriptions yg
+// sejak BL-58 pakai kapabilitas Casbin `crm:subscriptions/arr` — akibatnya
+// Sales/CSM default (dapat read tanpa arr) melihat ARR bocor di kartu ini
+// padahal tersamar di halaman Subscriptions. Kedua field TETAP dua kebijakan
+// berbeda by design (BL-58); yang diperbaiki hanya ARR ikut kebijakan yg SAMA
+// dgn Subscriptions, bukan menggabungkan MRR & ARR.
 func (h *Handler) subscriptionSummaryFor(ctx context.Context, base string, accountID int64, br string) panel.SubscriptionSummaryView {
 	href := base + "/subscriptions"
 	s, err := h.q(ctx).GetLatestSubscriptionForAccount(ctx, accountID)
@@ -37,7 +44,7 @@ func (h *Handler) subscriptionSummaryFor(ctx context.Context, base string, accou
 		PlanName:         subPlanDisplay(s.PlanName, s.ItemCount),
 		StatusLabel:      s.Status,
 		MRR:              maskARR(formatRupiah(s.Mrr), br),
-		ARR:              maskARR(formatRupiah(s.Arr), br),
+		ARR:              maskSubscriptionARR(formatRupiah(s.Arr), canSeeSubscriptionARR(ctx)),
 		RenewalOrEndDate: dateStr(s.EndDate),
 		Href:             href,
 	}

@@ -336,8 +336,9 @@ func TestSubscriptionRenew_Gate(t *testing.T) {
 	}
 }
 
-// TestSubscriptionRenewApprove_Gate: approve butuh crm:renewal_mgmt APPROVE. csm
-// (punya renewal_mgmt write tapi bukan approve) & sales ditolak 403; manager lolos.
+// TestSubscriptionRenewApprove_Gate: approve butuh crm:renewals APPROVE (BL-145
+// subtask 2, dipindah dari crm:renewal_mgmt). csm (punya renewal_mgmt write tapi
+// bukan approve) & sales ditolak 403; manager lolos.
 func TestSubscriptionRenewApprove_Gate(t *testing.T) {
 	env, uid := setupAccounts(t)
 	planID := env.seedPlan(t, "Paket AG", "PLAN-AG", "1000000")

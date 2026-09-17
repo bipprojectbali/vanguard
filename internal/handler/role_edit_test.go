@@ -78,6 +78,83 @@ func TestRoleEdit_RendersCustom(t *testing.T) {
 	}
 }
 
+// TestRoleEdit_DealsApproveColumnHidden: kolom "Setujui" TAK tampil sbg
+// checkbox di baris Deals (BL-145 subtask 1, CanApprove=false — nol enforcement
+// point hari ini), walau Manager punya default grant crm:deals approve
+// (business_defaults.go). Baris Renewals TETAP tampil checkbox-nya
+// (CanApprove=true sejak subtask 2, fiturnya nyata) — pembanding negatif agar
+// bukti kolom lain tak ikut disembunyikan.
+func TestRoleEdit_DealsApproveColumnHidden(t *testing.T) {
+	env, uid := setupRoles(t)
+	req := rolesReq(http.MethodGet, "/w/test/roles/manager", nil, "manager")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleEditPage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("harus 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, `name="approve.crm:deals"`) {
+		t.Error("kolom Setujui baris Deals harus disembunyikan (CanApprove=false)")
+	}
+	if !strings.Contains(body, `name="approve.crm:renewals"`) {
+		t.Error("kolom Setujui baris Renewals harus tetap tampil (CanApprove=true)")
+	}
+}
+
+// TestRoleEdit_RenewalApproveMovedToRenewals: kolom "Setujui" tampil di baris
+// Renewals, TAK di baris Renewal Management (BL-145 subtask 2 — approve renewal
+// upsell cuma pernah muncul di halaman Subscription detail/dunia Renewals, nol
+// kemunculan di halaman Renewal Management manapun). Pembanding negatif+positif
+// sekaligus, agar bukti flag CanApprove benar-benar TERTUKAR posisi (bukan cuma
+// ditambah di satu sisi lalu lupa dicabut di sisi lain).
+func TestRoleEdit_RenewalApproveMovedToRenewals(t *testing.T) {
+	env, uid := setupRoles(t)
+	req := rolesReq(http.MethodGet, "/w/test/roles/manager", nil, "manager")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleEditPage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("harus 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `name="approve.crm:renewals"`) {
+		t.Error("kolom Setujui baris Renewals harus tampil (CanApprove=true)")
+	}
+	if strings.Contains(body, `name="approve.crm:renewal_mgmt"`) {
+		t.Error("kolom Setujui baris Renewal Management harus disembunyikan (CanApprove=false)")
+	}
+}
+
+// TestRoleEdit_ApproveARRReactiveToLevel: kolom "Setujui" (baris Renewals,
+// satu-satunya CanApprove sejak subtask 2) & "Lihat ARR" (Subscriptions,
+// satu-satunya CanARR) ter-render reaktif Datastar (BL-145 subtask 4/5) — level
+// select ter-bind signal per baris, checkbox terkait ter-bind signal SENDIRI +
+// dinonaktifkan kondisional saat level baris itu "none", dan handler on:change
+// level memaksa signal checkbox itu balik ke false saat level diganti ke
+// "none". Reaktivitas ini murni UX klien — backend (readRoleMatrix guard
+// hasLevel, BL-145 subtask 0) tetap penjaga sesungguhnya, tak diuji ulang di
+// sini.
+func TestRoleEdit_ApproveARRReactiveToLevel(t *testing.T) {
+	env, uid := setupRoles(t)
+	req := rolesReq(http.MethodGet, "/w/test/roles/manager", nil, "manager")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleEditPage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("harus 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`data-bind="lvl_renewals"`, // level select baris Renewals ter-bind
+		`data-bind="apv_renewals"`, // checkbox Setujui ter-bind signal sendiri
+		`data-attr="{disabled: $lvl_renewals == &#39;none&#39;}"`,
+		`data-on:change="evt.target.value===&#39;none&#39;&amp;&amp;($apv_renewals=false)"`,
+		`data-bind="lvl_subscriptions"`, // level select baris Subscriptions ter-bind
+		`data-bind="arr_subscriptions"`, // checkbox Lihat ARR ter-bind signal sendiri
+		`data-attr="{disabled: $lvl_subscriptions == &#39;none&#39;}"`,
+		`data-on:change="evt.target.value===&#39;none&#39;&amp;&amp;($arr_subscriptions=false)"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("matriks harus memuat %q (reaktivitas approve/arr ↔ level):\n%s", want, body)
+		}
+	}
+}
+
 // TestRoleEdit_SystemLocked: peran sistem (admin) → keterangan terkunci, TANPA
 // tombol simpan — admin diwakili glob crm:* yang tak terpetakan ke matriks.
 func TestRoleEdit_SystemLocked(t *testing.T) {

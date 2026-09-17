@@ -292,3 +292,13 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 -- idx_contacts_account (partial WHERE deleted_at IS NULL) melayaninya langsung.
 SELECT COUNT(*) FROM contacts
 WHERE account_id = sqlc.arg(account_id) AND deleted_at IS NULL;
+
+-- name: ListAccountsWithPrimaryContact :many
+-- Dari sekumpulan account_id, mana yang SUDAH punya kontak utama hidup — dipakai
+-- resolver impor kontak (BL-134) utk menolak baris yang klaim is_primary_contact
+-- pada desa yang primary-nya sudah terisi (idx_contacts_primary tak boleh
+-- dilanggar). Dipanggil HANYA dgn account_id yang sudah lolos resolusi F3 tahap
+-- sebelumnya (tetap satu query batch, tak bertambah dgn jumlah baris — Rule 13).
+SELECT DISTINCT account_id FROM contacts
+WHERE deleted_at IS NULL AND is_primary_contact
+  AND account_id = ANY(sqlc.arg(account_ids)::bigint[]);
