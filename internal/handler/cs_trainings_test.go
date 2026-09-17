@@ -15,10 +15,12 @@ import (
 // cs_trainings_test.go — Training Schedule (Modul 6 Customer Success,
 // sub-item Onboarding 6.2.1.2). Tiga sumbu yang dijaga:
 //
-//   - F2 (Casbin bisnis): GET/POST /trainings REUSE objek "crm:journey" —
-//     admin/manager/csm lolos read+write; sales HANYA read (business_policy.csv
-//     baris 61: "p, sales, crm:journey, read" — tanpa write); support/""
-//     ditolak baik read maupun write (crm:journey tak ada di policy support).
+//   - F2 (Casbin bisnis): GET/POST /trainings gerbang objek "crm:adoption"
+//     (BL-169 — sebelumnya numpang "crm:journey", direlabel jadi gerbang
+//     khusus Training Schedule) — admin/manager/csm lolos read+write; sales
+//     TAK punya crm:adoption sama sekali → ditolak baik read maupun write
+//     (regresi disengaja: sebelumnya sales dapat read via crm:journey);
+//     support/"" ditolak baik read maupun write.
 //   - F3 (ownership): CSM (data_scope='own') melihat HANYA training dari desa
 //     binaannya (account_owner/assigned_csm/backup_csm); Admin
 //     (data_scope='all') melihat semua.
@@ -86,8 +88,10 @@ func (e *testEnv) allCSTrainings(t *testing.T) []db.ListCSTrainingsRow {
 // --- F2: gerbang read --------------------------------------------------
 
 // TestCSTrainings_GateRead: siapa boleh MEMBUKA daftar training (act read).
-// Admin/manager/csm/sales lolos ("crm:journey" read juga dipunyai Sales di
-// business_policy.csv — beda dari write); support/"" ditolak 403.
+// Admin/manager/csm lolos; sales/support/"" ditolak 403 (BL-169: gerbang
+// pindah dari "crm:journey" ke "crm:adoption" — Sales punya crm:journey read
+// tapi TAK punya crm:adoption sama sekali, jadi kehilangan akses; regresi
+// disengaja, bukan bug — lihat komentar header file).
 func TestCSTrainings_GateRead(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Gate Read Training", &uid, nil, nil)
@@ -100,7 +104,7 @@ func TestCSTrainings_GateRead(t *testing.T) {
 		{"admin", true},
 		{"manager", true},
 		{"csm", true},
-		{"sales", true},
+		{"sales", false},
 		{"support", false},
 		{"", false},
 	}

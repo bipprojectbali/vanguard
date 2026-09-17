@@ -114,8 +114,9 @@ func (h *Handler) dashSupportDomain(ctx context.Context, dataScope string, uid i
 		}
 	}
 
-	// BL-98: tautan Support Report — HANYA bila role ber-crm:reports.
-	if canViewReports(ctx) {
+	// BL-98: tautan Support Report — HANYA bila role ber-crm:reports_support
+	// (BL-169: dulu crm:reports).
+	if canViewSupportReports(ctx) {
 		d.ReportPath = wsPathOf(ctx, "/reports/support")
 	}
 	// BL-144: cek Charts JUGA (bukan cuma KPIs) — sama alasan BL-143 (dashboard_cs.go).

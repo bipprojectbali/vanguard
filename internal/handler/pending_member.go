@@ -50,5 +50,5 @@ func workspaceNavCtx(ctx context.Context, slug string) []ui.NavItem {
 	if isPendingMember(ctx) {
 		return pendingMemberNav(slug)
 	}
-	return workspaceNav(slug, canManageMembers(ctx), canEditWorkspace(ctx), canViewAccounts(ctx), canViewContacts(ctx), canViewLeads(ctx), canViewDeals(ctx), canViewSalesActivity(ctx), canViewAllActivities(ctx), canViewPlans(ctx), canViewSubscriptions(ctx), canViewSLAPolicies(ctx), canViewPlaybooks(ctx), canViewKBArticles(ctx), canManageRoles(ctx), canViewTickets(ctx), canViewHealthScore(ctx), canViewSuccessPlans(ctx), canViewEngagements(ctx), canViewCSRenewals(ctx), canViewReports(ctx), canReadCSJourney(ctx))
+	return workspaceNav(slug, canManageMembers(ctx), canEditWorkspace(ctx), canViewAccounts(ctx), canViewContacts(ctx), canViewLeads(ctx), canViewDeals(ctx), canViewSalesActivity(ctx), canViewAllActivities(ctx), canViewPlans(ctx), canViewSubscriptions(ctx), canViewSLAPolicies(ctx), canViewPlaybooks(ctx), canViewKBArticles(ctx), canManageRoles(ctx), canViewTickets(ctx), canViewHealthScore(ctx), canViewSuccessPlans(ctx), canViewEngagements(ctx), canViewCSRenewals(ctx), canViewSalesReports(ctx), canViewCSReports(ctx), canViewSupportReports(ctx), canViewSubscriptionReports(ctx), canReadCSJourney(ctx), canViewTrainings(ctx))
 }

@@ -111,8 +111,9 @@ func (h *Handler) dashSubscriptionDomain(ctx context.Context, dataScope string, 
 		})
 	}
 
-	// BL-98: tautan Subscription Report — HANYA bila role ber-crm:reports.
-	if canViewReports(ctx) {
+	// BL-98: tautan Subscription Report — HANYA bila role
+	// ber-crm:reports_subscriptions (BL-169: dulu crm:reports).
+	if canViewSubscriptionReports(ctx) {
 		d.ReportPath = wsPathOf(ctx, "/reports/subscriptions")
 	}
 	return d, len(d.KPIs) > 0, nil

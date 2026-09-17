@@ -35,8 +35,9 @@ type DashboardView struct {
 // DashDomain — satu section domain (mis. "Sales"). Hanya dirakit handler bila
 // role punya ≥1 kapabilitas modulnya; heading dirender hanya bila ada isi.
 // BL-98: ReportPath = tautan "Lihat Laporan →". Handler HANYA menyetelnya bila
-// role ber-crm:reports (canViewReports) → view tak pernah menautkan halaman yang
-// akan 403; "" = tak ada tautan.
+// role ber-crm:reports_<domain> (BL-169: dulu satu crm:reports; sekarang
+// per-domain, canViewSalesReports/canViewCSReports/dst) → view tak pernah
+// menautkan halaman yang akan 403; "" = tak ada tautan.
 // BL-140: Charts membalik BL-98 KHUSUS Beranda — 2–3 grafik inline per-domain
 // (di bawah strip KPI, TANPA switcher). Handler mengisi Charts hanya utk domain
 // yg sudah difilter per-kapabilitas (BL-141..144); nil/kosong → grid chart tak

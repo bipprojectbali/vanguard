@@ -186,7 +186,9 @@ func flsReactive(fsec *FieldSecurityRoleView) bool {
 
 // roleMatrix = tabel izin per modul CRM. Dibungkus ui.TableScroll agar scroll
 // terkurung, tak mendorong lebar halaman di mobile (konvensi mobile-first).
-// fls → diteruskan ke roleMatrixRow (lihat flsReactive di atas).
+// fls → diteruskan ke roleMatrixRow (lihat flsReactive di atas). BL-169: 4
+// modul Reports (Sales/CS/Support/Subscription) dirender FLAT sebagai baris
+// biasa, sama seperti modul lain — tanpa header grup.
 func roleMatrix(rc RoleCard, canEdit bool, fls bool) g.Node {
 	rows := make([]g.Node, 0, len(rc.Modules))
 	for _, m := range rc.Modules {

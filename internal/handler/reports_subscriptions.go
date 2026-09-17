@@ -25,9 +25,11 @@ import (
 // lampau). Filter interaktif Periode+Paket ditunda ke BL lanjutan (pola
 // BL-49/50/51).
 //
-// F2 gate canViewReports (SATU objek crm:reports read). F3 ownership via
-// SubscriptionsListFilterFor (subscription_owner — sumber SAMA modul asal). F4
-// masking Rp via maskARR di builder (Support/role tanpa akses → "•••").
+// F2 gate canViewSubscriptionReports (objek crm:reports_subscriptions read,
+// BL-169: dulu SATU objek crm:reports berbagi dgn 3 report lain). F3
+// ownership via SubscriptionsListFilterFor (subscription_owner — sumber SAMA
+// modul asal). F4 masking Rp via maskARR di builder (Support/role tanpa
+// akses → "•••").
 
 // reportTodayDate = "hari ini" appTZ sebagai pgtype.Date (tengah malam UTC —
 // jendela query date_trunc/end_date berbasis date murni). Dioper ke query
@@ -40,10 +42,10 @@ func reportTodayDate(now time.Time) pgtype.Date {
 }
 
 // ReportsSubscriptions — GET /reports/subscriptions. Bukan pemegang izin
-// crm:reports read → 403 + penjelasan (pola sama reports_support.go).
+// crm:reports_subscriptions read → 403 + penjelasan (pola sama reports_support.go).
 func (h *Handler) ReportsSubscriptions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !canViewReports(ctx) {
+	if !canViewSubscriptionReports(ctx) {
 		h.renderReportsForbidden(w, r, "Subscription Report", "/reports/subscriptions")
 		return
 	}

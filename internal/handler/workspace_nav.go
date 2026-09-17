@@ -15,16 +15,24 @@ import (
 // jumlah grup nested membuatnya lewat ambang file-health (rule #8) — jangan
 // gabungkan grup baru ke sini, tambah file grup baru.
 //
-// Tiga aturan tampil, semuanya demi "nol menu hantu — pintu yang tampil tak
+// Aturan tampil, semuanya demi "nol menu hantu — pintu yang tampil tak
 // pernah ditolak saat diketuk":
-//   - Modul BERBACKEND (Accounts, Contacts, Settings) muncul mengikuti IZIN yang
+//   - Modul BERBACKEND flat (Accounts, Contacts) muncul mengikuti IZIN yang
 //     SAMA dengan gerbang halamannya — bukan sekadar keberadaan route.
-//   - Modul wireframe yang backend-nya BELUM ada (Activities, Reports,
-//     Automation, Integrations) tetap ditampilkan terurut TAPI disabled
-//     (teredam, tanpa label tambahan) — peta jalan terlihat, pintunya jujur
-//     belum terbuka.
-//   - Settings jadi GRUP bersarang (wireframe 9): satu header, anak-anaknya
-//     User Management / Roles & Permissions / Customization + dua placeholder.
+//   - Grup bersarang (Sales, Subscriptions, Customer Success, Reports,
+//     Settings) disembunyikan TOTAL bila user tak berhak ke SATU PUN anaknya
+//     (grup kosong tak menawarkan apa pun) — anak yang tersisa enabled
+//     mengikuti izin gerbang halamannya masing-masing. Dulu keempat grup CRM
+//     ini "selalu tampil" (peta jalan) walau semua anak teredam; diganti
+//     (user, 17 Sep) karena sidebar jadi numpuk grup mati bagi role sempit
+//     (mis. Subscriptions/Customer Success semua nonaktif) — sekarang sama
+//     pola dengan Settings yang dari awal begini.
+//   - Anak TANPA izin di dalam grup (dan item top-level Activities) juga tak
+//     ditampilkan sama sekali (bukan Disabled=true teredam) — diganti (user,
+//     17 Sep) dari pola lama "tampil mati agar posisi modul di peta jalan
+//     terlihat"; sekarang konsisten dgn aturan grup di atas. `NavItem.Disabled`
+//     (internal/ui/shellnav.go navDisabled) tetap ada di struct untuk item
+//     yang memang belum berbackend, tapi tak ada lagi pemakainya saat ini.
 
 // workspaceNav membangun menu ruang kerja untuk slug + izin yang sudah dihitung
 // handler. Semua href bergantung SLUG (0004) → menu tak bisa jadi var paket.
@@ -36,7 +44,7 @@ import (
 // (crm:sales_activity) — untuk "Sales Activities" dalam grup Sales.
 // canAllActivities = gate halaman lintas-context (/activity-log) — LEBIH LUAS:
 // CRM role ATAU platform role (super_admin/staff butuh visibilitas sistem).
-func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canAllActivities, canPlans, canSubs, canSLA, canPlaybooks, canKB, canRoles, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canReports, canJourney bool) []ui.NavItem {
+func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts, canLeads, canDeals, canSalesActivity, canAllActivities, canPlans, canSubs, canSLA, canPlaybooks, canKB, canRoles, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canReportsSales, canReportsCS, canReportsSupport, canReportsSubscriptions, canJourney, canTrainings bool) []ui.NavItem {
 	items := []ui.NavItem{
 		{Label: "Dashboard", Href: wsPath(slug, ""), Icon: lucide.House(html.Class("size-4"))},
 	}
@@ -56,36 +64,40 @@ func workspaceNav(slug string, canMembers, canSettings, canAccounts, canContacts
 			Icon: lucide.Contact(html.Class("size-4")),
 		})
 	}
-	// Sales jadi GRUP bersarang (wireframe 4): Leads/Deals berbackend (enabled per
-	// izin), Quotes/Activities placeholder. Selalu tampil agar peta jalan terlihat.
-	items = append(items, workspaceSalesGroup(slug, canLeads, canDeals, canSalesActivity))
-	// Subscriptions jadi GRUP bersarang (wireframe 5): Plans & Pricing berbackend
-	// (enabled per izin), sisanya (Active Subscriptions/Renewals/Churn) placeholder.
-	// Selalu tampil agar peta jalan terlihat.
-	items = append(items, workspaceSubscriptionsGroup(slug, canPlans, canSubs))
-	// Customer Success jadi GRUP bersarang (wireframe 6): SLA Management
-	// (slice A1), Playbooks (slice A2), Knowledge Base (slice A3) & Tickets/Cases
-	// (slice B2) berbackend (enabled per izin), sisanya placeholder. Selalu tampil
-	// agar peta jalan terlihat.
-	items = append(items, workspaceCSGroup(slug, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canJourney))
+	// Sales jadi GRUP bersarang (wireframe 4): Leads/Deals/Quotes/Sales Activities
+	// enabled per izin. nil (tak berhak ke satu pun anak) → grup disembunyikan.
+	if grp := workspaceSalesGroup(slug, canLeads, canDeals, canSalesActivity); grp != nil {
+		items = append(items, *grp)
+	}
+	// Subscriptions jadi GRUP bersarang (wireframe 5): semua anak berbackend,
+	// enabled per izin. nil → grup disembunyikan.
+	if grp := workspaceSubscriptionsGroup(slug, canPlans, canSubs); grp != nil {
+		items = append(items, *grp)
+	}
+	// Customer Success jadi GRUP bersarang (wireframe 6): semua anak berbackend,
+	// enabled per izin. nil → grup disembunyikan.
+	if grp := workspaceCSGroup(slug, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canJourney, canTrainings); grp != nil {
+		items = append(items, *grp)
+	}
 	// Activities top-level = daftar lintas-context (sales+cs+general), M7.
 	// Gate crm:activities read (canViewActivities) ATAU platform role — BEDA objek
 	// dari Sales Activities (crm:sales_activity): csm/support memegang crm:activities
-	// jadi menu ini kini enabled bagi mereka (BL-39).
+	// jadi menu ini kini enabled bagi mereka (BL-39). Tanpa izin → item tak
+	// ditampilkan sama sekali (bukan disabled — nol menu hantu, sama pola dgn
+	// Settings/grup lain).
 	if canAllActivities {
 		items = append(items, ui.NavItem{
 			Label: "Activities",
 			Icon:  lucide.Activity(html.Class("size-4")),
 			Href:  wsPath(slug, "/activity-log"),
 		})
-	} else {
-		items = append(items,
-			ui.NavItem{Label: "Activities", Icon: lucide.Activity(html.Class("size-4")), Disabled: true})
 	}
-	// Reports jadi GRUP bersarang (wireframe 8): Sales Reports & Subscription
-	// Reports berbackend (enabled per izin, M8-1), sisanya placeholder. Selalu
-	// tampil agar peta jalan terlihat.
-	items = append(items, workspaceReportsGroup(slug, canReports))
+	// Reports jadi GRUP bersarang (wireframe 8): 4 halaman berbackend (M8-1),
+	// masing-masing objek Casbin sendiri sejak BL-169 (dulu satu canReports
+	// utk semuanya). nil → grup disembunyikan.
+	if grp := workspaceReportsGroup(slug, canReportsSales, canReportsCS, canReportsSupport, canReportsSubscriptions); grp != nil {
+		items = append(items, *grp)
+	}
 	if grp := workspaceSettingsGroup(slug, canMembers, canRoles, canSettings); grp != nil {
 		items = append(items, *grp)
 	}
