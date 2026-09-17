@@ -7,12 +7,28 @@ import (
 )
 
 // reports_view.go — gerbang F2 (Casbin bisnis) Reports (Modul 8, tasks.md M8-1).
-// Objek "crm:reports" sudah terdaftar di business_defaults.go (read utk manager/
-// sales/csm/support + admin lewat glob crm:*) — di sini hanya dirujuk. Meniru
-// dashboard_view.go (satu file = gerbang F2 per modul).
+// BL-169: dulu SATU gerbang (crm:reports) untuk 4 halaman preset report;
+// dipecah jadi 4 objek Casbin (business_defaults.go) sesuai 4 halaman nyata
+// di sidebar, agar admin bisa memberi akses per-domain (mis. Sales lihat
+// Sales Report saja, tanpa Support Report). Meniru dashboard_view.go (satu
+// file = gerbang F2 per modul).
 
-// canViewReports = gerbang READ preset report (Sales/Subscription). SATU gerbang
-// untuk kedua preset — Reports bukan objek data granular per tabel (skema.md §8).
-func canViewReports(ctx context.Context) bool {
-	return authz.CanBusiness(ctx, "crm:reports", "read")
+// canViewSalesReports = gerbang READ halaman Sales Reports.
+func canViewSalesReports(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:reports_sales", "read")
+}
+
+// canViewCSReports = gerbang READ halaman Customer Success Reports.
+func canViewCSReports(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:reports_cs", "read")
+}
+
+// canViewSupportReports = gerbang READ halaman Support Reports.
+func canViewSupportReports(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:reports_support", "read")
+}
+
+// canViewSubscriptionReports = gerbang READ halaman Subscription Reports.
+func canViewSubscriptionReports(ctx context.Context) bool {
+	return authz.CanBusiness(ctx, "crm:reports_subscriptions", "read")
 }

@@ -21,12 +21,15 @@ import (
 //
 // Penanda pembeda dipilih yang TAK ambigu: nav dev punya "/dev/logs" &
 // "/dev/workspaces" (tak pernah muncul di quicklinks — yang hanya /dev/users),
-// nav workspace punya grup "Subscriptions" (tak ada di dev, changelog, atau
-// chrome shell lain).
+// nav workspace punya item "Dashboard" (item PERTAMA workspaceNav, tanpa gerbang
+// izin — tak ada di dev, changelog, atau chrome shell lain). BUKAN lagi grup
+// "Subscriptions": sejak hide-grup-kosong, grup itu bisa disembunyikan total
+// bila akun platform tak punya izin ke satu pun anaknya, jadi tak lagi penanda
+// yang andal.
 
 const (
-	devNavMarker       = "/dev/logs"     // hanya devNav
-	workspaceNavMarker = "Subscriptions" // grup nav workspace (selalu dirender)
+	devNavMarker       = "/dev/logs" // hanya devNav
+	workspaceNavMarker = "Dashboard" // item pertama workspaceNav (selalu dirender)
 )
 
 // initAuthz memasang engine Casbin global — dibutuhkan navFor/workspaceNavCtx yang

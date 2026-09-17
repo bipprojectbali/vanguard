@@ -118,9 +118,11 @@ const (
 
 // TestCustomerSuccess_GateReadPerSection: admin/manager/csm melihat SEMUA
 // section (write policy row otomatis mencakup read, business.conf matcher);
-// sales melihat Health+Journey TAPI BUKAN Adoption (tak ada baris crm:adoption
-// sama sekali di business_defaults.go untuk sales). Support DIKECUALIKAN dari
-// tabel ini — lihat TestCustomerSuccess_F3_SupportSelaluDitolak.
+// sales melihat SEMUA TIGA section — Adoption (BL-169: section "Tingkat
+// Adopsi Fitur" pindah numpang gerbang crm:journey, bukan lagi crm:adoption;
+// sales punya crm:journey read) sekarang ikut canReadCSJourney, sama seperti
+// Health+Journey. Support DIKECUALIKAN dari tabel ini — lihat
+// TestCustomerSuccess_F3_SupportSelaluDitolak.
 func TestCustomerSuccess_GateReadPerSection(t *testing.T) {
 	cases := []struct {
 		role                                  string
@@ -129,7 +131,7 @@ func TestCustomerSuccess_GateReadPerSection(t *testing.T) {
 		{"admin", true, true, true},
 		{"manager", true, true, true},
 		{"csm", true, true, true},
-		{"sales", true, true, false},
+		{"sales", true, true, true},
 	}
 	for _, c := range cases {
 		t.Run("role="+c.role, func(t *testing.T) {

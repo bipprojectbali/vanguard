@@ -80,7 +80,8 @@ func DefaultBusinessRoles() []DefaultRole {
 				{"crm:playbooks", "write"},
 				{"crm:tickets", "write"}, {"crm:kb", "write"},
 				{"crm:sla", "write"}, {"crm:activities", "write"},
-				{"crm:reports", "read"},
+				{"crm:reports_sales", "read"}, {"crm:reports_cs", "read"},
+				{"crm:reports_support", "read"}, {"crm:reports_subscriptions", "read"},
 			},
 		},
 		{
@@ -97,7 +98,9 @@ func DefaultBusinessRoles() []DefaultRole {
 				{"crm:health", "read"}, {"crm:journey", "read"},
 				{"crm:renewal_mgmt", "read"},
 				{"crm:tickets", "read"}, {"crm:kb", "read"},
-				{"crm:activities", "write"}, {"crm:reports", "read"},
+				{"crm:activities", "write"},
+				{"crm:reports_sales", "read"}, {"crm:reports_cs", "read"},
+				{"crm:reports_support", "read"}, {"crm:reports_subscriptions", "read"},
 			},
 		},
 		{
@@ -118,7 +121,9 @@ func DefaultBusinessRoles() []DefaultRole {
 				{"crm:renewal_mgmt", "write"}, {"crm:playbooks", "write"},
 				{"crm:tickets", "read"},
 				{"crm:kb", "read"}, {"crm:sla", "read"},
-				{"crm:activities", "write"}, {"crm:reports", "read"},
+				{"crm:activities", "write"},
+				{"crm:reports_sales", "read"}, {"crm:reports_cs", "read"},
+				{"crm:reports_support", "read"}, {"crm:reports_subscriptions", "read"},
 			},
 		},
 		{
@@ -130,7 +135,9 @@ func DefaultBusinessRoles() []DefaultRole {
 				{"crm:accounts", "read"}, {"crm:contacts", "read"},
 				{"crm:health", "read"}, {"crm:tickets", "write"},
 				{"crm:kb", "write"}, {"crm:sla", "read"},
-				{"crm:activities", "write"}, {"crm:reports", "read"},
+				{"crm:activities", "write"},
+				{"crm:reports_sales", "read"}, {"crm:reports_cs", "read"},
+				{"crm:reports_support", "read"}, {"crm:reports_subscriptions", "read"},
 			},
 		},
 	}
@@ -201,7 +208,11 @@ var crmModules = []ModuleDef{
 	{"crm:health", "Health Score", false, false},
 	{"crm:journey", "Journey / Onboarding", false, false},
 	{"crm:success_plans", "Success Plans", false, false},
-	{"crm:adoption", "Product Adoption", false, false},
+	// BL-169: crm:adoption dulu "Product Adoption" (gerbang section CS 360
+	// yang kini numpang crm:journey) — dipakai ulang sbg gerbang khusus
+	// "Training Schedule" (modul nyata, dulu numpang crm:journey juga).
+	// Objek Casbin & posisi TETAP; hanya label yang berubah.
+	{"crm:adoption", "Training Schedule", false, false},
 	{"crm:engagements", "Engagements", false, false},
 	{"crm:renewal_mgmt", "Renewal Management", false, false},
 	{"crm:playbooks", "Playbooks", false, false},
@@ -209,7 +220,14 @@ var crmModules = []ModuleDef{
 	{"crm:kb", "Knowledge Base", false, false},
 	{"crm:sla", "SLA Management", false, false},
 	{"crm:activities", "Activities", false, false},
-	{"crm:reports", "Reports", false, false},
+	// BL-169: crm:reports (1 objek, gerbang preset Sales/Subscription report)
+	// dipecah jadi 4 objek sesuai 4 halaman Reports nyata di sidebar — admin
+	// bisa memberi akses per-domain (mis. Sales lihat Sales Report saja).
+	// Dirender FLAT (tanpa header grup), sama seperti modul lain.
+	{"crm:reports_sales", "Sales Reports", false, false},
+	{"crm:reports_cs", "Customer Success Reports", false, false},
+	{"crm:reports_support", "Support Reports", false, false},
+	{"crm:reports_subscriptions", "Subscription Reports", false, false},
 }
 
 // CRMModules mengembalikan salinan daftar modul (kolom matriks) agar pemanggil

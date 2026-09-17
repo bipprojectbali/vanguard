@@ -28,7 +28,8 @@ import (
 // padahal GET seharusnya tetap lolos gerbang arsip (CLAUDE.md §Siklus hidup).
 // KB (panel 4) tenant-scoped via RLS (h.q) — tak ber-owner, tanpa filter F3.
 //
-// F2 gate canViewReports (reports_view.go, SATU objek crm:reports read). F4:
+// F2 gate canViewSupportReports (reports_view.go, objek crm:reports_support
+// read, BL-169: dulu SATU objek crm:reports berbagi dgn 3 report lain). F4:
 // laporan ini tanpa kolom Rp → tanpa masking.
 
 // reportsSupportData menjalankan agregasi & merakit view-model 5 panel; dipakai
@@ -108,11 +109,11 @@ func (h *Handler) reportsSupportData(ctx context.Context, f supportReportFilter)
 	return v, nil
 }
 
-// ReportsSupport — GET /reports/support. Bukan pemegang izin crm:reports read
-// → 403 + penjelasan (pola sama dgn reports_sales.go).
+// ReportsSupport — GET /reports/support. Bukan pemegang izin
+// crm:reports_support read → 403 + penjelasan (pola sama dgn reports_sales.go).
 func (h *Handler) ReportsSupport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !canViewReports(ctx) {
+	if !canViewSupportReports(ctx) {
 		h.renderReportsForbidden(w, r, "Support Report", "/reports/support")
 		return
 	}

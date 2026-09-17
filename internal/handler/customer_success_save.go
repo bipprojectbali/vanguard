@@ -75,7 +75,7 @@ func (h *Handler) CustomerSuccessSave(w http.ResponseWriter, r *http.Request) {
 	// diuji langsung tanpa HTTP.
 	writeHealth := canWriteCSHealth(ctx)
 	writeJourney := canWriteCSJourney(ctx)
-	form = applyCustomerSuccessMasking(form, existing, writeHealth, writeJourney, canWriteCSAdoption(ctx))
+	form = applyCustomerSuccessMasking(form, existing, writeHealth, writeJourney, writeJourney)
 
 	// BL-26: normalisasi & keselarasan onboarding ↔ lifecycle HANYA saat section
 	// Journey berhak ditulis aktor (F2) — bila di-mask ke nilai lama, jangan

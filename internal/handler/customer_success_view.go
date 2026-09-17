@@ -48,7 +48,7 @@ func customerSuccessDetailView(
 
 		CanReadHealth:   canReadCSHealth(ctx),
 		CanReadJourney:  canReadCSJourney(ctx),
-		CanReadAdoption: canReadCSAdoption(ctx),
+		CanReadAdoption: canReadCSJourney(ctx),
 
 		OverallHealthScore:   probabilityStr(cs.OverallHealthScore),
 		HealthStatus:         deref(cs.HealthStatus),

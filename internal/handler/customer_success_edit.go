@@ -75,7 +75,7 @@ func (h *Handler) CustomerSuccessEdit(w http.ResponseWriter, r *http.Request) {
 
 		CanWriteHealth:   canWriteCSHealth(ctx),
 		CanWriteJourney:  canWriteCSJourney(ctx),
-		CanWriteAdoption: canWriteCSAdoption(ctx),
+		CanWriteAdoption: canWriteCSJourney(ctx),
 
 		LifecycleStages:    lifecycleStageOptions,
 		OnboardingStatuses: onboardingStatusOptions,

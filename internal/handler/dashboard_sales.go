@@ -118,10 +118,11 @@ func (h *Handler) dashSalesDomain(ctx context.Context, dataScope string, uid int
 		}
 	}
 
-	// BL-98: tautan Sales Report — HANYA bila role ber-crm:reports (jangan pernah
-	// menautkan halaman yang akan 403; role ber-crm:deals tanpa crm:reports tetap
-	// lihat KPI, tanpa tautan).
-	if canViewReports(ctx) {
+	// BL-98: tautan Sales Report — HANYA bila role ber-crm:reports_sales
+	// (BL-169: dulu crm:reports; jangan pernah menautkan halaman yang akan
+	// 403; role ber-crm:deals tanpa crm:reports_sales tetap lihat KPI, tanpa
+	// tautan).
+	if canViewSalesReports(ctx) {
 		d.ReportPath = wsPathOf(ctx, "/reports/sales")
 	}
 	return d, len(d.KPIs) > 0, nil

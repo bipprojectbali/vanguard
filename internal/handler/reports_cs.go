@@ -27,13 +27,14 @@ import (
 // terpisah — pola sama BL-43→BL-49 di Sales Report (jangan borong di sini).
 //
 // TIGA sumbu keamanan:
-//   - F2 gate canViewReports (reports_view.go, SATU objek crm:reports read).
+//   - F2 gate canViewCSReports (reports_view.go, objek crm:reports_cs read,
+//     BL-169: dulu SATU objek crm:reports berbagi dgn 3 report lain).
 //   - F3 ownership per-sumber via {Accounts,Subscriptions,Engagements}ListFilterFor
 //     (session.BusinessDataScope) — sumber SATU dgn modul asal, tak duplikasi
 //     logic scope. CSM (own) hanya lihat desa binaannya lintas ketiga sumber.
 //   - F4 maskARR pada kolom Rp (Nilai Hilang di tabel churn). Support pemegang
-//     crm:reports tapi DI LUAR allow-list canSeeARR (skema.md §9) → tersamar.
-//     Panel lain murni skor/persen/hari → tanpa masking.
+//     crm:reports_cs tapi DI LUAR allow-list canSeeARR (skema.md §9) →
+//     tersamar. Panel lain murni skor/persen/hari → tanpa masking.
 
 // reportsCSData menjalankan agregasi & merakit view-model 6 panel; dipakai
 // ReportsCS (HTML) & ReportsCSExport (CSV) agar keduanya konsisten (satu sumber
@@ -130,11 +131,11 @@ func (h *Handler) reportsCSData(ctx context.Context, f csReportFilter) (panel.Re
 	return v, nil
 }
 
-// ReportsCS — GET /reports/customer-success. Bukan pemegang izin crm:reports
-// read → 403 + penjelasan (pola sama dgn reports_sales.go).
+// ReportsCS — GET /reports/customer-success. Bukan pemegang izin
+// crm:reports_cs read → 403 + penjelasan (pola sama dgn reports_sales.go).
 func (h *Handler) ReportsCS(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !canViewReports(ctx) {
+	if !canViewCSReports(ctx) {
 		h.renderReportsForbidden(w, r, "Customer Success Report", "/reports/customer-success")
 		return
 	}

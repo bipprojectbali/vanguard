@@ -13,7 +13,8 @@ import (
 // "Report bukan objek data" (skema.md §8): nol tabel baru, agregasi murni.
 //
 // TIGA sumbu keamanan:
-//   - F2 gate canViewReports (reports_view.go, SATU objek crm:reports read).
+//   - F2 gate canViewSalesReports (reports_view.go, objek crm:reports_sales
+//     read, BL-169: dulu SATU objek crm:reports berbagi dgn 3 report lain).
 //   - F3 ownership per-sumber via {Deals,Leads,Activities}ListFilterFor
 //     (session.BusinessDataScope) — sumber SATU dgn modul asal, tak duplikasi
 //     logic scope. Support data_scope='none' atas deals → panel deal kosong
@@ -27,11 +28,11 @@ import (
 // CSV serentak via salesReportFilter (reports_sales_filter.go). Empat gap
 // butuh-schema (Target/Batal/picklist Alasan/qualified_at) → BL-44.
 
-// ReportsSales — GET /reports/sales. Bukan pemegang izin crm:reports read →
-// 403 + penjelasan (pola sama dgn plans_page.go/subscriptions_page.go).
+// ReportsSales — GET /reports/sales. Bukan pemegang izin crm:reports_sales
+// read → 403 + penjelasan (pola sama dgn plans_page.go/subscriptions_page.go).
 func (h *Handler) ReportsSales(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !canViewReports(ctx) {
+	if !canViewSalesReports(ctx) {
 		h.renderReportsForbidden(w, r, "Sales Report", "/reports/sales")
 		return
 	}

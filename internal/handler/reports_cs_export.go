@@ -16,7 +16,7 @@ import (
 // ReportsCSExport — GET /reports/customer-success/export?panel=…
 func (h *Handler) ReportsCSExport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !canViewReports(ctx) {
+	if !canViewCSReports(ctx) {
 		h.renderReportsForbidden(w, r, "Customer Success Report", "/reports/customer-success")
 		return
 	}

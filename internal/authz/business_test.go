@@ -261,12 +261,15 @@ func TestHasBusinessRole(t *testing.T) {
 }
 
 // TestDefaultRolesMatchLegacyCSV mengunci regresi PALING mahal: matriks efektif
-// DefaultBusinessRoles() HARUS setara business_policy.csv lama, KECUALI dua beda
+// DefaultBusinessRoles() HARUS setara business_policy.csv lama, KECUALI beda
 // yang DISENGAJA: (1) baris admin `crm:roles write` untuk panel manajemen peran,
 // (2) manager `crm:renewal_mgmt approve` dipindah ke `crm:renewals approve`
 // (BL-145 subtask 2 — approve renewal cuma pernah muncul di halaman Subscription
-// detail, nol kemunculan di halaman Renewal Management). Kalau meleset di luar
-// dua itu, M2/M3 (Accounts/Contacts) bisa diam-diam kehilangan akses.
+// detail, nol kemunculan di halaman Renewal Management), (3) `crm:reports read`
+// dipecah jadi 4 objek crm:reports_{sales,cs,support,subscriptions} (BL-169 —
+// sidebar & routing sudah 4 halaman Reports terpisah, CSV lama masih pakai satu
+// objek gabungan). Kalau meleset di luar itu, M2/M3 (Accounts/Contacts) bisa
+// diam-diam kehilangan akses.
 func TestDefaultRolesMatchLegacyCSV(t *testing.T) {
 	legacy := parseLegacyMatrix(t, BusinessPolicy)
 	got := map[string]bool{}
@@ -281,6 +284,16 @@ func TestDefaultRolesMatchLegacyCSV(t *testing.T) {
 	// crm:renewal_mgmt ke crm:renewals — CSV lama masih pakai nama objek lama.
 	delete(legacy, "manager|crm:renewal_mgmt|approve")
 	delete(got, "manager|crm:renewals|approve")
+	// Beda yang disengaja (BL-169): crm:reports read (1 objek) dipecah jadi 4
+	// objek crm:reports_{sales,cs,support,subscriptions} read untuk keempat
+	// role yang tadinya memegang crm:reports (manager/sales/csm/support).
+	reportsSplit := []string{"crm:reports_sales", "crm:reports_cs", "crm:reports_support", "crm:reports_subscriptions"}
+	for _, role := range []string{"manager", "sales", "csm", "support"} {
+		delete(legacy, role+"|crm:reports|read")
+		for _, obj := range reportsSplit {
+			delete(got, role+"|"+obj+"|read")
+		}
+	}
 
 	if len(got) != len(legacy) {
 		t.Errorf("jumlah izin beda: default=%d legacy=%d", len(got), len(legacy))

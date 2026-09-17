@@ -63,7 +63,7 @@ func (h *Handler) dashCSDomain(ctx context.Context, dataScope string, uid int64)
 		})
 	}
 
-	if canReadCSAdoption(ctx) {
+	if canReadCSJourney(ctx) {
 		ar, err := q.ReportCSAdoption(ctx, db.ReportCSAdoptionParams{
 			ScopeAll: acc.ScopeAll, IsCsm: acc.IsOwn, IsSales: acc.IsOwn, Uid: &uid,
 		})
@@ -117,8 +117,9 @@ func (h *Handler) dashCSDomain(ctx context.Context, dataScope string, uid int64)
 		})
 	}
 
-	// BL-98: tautan CS Report — HANYA bila role ber-crm:reports.
-	if canViewReports(ctx) {
+	// BL-98: tautan CS Report — HANYA bila role ber-crm:reports_cs
+	// (BL-169: dulu crm:reports).
+	if canViewCSReports(ctx) {
 		d.ReportPath = wsPathOf(ctx, "/reports/customer-success")
 	}
 	// BL-143: cek Charts JUGA (bukan cuma KPIs) — role custom crm:journey/

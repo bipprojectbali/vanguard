@@ -14,7 +14,7 @@ import (
 // ReportsSalesExport — GET /reports/sales/export?panel=…
 func (h *Handler) ReportsSalesExport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !canViewReports(ctx) {
+	if !canViewSalesReports(ctx) {
 		h.renderReportsForbidden(w, r, "Sales Report", "/reports/sales")
 		return
 	}
