@@ -22,10 +22,17 @@ import (
 // objek crm:engagements read). canRenewals = canViewCSRenewals (crm:renewal_mgmt read).
 // canReadCSJourney (Customer Journey / Lifecycle 6.2, REUSE crm:journey read).
 //
-// Implementation Tracker (6.2.1.1) & Training Schedule (6.2.1.2) SENGAJA tak
-// lagi punya item nav (BL-78, level A — hanya disembunyikan dari menu). Route,
-// handler, tabel & gate crm:journey (canViewImplTasks/canViewTrainings) tetap
-// hidup; item mudah dikembalikan dengan menambah kembali NavItem-nya.
+// Implementation Tracker (6.2.1.1) SENGAJA tak punya item nav (BL-78, level A
+// — hanya disembunyikan dari menu; entry-link tambahan di halaman Customer
+// Success juga dipause, BL-167). Route, handler, tabel & gate crm:journey
+// (canViewImplTasks) tetap hidup; item mudah dikembalikan dengan menambah
+// kembali NavItem-nya.
+//
+// Training Schedule (6.2.1.2) DIKEMBALIKAN ke menu (BL-168, 17 Sep — keputusan
+// user: hanya Training Schedule yang ditampilkan lagi, Implementation Tracker
+// TETAP dipause). Gate REUSE canJourney (parameter yang sudah ada — objek
+// Casbin `crm:journey` SAMA dgn canViewTrainings, lihat cs_trainings_view.go),
+// bukan parameter baru.
 func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canHealthScore, canSuccessPlans, canEngagements, canRenewals, canJourney bool) ui.NavItem {
 	children := make([]ui.NavItem, 0, 12)
 	// Health Score → /health-scores (canViewHealthScore, objek crm:health read).
@@ -48,6 +55,18 @@ func workspaceCSGroup(slug string, canSLA, canPlaybooks, canKB, canTickets, canH
 		journey.Disabled = true
 	}
 	children = append(children, journey)
+	// Training Schedule (6.2.1.2) → /trainings. DIKEMBALIKAN ke menu (BL-168,
+	// 17 Sep) — sempat dipause bareng Implementation Tracker (BL-78), tapi
+	// user minta HANYA ini yang tampil lagi. Gate = canJourney (parameter
+	// yang sudah ada, objek crm:journey read — SAMA dgn canViewTrainings,
+	// bukan sumbu izin baru); disabled bila tak berhak, tetap tampil.
+	trainings := ui.NavItem{Label: "Training Schedule", Icon: lucide.CalendarCheck(html.Class("size-4"))}
+	if canJourney {
+		trainings.Href = wsPath(slug, "/trainings")
+	} else {
+		trainings.Disabled = true
+	}
+	children = append(children, trainings)
 	// Success Plans → /success-plans (canViewSuccessPlans, objek crm:success_plans read).
 	// Berbackend sejak slice 6.3; disabled bila tak berhak, tetap tampil agar
 	// posisi modul di peta jalan terlihat.

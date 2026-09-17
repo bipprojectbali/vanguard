@@ -16,6 +16,12 @@ func leadsMsg(code string) string {
 		return "Lead dihapus."
 	case "converted":
 		return "Lead dikonversi menjadi Desa, Kontak, dan Deal."
+	// BL-133: LeadImportConfirm redirect PRG sukses dgn kode ini (mirror
+	// accountsMsg "imported", BL-63) — sebelumnya tak terpetakan di sini,
+	// jadi toast sukses tak pernah tampil di /leads walau LeadsList sudah
+	// merender ui.Toast dari v.Msg.
+	case "imported":
+		return "Impor CSV selesai — lead baru ditambahkan."
 	default:
 		return ""
 	}

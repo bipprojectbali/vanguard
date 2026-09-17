@@ -9,8 +9,8 @@ import (
 
 // TestWorkspaceNav_CSGroup: Customer Success = grup bersarang yang SELALU tampil
 // (peta jalan Modul 6). "Health Score" (6.1), "Customer Journey" (6.2),
-// "Success Plans" (6.3), "Engagements" (6.5), "Renewal Management" (6.6),
-// "SLA Management" (A1),
+// "Training Schedule" (6.2.1.2, BL-168), "Success Plans" (6.3), "Engagements"
+// (6.5), "Renewal Management" (6.6), "SLA Management" (A1),
 // "Playbooks" (A2), "Knowledge Base" (A3) & "Tickets / Cases" (B2) berbackend —
 // masing-masing enabled mengikuti izinnya. Tidak ada anak yang selalu disabled.
 func TestWorkspaceNav_CSGroup(t *testing.T) {
@@ -83,14 +83,19 @@ func TestWorkspaceNav_CSGroup(t *testing.T) {
 	if renewal.Disabled || renewal.Href != "/w/acme/renewal-management" {
 		t.Errorf("Renewal Management harus enabled→/w/acme/renewal-management, got disabled=%v href=%q", renewal.Disabled, renewal.Href)
 	}
-	// BL-78 (level A): Implementation Tracker (6.2.1.1) & Training Schedule
-	// (6.2.1.2) TIDAK lagi punya item nav — route/handler/tabel tetap hidup,
-	// cuma disembunyikan dari menu.
+	// BL-78 (level A): Implementation Tracker (6.2.1.1) TIDAK punya item nav —
+	// route/handler/tabel tetap hidup, cuma disembunyikan dari menu.
 	if _, ok := findItem(grp.Children, "Implementation Tracker"); ok {
 		t.Error("Implementation Tracker harus ABSEN dari menu CS (BL-78 level A)")
 	}
-	if _, ok := findItem(grp.Children, "Training Schedule"); ok {
-		t.Error("Training Schedule harus ABSEN dari menu CS (BL-78 level A)")
+	// Training Schedule (6.2.1.2) DIKEMBALIKAN ke menu (BL-168, 17 Sep) —
+	// gate REUSE canJourney (SAMA dgn Customer Journey, objek crm:journey read).
+	trainings, ok := findItem(grp.Children, "Training Schedule")
+	if !ok {
+		t.Fatal("grup Customer Success kurang anak Training Schedule (BL-168)")
+	}
+	if trainings.Disabled || trainings.Href != "/w/acme/trainings" {
+		t.Errorf("Training Schedule harus enabled→/w/acme/trainings, got disabled=%v href=%q", trainings.Disabled, trainings.Href)
 	}
 	journey, ok := findItem(grp.Children, "Customer Journey")
 	if !ok {
@@ -174,12 +179,18 @@ func TestWorkspaceNav_CSGroup(t *testing.T) {
 	if !renewalNone.Disabled || renewalNone.Href != "" {
 		t.Errorf("tanpa izin, Renewal Management harus disabled tanpa href, got disabled=%v href=%q", renewalNone.Disabled, renewalNone.Href)
 	}
-	// BL-78 (level A): kedua item tetap ABSEN meski tanpa izin.
+	// BL-78 (level A): Implementation Tracker tetap ABSEN meski tanpa izin.
 	if _, ok := findItem(grpNone.Children, "Implementation Tracker"); ok {
 		t.Error("Implementation Tracker harus ABSEN dari menu CS (BL-78 level A)")
 	}
-	if _, ok := findItem(grpNone.Children, "Training Schedule"); ok {
-		t.Error("Training Schedule harus ABSEN dari menu CS (BL-78 level A)")
+	// BL-168: Training Schedule tetap TAMPIL (disabled) tanpa izin — sama pola
+	// item berbackend lain di grup ini, bukan disabled permanen.
+	trainingsNone, ok := findItem(grpNone.Children, "Training Schedule")
+	if !ok {
+		t.Fatal("anak Training Schedule harus tetap tampil (disabled), BL-168")
+	}
+	if !trainingsNone.Disabled || trainingsNone.Href != "" {
+		t.Errorf("tanpa izin, Training Schedule harus disabled tanpa href, got disabled=%v href=%q", trainingsNone.Disabled, trainingsNone.Href)
 	}
 	journeyNone, ok := findItem(grpNone.Children, "Customer Journey")
 	if !ok {

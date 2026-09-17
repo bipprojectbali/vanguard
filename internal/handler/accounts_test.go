@@ -290,6 +290,41 @@ func firstVillage(t *testing.T, env *testEnv) villageRow {
 	return villages(t, env, 1)[0]
 }
 
+// firstDistrictCode = satu Kecamatan REAL (regions level 3) — dipakai test
+// impor CSV Lead (BL-133) yang butuh KODE Kemendagri kecamatan (bukan id
+// desa), beda kebutuhan dari villages()/firstVillage() (id + code level 4).
+// Menelusuri provinsi→kab/kota→kecamatan via ListDistrictsByRegency, yang
+// (beda dari ListAllRegions yang dipakai jalur lain) mengembalikan baris
+// Region penuh termasuk Code.
+func firstDistrictCode(t *testing.T, env *testEnv) (id int64, code string, name string) {
+	t.Helper()
+	ctx := t.Context()
+	provinces, err := env.q.ListProvinces(ctx)
+	if err != nil || len(provinces) == 0 {
+		t.Fatalf("list provinces: %v (len=%d)", err, len(provinces))
+	}
+	for _, p := range provinces {
+		pid := p.ID
+		regencies, err := env.q.ListRegenciesByProvince(ctx, &pid)
+		if err != nil {
+			t.Fatalf("list regencies: %v", err)
+		}
+		for _, reg := range regencies {
+			rid := reg.ID
+			districts, err := env.q.ListDistrictsByRegency(ctx, &rid)
+			if err != nil {
+				t.Fatalf("list districts: %v", err)
+			}
+			if len(districts) > 0 {
+				d := districts[0]
+				return d.ID, d.Code, d.Name
+			}
+		}
+	}
+	t.Fatalf("tak ada Kecamatan ditemukan — seed 00039 tak wajar")
+	return 0, "", ""
+}
+
 // withVillage menyetel village_id pada form (create WAJIB village_id sejak BL-66).
 func withVillage(f url.Values, v villageRow) url.Values {
 	f.Set("village_id", strconv.FormatInt(v.ID, 10))
