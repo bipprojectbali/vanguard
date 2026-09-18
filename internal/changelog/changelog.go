@@ -28,6 +28,36 @@ type Release struct {
 // Nomor versi teratas menjadi acuan badge "ada pembaruan".
 var Releases = []Release{
 	{
+		Version: "1.8.0",
+		Date:    "2026-09-18",
+		Summary: "Lead kini bisa diimpor massal lewat CSV, halaman Peran & Perizinan dirombak jadi lebih ringkas dan reaktif, gerbang akses Laporan kini per-domain, dan sejumlah perapian pada Customer Success serta perbaikan kebocoran ARR.",
+		Sections: []Section{
+			{
+				Title: "Baru",
+				Items: []string{
+					"Impor Lead massal lewat unggah CSV — pola sama dengan impor Desa dan Kontak: alur dua langkah (unggah → pratinjau seluruh baris → Konfirmasi Impor). Kode Kecamatan wajib diisi per baris; satu baris tak valid membatalkan seluruh file, bukan hanya baris itu.",
+				},
+			},
+			{
+				Title: "Diubah",
+				Items: []string{
+					"Halaman Peran & Perizinan dirombak jadi lebih ringkas — matriks perizinan dan aturan kepemilikan data kini dibuka lewat tombol \"Lihat\" per peran dalam satu jendela, bukan lagi tampil terpisah memanjang. Pengaturan keamanan nomor HP/WhatsApp dan tampilan Nilai Kontrak/MRR kini berada di halaman detail tiap peran, dan otomatis menyesuaikan begitu akses Kontak/Leads peran itu diubah.",
+					"Kotak centang \"Setujui\" dan \"Lihat Nilai (ARR)\" pada matriks Peran kini otomatis nonaktif saat level akses baris itu diset \"Tak ada\" — mencegah admin menyimpan izin yang saling bertentangan.",
+					"Kolom \"Setujui\" pada baris Deal di matriks Peran disembunyikan sementara (belum ada alur persetujuan Deal yang memakainya); tombol Setujui/Tolak untuk perpanjangan langganan kini dikelompokkan di bawah izin \"Renewals\", sejalan dengan halaman tempat tombolnya benar-benar muncul.",
+					"Gerbang akses halaman Laporan kini per-domain (Sales, Langganan, Customer Success, Support) — admin bisa memberi akses laporan Sales saja tanpa otomatis membuka laporan domain lain. Menu sidebar yang seluruh isinya tak bisa diakses kini disembunyikan total, tak lagi tampil redup.",
+					"Tombol \"Implementation Tracker\" pada halaman Customer Success dijeda sementara (disembunyikan), sedangkan \"Training Schedule\" dikembalikan ke menu sidebar Customer Success.",
+				},
+			},
+			{
+				Title: "Diperbaiki",
+				Items: []string{
+					"ARR pada kartu \"Ringkasan Langganan\" di halaman Desa kini disamarkan mengikuti hak akses yang sama dengan halaman Langganan — sebelumnya bisa tampil utuh untuk peran yang seharusnya hanya melihat versi tersamar.",
+					"Tombol pencarian cepat kode wilayah yang sempat tak muncul di halaman impor Kontak kini tampil, konsisten dengan halaman impor Desa dan Lead.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.7.0",
 		Date:    "2026-09-15",
 		Summary: "Desa dan Kontak kini bisa diimpor massal lewat CSV, pencarian cepat kode wilayah Kemendagri hadir di banyak halaman, notifikasi otomatis mengingatkan perpanjangan langganan, sort kolom melengkapi Sales Activities & Activity Log, dan dropdown Kontak di form Aktivitas kini mengikuti Target yang dipilih.",
