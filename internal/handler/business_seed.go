@@ -20,8 +20,9 @@ import (
 // ada workspace tanpa peran (yang akan membuat SEMUA modul CRM-nya deny-default).
 //
 // SATU sumber kebenaran: authz.DefaultBusinessRoles() — identik dengan backfill
-// migrasi (dikunci TestDefaultRolesMatchLegacyCSV). Idempoten via ON CONFLICT DO
-// NOTHING, jadi bootstrap primer yang jalan tiap boot aman diulang.
+// migrasi (dikunci TestDefaultRolesMatchLegacyCSV). Idempoten per PERAN (bukan
+// per baris izin): bootstrap primer yang jalan tiap boot aman diulang tanpa
+// menyentuh peran yang sudah pernah ditanam.
 //
 // Enforcer TAK di-reload di sini: workspace baru = tenant baru; subject `t<id>:*`
 // belum pernah ada di enforcer, dan CanBusiness untuk tenant itu baru dipanggil
@@ -32,8 +33,11 @@ func seedBusinessRoles(ctx context.Context, q *db.Queries, tenantID int64) error
 	for _, role := range authz.DefaultBusinessRoles() {
 		// CreateBusinessRole = :one dgn ON CONFLICT DO NOTHING RETURNING: pada
 		// seed berulang (bootstrap primer tiap boot) baris sudah ada → zero rows
-		// → pgx.ErrNoRows. Itu SUKSES idempoten, bukan gagal: peran sudah tertanam,
-		// tinggal pastikan izinnya (juga ON CONFLICT DO NOTHING di bawah).
+		// → pgx.ErrNoRows. Itu sinyal "peran ini SUDAH pernah diseed" — bukan
+		// "izinnya belum lengkap" — jadi izinnya SENGAJA tak disentuh lagi:
+		// operator boleh mencabut izin default lewat /roles, dan reboot/`make
+		// dev` tak boleh menanamnya balik. Hanya peran yang BENAR-BENAR baru
+		// (baris berhasil dibuat) yang diisi matriks default penuh.
 		if _, err := q.CreateBusinessRole(ctx, db.CreateBusinessRoleParams{
 			TenantID:    tenantID,
 			Name:        role.Name,
@@ -42,7 +46,10 @@ func seedBusinessRoles(ctx context.Context, q *db.Queries, tenantID int64) error
 			DataScope:   role.DataScope,
 			IsSystem:    role.IsSystem,
 			CreatedBy:   nil, // seed sistem — bukan tindakan seorang user
-		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue // peran sudah ada → jangan sentuh izinnya
+			}
 			return fmt.Errorf("seed peran %q: %w", role.Name, err)
 		}
 		for _, p := range role.Perms {
