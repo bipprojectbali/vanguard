@@ -59,9 +59,9 @@ type RelatedRecordsView struct {
 // detailCard.
 func detailRow(label string, value g.Node) g.Node {
 	return h.Div(
-		h.Class("grid gap-1 sm:grid-cols-5 sm:gap-3 py-3 border-b border-base-300/60 last:border-0"),
-		h.Dt(h.Class("text-xs font-medium uppercase tracking-wide text-base-content/50 sm:col-span-2"), g.Text(label)),
-		h.Dd(h.Class("sm:col-span-3 break-words font-medium text-base-content/90"), value),
+		h.Class("grid gap-1 sm:grid-cols-3 sm:gap-2 py-2 border-b border-base-300/50 last:border-0"),
+		h.Dt(h.Class("text-sm text-base-content/60"), g.Text(label)),
+		h.Dd(h.Class("sm:col-span-2 break-words"), value),
 	)
 }
 
@@ -69,16 +69,15 @@ func detailRow(label string, value g.Node) g.Node {
 // judul kartu jadi tautan "lihat lebih lanjut" (mis. "Ringkasan Langganan" →
 // daftar langganan workspace).
 func cardRows(title, titleHref string, rows ...g.Node) g.Node {
-	heading := g.Node(h.H2(h.Class("font-semibold tracking-tight text-lg"), g.Text(title)))
+	heading := g.Node(h.H2(h.Class("font-semibold mb-2"), g.Text(title)))
 	if titleHref != "" {
-		heading = h.H2(h.Class("font-semibold tracking-tight text-lg"),
-			h.A(h.Href(titleHref), h.Class("link link-hover inline-flex items-center gap-2"),
-				g.Text(title), h.Span(h.Class("text-sm font-normal text-base-content/45"), g.Text("Lihat semua →"))))
+		heading = h.H2(h.Class("font-semibold mb-2"),
+			h.A(h.Href(titleHref), h.Class("link link-hover"), g.Text(title)))
 	}
 	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 shadow-sm min-w-0 overflow-hidden"),
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
 		h.Div(
-			h.Class("card-body min-w-0 p-5 sm:p-6 gap-4"),
+			h.Class("card-body min-w-0"),
 			heading,
 			h.Dl(h.Class("min-w-0"), g.Group(rows)),
 		),
@@ -122,13 +121,10 @@ func RelatedRecords(v RelatedRecordsView) g.Node {
 		chips = append(chips, relatedRecordChip(c))
 	}
 	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 shadow-sm min-w-0"),
+		h.Class("card bg-base-100 border border-base-300 min-w-0"),
 		h.Div(
-			h.Class("card-body min-w-0 p-5 sm:p-6 gap-4"),
-			h.Div(
-				h.H2(h.Class("font-semibold tracking-tight text-lg"), g.Text("Terkait")),
-				h.P(h.Class("text-sm text-base-content/55 mt-1"), g.Text("Akses ringkasan aktivitas dan data yang terhubung dengan akun ini.")),
-			),
+			h.Class("card-body min-w-0"),
+			h.H2(h.Class("font-semibold mb-2"), g.Text("Terkait")),
 			h.Div(h.Class("grid grid-cols-2 md:grid-cols-4 gap-3 min-w-0"), g.Group(chips)),
 		),
 	)
@@ -144,12 +140,12 @@ func relatedRecordChip(c RelatedRecordChip) g.Node {
 	if c.Href != "" {
 		return h.A(
 			h.Href(c.Href),
-			h.Class("rounded-box border border-base-300 bg-base-200/30 p-4 min-h-16 min-w-0 flex flex-col justify-center gap-1 transition-colors hover:bg-base-200 hover:border-primary/30"),
+			h.Class("rounded-box border border-base-300 p-3 min-h-11 min-w-0 flex flex-col justify-center gap-1 hover:bg-base-200"),
 			g.Group(body),
 		)
 	}
 	return h.Div(
-		h.Class("rounded-box border border-base-300 bg-base-200/30 p-4 min-h-16 min-w-0 flex flex-col justify-center gap-1"),
+		h.Class("rounded-box border border-base-300 p-3 min-h-11 min-w-0 flex flex-col justify-center gap-1"),
 		g.Group(body),
 	)
 }
