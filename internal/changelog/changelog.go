@@ -30,7 +30,7 @@ var Releases = []Release{
 	{
 		Version: "1.8.0",
 		Date:    "2026-09-18",
-		Summary: "Lead kini bisa diimpor massal lewat CSV, halaman Peran & Perizinan dirombak jadi lebih ringkas dan reaktif, gerbang akses Laporan kini per-domain, dan sejumlah perapian pada Customer Success serta perbaikan kebocoran ARR.",
+		Summary: "Lead kini bisa diimpor massal lewat CSV, halaman Peran & Perizinan dirombak jadi lebih ringkas dan reaktif, gerbang akses Laporan kini per-domain, dan perbaikan kebocoran ARR pada halaman Desa.",
 		Sections: []Section{
 			{
 				Title: "Baru",
@@ -45,7 +45,6 @@ var Releases = []Release{
 					"Kotak centang \"Setujui\" dan \"Lihat Nilai (ARR)\" pada matriks Peran kini otomatis nonaktif saat level akses baris itu diset \"Tak ada\" — mencegah admin menyimpan izin yang saling bertentangan.",
 					"Kolom \"Setujui\" pada baris Deal di matriks Peran disembunyikan sementara (belum ada alur persetujuan Deal yang memakainya); tombol Setujui/Tolak untuk perpanjangan langganan kini dikelompokkan di bawah izin \"Renewals\", sejalan dengan halaman tempat tombolnya benar-benar muncul.",
 					"Gerbang akses halaman Laporan kini per-domain (Sales, Langganan, Customer Success, Support) — admin bisa memberi akses laporan Sales saja tanpa otomatis membuka laporan domain lain. Menu sidebar yang seluruh isinya tak bisa diakses kini disembunyikan total, tak lagi tampil redup.",
-					"Tombol \"Implementation Tracker\" pada halaman Customer Success dijeda sementara (disembunyikan), sedangkan \"Training Schedule\" dikembalikan ke menu sidebar Customer Success.",
 				},
 			},
 			{
