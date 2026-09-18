@@ -86,25 +86,29 @@ func AccountDetail(v AccountDetailView) g.Node {
 	base := v.Base + "/accounts/" + idStr
 
 	header := h.Div(
-		h.Class("flex flex-wrap items-start justify-between gap-2"),
+		h.Class("rounded-box border border-base-300 bg-base-100 px-5 py-5 sm:px-6 sm:py-6"),
 		h.Div(
-			h.Class("min-w-0"),
-			h.H1(h.Class("text-xl font-semibold truncate"), g.Text(v.VillageName)),
+			h.Class("flex flex-wrap items-start justify-between gap-4"),
 			h.Div(
-				h.Class("flex flex-wrap items-center gap-2 mt-1"),
-				// BL-61: badge Kode Sistem (entity_code) dihapus dari detail —
-				// operator cukup lihat "Kode Desa (Kemendagri)" (village_code) di
-				// kartu Identitas. entity_code tetap dibuat & tersimpan di backend.
-				// Tipe Akun kini badge terisi (badge-neutral) — mewarisi gaya
-				// background badge kode sistem yang dilepas, bukan ghost.
-				h.Span(h.Class("badge badge-neutral"), g.Text(v.AccountType)),
+				h.Class("min-w-0"),
+				h.Div(h.Class("text-xs font-semibold uppercase tracking-[0.16em] text-base-content/50"), g.Text("Profil akun")),
+				h.H1(h.Class("mt-2 text-2xl font-semibold tracking-tight sm:text-3xl truncate"), g.Text(v.VillageName)),
+				h.Div(
+					h.Class("flex flex-wrap items-center gap-2 mt-3"),
+					// BL-61: badge Kode Sistem (entity_code) dihapus dari detail —
+					// operator cukup lihat "Kode Desa (Kemendagri)" (village_code) di
+					// kartu Identitas. entity_code tetap dibuat & tersimpan di backend.
+					// Tipe Akun kini badge terisi (badge-neutral) — mewarisi gaya
+					// background badge kode sistem yang dilepas, bukan ghost.
+					h.Span(h.Class("badge badge-neutral"), g.Text(v.AccountType)),
+				),
 			),
+			ui.When(v.CanWrite, h.Div(
+				h.Class("flex flex-wrap items-center gap-2"),
+				h.A(h.Href(base+"/edit"), h.Class("btn btn-sm btn-primary min-h-11"), g.Text("Sunting")),
+				deleteAccountForm(base),
+			)),
 		),
-		ui.When(v.CanWrite, h.Div(
-			h.Class("flex flex-wrap items-center gap-2"),
-			h.A(h.Href(base+"/edit"), h.Class("btn btn-sm min-h-11"), g.Text("Sunting")),
-			deleteAccountForm(base),
-		)),
 	)
 
 	// BL-130: baris "Induk Akun" (parent_account_id) DISEMBUNYIKAN dari UI — konsep
@@ -165,13 +169,15 @@ func AccountDetail(v AccountDetailView) g.Node {
 	}
 	body = append(body,
 		h.Div(
-			h.Class("flex flex-wrap items-center justify-between gap-2"),
-			h.A(h.Href(v.Base+"/accounts"), h.Class("text-sm text-base-content/60"),
+			h.Class("flex flex-wrap items-center justify-between gap-3"),
+			h.A(h.Href(v.Base+"/accounts"), h.Class("btn btn-sm btn-ghost min-h-11 px-3 text-base-content/70"),
 				g.Text("« Kembali ke daftar desa")),
-			h.A(h.Href(base+"/contacts"), h.Class("btn btn-sm btn-ghost min-h-11"),
-				g.Text("Kontak »")),
-			h.A(h.Href(base+"/customer-success"), h.Class("btn btn-sm btn-ghost min-h-11"),
-				g.Text("Customer Success »")),
+			h.Div(h.Class("flex flex-wrap items-center gap-1"),
+				h.A(h.Href(base+"/contacts"), h.Class("btn btn-sm btn-ghost min-h-11"),
+					g.Text("Kontak »")),
+				h.A(h.Href(base+"/customer-success"), h.Class("btn btn-sm btn-ghost min-h-11"),
+					g.Text("Customer Success »")),
+			),
 		),
 		// BL-62: SATU grid 2-kolom (bukan dua stack independen) agar tiap PASANGAN
 		// kartu berbagi baris grid yang sama → tinggi sejajar. Grid item meregang
@@ -191,7 +197,7 @@ func AccountDetail(v AccountDetailView) g.Node {
 		RelatedRecords(v.Related),
 		ActivityTimeline(v.Activities),
 	)
-	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
+	return h.Div(h.Class("grid gap-5 min-w-0"), g.Group(body))
 }
 
 type detailField struct {
