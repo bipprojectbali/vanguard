@@ -84,6 +84,7 @@ func seedCustomerSuccess(ctx context.Context, q *db.Queries, tenantID int64, rng
 				FeatureAdoptionRate:  adoptionRate,
 				KeyFeaturesUsed:      &features,
 				UsageTrend:           usageTrend,
+				UsageDataSource:      "Manual", // BL-27: kolom wajib (CHECK); data seed demo, bukan dari Desa+
 			}); err != nil {
 				return count, fmt.Errorf("customer_success desa #%d: %w", acc.ID, err)
 			}

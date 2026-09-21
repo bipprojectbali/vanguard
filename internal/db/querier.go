@@ -237,8 +237,10 @@ type Querier interface {
 	// seed/test lama boleh membuat kontak tanpa kode (kolom nullable, tak di-backfill).
 	CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error)
 	// Buat baris pertama kali desa ini disimpan. tenant_id eksplisit (RLS WITH
-	// CHECK memverifikasinya = GUC). usage_data_source TAK dioper (default
-	// 'Manual', v1 tak ada field form untuknya).
+	// CHECK memverifikasinya = GUC). usage_data_source DIOPER EKSPLISIT oleh
+	// caller (BL-27) — bukan lewat customerSuccessForm (form manual tak pernah
+	// mengubahnya): jalur manual (customer_success_save.go) mengoper "Manual",
+	// jalur sync (customer_success_sync.go) mengoper "Product Telemetry".
 	CreateCustomerSuccess(ctx context.Context, arg CreateCustomerSuccessParams) (CustomerSuccess, error)
 	// deals.sql — pipeline Sales (Deal). Isolasi WORKSPACE ditegakkan RLS (GUC
 	// app.tenant_id di WithTenant); isolasi ANTAR-DESA (F3) ditegakkan di layer query

@@ -95,18 +95,26 @@ func (h *Handler) CustomerSuccessSave(w http.ResponseWriter, r *http.Request) {
 	// turunan BL-25) dihitung di computeHealthSnapshot (customer_success_persist.go).
 	form, hc := computeHealthSnapshot(form, existing, writeHealth)
 
+	// BL-27: jalur manual ini TAK PERNAH mengubah usage_data_source — pass-through
+	// dari baris existing (baris baru, existing zero-value → default "Manual",
+	// selaras DEFAULT kolom DB; baris existing selalu non-kosong krn NOT NULL).
+	usageDataSource := existing.UsageDataSource
+	if usageDataSource == "" {
+		usageDataSource = "Manual"
+	}
+
 	uid := session.UserID(ctx)
 	tenantID := session.TenantID(ctx)
 	okCode := "saved"
 	if !exists {
-		if err := h.createCustomerSuccessRow(ctx, tenantID, accountID, uid, form, hc); err != nil {
+		if err := h.createCustomerSuccessRow(ctx, tenantID, accountID, uid, form, hc, usageDataSource); err != nil {
 			h.Log.Error("customer_success: create", "err", err)
 			wsRedirect(w, r, accountPath+"/customer-success/edit", "failed")
 			return
 		}
 		okCode = "created"
 	} else {
-		if err := h.updateCustomerSuccessRow(ctx, accountID, uid, form, hc); err != nil {
+		if err := h.updateCustomerSuccessRow(ctx, accountID, uid, form, hc, usageDataSource); err != nil {
 			h.Log.Error("customer_success: update", "err", err)
 			wsRedirect(w, r, accountPath+"/customer-success/edit", "failed")
 			return

@@ -155,6 +155,38 @@ func selectField(label, name, current string, opts []string, required bool, hint
 	)
 }
 
+// readonlyField — padanan visual field() tanpa <input>: label + badge nilai,
+// untuk field yang jadi system-derived/read-only secara kondisional (mis. BL-27
+// last_login_date/active_users saat usage_data_source == "Product Telemetry").
+// Tak bernama (tak ada atribut name) SENGAJA — nilai ini tak pernah dikirim
+// form; backend yang mempertahankan nilai lama (bukan diandalkan dari sini).
+func readonlyField(label, val string) g.Node {
+	display := val
+	if display == "" {
+		display = "—"
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor(label, "", false),
+		h.Div(h.Class("min-w-0"), h.Span(h.Class("badge badge-ghost font-normal"), g.Text(display))),
+	)
+}
+
+// readonlyTextField — padanan textareaField() tanpa <textarea>, untuk nilai
+// read-only yang bisa panjang (mis. BL-27 key_features_used) di mana badge
+// kurang cocok.
+func readonlyTextField(label, val string) g.Node {
+	display := val
+	if display == "" {
+		display = "—"
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0 sm:col-span-2"),
+		labelFor(label, "", false),
+		h.P(h.Class("text-sm text-base-content/80 break-words"), g.Text(display)),
+	)
+}
+
 // enumOptions membangun daftar <option> untuk dropdown enum. blank=true (field
 // opsional) menambah opsi "—" bernilai kosong di depan; opsi yang == current
 // ditandai Selected. Diekstrak agar selectField & enumField (legenda BL-3/BL-4)

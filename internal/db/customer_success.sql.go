@@ -21,7 +21,7 @@ INSERT INTO customer_success (
     onboarding_status, kickoff_date, target_go_live_date, actual_go_live_date,
     onboarding_progress,
     last_login_date, active_users, login_frequency, feature_adoption_rate,
-    key_features_used, usage_trend,
+    key_features_used, usage_trend, usage_data_source,
     created_by
 ) VALUES (
     $1, $2,
@@ -32,8 +32,8 @@ INSERT INTO customer_success (
     $15, $16, $17, $18,
     $19,
     $20, $21, $22, $23,
-    $24, $25,
-    $26
+    $24, $25, $26,
+    $27
 )
 RETURNING id, tenant_id, account_id, overall_health_score, health_status, adoption_score, engagement_score, support_score, sentiment_score, score_trend, health_last_calculated, lifecycle_stage, stage_entry_date, onboarding_status, kickoff_date, target_go_live_date, actual_go_live_date, onboarding_progress, last_login_date, active_users, login_frequency, feature_adoption_rate, key_features_used, usage_trend, usage_data_source, created_by, created_at, updated_by, updated_at, previous_health_score, previous_health_calculated_at
 `
@@ -64,12 +64,15 @@ type CreateCustomerSuccessParams struct {
 	FeatureAdoptionRate        pgtype.Numeric     `json:"feature_adoption_rate"`
 	KeyFeaturesUsed            *string            `json:"key_features_used"`
 	UsageTrend                 *string            `json:"usage_trend"`
+	UsageDataSource            string             `json:"usage_data_source"`
 	CreatedBy                  *int64             `json:"created_by"`
 }
 
 // Buat baris pertama kali desa ini disimpan. tenant_id eksplisit (RLS WITH
-// CHECK memverifikasinya = GUC). usage_data_source TAK dioper (default
-// 'Manual', v1 tak ada field form untuknya).
+// CHECK memverifikasinya = GUC). usage_data_source DIOPER EKSPLISIT oleh
+// caller (BL-27) — bukan lewat customerSuccessForm (form manual tak pernah
+// mengubahnya): jalur manual (customer_success_save.go) mengoper "Manual",
+// jalur sync (customer_success_sync.go) mengoper "Product Telemetry".
 func (q *Queries) CreateCustomerSuccess(ctx context.Context, arg CreateCustomerSuccessParams) (CustomerSuccess, error) {
 	row := q.db.QueryRow(ctx, createCustomerSuccess,
 		arg.TenantID,
@@ -97,6 +100,7 @@ func (q *Queries) CreateCustomerSuccess(ctx context.Context, arg CreateCustomerS
 		arg.FeatureAdoptionRate,
 		arg.KeyFeaturesUsed,
 		arg.UsageTrend,
+		arg.UsageDataSource,
 		arg.CreatedBy,
 	)
 	var i CustomerSuccess
@@ -216,9 +220,10 @@ UPDATE customer_success SET
     feature_adoption_rate   = $21,
     key_features_used       = $22,
     usage_trend             = $23,
-    updated_by              = $24,
+    usage_data_source       = $24,
+    updated_by              = $25,
     updated_at              = now()
-WHERE account_id = $25
+WHERE account_id = $26
 RETURNING id, tenant_id, account_id, overall_health_score, health_status, adoption_score, engagement_score, support_score, sentiment_score, score_trend, health_last_calculated, lifecycle_stage, stage_entry_date, onboarding_status, kickoff_date, target_go_live_date, actual_go_live_date, onboarding_progress, last_login_date, active_users, login_frequency, feature_adoption_rate, key_features_used, usage_trend, usage_data_source, created_by, created_at, updated_by, updated_at, previous_health_score, previous_health_calculated_at
 `
 
@@ -246,6 +251,7 @@ type UpdateCustomerSuccessParams struct {
 	FeatureAdoptionRate        pgtype.Numeric     `json:"feature_adoption_rate"`
 	KeyFeaturesUsed            *string            `json:"key_features_used"`
 	UsageTrend                 *string            `json:"usage_trend"`
+	UsageDataSource            string             `json:"usage_data_source"`
 	UpdatedBy                  *int64             `json:"updated_by"`
 	AccountID                  int64              `json:"account_id"`
 }
@@ -279,6 +285,7 @@ func (q *Queries) UpdateCustomerSuccess(ctx context.Context, arg UpdateCustomerS
 		arg.FeatureAdoptionRate,
 		arg.KeyFeaturesUsed,
 		arg.UsageTrend,
+		arg.UsageDataSource,
 		arg.UpdatedBy,
 		arg.AccountID,
 	)

@@ -62,3 +62,10 @@ func (c *Config) IsProduction() bool { return c.Env == "production" }
 func (c *Config) ClaudeProxyEnabled() bool {
 	return c.ClaudeProxyURL != "" && c.ClaudeProxyToken != ""
 }
+
+// DesaPlusEnabled melaporkan apakah integrasi telemetry desa-plus (BL-27)
+// terkonfigurasi. Kosong = tombol "Sinkron dari Desa+" tak tampil di UI sama
+// sekali (fail-soft, mirror GoogleEnabled).
+func (c *Config) DesaPlusEnabled() bool {
+	return c.DesaPlusURL != "" && c.DesaPlusToken != ""
+}

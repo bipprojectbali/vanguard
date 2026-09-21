@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"go_starter/internal/db"
@@ -20,6 +21,13 @@ import (
 func customerSuccessDetailView(
 	ctx context.Context, base string, a db.Account, cs db.CustomerSuccess, exists, hasLiveSub bool,
 ) panel.CustomerSuccessDetailView {
+	// BL-27: tombol "Sinkron dari Desa+" muncul HANYA bila semua syarat terpenuhi
+	// — gerbang tulis sama dgn Adoption (crm:journey, BL-169) + pelanggan aktif
+	// (BL-114) + integrasi terkonfigurasi (DesaPlusEnabled, client!=nil di sini
+	// krn dicek lewat var paket) + desa sudah berkode. Kosongnya salah satu tak
+	// dianggap galat — tombol cukup disembunyikan (fail-soft, mirror CanAssign).
+	canSync := canWriteCSJourney(ctx) && !IsReadOnly(ctx) && hasLiveSub &&
+		desaPlusClient != nil && a.VillageCode != nil && *a.VillageCode != ""
 	// BL-26: peringatan keselarasan onboarding↔lifecycle (K2/K4) HANYA bila
 	// aktor berhak membaca section Journey — jangan bocorkan keadaan section
 	// yang disembunyikan F2. Banner tak relevan sebelum baris ada (exists=false).
@@ -50,6 +58,10 @@ func customerSuccessDetailView(
 		CanReadJourney:  canReadCSJourney(ctx),
 		CanReadAdoption: canReadCSJourney(ctx),
 
+		CanSync:            canSync,
+		SyncAction:         base + "/accounts/" + strconv.FormatInt(a.ID, 10) + "/customer-success/sync",
+		IsTelemetrySourced: cs.UsageDataSource == "Product Telemetry",
+
 		OverallHealthScore:   probabilityStr(cs.OverallHealthScore),
 		HealthStatus:         deref(cs.HealthStatus),
 		AdoptionScore:        probabilityStr(cs.AdoptionScore),
@@ -57,18 +69,18 @@ func customerSuccessDetailView(
 		SupportScore:         probabilityStr(cs.SupportScore),
 		SentimentScore:       probabilityStr(cs.SentimentScore),
 		ScoreTrend:           deref(cs.ScoreTrend),
-		HealthLastCalculated: dateTimeStr(cs.HealthLastCalculated),
+		HealthLastCalculated: dateTimeStrID(cs.HealthLastCalculated),
 
 		LifecycleStage:     deref(cs.LifecycleStage),
-		StageEntryDate:     dateStr(cs.StageEntryDate),
+		StageEntryDate:     dateStrID(cs.StageEntryDate),
 		DaysInStage:        daysInStageLabel(time.Now(), cs.StageEntryDate),
 		OnboardingStatus:   deref(cs.OnboardingStatus),
-		KickoffDate:        dateStr(cs.KickoffDate),
-		TargetGoLiveDate:   dateStr(cs.TargetGoLiveDate),
-		ActualGoLiveDate:   dateStr(cs.ActualGoLiveDate),
+		KickoffDate:        dateStrID(cs.KickoffDate),
+		TargetGoLiveDate:   dateStrID(cs.TargetGoLiveDate),
+		ActualGoLiveDate:   dateStrID(cs.ActualGoLiveDate),
 		OnboardingProgress: probabilityStr(cs.OnboardingProgress),
 
-		LastLoginDate:       dateStr(cs.LastLoginDate),
+		LastLoginDate:       dateStrID(cs.LastLoginDate),
 		ActiveUsers:         int32Str(cs.ActiveUsers),
 		LoginFrequency:      deref(cs.LoginFrequency),
 		FeatureAdoptionRate: numericStr(cs.FeatureAdoptionRate),

@@ -65,6 +65,16 @@ type CustomerSuccessDetailView struct {
 	AssignedCSM  string
 	BackupCSM    string
 
+	// Sinkronisasi Product Adoption dari Desa+ (BL-27). CanSync = gerbang tulis
+	// crm:journey + !read-only + pelanggan aktif + integrasi terkonfigurasi +
+	// desa berkode (semua dihitung handler). SyncAction = URL POST
+	// /accounts/{id}/customer-success/sync. IsTelemetrySourced = baris terbaru
+	// berasal dari sync (bukan isian manual) — dipakai form edit utk mengunci 3
+	// field yang datang dari telemetry jadi read-only (lihat CustomerSuccessForm).
+	CanSync            bool
+	SyncAction         string
+	IsTelemetrySourced bool
+
 	OverallHealthScore   string
 	HealthStatus         string
 	AdoptionScore        string
@@ -114,8 +124,11 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 		h.Div(
 			h.Class("flex flex-wrap items-center gap-2"),
 			ui.When(v.CanAssign, assignCSTrigger()),
+			ui.When(v.CanSync, customerSuccessSyncForm(v.SyncAction)),
+			// btn-outline: seragam dgn "Penugasan CS"/"Sinkron dari Desa+" di
+			// sebelahnya — permintaan user 21 Sep, tiga tombol header sebaris.
 			ui.When(v.CanWrite, h.A(
-				h.Href(base+"/customer-success/edit"), h.Class("btn btn-sm min-h-11"),
+				h.Href(base+"/customer-success/edit"), h.Class("btn btn-sm btn-outline min-h-11"),
 				g.Text(editLabel))),
 		),
 	)
@@ -202,7 +215,10 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 			{"Progres Onboarding", v.OnboardingProgress},
 		})),
 		ui.When(v.CanReadAdoption, detailCard("Product Adoption", []detailField{
-			{"Login Terakhir", v.LastLoginDate},
+			// BL-27: "Login Terakhir" → "Aktivitas Terakhir" — API desa-plus SENGAJA
+			// tak menyediakan data login/logout (dikecualikan by design), jadi field
+			// ini kini berarti "kapan aktivitas apa pun terakhir tercatat di sistem".
+			{"Aktivitas Terakhir", v.LastLoginDate},
 			{"Pengguna Aktif", v.ActiveUsers},
 			{"Frekuensi Login", v.LoginFrequency},
 			{"Tingkat Adopsi Fitur", v.FeatureAdoptionRate},
@@ -210,6 +226,7 @@ func CustomerSuccessDetail(v CustomerSuccessDetailView) g.Node {
 			{"Tren Penggunaan", v.UsageTrend},
 			{"Sumber Data", v.UsageDataSource},
 		})),
+		ui.When(v.CanReadAdoption && v.IsTelemetrySourced, telemetrySourceNote()),
 		assign,
 	)
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))

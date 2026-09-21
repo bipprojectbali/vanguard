@@ -42,6 +42,17 @@ func applyCustomerSuccessMasking(
 		form.FeatureAdoptionRate = existing.FeatureAdoptionRate
 		form.KeyFeaturesUsed = existing.KeyFeaturesUsed
 		form.UsageTrend = existing.UsageTrend
+	} else if existing.UsageDataSource == "Product Telemetry" {
+		// BL-27: last_login_date/active_users/key_features_used berasal dari sync
+		// Desa+ (bukan section-write biasa) — form edit merendernya READ-ONLY
+		// (customer_success_form.go), tapi form klien cuma jaring UX; masking di
+		// sini adalah wasit sesungguhnya, cermin pola health_status/score_trend
+		// (BL-24/25) yang juga diabaikan dari input & selalu server-derived.
+		// login_frequency/feature_adoption_rate/usage_trend TETAP field manual
+		// biasa (API desa-plus tak punya padanan untuk ketiganya).
+		form.LastLoginDate = existing.LastLoginDate
+		form.ActiveUsers = existing.ActiveUsers
+		form.KeyFeaturesUsed = existing.KeyFeaturesUsed
 	}
 	return form
 }

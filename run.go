@@ -18,6 +18,7 @@ import (
 	"go_starter/internal/claudeai"
 	"go_starter/internal/config"
 	"go_starter/internal/database"
+	"go_starter/internal/desaplus"
 	"go_starter/internal/handler"
 	"go_starter/internal/maintenance"
 	"go_starter/internal/mcpserver"
@@ -207,6 +208,13 @@ func run() (err error) {
 		log.Info("jena ai enabled")
 	} else {
 		log.Warn("jena ai disabled: CLAUDE_PROXY_URL/CLAUDE_PROXY_TOKEN kosong")
+	}
+
+	// BL-27: integrasi telemetry desa-plus — opsional, tombol "Sinkron dari
+	// Desa+" di Customer Success tak tampil bila kosong (lihat DesaPlusEnabled).
+	if cfg.DesaPlusEnabled() {
+		handler.SetDesaPlusClient(desaplus.NewClient(cfg.DesaPlusURL, cfg.DesaPlusToken))
+		log.Info("desa-plus telemetry sync enabled")
 	}
 
 	// Wiring handler + router.

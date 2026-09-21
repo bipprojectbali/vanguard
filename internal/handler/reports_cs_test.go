@@ -41,6 +41,9 @@ func (e *testEnv) reportsCSBody(t *testing.T, uid int64, tenantRole, businessRol
 func (e *testEnv) seedCSRow(t *testing.T, p db.CreateCustomerSuccessParams) {
 	t.Helper()
 	p.TenantID = e.tenantID
+	if p.UsageDataSource == "" {
+		p.UsageDataSource = "Manual" // BL-27: kolom wajib (CHECK); pemanggil lama tak menyetelnya
+	}
 	if _, err := e.q.CreateCustomerSuccess(t.Context(), p); err != nil {
 		t.Fatalf("seed customer_success (account %d): %v", p.AccountID, err)
 	}
