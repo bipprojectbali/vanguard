@@ -4,8 +4,11 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"go_starter/internal/db"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // customer_success_crud_test.go — dipisah dari customer_success_test.go agar tiap
@@ -246,6 +249,42 @@ func TestApplyCustomerSuccessMasking(t *testing.T) {
 	all := applyCustomerSuccessMasking(form, existing, true, true, true)
 	if all.HealthStatus != form.HealthStatus || all.LifecycleStage != form.LifecycleStage || all.LoginFrequency != form.LoginFrequency {
 		t.Error("berhak tulis semua section harus lolos form baru, tak ada masking")
+	}
+
+	// BL-27: writeAdoption=true TAPI existing.UsageDataSource=="Product Telemetry"
+	// → last_login_date/active_users/key_features_used (asal sync Desa+) TETAP
+	// di-mask ke existing meski berhak tulis section-nya (server yang menjaga,
+	// bukan sekadar form read-only di client); login_frequency (field manual,
+	// API desa-plus tak punya padanan) tetap lolos nilai form baru seperti biasa.
+	newLogin := pgtype.Date{Time: time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), Valid: true}
+	oldLogin := pgtype.Date{Time: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+	newUsers, oldUsers := int32(50), int32(10)
+	newFeatures, oldFeatures := "baru (5x)", "lama (2x)"
+	telemetryForm := customerSuccessForm{
+		LastLoginDate:   newLogin,
+		ActiveUsers:     &newUsers,
+		KeyFeaturesUsed: &newFeatures,
+		LoginFrequency:  &newFreq,
+	}
+	telemetryExisting := db.CustomerSuccess{
+		LastLoginDate:   oldLogin,
+		ActiveUsers:     &oldUsers,
+		KeyFeaturesUsed: &oldFeatures,
+		LoginFrequency:  &oldFreq,
+		UsageDataSource: "Product Telemetry",
+	}
+	telemetry := applyCustomerSuccessMasking(telemetryForm, telemetryExisting, true, true, true)
+	if telemetry.LastLoginDate != telemetryExisting.LastLoginDate {
+		t.Error("BL-27: last_login_date (dari sync Desa+) harus tetap existing walau writeAdoption true")
+	}
+	if telemetry.ActiveUsers != telemetryExisting.ActiveUsers {
+		t.Error("BL-27: active_users (dari sync Desa+) harus tetap existing")
+	}
+	if telemetry.KeyFeaturesUsed != telemetryExisting.KeyFeaturesUsed {
+		t.Error("BL-27: key_features_used (dari sync Desa+) harus tetap existing")
+	}
+	if telemetry.LoginFrequency != telemetryForm.LoginFrequency {
+		t.Error("BL-27: login_frequency field manual tetap lolos form baru (API desa-plus tak punya padanan)")
 	}
 }
 

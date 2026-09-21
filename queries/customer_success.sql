@@ -15,8 +15,10 @@ WHERE account_id = sqlc.arg(account_id);
 
 -- name: CreateCustomerSuccess :one
 -- Buat baris pertama kali desa ini disimpan. tenant_id eksplisit (RLS WITH
--- CHECK memverifikasinya = GUC). usage_data_source TAK dioper (default
--- 'Manual', v1 tak ada field form untuknya).
+-- CHECK memverifikasinya = GUC). usage_data_source DIOPER EKSPLISIT oleh
+-- caller (BL-27) — bukan lewat customerSuccessForm (form manual tak pernah
+-- mengubahnya): jalur manual (customer_success_save.go) mengoper "Manual",
+-- jalur sync (customer_success_sync.go) mengoper "Product Telemetry".
 INSERT INTO customer_success (
     tenant_id, account_id,
     overall_health_score, health_status, adoption_score, engagement_score,
@@ -26,7 +28,7 @@ INSERT INTO customer_success (
     onboarding_status, kickoff_date, target_go_live_date, actual_go_live_date,
     onboarding_progress,
     last_login_date, active_users, login_frequency, feature_adoption_rate,
-    key_features_used, usage_trend,
+    key_features_used, usage_trend, usage_data_source,
     created_by
 ) VALUES (
     sqlc.arg(tenant_id), sqlc.arg(account_id),
@@ -37,7 +39,7 @@ INSERT INTO customer_success (
     sqlc.narg(onboarding_status), sqlc.narg(kickoff_date), sqlc.narg(target_go_live_date), sqlc.narg(actual_go_live_date),
     sqlc.narg(onboarding_progress),
     sqlc.narg(last_login_date), sqlc.narg(active_users), sqlc.narg(login_frequency), sqlc.narg(feature_adoption_rate),
-    sqlc.narg(key_features_used), sqlc.narg(usage_trend),
+    sqlc.narg(key_features_used), sqlc.narg(usage_trend), sqlc.arg(usage_data_source),
     sqlc.narg(created_by)
 )
 RETURNING *;
@@ -71,6 +73,7 @@ UPDATE customer_success SET
     feature_adoption_rate   = sqlc.narg(feature_adoption_rate),
     key_features_used       = sqlc.narg(key_features_used),
     usage_trend             = sqlc.narg(usage_trend),
+    usage_data_source       = sqlc.arg(usage_data_source),
     updated_by              = sqlc.narg(updated_by),
     updated_at              = now()
 WHERE account_id = sqlc.arg(account_id)

@@ -77,6 +77,11 @@ func (h *Handler) CustomerSuccessEdit(w http.ResponseWriter, r *http.Request) {
 		CanWriteJourney:  canWriteCSJourney(ctx),
 		CanWriteAdoption: canWriteCSJourney(ctx),
 
+		// BL-27: baris existing (bukan zero-value jalur create) yang sumbernya
+		// sync Desa+ → 3 field terkait dirender read-only (lihat customer_success_
+		// form.go, ditegakkan lagi di applyCustomerSuccessMasking saat SAVE).
+		IsTelemetrySourced: cs.UsageDataSource == "Product Telemetry",
+
 		LifecycleStages:    lifecycleStageOptions,
 		OnboardingStatuses: onboardingStatusOptions,
 		LoginFrequencies:   loginFrequencyOptions,

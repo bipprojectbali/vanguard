@@ -74,6 +74,15 @@ type CustomerSuccessFormView struct {
 	CanWriteJourney  bool
 	CanWriteAdoption bool
 
+	// IsTelemetrySourced (BL-27) = baris existing usage_data_source ==
+	// "Product Telemetry" (dari tombol "Sinkron dari Desa+" di halaman detail,
+	// bukan section-write biasa). Mengunci 3 field yang punya padanan API
+	// (last_login_date/active_users/key_features_used) jadi READ-ONLY di form
+	// ini — field manual (login_frequency/feature_adoption_rate/usage_trend)
+	// TETAP bisa diedit. Penjaga sesungguhnya di backend (applyCustomerSuccess
+	// Masking, customer_success_mask.go); flag ini murni tampilan.
+	IsTelemetrySourced bool
+
 	// Status Kesehatan (BL-24) sengaja TAK dirender di form sunting: tetap turunan
 	// overall_health_score & tampil di halaman DETAIL, tapi bukan bagian form edit.
 	// Tren Skor (BL-25) juga TAK dirender di form (BL-128 (b)) — alasan sama.
@@ -122,13 +131,13 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 				field("Progres Onboarding (0–100)", "onboarding_progress", v.Fields.OnboardingProgress, false, "number")),
 		)),
 		ui.When(v.CanWriteAdoption, formCard("Product Adoption",
-			field("Login Terakhir", "last_login_date", v.Fields.LastLoginDate, false, "date"),
-			field("Pengguna Aktif", "active_users", v.Fields.ActiveUsers, false, "number"),
+			adoptionUsageField(v.IsTelemetrySourced, "Aktivitas Terakhir", "last_login_date", v.Fields.LastLoginDate, "date"),
+			adoptionUsageField(v.IsTelemetrySourced, "Pengguna Aktif", "active_users", v.Fields.ActiveUsers, "number"),
 			selectField("Frekuensi Login", "login_frequency", v.Fields.LoginFrequency, v.LoginFrequencies, false),
 			field("Tingkat Adopsi Fitur (%)", "feature_adoption_rate", v.Fields.FeatureAdoptionRate, false, "text"),
-			textareaField("Fitur Utama Dipakai", "key_features_used", v.Fields.KeyFeaturesUsed),
+			adoptionUsageTextareaField(v.IsTelemetrySourced, "Fitur Utama Dipakai", "key_features_used", v.Fields.KeyFeaturesUsed),
 			selectField("Tren Penggunaan", "usage_trend", v.Fields.UsageTrend, v.UsageTrends, false),
-			usageDataSourceNote(),
+			usageDataSourceNote(v.IsTelemetrySourced),
 		)),
 	}
 
@@ -171,13 +180,42 @@ func onboardingStatusSelect(current string, opts []string) g.Node {
 	)
 }
 
-// usageDataSourceNote — usage_data_source TETAP "Manual" di v1 (tanpa input:
-// belum ada integrasi telemetri produk, lihat komentar migrasi 00019). Teks
-// statis, bukan field, agar tak menjanjikan nilai yang bisa diubah pengguna.
-func usageDataSourceNote() g.Node {
+// usageDataSourceNote — catatan kecil arti "Sumber Data" (bukan field, agar
+// tak menjanjikan nilai yang bisa diubah pengguna dari form ini). BL-27:
+// sejak sinkronisasi Desa+ ada, usage_data_source bisa "Product Telemetry" —
+// teks menyesuaikan & menjelaskan CAKUPAN PARSIAL (hanya 3 dari 6 field),
+// biar operator tak mengira seluruh section Adoption otomatis. Sinkronisasi
+// sendiri dipicu tombol "Sinkron dari Desa+" di halaman DETAIL, bukan di sini.
+func usageDataSourceNote(isTelemetrySourced bool) g.Node {
+	text := "Sumber Data: Manual."
+	if isTelemetrySourced {
+		text = "Sumber Data: Product Telemetry — Aktivitas Terakhir, Pengguna Aktif, dan " +
+			"Fitur Utama Dipakai disinkron otomatis dari Desa+ (read-only di sini). Frekuensi " +
+			"Login, Tingkat Adopsi Fitur, dan Tren Penggunaan tetap isian manual."
+	}
 	return h.Div(
 		h.Class("grid gap-1 min-w-0 sm:col-span-2"),
-		h.P(h.Class("text-xs text-base-content/60"),
-			g.Text("Sumber Data: Manual — integrasi telemetri produk belum tersedia.")),
+		h.P(h.Class("text-xs text-base-content/60"), g.Text(text)),
 	)
+}
+
+// adoptionUsageField — field() biasa, KECUALI saat isTelemetrySourced: berubah
+// jadi tampilan read-only (badge) tanpa <input>, agar operator tak mengira
+// nilai ini bisa diketik manual selagi berasal dari sync Desa+ (BL-27).
+// Penjaga sesungguhnya tetap di backend (applyCustomerSuccessMasking,
+// customer_success_mask.go) — ini murni tampilan, form klien cuma jaring UX.
+func adoptionUsageField(isTelemetrySourced bool, label, name, val, typ string) g.Node {
+	if !isTelemetrySourced {
+		return field(label, name, val, false, typ)
+	}
+	return readonlyField(label, val)
+}
+
+// adoptionUsageTextareaField — padanan adoptionUsageField untuk field
+// key_features_used (textarea, 2-kolom), sama alasan.
+func adoptionUsageTextareaField(isTelemetrySourced bool, label, name, val string) g.Node {
+	if !isTelemetrySourced {
+		return textareaField(label, name, val)
+	}
+	return readonlyTextField(label, val)
 }

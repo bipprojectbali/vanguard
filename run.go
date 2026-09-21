@@ -17,6 +17,7 @@ import (
 	"go_starter/internal/assets"
 	"go_starter/internal/config"
 	"go_starter/internal/database"
+	"go_starter/internal/desaplus"
 	"go_starter/internal/handler"
 	"go_starter/internal/maintenance"
 	"go_starter/internal/mcpserver"
@@ -195,6 +196,13 @@ func run() (err error) {
 		log.Info("google oauth enabled")
 	} else {
 		log.Warn("google oauth disabled: kredensial GOOGLE_* tidak lengkap")
+	}
+
+	// BL-27: integrasi telemetry desa-plus — opsional, tombol "Sinkron dari
+	// Desa+" di Customer Success tak tampil bila kosong (lihat DesaPlusEnabled).
+	if cfg.DesaPlusEnabled() {
+		handler.SetDesaPlusClient(desaplus.NewClient(cfg.DesaPlusURL, cfg.DesaPlusToken))
+		log.Info("desa-plus telemetry sync enabled")
 	}
 
 	// Wiring handler + router.

@@ -56,7 +56,11 @@ func computeHealthSnapshot(form customerSuccessForm, existing db.CustomerSuccess
 }
 
 // createCustomerSuccessRow menyisipkan baris CS baru (jalur create). CreatedBy = aktor.
-func (h *Handler) createCustomerSuccessRow(ctx context.Context, tenantID, accountID, uid int64, form customerSuccessForm, hc csHealthComputed) error {
+// usageDataSource DIOPER EKSPLISIT oleh caller (BL-27) — BUKAN bagian
+// customerSuccessForm, karena form manual (customer_success_save.go) tak
+// pernah mengubahnya; jalur sync (customer_success_sync.go) mengoper
+// "Product Telemetry" secara sadar.
+func (h *Handler) createCustomerSuccessRow(ctx context.Context, tenantID, accountID, uid int64, form customerSuccessForm, hc csHealthComputed, usageDataSource string) error {
 	_, err := h.q(ctx).CreateCustomerSuccess(ctx, db.CreateCustomerSuccessParams{
 		TenantID:                   tenantID,
 		AccountID:                  accountID,
@@ -83,14 +87,16 @@ func (h *Handler) createCustomerSuccessRow(ctx context.Context, tenantID, accoun
 		FeatureAdoptionRate:        form.FeatureAdoptionRate,
 		KeyFeaturesUsed:            form.KeyFeaturesUsed,
 		UsageTrend:                 form.UsageTrend,
+		UsageDataSource:            usageDataSource,
 		CreatedBy:                  &uid,
 	})
 	return err
 }
 
 // updateCustomerSuccessRow memperbarui baris CS existing (jalur update). UpdatedBy =
-// aktor; AccountID = kunci baris (satu baris per desa).
-func (h *Handler) updateCustomerSuccessRow(ctx context.Context, accountID, uid int64, form customerSuccessForm, hc csHealthComputed) error {
+// aktor; AccountID = kunci baris (satu baris per desa). usageDataSource lihat
+// komentar createCustomerSuccessRow.
+func (h *Handler) updateCustomerSuccessRow(ctx context.Context, accountID, uid int64, form customerSuccessForm, hc csHealthComputed, usageDataSource string) error {
 	_, err := h.q(ctx).UpdateCustomerSuccess(ctx, db.UpdateCustomerSuccessParams{
 		OverallHealthScore:         hc.overallScore,
 		HealthStatus:               form.HealthStatus,
@@ -115,6 +121,7 @@ func (h *Handler) updateCustomerSuccessRow(ctx context.Context, accountID, uid i
 		FeatureAdoptionRate:        form.FeatureAdoptionRate,
 		KeyFeaturesUsed:            form.KeyFeaturesUsed,
 		UsageTrend:                 form.UsageTrend,
+		UsageDataSource:            usageDataSource,
 		UpdatedBy:                  &uid,
 		AccountID:                  accountID,
 	})

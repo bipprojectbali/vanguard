@@ -95,6 +95,8 @@ func customerSuccessMsg(code string) string {
 		return "Customer Success desa ini disimpan pertama kali."
 	case "saved":
 		return "Perubahan Customer Success disimpan."
+	case "synced":
+		return "Product Adoption disinkronkan dari Desa+."
 	default:
 		return ""
 	}
@@ -127,6 +129,16 @@ func customerSuccessErrMsg(code string) string {
 		return "Tingkat adopsi fitur harus berupa angka 0–100."
 	case "failed":
 		return "Gagal menyimpan Customer Success. Coba lagi."
+	case "desaplus_disabled":
+		return "Integrasi Desa+ belum dikonfigurasi di server ini."
+	case "desaplus_no_code":
+		return "Desa ini belum punya kode desa (village_code) — isi dulu di data Account sebelum sinkron."
+	case "desaplus_not_found":
+		return "Desa ini belum terpasang di sisi Desa+ (kode desa belum dikenali). Kemungkinan besar tim Desa+ belum memasangkan datanya — koordinasikan dengan mereka, bukan bug di sini."
+	case "desaplus_unauthorized":
+		return "Token integrasi Desa+ ditolak. Hubungi admin untuk memeriksa konfigurasi."
+	case "desaplus_failed":
+		return "Gagal menghubungi Desa+. Coba lagi beberapa saat lagi."
 	default:
 		return ""
 	}

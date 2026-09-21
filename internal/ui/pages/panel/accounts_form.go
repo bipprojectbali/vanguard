@@ -202,7 +202,10 @@ const assignCSSignal = "assignOpen"
 func assignCSTrigger() g.Node {
 	return h.Button(
 		h.Type("button"),
-		h.Class("btn btn-sm min-h-11"),
+		// btn-outline: seragam dgn tombol header CS lain ("Sinkron dari Desa+"/
+		// "Sunting", customer_success_sync_ui.go & customer_success_view.go) —
+		// permintaan user 21 Sep, tiga tombol header sebaris harus satu gaya.
+		h.Class("btn btn-sm btn-outline min-h-11"),
 		data.On("click", "$"+assignCSSignal+" = true"),
 		g.Text("Penugasan CS"),
 	)

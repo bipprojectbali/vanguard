@@ -78,4 +78,16 @@ type Config struct {
 	// pada endpoint yang membaca database jauh lebih berbahaya daripada tak ada
 	// endpoint — pola yang sama dengan SESSION_KEY.
 	MCPToken string
+
+	// BL-27: integrasi telemetry produk desa-plus ("Des Plus") — sumber otomatis
+	// section 6.4 Product Adoption Customer Success. DesaPlusURL = base URL API
+	// khusus integrasi (mis. "https://desaplus.example.com/api/vanguard", TANPA
+	// trailing slash), DesaPlusToken = kunci header `x-api-key`. KOSONG (default)
+	// = fitur MATI (tombol "Sinkron dari Desa+" tak tampil) — sama pola MCPToken:
+	// integrasi eksternal opsional tak boleh menyala hanya karena lupa mengisi.
+	// Kedua env WAJIB kosong BERSAMA atau terisi BERSAMA (divalidasi MustLoad):
+	// hanya satu terisi = konfigurasi setengah yang bakal gagal senyap saat
+	// dipakai, bukan saat boot.
+	DesaPlusURL   string // DESA_PLUS_URL
+	DesaPlusToken string // DESA_PLUS_TOKEN
 }

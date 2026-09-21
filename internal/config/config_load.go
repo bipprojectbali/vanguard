@@ -28,6 +28,8 @@ func MustLoad() *Config {
 		MaxWorkspacesPerUser: getEnvInt("MAX_WORKSPACES_PER_USER", 3),
 		AppName:              getEnv("APP_NAME", "App"),
 		MCPToken:             getEnv("MCP_TOKEN", ""),
+		DesaPlusURL:          strings.TrimRight(getEnv("DESA_PLUS_URL", ""), "/"),
+		DesaPlusToken:        getEnv("DESA_PLUS_TOKEN", ""),
 	}
 	// MCP_TOKEN opsional & lintas-lingkungan (bukan cuma production): kalau diisi,
 	// panjangnya divalidasi di MANA PUN — endpoint MCP yang membaca database sama
@@ -36,6 +38,14 @@ func MustLoad() *Config {
 		panic(fmt.Sprintf("config: MCP_TOKEN terlalu pendek (%d karakter, minimal %d) — "+
 			"kosongkan untuk mematikan MCP, atau buat dengan: openssl rand -base64 48",
 			len(c.MCPToken), MinMCPTokenLen))
+	}
+	// BL-27: DESA_PLUS_URL & DESA_PLUS_TOKEN wajib kosong BERSAMA atau terisi
+	// BERSAMA — konfigurasi setengah (mis. URL terisi, token lupa) akan gagal
+	// SENYAP saat tombol sync dipencet (request kirim tanpa x-api-key → 401 yang
+	// membingungkan), bukan gagal jelas saat boot.
+	if (c.DesaPlusURL == "") != (c.DesaPlusToken == "") {
+		panic("config: DESA_PLUS_URL dan DESA_PLUS_TOKEN harus diisi BERSAMA atau " +
+			"dikosongkan BERSAMA — konfigurasi setengah tak diizinkan")
 	}
 	// Validasi TZ fail-fast: nama IANA salah → panic saat startup, bukan error
 	// senyap saat render panel logs. (tzdata di-embed via import di main.)

@@ -57,6 +57,7 @@ func (h *Handler) handoverCSFromWonDeal(ctx context.Context, deal db.Deal, tenan
 			LifecycleStage:   &stage,
 			OnboardingStatus: &status,
 			CreatedBy:        &uid,
+			UsageDataSource:  "Manual", // BL-27: kolom wajib (CHECK); handover belum tersinkron Desa+
 		}); err != nil {
 			return err
 		}
