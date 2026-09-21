@@ -86,6 +86,7 @@ func (e *testEnv) seedCustomerSuccess(t *testing.T, accountID int64) db.Customer
 		ActiveUsers:        &activeUsers,
 		LoginFrequency:     &freq,
 		UsageTrend:         &usage,
+		UsageDataSource:    "Manual", // BL-27: kolom wajib (CHECK), baris seed manual bukan hasil sync
 	})
 	if err != nil {
 		t.Fatalf("seed customer success: %v", err)

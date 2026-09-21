@@ -43,6 +43,7 @@ func (e *testEnv) seedHealthScoreFull(
 		SupportScore:       &support,
 		SentimentScore:     &sentiment,
 		ScoreTrend:         &trend,
+		UsageDataSource:    "Manual", // BL-27: kolom wajib (CHECK)
 	})
 	if err != nil {
 		t.Fatalf("seed full health score for account %d: %v", accountID, err)

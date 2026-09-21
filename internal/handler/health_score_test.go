@@ -34,6 +34,7 @@ func (e *testEnv) seedHealthScore(t *testing.T, accountID int64, score int16, st
 		AccountID:          accountID,
 		OverallHealthScore: &score,
 		HealthStatus:       &status,
+		UsageDataSource:    "Manual", // BL-27: kolom wajib (CHECK)
 	})
 	if err != nil {
 		t.Fatalf("seed health score for account %d: %v", accountID, err)

@@ -70,7 +70,15 @@ func (h *Handler) CustomerSuccessDetail(w http.ResponseWriter, r *http.Request) 
 
 	base := wsPath(slugFromRequest(r), "")
 	v := customerSuccessDetailView(ctx, base, account, cs, exists, hasLiveSub)
-	v.Err = wsErrMsg(r.URL.Query().Get("err"))
+	// BL-27: kode galat CustomerSuccessSync (desaplus_*) hanya dikenal
+	// customerSuccessErrMsg, bukan wsErrMsg — dicoba DULU (sama pola v.Msg di
+	// bawah), baru fallback wsErrMsg utk kode generik lain yg mungkin mendarat
+	// di halaman ini. Tanpa ini: redirect ?err=desaplus_not_found termuat ulang
+	// tanpa alert sama sekali (kode tak dikenal wsErrMsg → "").
+	v.Err = customerSuccessErrMsg(r.URL.Query().Get("err"))
+	if v.Err == "" {
+		v.Err = wsErrMsg(r.URL.Query().Get("err"))
+	}
 	// Dua sumber ?ok= mendarat di halaman yang sama: AccountAssign ("assigned",
 	// via accountsMsg) & customer_success_save.go ("created"/"saved", via
 	// customerSuccessMsg — keduanya kebetulan PUNYA kode "created"/"saved" juga

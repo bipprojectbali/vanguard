@@ -346,6 +346,9 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/accounts/{id}/customer-success", h.CustomerSuccessDetail)
 		r.Get("/accounts/{id}/customer-success/edit", h.CustomerSuccessEdit)
 		r.Post("/accounts/{id}/customer-success", h.CustomerSuccessSave)
+		// BL-27: tombol "Sinkron dari Desa+" — gerbang F2 SAMA pola (di HANDLER,
+		// bukan di sini), cermin persis 3 route CS di atas.
+		r.Post("/accounts/{id}/customer-success/sync", h.CustomerSuccessSync)
 
 		// Lead (Sales, CRM Modul 4). Gerbang di HANDLER sumbu BISNIS
 		// (CanBusiness "crm:leads") + ownership-filter F3 (lead_owner) +

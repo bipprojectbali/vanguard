@@ -58,6 +58,7 @@ func (e *testEnv) seedHealthFull(t *testing.T, p healthFullParams) {
 		EngagementScore:    p.Engagement,
 		SupportScore:       p.Support,
 		ScoreTrend:         p.Trend,
+		UsageDataSource:    "Manual", // BL-27: kolom wajib (CHECK)
 	})
 	if err != nil {
 		t.Fatalf("seed health full: %v", err)
