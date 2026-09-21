@@ -159,6 +159,19 @@ html[data-sidebar="collapsed"] .app-navlabel.badge {
     85% { opacity: 1; transform: translateY(0); }
     100% { opacity: 0; transform: translateY(0.25rem); }
   }
+
+  /* BL-162: bubble chat Jena AI (pertanyaan/jawaban/loading) masuk dengan
+     fade+slide, bukan pop instan. Animasi CSS otomatis terpicu ulang saat
+     elemen berpindah display:none→block (bubble pending toggle data-show)
+     MAUPUN saat baru disisipkan ke DOM (bubble permanen via SSE
+     PatchElements) — keduanya "first paint" bagi browser, tanpa perlu JS. */
+  .jena-bubble-in {
+    animation: jena-bubble-in 0.25s ease-out;
+  }
+  @keyframes jena-bubble-in {
+    from { opacity: 0; transform: translateY(0.5rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }
 
 /* BL-64: rapikan header & footer sidebar saat rail collapse (4rem, md:+ saja).

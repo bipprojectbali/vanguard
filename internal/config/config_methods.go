@@ -57,3 +57,8 @@ func (c *Config) GoogleEnabled() bool {
 
 // IsProduction melaporkan apakah aplikasi berjalan di mode production.
 func (c *Config) IsProduction() bool { return c.Env == "production" }
+
+// ClaudeProxyEnabled melaporkan apakah Jena AI (BL-162) terkonfigurasi.
+func (c *Config) ClaudeProxyEnabled() bool {
+	return c.ClaudeProxyURL != "" && c.ClaudeProxyToken != ""
+}

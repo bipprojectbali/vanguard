@@ -28,6 +28,8 @@ func MustLoad() *Config {
 		MaxWorkspacesPerUser: getEnvInt("MAX_WORKSPACES_PER_USER", 3),
 		AppName:              getEnv("APP_NAME", "App"),
 		MCPToken:             getEnv("MCP_TOKEN", ""),
+		ClaudeProxyURL:       getEnv("CLAUDE_PROXY_URL", ""),
+		ClaudeProxyToken:     getEnv("CLAUDE_PROXY_TOKEN", ""),
 	}
 	// MCP_TOKEN opsional & lintas-lingkungan (bukan cuma production): kalau diisi,
 	// panjangnya divalidasi di MANA PUN — endpoint MCP yang membaca database sama

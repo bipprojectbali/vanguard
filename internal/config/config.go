@@ -78,4 +78,15 @@ type Config struct {
 	// pada endpoint yang membaca database jauh lebih berbahaya daripada tak ada
 	// endpoint — pola yang sama dengan SESSION_KEY.
 	MCPToken string
+
+	// ClaudeProxyURL/ClaudeProxyToken = kredensial proxy internal Claude untuk
+	// Jena AI (BL-162 PoC). CLAUDE_PROXY_URL/CLAUDE_PROXY_TOKEN, default KOSONG.
+	//
+	// Kosong = fitur Jena AI TAK di-wire sama sekali (opt-in, sama pola dengan
+	// MCPToken) — tombol floating tak pernah tampil, bukan tampil lalu gagal.
+	// TANPA validasi panjang: token diterbitkan operator proxy eksternal (bukan
+	// digenerate sendiri seperti SESSION_KEY/MCP_TOKEN), jadi tak ada ambang
+	// "kuat" yang bisa ditegakkan di sisi kita.
+	ClaudeProxyURL   string
+	ClaudeProxyToken string
 }

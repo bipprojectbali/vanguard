@@ -25,6 +25,22 @@ func TestGoogleEnabled(t *testing.T) {
 	}
 }
 
+func TestClaudeProxyEnabled(t *testing.T) {
+	full := Config{ClaudeProxyURL: "https://proxy", ClaudeProxyToken: "sk-cp-x"}
+	if !full.ClaudeProxyEnabled() {
+		t.Error("URL+token terisi → enabled")
+	}
+	for _, c := range []Config{
+		{ClaudeProxyURL: "https://proxy"},
+		{ClaudeProxyToken: "sk-cp-x"},
+		{},
+	} {
+		if c.ClaudeProxyEnabled() {
+			t.Errorf("kredensial tak lengkap harus disabled: %+v", c)
+		}
+	}
+}
+
 func TestIsProduction(t *testing.T) {
 	if !(&Config{Env: "production"}).IsProduction() {
 		t.Error("'production' → true")

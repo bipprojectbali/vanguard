@@ -54,6 +54,16 @@ func (h *Handler) renderShell(w http.ResponseWriter, r *http.Request, title, bra
 	if slug := slugFromRequest(r); slug != "" {
 		wsBase = wsPath(slug, "")
 	}
+	// Jena AI (BL-162 PoC): hanya tampil di halaman /w/{slug} (data tenant milik
+	// user yang bertanya, bukan /dev/notifications), digate permission ai:chat/use
+	// DAN provider terkonfigurasi (CLAUDE_PROXY_URL/TOKEN) — dua syarat, keduanya
+	// dihitung di handler (view tak boleh cek authz/config sendiri).
+	showJenaAI := false
+	jenaAIPostURL := ""
+	if slug := slugFromRequest(r); slug != "" && authz.Can(r.Context(), "ai:chat", "use") && JenaAIConfigured() {
+		showJenaAI = true
+		jenaAIPostURL = wsPath(slug, "jena-ai/ask")
+	}
 	d := ui.ShellData{
 		Title:              title,
 		BrandLabel:         brand,
@@ -72,6 +82,8 @@ func (h *Handler) renderShell(w http.ResponseWriter, r *http.Request, title, bra
 		ChangelogVersion:   changelog.Current(),
 		ChangelogReleases:  changelog.Releases,
 		WSBase:             wsBase,
+		ShowJenaAI:         showJenaAI,
+		JenaAIPostURL:      jenaAIPostURL,
 	}
 	if err := ui.AppShell(d, body).Render(w); err != nil {
 		h.Log.Error("render shell", "path", r.URL.Path, "err", err)

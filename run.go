@@ -15,6 +15,7 @@ import (
 
 	"go_starter/internal/appmode"
 	"go_starter/internal/assets"
+	"go_starter/internal/claudeai"
 	"go_starter/internal/config"
 	"go_starter/internal/database"
 	"go_starter/internal/handler"
@@ -195,6 +196,17 @@ func run() (err error) {
 		log.Info("google oauth enabled")
 	} else {
 		log.Warn("google oauth disabled: kredensial GOOGLE_* tidak lengkap")
+	}
+
+	// Jena AI (BL-162 PoC) — di-wire bila kredensial proxy Claude tersedia.
+	// Kosong = fitur mati (tombol tak pernah render, ShowJenaAI gate ganda di
+	// render_shell.go): opt-in sama semangat MCP_TOKEN, bukan wajib di semua env.
+	if cfg.ClaudeProxyEnabled() {
+		handler.SetClaudeClient(claudeai.New(cfg.ClaudeProxyURL, cfg.ClaudeProxyToken))
+		handler.SetJenaKnowledge(jenaKnowledgeMD)
+		log.Info("jena ai enabled")
+	} else {
+		log.Warn("jena ai disabled: CLAUDE_PROXY_URL/CLAUDE_PROXY_TOKEN kosong")
 	}
 
 	// Wiring handler + router.

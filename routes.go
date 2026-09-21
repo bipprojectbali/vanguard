@@ -629,5 +629,16 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// Gerbang di HANDLER (canManageFieldSecurity, objek crm:field_security)
 		// — TERPISAH dari canManageRoles, dan berlaku juga utk peran sistem.
 		r.Post("/roles/{name}/field-security", h.RoleFieldSecurityUpdate)
+
+		// Jena AI (BL-162 PoC) — gerbang Casbin eksplisit (ai:chat/use), digrant
+		// ke SEMUA anggota workspace (21 Sep, sebelumnya sempat admin+ dulu utk
+		// validasi biaya/kualitas jawaban — lihat policy.csv). Beda dari pola CRM
+		// lain yang gerbangnya di HANDLER (sumbu bisnis F2/F3): di sini pakai
+		// Casbin langsung karena ini toggle fitur on/off per role, bukan data CRM
+		// per-modul.
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireEnforce("ai:chat", "use"))
+			r.Post("/jena-ai/ask", h.JenaAIAsk)
+		})
 	})
 }

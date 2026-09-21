@@ -43,6 +43,28 @@ func (e *testEnv) seedLeadWithPhone(t *testing.T, name string, owner int64, mobi
 	return l
 }
 
+// seedLead membuat lead minimal (tanpa PII) — pola sama seedDeal
+// (sales_quotes_test.go), dipakai test yang cuma butuh kepemilikan.
+func (e *testEnv) seedLead(t *testing.T, name string, owner *int64) db.Lead {
+	t.Helper()
+	code, err := e.q.GenerateEntityCode(t.Context(), e.tenantID, codes.EntityLead)
+	if err != nil {
+		t.Fatalf("generate lead code: %v", err)
+	}
+	l, err := e.q.CreateLead(t.Context(), db.CreateLeadParams{
+		TenantID:   e.tenantID,
+		EntityCode: &code,
+		LeadName:   name,
+		LeadOwner:  owner,
+		LeadStatus: "New",
+		CreatedBy:  owner,
+	})
+	if err != nil {
+		t.Fatalf("seed lead %s: %v", name, err)
+	}
+	return l
+}
+
 // leadFormValues merakit form values minimal sah untuk LeadUpdate.
 func leadFormValues(name, status string) url.Values {
 	return url.Values{

@@ -22,6 +22,14 @@ var staticEmbed embed.FS
 //go:embed migrations/*.sql
 var migrationsEmbed embed.FS
 
+// jenaKnowledgeMD (BL-162 PoC) — dokumen pengetahuan Jena AI. docs/crm/ hidup di
+// root repo, sibling internal/, jadi TAK BISA di-embed di internal/handler
+// (go:embed dilarang menaiki direktori) — di-embed di sini lalu disuntik lewat
+// handler.SetJenaKnowledge (run.go), sama pola staticEmbed/migrationsEmbed.
+//
+//go:embed docs/crm/jena-ai-knowledge.md
+var jenaKnowledgeMD string
+
 func main() {
 	// Dispatch subcommand SEBELUM run(). `./app migrate` = jalankan migrasi lalu
 	// exit — dipakai container migrate one-shot (compose service_completed_successfully)

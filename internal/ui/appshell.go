@@ -76,6 +76,13 @@ type ShellData struct {
 	// endpoint-nya ter-NEST di bawah rute workspace (routes.go), jadi tak
 	// bisa ditulis sebagai path absolut "/regions/search" begitu saja.
 	WSBase string
+
+	// ShowJenaAI (BL-162 PoC) = gabungan permission Casbin (ai:chat/use) +
+	// konfigurasi proxy tersedia, dihitung handler (render_shell.go) — view
+	// tak boleh cek authz/config sendiri. false → JenaAIWidget tak render
+	// apa pun (bukan CSS disembunyikan; lihat internal/ui/jena_ai.go).
+	ShowJenaAI    bool
+	JenaAIPostURL string // wsPath(slug, "jena-ai/ask") — view tak rakit path sendiri.
 }
 
 // NavBadge = entri menu dengan penghitung. Count 0 → badge disembunyikan (angka
@@ -112,6 +119,9 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 		// tak ada risiko FOUC (beda dgn sidebar.js/theme.js yang set atribut
 		// <html> sebelum paint).
 		h.Script(h.Src("/static/regiontree.js"), h.Defer()),
+		// ai-widget.js DEFER: auto-scroll #jena-thread + Escape-to-close, murni
+		// kosmetik JS — jenaOpen mulai false lewat signal Datastar, tak ada FOUC.
+		h.Script(h.Src("/static/ai-widget.js"), h.Defer()),
 	)
 	return c.HTML5(c.HTML5Props{
 		Title:    d.Title,
@@ -120,9 +130,23 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 		Body: []g.Node{
 			// Latar dasar = base-200; sidebar & card = base-100 (permukaan
 			// menonjol). Hierarki relatif ini benar otomatis di semua tema.
-			h.Class("min-h-screen bg-base-200 text-base-content"),
+			// overflow-x-hidden WAJIB: jenaPanel (jena_ai.go) docked kanan pakai
+			// `translate-x-full` (POSITIF) untuk closed state — position:fixed yang
+			// digeser melewati tepi viewport tetap dihitung browser ke
+			// documentElement.scrollWidth (beda dari sidebar kiri yang
+			// -translate-x-full/negatif, tak pernah memperluas scrollWidth). Tanpa
+			// ini halaman jadi bisa di-scroll horizontal & auto-scroll mendorong
+			// tombol trigger kiri-bawah ikut bergeser dari pandangan.
+			h.Class("min-h-screen overflow-x-hidden bg-base-200 text-base-content"),
 			data.Signals(map[string]any{
 				"sidebarOpen": false, "logoutConfirm": false, "changelogOpen": false,
+				// jenaLoading = data-indicator bawaan Datastar (jena_ai.go jenaForm):
+				// true selama @post ask masih in-flight, otomatis false lagi saat
+				// selesai (sukses/gagal) — dipakai toggle bubble pending+loading dots.
+				// jenaPending = teks pertanyaan yang sedang diproses, disalin dari
+				// input SEBELUM form di-reset, ditampilkan optimistic sebelum jawaban
+				// server tiba (lihat jenaPendingBubble).
+				"jenaOpen": false, "jenaLoading": false, "jenaPending": "",
 				regionSearchSignal: false, regionSearchTabSignal: "kode",
 			}),
 
@@ -168,6 +192,22 @@ func AppShell(d ShellData, content ...g.Node) g.Node {
 			// modal tetap dirender (markup konsisten di semua panel) tapi tak
 			// dipicu di sana (trigger belum dipasang di halaman /dev mana pun).
 			RegionSearchModal(d.WSBase),
+
+			// Jena AI (BL-162 PoC) — tombol floating + panel chat. show=false
+			// (izin/konfigurasi tak lengkap) → tak render apa pun sama sekali.
+			JenaAIWidget(d.ShowJenaAI, d.JenaAIPostURL),
+
+			// Slot toast global "flash" — satu-satunya target patchFlash
+			// (internal/handler/dev_users_flash.go) yang dipakai JenaAIAsk untuk
+			// SEMUA jalur non-sukses (belum dikonfigurasi/kosong/terlalu
+			// panjang/error provider). Tanpa slot ini di AppShell, PatchElements SSE
+			// tak menemukan id="flash" di DOM /w/{slug} (hanya ada di halaman
+			// mandiri /dev/users) → patch jadi no-op senyap (cuma console warning
+			// PatchElementsNoTargetsFound), user tak melihat apa pun sama sekali
+			// walau backend sudah membalas 200. Ditaruh SEKALI di sini (bukan
+			// per-halaman panel seperti toast PRG ?ok=/?err= tiap modul CRM) karena
+			// Jena AI sendiri global lintas-halaman, bukan konten spesifik satu page.
+			ToastSlot("flash"),
 		},
 	})
 }

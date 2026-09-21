@@ -30,6 +30,12 @@ p, admin, admin:users, read
 p, admin, admin:users, create
 p, admin, admin:users:btn-delete, delete
 
+# Jena AI (BL-162 PoC) — sempat dibatasi admin+ dulu utk validasi biaya/kualitas
+# jawaban; 21 Sep dilebarkan ke SEMUA anggota workspace (keputusan user) —
+# digrant ke member (role dasar), admin/owner/staff/super_admin ikut mewarisi
+# lewat rantai g (member < admin < owner < staff < super_admin).
+p, member, ai:chat, use
+
 # --- Platform: panel /dev (dev:*) ---
 # staff & super_admin lihat panel lintas-tenant. super_admin god-mode via cabang
 # matcher (root); staff butuh policy eksplisit (BUKAN root — akses terbatas).
