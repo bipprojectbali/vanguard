@@ -28,6 +28,20 @@ type Release struct {
 // Nomor versi teratas menjadi acuan badge "ada pembaruan".
 var Releases = []Release{
 	{
+		Version: "1.9.0",
+		Date:    "2026-09-21",
+		Summary: "Asisten chat \"Jena AI\" hadir sebagai uji coba terbatas, dan halaman Customer Success kini bisa menyinkronkan data pemakaian desa langsung dari Desa+.",
+		Sections: []Section{
+			{
+				Title: "Baru",
+				Items: []string{
+					"Asisten chat \"Jena AI\" (uji coba) — tombol mengambang di pojok kiri-bawah pada halaman workspace untuk bertanya cara pakai aplikasi, sekaligus mencari & merangkum data Desa, Langganan, Deal, dan Lead milik sendiri. Jawaban data selalu mengikuti hak akses dan penyamaran (ARR/HP) yang sama seperti halaman biasa — tak pernah membocorkan data di luar cakupan penanya.",
+					"Tombol \"Sinkron dari Desa+\" pada halaman Customer Success (khusus desa berlangganan aktif) — menarik otomatis 3 kolom pemakaian produk (Aktivitas Terakhir, Jumlah Pengguna Aktif, Fitur yang Paling Sering Dipakai) dari sistem Desa+, menggantikan pengisian manual. Kolom yang sudah tersinkron ditandai sebagai data otomatis dan terkunci dari suntingan manual.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.8.0",
 		Date:    "2026-09-18",
 		Summary: "Lead kini bisa diimpor massal lewat CSV, halaman Peran & Perizinan dirombak jadi lebih ringkas dan reaktif, gerbang akses Laporan kini per-domain, dan perbaikan kebocoran ARR pada halaman Desa.",
