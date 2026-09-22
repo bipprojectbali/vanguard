@@ -277,9 +277,36 @@ func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool, actx arrCrossModule
 
 	return h.Tr(append(rowAttrs,
 		h.Class("border-b border-base-300/50"),
-		h.Td(h.Class("py-2 pr-4"), g.Text(m.Label)),
+		h.Td(h.Class("py-2 pr-4"), g.Text(m.Label), moduleHint(m.Obj)),
 		h.Td(h.Class("py-2"), levelCell),
 	)...)
+}
+
+// moduleHints = keterangan kecil di bawah nama modul untuk baris yang izinnya
+// tersimpan sah tapi TAK TERJANGKAU UI tanpa modul lain (audit 2026-09, lihat
+// catatan reachability di business_defaults.go dekat entri crmModules
+// "crm:renewals"/"crm:churn"). Renewals & Churn: SubscriptionDetail/
+// SubscriptionRenewals/SubscriptionChurnList (tempat tombol Renew/Churn
+// dirender) semua digerbangi canViewSubscriptions ("crm:subscriptions" read),
+// BUKAN crm:renewals/crm:churn — jadi "Lihat"/"Kelola" di baris ini percuma
+// selama Active Subscriptions="Tak ada". Sengaja DIDOKUMENTASIKAN (bukan
+// diubah gate-nya) — lihat riwayat commit branch
+// chore/document-renewals-churn-prereq utk diskusi keputusannya.
+var moduleHints = map[string]string{
+	"crm:renewals": "Butuh Active Subscriptions ≥ Lihat juga, agar halamannya terjangkau.",
+	"crm:churn":    "Butuh Active Subscriptions ≥ Lihat juga, agar halamannya terjangkau.",
+}
+
+// moduleHint merender <p> kecil di bawah label modul bila obj punya entri di
+// moduleHints, atau g.Text("") (node kosong, aman digabung g.Group) bila
+// tidak — dipisah dari roleMatrixRow agar map lookup tak mengotori badan
+// fungsi yang sudah padat reaktivitas Datastar.
+func moduleHint(obj string) g.Node {
+	hint, ok := moduleHints[obj]
+	if !ok {
+		return g.Text("")
+	}
+	return h.P(h.Class("text-xs text-base-content/60 font-normal"), g.Text(hint))
 }
 
 // arrCrossModuleCtx = konteks reaktivitas checkbox "Lihat Nilai Kontrak" LINTAS

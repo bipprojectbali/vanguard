@@ -59,6 +59,15 @@ func canActivateSubscriptions(ctx context.Context) bool {
 // Beranda (BL-59b). Berbeda dari canRenewSubscriptions (WRITE) — melihat metrik
 // renewal tak sama dengan berhak memperpanjang. Default: admin (glob), manager,
 // sales, csm punya crm:renewals read (business_defaults); support tidak.
+//
+// TANPA PEMANGGIL hari ini (audit 2026-09) — dipertahankan utk simetri dgn
+// canViewChurn (yang DIPAKAI, dashboard_subscription.go) & krn crm:renewals
+// tetap baris tersendiri di matriks editor (business_defaults.go:crmModules).
+// Bukan kode mati yg lupa dibersihkan: opsi "Lihat" Renewals memang belum
+// mengendalikan halaman apa pun sendiri — SubscriptionRenewals/SubscriptionDetail
+// digerbangi canViewSubscriptions (crm:subscriptions read), BUKAN fungsi ini.
+// Lihat catatan reachability di business_defaults.go dekat entri crmModules
+// "crm:renewals"/"crm:churn".
 func canViewRenewals(ctx context.Context) bool {
 	return authz.CanBusiness(ctx, "crm:renewals", "read")
 }

@@ -229,6 +229,61 @@ func TestRoleEdit_UnenforcedModulesHideKelolaOption(t *testing.T) {
 	}
 }
 
+// TestRoleEdit_RenewalsChurnReachabilityHint: audit 2026-09 — baris Renewals &
+// Churn / Cancellations menampilkan keterangan kecil "Butuh Active
+// Subscriptions ≥ Lihat juga" (moduleHints, role_edit.go), sebab izin
+// crm:renewals/crm:churn TERSIMPAN SAH tapi halamannya (SubscriptionDetail/
+// SubscriptionRenewals/SubscriptionChurnList) digerbangi canViewSubscriptions
+// ("crm:subscriptions" read) — bukan objek modul ini sendiri. Manager punya
+// grant default crm:renewals write & crm:churn write (business_defaults.go),
+// jadi tanpa hint ini admin penyunting takkan menyadari mengapa memberi
+// "Kelola" pada dua baris itu saja tak cukup. Baris Accounts (tak ada di
+// moduleHints) jadi pembanding negatif — hint tak boleh bocor ke baris lain.
+func TestRoleEdit_RenewalsChurnReachabilityHint(t *testing.T) {
+	env, uid := setupRoles(t)
+	req := rolesReq(http.MethodGet, "/w/test/roles/manager", nil, "manager")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleEditPage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("harus 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	rowBody := func(t *testing.T, marker string) string {
+		t.Helper()
+		pos := strings.Index(body, marker)
+		if pos < 0 {
+			t.Fatalf("penanda %q tak ditemukan", marker)
+		}
+		// <p> hint ada di kolom Label, mendahului kolom Akses tempat marker
+		// (name="level.X") berada dalam <tr> yang sama — cari MUNDUR ke <tr
+		// pembuka baris ini dulu, baru MAJU ke </tr> penutupnya.
+		start := strings.LastIndex(body[:pos], "<tr")
+		if start < 0 {
+			t.Fatalf("pembuka <tr sebelum %q tak ditemukan", marker)
+		}
+		end := strings.Index(body[pos:], "</tr>")
+		if end < 0 {
+			t.Fatalf("penutup </tr> setelah %q tak ditemukan", marker)
+		}
+		return body[start : pos+end]
+	}
+
+	const hint = "Butuh Active Subscriptions"
+	for _, obj := range []string{"crm:renewals", "crm:churn"} {
+		row := rowBody(t, `name="level.`+obj+`"`)
+		if !strings.Contains(row, hint) {
+			t.Errorf("baris %s harus memuat keterangan reachability %q", obj, hint)
+		}
+	}
+
+	// Pembanding negatif: baris Accounts tak punya entri di moduleHints, hint
+	// tak boleh muncul di baris ini.
+	accRow := rowBody(t, `name="level.crm:accounts"`)
+	if strings.Contains(accRow, hint) {
+		t.Error("baris Accounts tak boleh memuat keterangan reachability Renewals/Churn")
+	}
+}
+
 // TestRoleEdit_SystemLocked: peran sistem (admin) → keterangan terkunci, TANPA
 // tombol simpan — admin diwakili glob crm:* yang tak terpetakan ke matriks.
 func TestRoleEdit_SystemLocked(t *testing.T) {
