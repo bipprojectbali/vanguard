@@ -80,15 +80,30 @@ type rolePerm struct{ Obj, Act string }
 // write TAK menulis read tambahan: matcher bisnis membuat write mencakup read
 // (business.conf), jadi satu baris (obj,write) sudah memberi keduanya.
 //
-// hasLevel (BL-145 subtask 0): approve/arr HANYA ditulis bila modul yg sama
-// punya level read/write. Tanpa guard ini form bisa kirim level=none +
-// approve/arr=1 (state form stale, replay) → tersimpan kapabilitas approve/arr
-// tanpa akses baca sama sekali ke modulnya — kelas celah sama dgn BL-166
-// (mismatch mekanisme F2), tapi di sisi TULIS kebijakan. Floor-nya sama utk
-// approve maupun arr: blokir hanya di "none", bebas di "read" MAUPUN "write"
-// (approve sengaja tak butuh "write" — pola maker-checker, business.conf).
+// hasLevel (BL-145 subtask 0): approve HANYA ditulis bila modul yg sama punya
+// level read/write. Tanpa guard ini form bisa kirim level=none + approve=1
+// (state form stale, replay) → tersimpan kapabilitas approve tanpa akses baca
+// sama sekali ke modulnya — kelas celah sama dgn BL-166 (mismatch mekanisme
+// F2), tapi di sisi TULIS kebijakan. Floornya "none" saja, bebas di "read"
+// MAUPUN "write" (approve sengaja tak butuh "write" — pola maker-checker,
+// business.conf).
+//
+// arr TIDAK pakai hasLevel modulnya sendiri — dipakai arrGateOpen (guard OR
+// lintas authz.ARRGateObjects): (crm:subscriptions, arr) sejak BL-169
+// menggerbangi Nilai Kontrak lintas modul (canSeeARR, fls.go), jadi role yg
+// levelnya "none" di Subscriptions tapi granted di salah satu gate lain
+// (mis. Leads="Kelola") tetap boleh menyimpan izin arr itu. Tanpa guard OR ini,
+// checkbox "Lihat Nilai Kontrak" bisa dicentang aktif di editor tapi diam-diam
+// DIBUANG saat submit — mismatch UI/backend yang jadi laporan awal celah ini.
 func readRoleMatrix(r *http.Request) []rolePerm {
 	mods := authz.CRMModules()
+	arrGateOpen := false
+	for _, obj := range authz.ARRGateObjects {
+		if lvl := r.FormValue("level." + obj); lvl == "read" || lvl == "write" {
+			arrGateOpen = true
+			break
+		}
+	}
 	perms := make([]rolePerm, 0, len(mods))
 	for _, m := range mods {
 		level := r.FormValue("level." + m.Obj)
@@ -102,7 +117,7 @@ func readRoleMatrix(r *http.Request) []rolePerm {
 		if hasLevel && m.CanApprove && r.FormValue("approve."+m.Obj) == "1" {
 			perms = append(perms, rolePerm{m.Obj, "approve"})
 		}
-		if hasLevel && m.CanARR && r.FormValue("arr."+m.Obj) == "1" {
+		if arrGateOpen && m.CanARR && r.FormValue("arr."+m.Obj) == "1" {
 			perms = append(perms, rolePerm{m.Obj, "arr"})
 		}
 	}

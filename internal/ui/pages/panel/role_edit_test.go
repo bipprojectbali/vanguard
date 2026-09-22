@@ -160,6 +160,42 @@ func TestRoleEdit_ZonaBerbahayaHiddenWhenNotEditable(t *testing.T) {
 	}
 }
 
+// TestRoleEdit_ARRCheckboxUnlockedByOtherGateModule: fix checkbox "Lihat Nilai
+// Kontrak" tak terbuka walau modul lain sudah "Kelola" — RoleCard dengan
+// crm:subscriptions Level="none" (CanARR) TAPI crm:leads Level="write"
+// (ARREligible), keduanya ARREligible:true di fixture. Ekspresi disabled
+// checkbox ARR TIDAK BOLEH semata $lvl_subscriptions=='none' (baris sendiri) —
+// harus AND lintas semua modul ARREligible (buildARRCrossModuleCtx,
+// role_edit.go), dan checkbox itu sendiri harus tercentang-siap (unlockedNow)
+// karena crm:leads sudah "write" saat render.
+func TestRoleEdit_ARRCheckboxUnlockedByOtherGateModule(t *testing.T) {
+	rc := RoleCard{
+		Name: "finance", DisplayName: "Keuangan", DataScope: "own",
+		Modules: []RoleModulePerm{
+			{Obj: "crm:leads", Label: "Leads", Level: "write", ARREligible: true},
+			{Obj: "crm:subscriptions", Label: "Subscriptions", Level: "none",
+				CanARR: true, ARR: true, ARREligible: true},
+		},
+	}
+	var out strings.Builder
+	RoleEdit("/w/acme", rc, nil, true, "", "", nil).Render(&out)
+	body := out.String()
+
+	if strings.Contains(body, `data-attr="{disabled: $lvl_subscriptions == &#39;none&#39;}"`) {
+		t.Error("disabled checkbox ARR tak boleh lagi semata level baris Subscriptions sendiri")
+	}
+	if !strings.Contains(body, "$lvl_leads==&#39;none&#39;") || !strings.Contains(body, "$lvl_subscriptions==&#39;none&#39;") {
+		t.Error("disabled checkbox ARR harus AND lintas modul ARREligible (leads & subscriptions)")
+	}
+	if !strings.Contains(body, `data-bind="arr_subscriptions"`) {
+		t.Fatal("checkbox ARR harus ter-bind signal arr_subscriptions")
+	}
+	// unlockedNow=true (leads sudah "write") → signal awal arr_subscriptions harus true (m.ARR=true).
+	if !strings.Contains(body, `data-signals="{&#34;arr_subscriptions&#34;:true`) {
+		t.Error("signal awal arr_subscriptions harus true saat modul gate lain (leads) sudah punya level")
+	}
+}
+
 func TestRoleEdit_SystemRoleKeepsSeparateFieldSecurityForm(t *testing.T) {
 	rc := RoleCard{Name: "admin", DisplayName: "Admin", IsSystem: true}
 	fsec := &FieldSecurityRoleView{

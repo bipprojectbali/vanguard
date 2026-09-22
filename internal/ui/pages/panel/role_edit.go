@@ -25,9 +25,13 @@ type RoleModulePerm struct {
 	Label      string
 	CanApprove bool
 	CanARR     bool // true → sel "Lihat ARR" dirender (hanya Subscriptions, BL-58)
-	Level      string
-	Approve    bool
-	ARR        bool // tersetel → kotak "Lihat ARR" tercentang
+	// ARREligible: true → level modul INI ikut menentukan buka/tutup checkbox
+	// "Lihat Nilai Kontrak" (authz.ARRGateObjects, disalin handler dari sana) —
+	// checkbox itu sendiri TETAP satu, dirender hanya di baris CanARR.
+	ARREligible bool
+	Level       string
+	Approve     bool
+	ARR         bool // tersetel → kotak "Lihat ARR" tercentang
 }
 
 // RoleCard = satu peran CRM workspace beserta matriksnya. Name = identitas mesin
@@ -99,6 +103,7 @@ func RoleEdit(base string, rc RoleCard, scopes []ScopeOption, canEdit bool, errM
 		return roleEditShell(body)
 	}
 
+	actx := buildARRCrossModuleCtx(rc)
 	settingsForm := h.FormEl(
 		h.Method("post"), h.Action(base+"/roles/"+rc.Name),
 		h.Class("grid gap-3 min-w-0"),
@@ -124,8 +129,8 @@ func RoleEdit(base string, rc RoleCard, scopes []ScopeOption, canEdit bool, errM
 				h.Placeholder("Ringkas peran ini dalam satu kalimat"),
 				disabledIf(!canEdit)),
 		),
-		roleMatrix(rc, canEdit, flsReactive(fsec)),
-		additionalSettings(rc, canEdit, fsec),
+		roleMatrix(rc, canEdit, flsReactive(fsec), actx),
+		additionalSettings(rc, canEdit, fsec, actx),
 		ui.When(canEdit, h.Button(h.Type("submit"),
 			h.Class("btn btn-primary min-h-11 justify-self-start"),
 			g.Text("Simpan Perubahan"))),
@@ -189,10 +194,10 @@ func flsReactive(fsec *FieldSecurityRoleView) bool {
 // fls → diteruskan ke roleMatrixRow (lihat flsReactive di atas). BL-169: 4
 // modul Reports (Sales/CS/Support/Subscription) dirender FLAT sebagai baris
 // biasa, sama seperti modul lain — tanpa header grup.
-func roleMatrix(rc RoleCard, canEdit bool, fls bool) g.Node {
+func roleMatrix(rc RoleCard, canEdit bool, fls bool, actx arrCrossModuleCtx) g.Node {
 	rows := make([]g.Node, 0, len(rc.Modules))
 	for _, m := range rc.Modules {
-		rows = append(rows, roleMatrixRow(m, canEdit, fls))
+		rows = append(rows, roleMatrixRow(m, canEdit, fls, actx))
 	}
 	return ui.TableScroll(h.Table(
 		h.Class("w-full text-sm"),
@@ -228,7 +233,7 @@ func roleMatrix(rc RoleCard, canEdit bool, fls bool) g.Node {
 // sini). Backend (readRoleMatrix, guard hasLevel BL-145 subtask 0;
 // writeFieldSecurity utk FLS) TETAP penjaga sesungguhnya — reaktivitas ini
 // murni UX, bukan pengganti validasi server.
-func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool) g.Node {
+func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool, actx arrCrossModuleCtx) g.Node {
 	levelCell := levelSelect(m.Obj, m.Level, !canEdit)
 	var rowAttrs []g.Node
 
@@ -244,13 +249,19 @@ func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool) g.Node {
 			resets = append(resets, "$"+apvSig+"=false")
 		}
 		if m.CanARR {
+			// Bukan hasLevel (baris ini sendiri) — actx.unlockedNow lintas
+			// authz.ARRGateObjects (lihat arrCrossModuleCtx).
 			arrSig := "arr_" + suffix
-			signals[arrSig] = m.ARR && hasLevel
-			resets = append(resets, "$"+arrSig+"=false")
+			signals[arrSig] = m.ARR && actx.unlockedNow
 		}
 		var stmts []string
 		if len(resets) > 0 {
 			stmts = append(stmts, "evt.target.value==='none'&&("+strings.Join(resets, ",")+")")
+		}
+		if m.ARREligible && actx.resetStmt != "" {
+			// Fires di SETIAP baris gate (bukan cuma baris CanARR sendiri) —
+			// begitu SEMUA modul gate balik "none", paksa checkbox ARR ke false.
+			stmts = append(stmts, actx.resetStmt)
 		}
 		if fls && (m.Obj == "crm:contacts" || m.Obj == "crm:leads") {
 			stmts = append(stmts,
@@ -275,6 +286,55 @@ func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool) g.Node {
 	)...)
 }
 
+// arrCrossModuleCtx = konteks reaktivitas checkbox "Lihat Nilai Kontrak" LINTAS
+// MODUL (dibangun SEKALI di RoleEdit lewat buildARRCrossModuleCtx, dipakai
+// roleMatrix/roleMatrixRow & additionalSettings) — checkbox itu TETAP SATU
+// (dirender di baris CanARR, Subscriptions), tapi level baris ITU SENDIRI
+// bukan lagi satu-satunya syarat aktif: authz.ARRGateObjects (business_defaults.go)
+// melebarkan gate ke modul lain di backend (readRoleMatrix, roles_rest.go), dan
+// ini menyalin logika OR yang SAMA persis di sisi UI — tanpanya checkbox bisa
+// tampak bisa dicentang di editor tapi diam-diam dibuang backend saat submit
+// (atau sebaliknya: tampak terkunci padahal backend sudah mengizinkan).
+type arrCrossModuleCtx struct {
+	disabledExpr string // "$lvl_x=='none'&&$lvl_y=='none'&&..." semua modul gate — kosong bila tak ada baris CanARR
+	resetStmt    string // "(disabledExpr)&&($arr_<sig>=false)" — dipasang di on:change TIAP baris gate
+	unlockedNow  bool   // true → SALAH SATU modul gate level-nya (saat render) bukan "none"
+}
+
+// buildARRCrossModuleCtx menyisir rc.Modules SEKALI: baris ber-ARREligible
+// menyusun disabledExpr/unlockedNow, baris ber-CanARR menentukan signal target
+// (arr_<suffix>) yang direset. Urut ikut urutan rc.Modules (= authz.CRMModules,
+// stabil) agar keluarannya deterministik.
+func buildARRCrossModuleCtx(rc RoleCard) arrCrossModuleCtx {
+	var gateObjs []string
+	var arrSig string
+	unlocked := false
+	for _, m := range rc.Modules {
+		if m.ARREligible {
+			gateObjs = append(gateObjs, m.Obj)
+			if m.Level != "none" {
+				unlocked = true
+			}
+		}
+		if m.CanARR {
+			arrSig = "arr_" + moduleSignal(m.Obj)
+		}
+	}
+	if len(gateObjs) == 0 || arrSig == "" {
+		return arrCrossModuleCtx{}
+	}
+	parts := make([]string, len(gateObjs))
+	for i, obj := range gateObjs {
+		parts[i] = "$lvl_" + moduleSignal(obj) + "=='none'"
+	}
+	disabled := strings.Join(parts, "&&")
+	return arrCrossModuleCtx{
+		disabledExpr: disabled,
+		resetStmt:    "(" + disabled + ")&&($" + arrSig + "=false)",
+		unlockedNow:  unlocked,
+	}
+}
+
 // additionalSettings merender checklist "Pengaturan Tambahan", dikelompokkan
 // dua sub-judul (perbaikan tampilan, 2026-09-17): "Keuangan" (kapabilitas
 // approve/arr per modul — dulu kolom "Setujui"/"Lihat ARR" di tabel matriks,
@@ -291,7 +351,7 @@ func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool) g.Node {
 // absen tak bisa dibedakan dari "form tak pernah render bagian ini". Kosong
 // sama sekali (nol approve/arr & fsec nil) → g.Text("") (pola ui.When, BUKAN
 // nil).
-func additionalSettings(rc RoleCard, canEdit bool, fsec *FieldSecurityRoleView) g.Node {
+func additionalSettings(rc RoleCard, canEdit bool, fsec *FieldSecurityRoleView, actx arrCrossModuleCtx) g.Node {
 	var financeRows []g.Node
 	for _, m := range rc.Modules {
 		suffix := moduleSignal(m.Obj)
@@ -300,7 +360,7 @@ func additionalSettings(rc RoleCard, canEdit bool, fsec *FieldSecurityRoleView) 
 			apvSig := "apv_" + suffix
 			cb := permCheckCell("approve."+m.Obj, true, m.Approve, false)
 			if canEdit {
-				cb = reactiveCheckbox("approve."+m.Obj, apvSig, lvlSig)
+				cb = reactiveCheckbox("approve."+m.Obj, apvSig, "$"+lvlSig+" == 'none'")
 			}
 			financeRows = append(financeRows, settingRow(cb, "Boleh menyetujui "+m.Label, g.Text("")))
 		}
@@ -308,7 +368,7 @@ func additionalSettings(rc RoleCard, canEdit bool, fsec *FieldSecurityRoleView) 
 			arrSig := "arr_" + suffix
 			cb := permCheckCell("arr."+m.Obj, true, m.ARR, false)
 			if canEdit {
-				cb = reactiveCheckbox("arr."+m.Obj, arrSig, lvlSig)
+				cb = reactiveCheckbox("arr."+m.Obj, arrSig, actx.disabledExpr)
 			}
 			financeRows = append(financeRows, settingRow(cb,
 				"Lihat Nilai Kontrak (MRR/ARR/Deal Amount) pelanggan", g.Text("")))
@@ -367,7 +427,8 @@ var kontakHint = []string{
 
 var keuanganHint = []string{
 	"\"Lihat Nilai Kontrak (MRR/ARR/Deal Amount) pelanggan\" mengatur akses ke nilai kontrak.",
-	"Berlaku lintas modul: Subscriptions, Deals, Leads, Accounts, Quotes, Reports.",
+	"Berlaku lintas modul: Subscriptions, Deals, Leads, Accounts, Quotes, Renewals, " +
+		"Churn/Cancellations, Reports.",
 	"\"Boleh menyetujui\" mengatur wewenang approve Deals/Quotes/Renewal Management, " +
 		"(tak perlu pilih \"Kelola\" untuk bisa menyetujui).",
 }
@@ -460,16 +521,18 @@ func permCheckCell(name string, show, checked, canEdit bool) g.Node {
 
 // reactiveCheckbox = checkbox approve/arr versi REAKTIF (BL-145 subtask 4/5):
 // checked-nya di-bind dua-arah ke signal sig (bukan h.Checked() statis) —
-// dinonaktifkan reaktif saat level baris (lvlSig) = "none", dan DIPAKSA false
-// oleh handler on:change level select (roleMatrixRow) saat itu terjadi. name/
-// value TETAP native agar form ter-submit apa adanya (checkbox nonaktif tak
-// ikut terkirim, sama seperti checkbox biasa).
-func reactiveCheckbox(name, sig, lvlSig string) g.Node {
+// dinonaktifkan reaktif saat disabledExpr benar, dan DIPAKSA false oleh
+// handler on:change level select (roleMatrixRow) saat itu terjadi. disabledExpr
+// dibangun pemanggil: approve = level baris sendiri ("$lvl_x == 'none'"), arr =
+// OR lintas modul (arrCrossModuleCtx.disabledExpr, sejak gate ARR melebar ke
+// modul lain). name/value TETAP native agar form ter-submit apa adanya
+// (checkbox nonaktif tak ikut terkirim, sama seperti checkbox biasa).
+func reactiveCheckbox(name, sig, disabledExpr string) g.Node {
 	return h.Input(
 		h.Type("checkbox"), h.Class("checkbox checkbox-sm"),
 		h.Name(name), h.Value("1"),
 		data.Bind(sig),
-		data.Attr("disabled", "$"+lvlSig+" == 'none'"),
+		data.Attr("disabled", disabledExpr),
 	)
 }
 
