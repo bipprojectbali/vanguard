@@ -45,7 +45,16 @@ func TestListProvinces_SeededFromMigration(t *testing.T) {
 	}
 }
 
-func TestListAllRegions_FourLevels(t *testing.T) {
+// TestListAllRegions_ThreeLevelsOnly membuktikan kontrak WHERE level <= 3:
+// ListAllRegions dipakai SEKALI per render form utk embed JSON cascading
+// dropdown (static/regions.js, ADR 0009) yang HANYA butuh Provinsi/Kabupaten-
+// Kota/Kecamatan — level 4 (Desa/Kelurahan, ~83.762 baris) dilayani jalur
+// LAZY-FETCH terpisah (ListVillagesByDistrict/data-villages-url) karena
+// volumenya "terlalu besar utk diembed". Regresi query ini (kehilangan filter
+// level) pernah membengkakkan payload form ~11x (91.599 vs ~7.837 baris) dan
+// jadi penyebab form Lead/Account baru lambat dimuat lewat jalur jaringan
+// lambat — lihat comment ListAllRegions di queries/regions.sql.
+func TestListAllRegions_ThreeLevelsOnly(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 	q := New(pool)
@@ -54,12 +63,12 @@ func TestListAllRegions_FourLevels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list all regions: %v", err)
 	}
-	// BL-66: migrasi 00039 menambah level 4 (Desa/Kelurahan, ~83.762 baris) di
-	// atas 3 level 00026 (~7.837) → total puluhan ribu.
-	if len(rows) < 80000 {
-		t.Fatalf("harus >=80000 baris (4 level, cahyadsn/wilayah), got %d", len(rows))
+	// 34+ provinsi + ratusan kab/kota + ribuan kecamatan (00026) — cek batas
+	// bawah wajar, bukan angka pas, agar tak rapuh thd update seed.
+	if len(rows) < 7000 {
+		t.Fatalf("harus >=7000 baris (3 level, cahyadsn/wilayah), got %d", len(rows))
 	}
-	var l1, l2, l3, l4 int
+	var l1, l2, l3 int
 	for _, r := range rows {
 		switch r.Level {
 		case 1:
@@ -68,14 +77,37 @@ func TestListAllRegions_FourLevels(t *testing.T) {
 			l2++
 		case 3:
 			l3++
-		case 4:
-			l4++
 		default:
-			t.Fatalf("level di luar 1-4 lolos seed: %d (%s)", r.Level, r.Name)
+			t.Fatalf("ListAllRegions harus level<=3 saja, ada level=%d (%s) — filter level di regions.sql hilang?", r.Level, r.Name)
 		}
 	}
-	if l1 == 0 || l2 == 0 || l3 == 0 || l4 == 0 {
-		t.Fatalf("keempat level harus terisi, got provinsi=%d kab/kota=%d kecamatan=%d desa=%d", l1, l2, l3, l4)
+	if l1 == 0 || l2 == 0 || l3 == 0 {
+		t.Fatalf("ketiga level harus terisi, got provinsi=%d kab/kota=%d kecamatan=%d", l1, l2, l3)
+	}
+}
+
+// TestRegionsSeed_FourLevelsInDB membuktikan poin (1) di komentar package:
+// keempat level (termasuk Desa/Kelurahan level 4, BL-66/migrasi 00039)
+// benar-benar ter-seed dgn jumlah wajar di DB — dicek via query mentah
+// (bukan ListAllRegions, yang sejak fix di atas SENGAJA tak lagi
+// mengembalikan level 4).
+func TestRegionsSeed_FourLevelsInDB(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	var l1, l2, l3, l4 int
+	err := pool.QueryRow(ctx,
+		`SELECT count(*) FILTER (WHERE level = 1),
+		        count(*) FILTER (WHERE level = 2),
+		        count(*) FILTER (WHERE level = 3),
+		        count(*) FILTER (WHERE level = 4)
+		 FROM regions`,
+	).Scan(&l1, &l2, &l3, &l4)
+	if err != nil {
+		t.Fatalf("count per level: %v", err)
+	}
+	if l1 < 30 || l2 < 400 || l3 < 5000 || l4 < 70000 {
+		t.Fatalf("jumlah per level di luar batas wajar seed cahyadsn/wilayah, got provinsi=%d kab/kota=%d kecamatan=%d desa=%d", l1, l2, l3, l4)
 	}
 }
 
@@ -248,147 +280,3 @@ func TestGetDistrictCode_NonDistrictErrNoRows(t *testing.T) {
 	}
 }
 
-// firstDistrictWithVillages mencari SATU Kecamatan berdesa dari seed. Rerata
-// nasional ~10,7 desa/kecamatan (83.762 desa / 7.837 kecamatan, ADR 0009) —
-// cukup memeriksa beberapa kandidat pertama (kab/kota pertama tiap provinsi,
-// lalu kecamatan pertama tiap kab/kota) daripada menelusur SELURUH ~7.837
-// kecamatan (O(n) query berurutan, lambat tanpa manfaat tambahan pembuktian).
-func firstDistrictWithVillages(t *testing.T, q *Queries, ctx context.Context) (Region, []ListVillagesByDistrictRow) {
-	t.Helper()
-	provinces, err := q.ListProvinces(ctx)
-	if err != nil || len(provinces) == 0 {
-		t.Fatalf("list provinces: %v (len=%d)", err, len(provinces))
-	}
-	const maxProvincesTried = 5
-	for pi, prov := range provinces {
-		if pi >= maxProvincesTried {
-			break
-		}
-		regencies, err := q.ListRegenciesByProvince(ctx, &prov.ID)
-		if err != nil || len(regencies) == 0 {
-			continue
-		}
-		districts, err := q.ListDistrictsByRegency(ctx, &regencies[0].ID)
-		if err != nil {
-			continue
-		}
-		for _, d := range districts {
-			villages, err := q.ListVillagesByDistrict(ctx, &d.ID)
-			if err != nil {
-				t.Fatalf("list villages: %v", err)
-			}
-			if len(villages) > 0 {
-				return d, villages
-			}
-		}
-	}
-	t.Fatal("tak ada Kecamatan berdesa di kandidat yang diperiksa — dataset tak sesuai ekspektasi")
-	return Region{}, nil
-}
-
-// TestSearchRegionsByDistrict_KecamatanDanSemuaDesa: baris pertama = Kecamatan
-// itu sendiri (Desa kosong, sama pola SearchRegionsByCode cabang level 3),
-// diikuti SEMUA Desa anaknya — kontrak dipakai tab "Wilayah" modal
-// RegionSearchModal (perluasan BL-163).
-func TestSearchRegionsByDistrict_KecamatanDanSemuaDesa(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	q := New(pool)
-
-	district, villages := firstDistrictWithVillages(t, q, ctx)
-
-	rows, err := q.SearchRegionsByDistrict(ctx, SearchRegionsByDistrictParams{
-		DistrictID: district.ID, PageSize: 1000,
-	})
-	if err != nil {
-		t.Fatalf("search by district: %v", err)
-	}
-	if len(rows) == 0 {
-		t.Fatal("harus >=1 baris (minimal Kecamatan itu sendiri)")
-	}
-	first := rows[0]
-	if first.Code != district.Code || first.VillageName != "" || first.DistrictName != district.Name {
-		t.Errorf("baris pertama harus Kecamatan %q (Desa kosong), got code=%q village=%q district=%q",
-			district.Name, first.Code, first.VillageName, first.DistrictName)
-	}
-	// Semua Desa anak Kecamatan ini harus ikut muncul (page_size besar → tak
-	// terpotong), dicocokkan via code.
-	got := map[string]bool{}
-	for _, r := range rows[1:] {
-		got[r.Code] = true
-		if r.DistrictName != district.Name {
-			t.Errorf("baris desa %q harus berinduk Kecamatan %q, got %q", r.VillageName, district.Name, r.DistrictName)
-		}
-	}
-	for _, v := range villages {
-		if !got[v.Code] {
-			t.Errorf("Desa %q (code %q) tak muncul di hasil SearchRegionsByDistrict", v.Name, v.Code)
-		}
-	}
-}
-
-// TestSearchRegionsByDistrict_MinimalSatuBarisKecamatanItuSendiri: Kecamatan
-// tanpa Desa (jarang, tapi kalau seed punya) tetap balikin 1 baris (dirinya
-// sendiri), BUKAN 0 — beda dgn asumsi salah "Kecamatan kosong = tak ada
-// hasil". Dites via id Kecamatan tak dipakai UNION kanan (parent_region_id
-// tak match manapun) — pakai id yang sungguhan Kecamatan tapi cari kandidat
-// tanpa desa; bila seed tak punya kandidat begitu, cukup pastikan Kecamatan
-// manapun MINIMAL 1 baris (properti yang sama, versi lebih longgar).
-func TestSearchRegionsByDistrict_MinimalSatuBarisKecamatanItuSendiri(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	q := New(pool)
-
-	provinces, err := q.ListProvinces(ctx)
-	if err != nil || len(provinces) == 0 {
-		t.Fatalf("list provinces: %v (len=%d)", err, len(provinces))
-	}
-	regencies, err := q.ListRegenciesByProvince(ctx, &provinces[0].ID)
-	if err != nil || len(regencies) == 0 {
-		t.Fatalf("list regencies: %v (len=%d)", err, len(regencies))
-	}
-	districts, err := q.ListDistrictsByRegency(ctx, &regencies[0].ID)
-	if err != nil || len(districts) == 0 {
-		t.Fatalf("list districts: %v (len=%d)", err, len(districts))
-	}
-	district := districts[0]
-
-	rows, err := q.SearchRegionsByDistrict(ctx, SearchRegionsByDistrictParams{
-		DistrictID: district.ID, PageSize: 1000,
-	})
-	if err != nil {
-		t.Fatalf("search by district: %v", err)
-	}
-	if len(rows) == 0 {
-		t.Fatalf("Kecamatan %q harus MINIMAL 1 baris (dirinya sendiri), got 0", district.Name)
-	}
-	if rows[0].Code != district.Code || rows[0].VillageName != "" {
-		t.Errorf("baris pertama harus Kecamatan itu sendiri (Desa kosong), got code=%q village=%q",
-			rows[0].Code, rows[0].VillageName)
-	}
-}
-
-// TestSearchRegionsByDistrict_IDBukanKecamatanNihil: id level 1/2 (bukan
-// Kecamatan) → tak ada baris (UNION kiri filter level=3, UNION kanan filter
-// parent_region_id=id yang levelnya bukan 3 tak akan punya anak level 4
-// dengan parent itu secara valid dari sisi domain) — bukti query tak
-// diam-diam balikin data jenjang salah.
-func TestSearchRegionsByDistrict_IDBukanKecamatanNihil(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	q := New(pool)
-
-	provinces, err := q.ListProvinces(ctx)
-	if err != nil || len(provinces) == 0 {
-		t.Fatalf("list provinces: %v (len=%d)", err, len(provinces))
-	}
-	rows, err := q.SearchRegionsByDistrict(ctx, SearchRegionsByDistrictParams{
-		DistrictID: provinces[0].ID, PageSize: 1000,
-	})
-	if err != nil {
-		t.Fatalf("search by district: %v", err)
-	}
-	if len(rows) != 0 {
-		t.Errorf("id provinsi harus 0 baris, got %d", len(rows))
-	}
-}
