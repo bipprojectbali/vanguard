@@ -22,7 +22,7 @@ func (h *Handler) dealsTable(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	filter := db.DealsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 
 	// q = pencarian bebas (BL-6): MEMPERSEMPIT di atas F3+stage, tak melebarkan.
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -287,7 +287,7 @@ func (h *Handler) dealsTable(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]panel.DealRow, 0, len(shown))
 	for _, d := range shown {
-		items = append(items, dealRowView(d, names, br))
+		items = append(items, dealRowView(d, names, canARR))
 	}
 
 	base := wsPath(slugFromRequest(r), "")

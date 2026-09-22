@@ -19,7 +19,7 @@ import (
 func (h *Handler) reportsSubscriptionsData(ctx context.Context, f subscriptionReportFilter) (panel.ReportsSubscriptionsView, error) {
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 	today := reportTodayDate(time.Now().In(appTZ))
 	q := h.q(ctx)
 
@@ -85,26 +85,26 @@ func (h *Handler) reportsSubscriptionsData(ctx context.Context, f subscriptionRe
 
 	renewalRate := ratePct(renewal.RenewedPast, renewal.DuePast)
 	v := panel.ReportsSubscriptionsView{
-		MRR:         maskARR(formatRupiah(mrr.MrrActive), br),
-		ARR:         maskARR(formatRupiah(mrr.ArrActive), br),
+		MRR:         maskARR(formatRupiah(mrr.MrrActive), canARR),
+		ARR:         maskARR(formatRupiah(mrr.ArrActive), canARR),
 		RenewalRate: renewalRate,
 		ChurnRate:   ratePct(retention.Churned, retention.Active+retention.Churned),
 
-		MRRComponents: buildMRRComponents(mrr, br),
+		MRRComponents: buildMRRComponents(mrr, canARR),
 
 		RenewalRateCard: renewalRate,
-		RenewedValue:    maskARR(formatRupiah(renewal.RenewedValue), br),
+		RenewedValue:    maskARR(formatRupiah(renewal.RenewedValue), canARR),
 		Due30:           renewal.Due30,
 		RenewalMonths:   buildRenewalMonths(renewalMonths),
 
 		ChurnVillages: retention.Churned,
-		LostValue:     maskARR(formatRupiah(churnAge.LostValue), br),
+		LostValue:     maskARR(formatRupiah(churnAge.LostValue), canARR),
 		AvgAge:        ageDaysStr(churnAge.AvgAgeDays, churnAge.AgedCount),
-		ChurnReasons:  buildSubChurnReasons(churnReasons, br),
+		ChurnReasons:  buildSubChurnReasons(churnReasons, canARR),
 
-		RevenueByPlan: buildRevenueByPlan(revenueByPlan, br),
+		RevenueByPlan: buildRevenueByPlan(revenueByPlan, canARR),
 
-		AgingRows: buildSubAging(aging, br),
+		AgingRows: buildSubAging(aging, canARR),
 	}
 	return v, nil
 }

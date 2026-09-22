@@ -13,8 +13,10 @@ import (
 
 // renewalChainView memuat riwayat rantai renewal (lama→baru) untuk kartu di
 // detail. Best-effort (mirror dealQuotesPreview): gagal query → nil + log, detail
-// tetap terbaca. ARR tiap periode disamarkan mengikuti kebijakan yang sama.
-func (h *Handler) renewalChainView(ctx context.Context, id int64, businessRole string, canARR bool) []panel.SubChainRow {
+// tetap terbaca. ARR tiap periode disamarkan mengikuti kebijakan yang sama. canARR
+// dihitung SEKALI oleh pemanggil (canSeeSubscriptionARR(ctx)) — MRR & ARR sama
+// kapabilitas sejak BL-169, jadi satu bool cukup untuk keduanya.
+func (h *Handler) renewalChainView(ctx context.Context, id int64, canARR bool) []panel.SubChainRow {
 	rows, err := h.q(ctx).ListRenewalChain(ctx, id)
 	if err != nil {
 		h.Log.Error("subscriptions: renewal chain", "err", err)
@@ -26,7 +28,7 @@ func (h *Handler) renewalChainView(ctx context.Context, id int64, businessRole s
 			ID:     c.ID,
 			IsThis: c.ID == id,
 			Status: c.Status,
-			MRR:    maskARR(formatRupiah(c.Mrr), businessRole),
+			MRR:    maskARR(formatRupiah(c.Mrr), canARR),
 			ARR:    maskSubscriptionARR(formatRupiah(c.Arr), canARR),
 			Start:  dateStr(c.StartDate),
 			End:    dateStr(c.EndDate),
@@ -36,10 +38,11 @@ func (h *Handler) renewalChainView(ctx context.Context, id int64, businessRole s
 }
 
 // subItemRows memetakan baris subscription_items → baris tabel item detail (BL-88
-// PR2b). Nilai komersial disamarkan F4: MRR & Subtotal ikut kebijakan maskARR (br),
-// ARR ikut kapabilitas ARR (maskSubscriptionARR). PlanName NULL (plan terhapus /
-// item tanpa plan) → "—" via view (orDash). Kuantitas & harga satuan bukan sensitif.
-func subItemRows(items []db.ListSubscriptionItemsWithPlanRow, businessRole string, canARR bool) []panel.SubItemRow {
+// PR2b). Nilai komersial disamarkan F4: MRR & Subtotal ikut kebijakan maskARR, ARR
+// ikut maskSubscriptionARR — kapabilitas SAMA sejak BL-169 (canARR tunggal, dihitung
+// sekali oleh pemanggil). PlanName NULL (plan terhapus / item tanpa plan) → "—" via
+// view (orDash). Kuantitas & harga satuan bukan sensitif.
+func subItemRows(items []db.ListSubscriptionItemsWithPlanRow, canARR bool) []panel.SubItemRow {
 	out := make([]panel.SubItemRow, 0, len(items))
 	for _, it := range items {
 		name := ""
@@ -50,8 +53,8 @@ func subItemRows(items []db.ListSubscriptionItemsWithPlanRow, businessRole strin
 			PlanName:  name,
 			Quantity:  strconv.FormatInt(int64(it.Quantity), 10),
 			UnitPrice: formatRupiah(it.UnitPrice),
-			Subtotal:  maskARR(formatRupiah(it.Subtotal), businessRole),
-			MRR:       maskARR(formatRupiah(it.Mrr), businessRole),
+			Subtotal:  maskARR(formatRupiah(it.Subtotal), canARR),
+			MRR:       maskARR(formatRupiah(it.Mrr), canARR),
 			ARR:       maskSubscriptionARR(formatRupiah(it.Arr), canARR),
 		})
 	}

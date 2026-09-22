@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"go_starter/internal/db"
-	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 
 	"github.com/jackc/pgx/v5"
@@ -21,8 +20,10 @@ import (
 // Nama plan & desa diresolusi best-effort (di luar tenant/terhapus → label
 // cadangan, tak menggagalkan halaman).
 func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscription, names map[int64]string) panel.SubDetailView {
-	br := session.BusinessRole(ctx)
-	canARR := canSeeSubscriptionARR(ctx) // BL-58: kapabilitas ter-matriks, bukan nama role
+	// BL-58/BL-169: canSeeARR/canSeeSubscriptionARR = kapabilitas Casbin ter-matriks
+	// yang SAMA (disatukan BL-169) — satu bool dihitung sekali, dipakai untuk semua
+	// nilai komersial (MRR/ARR/Subtotal) di halaman ini.
+	canARR := canSeeSubscriptionARR(ctx)
 	now := todayInAppTZ()
 
 	// Item paket (BL-88 PR2b): best-effort (gagal → nil, detail tetap terbaca).
@@ -68,7 +69,7 @@ func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscript
 	// auto_renew (renewalTypeLabel) — menggabungkan 2 field lama (RenewalType +
 	// AutoRenew) jadi satu field mockup, tanpa regresi data (keputusan desain BL-154).
 	renewalTypeDisplay := renewalTypeLabel(s.RenewalType, s.AutoRenew)
-	prevToCurrent := maskARR(formatRupiah(s.PreviousValue), br) + " → " + maskARR(formatRupiah(s.Mrr), br)
+	prevToCurrent := maskARR(formatRupiah(s.PreviousValue), canARR) + " → " + maskARR(formatRupiah(s.Mrr), canARR)
 
 	// BL-154 System & Audit: pembuat/pengubah + waktu (mirror dealSystemAuditCard/
 	// auditViewFor — metadata operasional, bukan data sensitif, tanpa masking F4).
@@ -88,9 +89,9 @@ func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscript
 		Village:      h.accountLabel(ctx, s.AccountID),
 		AccountID:    s.AccountID,
 		Plan:         planDisplay,
-		Items:        subItemRows(items, br, canARR),
+		Items:        subItemRows(items, canARR),
 		Status:       s.Status,
-		MRR:          maskARR(formatRupiah(s.Mrr), br),
+		MRR:          maskARR(formatRupiah(s.Mrr), canARR),
 		ARR:          maskSubscriptionARR(formatRupiah(s.Arr), canARR),
 		BillingCycle: deref(s.BillingCycle),
 		Start:        dateStr(s.StartDate),
@@ -98,7 +99,7 @@ func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscript
 		Seats:        int32Str(s.QuantitySeats),
 		PaymentState: deref(s.PaymentStatus),
 		Owner:        ownerName(s.SubscriptionOwner, names),
-		Chain:        h.renewalChainView(ctx, s.ID, br, canARR),
+		Chain:        h.renewalChainView(ctx, s.ID, canARR),
 
 		// BL-154 — kartu Identitas & Langganan (tambahan): Contract Term.
 		ContractTerm: contractTermStr(s.ContractTermMonths),

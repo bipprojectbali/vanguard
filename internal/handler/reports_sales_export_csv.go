@@ -20,7 +20,7 @@ func (h *Handler) reportsSalesCSV(ctx context.Context, panelKey string, f salesR
 	lead := db.LeadsListFilterFor(session.BusinessDataScope(ctx))
 	act := db.ActivitiesListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 	q := h.q(ctx)
 
 	switch panelKey {
@@ -34,7 +34,7 @@ func (h *Handler) reportsSalesCSV(ctx context.Context, panelKey string, f salesR
 		}
 		rows := make([][]string, 0, len(buckets))
 		for _, b := range buckets {
-			rows = append(rows, []string{b.Period, maskARR(numericStr(b.WeightedValue), br)})
+			rows = append(rows, []string{b.Period, maskARR(numericStr(b.WeightedValue), canARR)})
 		}
 		return "sales-forecast", []string{"Periode", "Forecast"}, rows, nil
 
@@ -122,9 +122,9 @@ func (h *Handler) reportsSalesCSV(ctx context.Context, panelKey string, f salesR
 			rows = append(rows, []string{
 				s.Stage,
 				strconv.FormatInt(s.DealCount, 10),
-				maskARR(numericStr(s.StageValue), br),
+				maskARR(numericStr(s.StageValue), canARR),
 				strconv.FormatInt(s.AvgProbability, 10) + "%",
-				maskARR(numericStr(s.WeightedValue), br),
+				maskARR(numericStr(s.WeightedValue), canARR),
 			})
 		}
 		return "sales-report", []string{"Stage", "Jumlah Deal", "Nilai", "Probability", "Weighted"}, rows, nil

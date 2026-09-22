@@ -40,7 +40,7 @@ func (h *Handler) SubscriptionChurnList(w http.ResponseWriter, r *http.Request) 
 	typeFilter := normalizeChurnTypeFilter(r.URL.Query().Get("type"))
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 
 	cursorAt, cursorID := pageCursor(r)
 	rows, err := h.q(ctx).ListChurned(ctx, db.ListChurnedParams{
@@ -68,11 +68,11 @@ func (h *Handler) SubscriptionChurnList(w http.ResponseWriter, r *http.Request) 
 	}
 	items := make([]panel.ChurnRow, 0, len(shown))
 	for _, s := range shown {
-		items = append(items, churnRowView(s, names, br))
+		items = append(items, churnRowView(s, names, canARR))
 	}
 
 	// KPI global (semua tipe) — tab Tipe hanya menyaring tabel, bukan kartu (BL-92).
-	kpis, err := h.churnKPIs(ctx, filter, uid, br)
+	kpis, err := h.churnKPIs(ctx, filter, uid, canARR)
 	if err != nil {
 		h.Log.Error("subscriptions: churn kpis", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)

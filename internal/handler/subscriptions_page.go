@@ -32,7 +32,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 
 	// now/today di zona waktu app: now menurunkan Status DERIVASI per-baris
 	// (BL-95, ambang SAMA dgn Renewals BL-94); today (tanggal sipil UTC) menyaring
@@ -107,7 +107,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.SubRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, subRowView(subListRowFromVillageSort(s), names, br, now))
+			items = append(items, subRowView(subListRowFromVillageSort(s), names, canARR, now))
 		}
 	case "status":
 		// Masa Berlaku diurut RAW status (Trial/Active/…, alfabetis) — keputusan
@@ -137,7 +137,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.SubRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, subRowView(subListRowFromStatusSort(s), names, br, now))
+			items = append(items, subRowView(subListRowFromStatusSort(s), names, canARR, now))
 		}
 	case "plan":
 		cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
@@ -168,7 +168,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.SubRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, subRowView(subListRowFromPlanSort(s), names, br, now))
+			items = append(items, subRowView(subListRowFromPlanSort(s), names, canARR, now))
 		}
 	case "mrr":
 		cursorRaw, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
@@ -207,7 +207,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.SubRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, subRowView(subListRowFromMrrSort(s), names, br, now))
+			items = append(items, subRowView(subListRowFromMrrSort(s), names, canARR, now))
 		}
 	case "renewal":
 		cursorRaw, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
@@ -242,7 +242,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.SubRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, subRowView(subListRowFromRenewalSort(s), names, br, now))
+			items = append(items, subRowView(subListRowFromRenewalSort(s), names, canARR, now))
 		}
 	case "csm":
 		cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
@@ -277,7 +277,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.SubRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, subRowView(subListRowFromCsmSort(s), names, br, now))
+			items = append(items, subRowView(subListRowFromCsmSort(s), names, canARR, now))
 		}
 	default:
 		rows, err := h.q(ctx).ListSubscriptions(ctx, db.ListSubscriptionsParams{
@@ -301,7 +301,7 @@ func (h *Handler) SubscriptionsList(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.SubRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, subRowView(subListRowFromDefault(s), names, br, now))
+			items = append(items, subRowView(subListRowFromDefault(s), names, canARR, now))
 		}
 	}
 
@@ -420,8 +420,9 @@ func subListRowFromCsmSort(s db.ListSubscriptionsSortByCsmRow) subListRow {
 // audit FLS M9-1). Status = DERIVASI renewal (subDerivedStatus) HANYA untuk
 // langganan Active; status daur hidup lain (Trial/Cancelled/…) tampil apa adanya
 // (badge lifecycle) — derivasi berbasis end_date tak bermakna untuk status
-// terminal. CSM (owner) diresolusi dari peta anggota.
-func subRowView(s subListRow, names map[int64]string, businessRole string, now time.Time) panel.SubRow {
+// terminal. CSM (owner) diresolusi dari peta anggota. canARR dihitung SEKALI
+// oleh pemanggil (canSeeARR(ctx)).
+func subRowView(s subListRow, names map[int64]string, canARR bool, now time.Time) panel.SubRow {
 	label, cls := subDerivedStatus(s.Status, s.EndDate, now)
 	return panel.SubRow{
 		ID:          s.ID,
@@ -429,7 +430,7 @@ func subRowView(s subListRow, names map[int64]string, businessRole string, now t
 		Plan:        subPlanDisplay(s.PlanName, s.ItemCount),
 		Status:      label,
 		StatusClass: cls,
-		MRR:         maskARR(formatRupiah(s.Mrr), businessRole),
+		MRR:         maskARR(formatRupiah(s.Mrr), canARR),
 		Renewal:     dateStr(s.EndDate),
 		CSM:         ownerName(s.SubscriptionOwner, names),
 	}

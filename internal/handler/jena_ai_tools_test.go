@@ -166,15 +166,16 @@ func TestJenaGetSubscriptionStatus_NoSubscription(t *testing.T) {
 	}
 }
 
-func TestJenaGetSubscriptionStatus_F4ArrVsMrrDifferentGates(t *testing.T) {
+// TestJenaGetSubscriptionStatus_ArrVisibleForSalesDefault: Sales punya grant
+// crm:subscriptions/arr bawaan sejak BL-169 → MRR & ARR SAMA-SAMA tampil
+// (satu kapabilitas, satu gerbang — fls.go/canSeeARR memanggil
+// subscriptions_view.go/canSeeSubscriptionARR langsung).
+func TestJenaGetSubscriptionStatus_ArrVisibleForSalesDefault(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Langganan", &uid, nil, nil)
 	planID := env.seedPlan(t, "Plan Uji", "PLAN-JENA", "1000000")
 	env.seedSubscription(t, acc.ID, planID, &uid, "Active", "1000000", "12000000")
 
-	// Sales: canSeeARR true (MRR tampil) tapi canSeeSubscriptionARR false
-	// (bukan Admin/Manager) → ARR tetap tersamar. Membuktikan MRR & ARR pakai
-	// gerbang F4 BERBEDA (fls.go vs subscriptions_view.go).
 	var out string
 	env.runJena(uid, "sales", func(ctx context.Context) {
 		var err error
@@ -189,10 +190,52 @@ func TestJenaGetSubscriptionStatus_F4ArrVsMrrDifferentGates(t *testing.T) {
 		t.Fatalf("hasil bukan JSON valid: %v\n%s", err, out)
 	}
 	if parsed["mrr"] == flsHidden {
-		t.Errorf("MRR harus tampil untuk Sales (canSeeARR), got %v", parsed["mrr"])
+		t.Errorf("MRR harus tampil untuk Sales (grant arr bawaan, BL-169), got %v", parsed["mrr"])
+	}
+	if parsed["arr"] == flsHidden {
+		t.Errorf("ARR harus tampil untuk Sales (grant arr bawaan, BL-169), got %v", parsed["arr"])
+	}
+}
+
+// TestJenaGetSubscriptionStatus_MrrArrSameGateForCustomRole: peran custom
+// TANPA grant crm:subscriptions/arr — MRR & ARR SAMA-SAMA tersamar (satu
+// kapabilitas sejak BL-169, bukan dua gerbang independen spt sebelumnya).
+func TestJenaGetSubscriptionStatus_MrrArrSameGateForCustomRole(t *testing.T) {
+	env, uid := setupAccounts(t)
+	env.loadBusinessRolesWith(t,
+		authz.BusinessPerm{Role: "jenanoarr", Obj: "crm:accounts", Act: "read"},
+		authz.BusinessPerm{Role: "jenanoarr", Obj: "crm:subscriptions", Act: "read"},
+	)
+	acc := env.seedAccount(t, "Desa Langganan NoARR", &uid, nil, nil)
+	planID := env.seedPlan(t, "Plan Uji NoARR", "PLAN-JENA-NOARR", "1000000")
+	env.seedSubscription(t, acc.ID, planID, &uid, "Active", "1000000", "12000000")
+
+	// Peran custom tak dikenal DefaultDataScope → DataScopeNone (F3 nihil
+	// baris). Set eksplisit DataScopeAll agar F3 lolos & F4 (arr) murni diuji
+	// (pola sama TestJenaGetAccountSummary_F4BudgetMaskedForSupport).
+	var out string
+	env.sm.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		session.SetIdentity(ctx, uid, "test@local", "owner", false,
+			env.tenantID, "Test", "test", "")
+		session.SetBusinessRole(ctx, "jenanoarr")
+		session.SetBusinessDataScope(ctx, authz.DataScopeAll)
+		var err error
+		out, err = env.h.jenaGetSubscriptionStatus(withQueries(ctx, env.q), json.RawMessage(itoaJSON("account_id", acc.ID)))
+		if err != nil {
+			t.Fatalf("jenaGetSubscriptionStatus: %v", err)
+		}
+	})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("hasil bukan JSON valid: %v\n%s", err, out)
+	}
+	if parsed["mrr"] != flsHidden {
+		t.Errorf("MRR harus tersamar untuk peran custom tanpa grant arr, got %v", parsed["mrr"])
 	}
 	if parsed["arr"] != flsHidden {
-		t.Errorf("ARR harus tersamar untuk Sales (bukan Admin/Manager, canSeeSubscriptionARR false), got %v", parsed["arr"])
+		t.Errorf("ARR harus tersamar untuk peran custom tanpa grant arr, got %v", parsed["arr"])
 	}
 }
 

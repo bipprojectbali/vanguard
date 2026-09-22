@@ -24,35 +24,26 @@ import (
 //     kepemilikan. Peran custom dgn cakupan 'own' via runAccountScope (pola
 //     BL-58) krn peran bawaan ber-arr (admin/manager) defaultnya cakupan 'all'.
 
-// TestDashboardSubscriptionCharts_RevenueGatedByARR: admin/manager (crm:
-// subscriptions + arr) melihat KEDUA chart baru; sales/csm (crm:subscriptions
-// TANPA arr) hanya melihat Renewal per Bulan; support (tanpa kapabilitas
-// domain ini sama sekali) tak melihat satupun.
+// TestDashboardSubscriptionCharts_RevenueGatedByARR: admin/manager/sales/csm
+// (crm:subscriptions + arr — grant arr meluas ke Sales & CSM sejak BL-169)
+// melihat KEDUA chart baru; support (tanpa kapabilitas domain ini sama
+// sekali) tak melihat satupun. Kasus "punya crm:subscriptions TANPA arr"
+// (F4 lebih ketat dari union Renewal) diuji lewat peran custom di
+// TestDashboardSubscriptionCharts_RevenueGatedByARR_CustomRoleNoARR — peran
+// bawaan tak lagi merepresentasikan kombinasi itu sejak BL-169.
 func TestDashboardSubscriptionCharts_RevenueGatedByARR(t *testing.T) {
 	env, uid := setupAccounts(t)
 	plan := env.seedPlan(t, "Paket Chart Gate", "PLAN-CHART-GATE", "1000000")
 	acc := env.seedAccount(t, "Desa Chart Sub", &uid, nil, nil)
 	env.seedDashboardSub(t, acc.ID, plan, &uid, "Active", "6000000", nil)
 
-	for _, role := range []string{"admin", "manager"} {
+	for _, role := range []string{"admin", "manager", "sales", "csm"} {
 		t.Run(role+" melihat kedua chart Langganan", func(t *testing.T) {
 			body := env.dashboardBody(t, uid, "owner", role)
 			for _, id := range []string{"chart-sub-revenue", "chart-sub-renewal"} {
 				if !strings.Contains(body, `id="`+id+`"`) {
 					t.Errorf("role %q harus melihat %q, body:\n%s", role, id, body)
 				}
-			}
-		})
-	}
-
-	for _, role := range []string{"sales", "csm"} {
-		t.Run(role+" hanya melihat Renewal per Bulan (tanpa arr)", func(t *testing.T) {
-			body := env.dashboardBody(t, uid, "owner", role)
-			if !strings.Contains(body, `id="chart-sub-renewal"`) {
-				t.Errorf("role %q (crm:subscriptions tanpa arr) tetap harus melihat chart-sub-renewal, body:\n%s", role, body)
-			}
-			if strings.Contains(body, `id="chart-sub-revenue"`) {
-				t.Errorf("role %q (crm:subscriptions TANPA arr) TAK boleh melihat chart-sub-revenue (F4), body:\n%s", role, body)
 			}
 		})
 	}
@@ -65,6 +56,35 @@ func TestDashboardSubscriptionCharts_RevenueGatedByARR(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestDashboardSubscriptionCharts_RevenueGatedByARR_CustomRoleNoARR: peran
+// custom dgn crm:subscriptions read TANPA grant arr — kombinasi yang sejak
+// BL-169 tak lagi diwakili peran bawaan manapun (Sales/CSM kini default
+// ber-arr) — tetap melihat Renewal per Bulan (union canSubs||canChurn, COUNT
+// saja, aman F4) tapi TIDAK melihat Revenue per Paket (F4 lebih ketat).
+func TestDashboardSubscriptionCharts_RevenueGatedByARR_CustomRoleNoARR(t *testing.T) {
+	env, uid := setupAccounts(t)
+	env.loadBusinessRolesWith(t,
+		authz.BusinessPerm{Role: "subsnoarr", Obj: "crm:dashboard", Act: "read"},
+		authz.BusinessPerm{Role: "subsnoarr", Obj: "crm:subscriptions", Act: "read"},
+	)
+	plan := env.seedPlan(t, "Paket Chart NoARR", "PLAN-CHART-NOARR", "1000000")
+	acc := env.seedAccount(t, "Desa Chart NoARR", &uid, nil, nil)
+	env.seedDashboardSub(t, acc.ID, plan, &uid, "Active", "6000000", nil)
+
+	req := accountsReq(http.MethodGet, "/w/test/", nil, "")
+	rec := env.runAccountScope(uid, "member", "subsnoarr", "all", req, env.h.WorkspaceHome)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="chart-sub-renewal"`) {
+		t.Errorf("peran custom (crm:subscriptions tanpa arr) tetap harus melihat chart-sub-renewal, body:\n%s", body)
+	}
+	if strings.Contains(body, `id="chart-sub-revenue"`) {
+		t.Errorf("peran custom (crm:subscriptions TANPA arr) TAK boleh melihat chart-sub-revenue (F4), body:\n%s", body)
+	}
 }
 
 // TestDashboardSubscriptionCharts_RenewalVisibleForChurnOnly (BL-98 union):

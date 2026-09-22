@@ -175,28 +175,25 @@ func TestReportsCS_RetentionAndChurn(t *testing.T) {
 }
 
 // TestReportsCS_ChurnMasking: F4 — buildChurnRows memasking Nilai Hilang bagi
-// role DI LUAR canSeeARR. Diuji langsung di level builder (bukan via handler):
-// role bawaan yang bisa melihat langganan (scope all/own) SELALU juga pemegang
-// ARR, sedangkan Support scope=none → nol baris churn (tak ada yang di-mask).
-// Masking baru menggigit pada ROLE KUSTOM (data_scope all/own tapi bukan 4 nama
-// ber-ARR) — persis yang di-simulasikan businessRole "support" pada builder di
-// bawah: canSeeARR("support")=false → tersamar; "admin"=true → Rupiah utuh.
+// pemanggil TANPA kapabilitas crm:subscriptions/arr (canSeeARR, BL-169).
+// Builder murni-data kini menerima bool (bukan businessRole) — pemanggil
+// (reports_cs.go) yang menghitung canSeeARR(ctx) sekali.
 func TestReportsCS_ChurnMasking(t *testing.T) {
 	rows := []db.ReportChurnReasonsRow{
 		{ChurnReason: "Budget", AccountCount: 1, LostValue: numFrom(t, "500000")},
 	}
 
-	masked := buildChurnRows(rows, "support")
+	masked := buildChurnRows(rows, false)
 	if len(masked) != 1 {
-		t.Fatalf("buildChurnRows(support) len = %d, want 1", len(masked))
+		t.Fatalf("buildChurnRows(false) len = %d, want 1", len(masked))
 	}
 	if masked[0].LostValue != flsHidden {
 		t.Errorf("Nilai Hilang non-ARR = %q, want %q (tersamar)", masked[0].LostValue, flsHidden)
 	}
 
-	seen := buildChurnRows(rows, "admin")
+	seen := buildChurnRows(rows, true)
 	if !strings.Contains(seen[0].LostValue, "500.000") {
-		t.Errorf("admin harus melihat Nilai Hilang Rp 500.000, got %q", seen[0].LostValue)
+		t.Errorf("canARR=true harus melihat Nilai Hilang Rp 500.000, got %q", seen[0].LostValue)
 	}
 }
 

@@ -30,7 +30,7 @@ var churnTypeTabs = []churnTypeTab{
 // terakhir, Churned MRR = bulan berjalan, Avg Tenure = seluruh riwayat (period NULL).
 // SELALU global (semua tipe churn) — tab Tipe hanya menyaring tabel + CSV. F3
 // ownership diwariskan dari filter/uid. REUSE ReportRetention/ReportChurnAge apa adanya.
-func (h *Handler) churnKPIs(ctx context.Context, filter db.SubscriptionsListFilter, uid int64, br string) (panel.ChurnKPIs, error) {
+func (h *Handler) churnKPIs(ctx context.Context, filter db.SubscriptionsListFilter, uid int64, canARR bool) (panel.ChurnKPIs, error) {
 	now := time.Now().In(appTZ)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, appTZ)
 	start30 := salesTS(today.AddDate(0, 0, -30))
@@ -64,7 +64,7 @@ func (h *Handler) churnKPIs(ctx context.Context, filter db.SubscriptionsListFilt
 
 	return panel.ChurnKPIs{
 		ChurnRate:       ratePct(ret.Churned, ret.Active+ret.Churned),
-		ChurnedMRR:      maskARR(formatRupiah(mon.LostValue), br),
+		ChurnedMRR:      maskARR(formatRupiah(mon.LostValue), canARR),
 		VillagesChurned: strconv.FormatInt(ret.Churned, 10),
 		VillagesActive:  strconv.FormatInt(ret.Active, 10),
 		AvgTenure:       tenureMonthsStr(life.AvgAgeDays, life.AgedCount),
@@ -122,12 +122,12 @@ func churnTypeFilterOptions() []panel.ChurnType {
 // mrr, nilai komersial → maskARR (F4). CSM = nama pemilik langganan dari peta
 // anggota. Tenure = cancellation_date − start_date (BL-92). Kolom mengikuti
 // wireframe 5.2/5.4.
-func churnRowView(s db.ListChurnedRow, names map[int64]string, businessRole string) panel.ChurnRow {
+func churnRowView(s db.ListChurnedRow, names map[int64]string, canARR bool) panel.ChurnRow {
 	return panel.ChurnRow{
 		ID:        s.ID,
 		Village:   s.VillageName,
 		Plan:      subPlanDisplay(s.PlanName, s.ItemCount),
-		LostMRR:   maskARR(formatRupiah(s.LostValueMrr), businessRole),
+		LostMRR:   maskARR(formatRupiah(s.LostValueMrr), canARR),
 		Reason:    deref(s.ChurnReason),
 		Type:      deref(s.ChurnType),
 		ChurnDate: dateStr(s.CancellationDate),

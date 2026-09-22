@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"go_starter/internal/db"
-	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 )
 
@@ -37,7 +36,6 @@ func accountRowView(a db.Account, names map[int64]string, regions map[int64]regi
 // accountDetailView merakit data detail lengkap + terapkan F4. Menerima ctx untuk
 // membaca business_role aktor (dasar masking). base = prefix URL workspace.
 func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Account) panel.AccountDetailView {
-	br := session.BusinessRole(ctx)
 	// Satu baris → 1 query GetRegionAncestry (bukan regionAncestryMap, yang
 	// scan ~7.817 baris demi 1 hasil — cocok utk daftar, bukan detail).
 	var province, regency, district string
@@ -54,7 +52,7 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 		h.Log.Error("accounts: member names", "err", err)
 	}
 	parentLabel, parentHref := h.parentAccountFor(ctx, base, a.ParentAccountID)
-	sub := h.subscriptionSummaryFor(ctx, base, a.ID, br)
+	sub := h.subscriptionSummaryFor(ctx, base, a.ID)
 
 	return panel.AccountDetailView{
 		Base:        base,
@@ -93,7 +91,7 @@ func (h *Handler) accountDetailView(ctx context.Context, base string, a db.Accou
 		// BL-112: tampilkan terformat "Rp 7.500.000" (formatRupiah), bukan angka
 		// mentah "7500000.00" (numericStr). Masking F4 (maskARR) tetap memutuskan
 		// tampil/sembunyi TERPISAH dari format.
-		VillageBudget: maskARR(formatRupiah(a.VillageBudget), br),
+		VillageBudget: maskARR(formatRupiah(a.VillageBudget), canSeeARR(ctx)),
 
 		// BL-106: HP Kontak account TAK lagi ber-FLS — siapa pun yang boleh melihat
 		// desa ini melihat nomor penuh (beda dari Kontak/Lead yang tetap ber-mask).

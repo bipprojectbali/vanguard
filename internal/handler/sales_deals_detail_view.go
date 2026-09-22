@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"go_starter/internal/db"
-	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 
 	"github.com/jackc/pgx/v5"
@@ -42,7 +41,6 @@ func (h *Handler) dealQuotesPreview(ctx context.Context, dealID int64) []panel.Q
 // kontak utama diresolusi best-effort (baris di luar tenant/terhapus → label
 // cadangan, tak menggagalkan halaman).
 func (h *Handler) dealDetailView(ctx context.Context, base string, d db.Deal, names map[int64]string) panel.DealDetailView {
-	br := session.BusinessRole(ctx)
 	accountLabel := h.accountLabel(ctx, d.AccountID)
 	contactLabel := ""
 	if d.PrimaryContactID != nil {
@@ -76,7 +74,7 @@ func (h *Handler) dealDetailView(ctx context.Context, base string, d db.Deal, na
 
 		WonSubStatuses:   wonSubStatusOptions,
 		DealType:         deref(d.DealType),
-		Amount:           maskARR(formatRupiah(d.Amount), br),
+		Amount:           maskARR(formatRupiah(d.Amount), canSeeARR(ctx)),
 		AmountLabel:      amountLabel,
 		Probability:      probabilityStr(d.Probability),
 		ExpectedClose:    dateStr(d.ExpectedCloseDate),

@@ -91,8 +91,9 @@ func renewalListRowFromMrrSort(s db.ListRenewalsSortByMrrRow) renewalListRow {
 // relatif "hari ini" (zona waktu app). Jenis: renewal_type bila terisi, jika NULL
 // fallback ke auto_renew (BL-94). Status = DERIVASI renewal (bukan lifecycle
 // subscription.status) sesuai wireframe. Prev→Current = previous_value → MRR,
-// keduanya nilai komersial → maskARR (F4, diperbaiki audit FLS M9-1).
-func renewalRowView(s renewalListRow, now time.Time, businessRole string) panel.RenewalRow {
+// keduanya nilai komersial → maskARR (F4, diperbaiki audit FLS M9-1). canARR
+// dihitung SEKALI oleh pemanggil (canSeeARR(ctx)).
+func renewalRowView(s renewalListRow, now time.Time, canARR bool) panel.RenewalRow {
 	label, cls := renewalDerivedStatus(now, s.Status, s.EndDate, s.RenewalStatus)
 	return panel.RenewalRow{
 		ID:          s.ID,
@@ -103,8 +104,8 @@ func renewalRowView(s renewalListRow, now time.Time, businessRole string) panel.
 		Type:        renewalTypeLabel(s.RenewalType, s.AutoRenew),
 		Status:      label,
 		StatusClass: cls,
-		PrevValue:   maskARR(formatRupiah(s.PreviousValue), businessRole),
-		CurrentMRR:  maskARR(formatRupiah(s.Mrr), businessRole),
+		PrevValue:   maskARR(formatRupiah(s.PreviousValue), canARR),
+		CurrentMRR:  maskARR(formatRupiah(s.Mrr), canARR),
 	}
 }
 

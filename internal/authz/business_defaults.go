@@ -93,7 +93,8 @@ func DefaultBusinessRoles() []DefaultRole {
 				{"crm:accounts", "write"}, {"crm:contacts", "write"},
 				{"crm:leads", "write"}, {"crm:deals", "write"},
 				{"crm:sales_activity", "write"},
-				{"crm:subscriptions", "read"}, {"crm:renewals", "read"},
+				{"crm:subscriptions", "read"}, {"crm:subscriptions", "arr"},
+				{"crm:renewals", "read"},
 				{"crm:plans", "read"}, {"crm:churn", "read"},
 				{"crm:health", "read"}, {"crm:journey", "read"},
 				{"crm:renewal_mgmt", "read"},
@@ -113,7 +114,7 @@ func DefaultBusinessRoles() []DefaultRole {
 				// BL-11: CS = peran pasca-jual; pipeline pra-jual (Deals) bukan
 				// wilayahnya. Konteks kontrak TETAP lewat crm:subscriptions
 				// (cermin pasca-jual dari deal menang: source_deal_id+nilai+plan).
-				{"crm:subscriptions", "read"},
+				{"crm:subscriptions", "read"}, {"crm:subscriptions", "arr"},
 				{"crm:renewals", "read"}, {"crm:plans", "read"},
 				{"crm:churn", "write"}, {"crm:health", "write"},
 				{"crm:journey", "write"}, {"crm:success_plans", "write"},
@@ -192,8 +193,12 @@ type ModuleDef struct {
 // editor (di luar daftar, ATAU CanApprove/CanARR=false) ikut TERHAPUS begitu
 // role itu disunting ULANG lewat UI — bukan permanen aman, tapi konsisten dgn
 // invarian existing (TestRoles_UpdateIgnoresDroppedColumns), bukan risiko
-// baru. CanARR hanya Subscriptions (BL-58): visibilitas ARR = kapabilitas
-// ter-matriks (crm:subscriptions/arr), bukan cek nama role.
+// baru. CanARR checkbox-nya cuma dirender di baris Subscriptions (BL-58) —
+// TAPI sejak BL-169 kapabilitas yang sama (crm:subscriptions/arr) juga
+// menggerbangi Nilai Kontrak lintas modul (Deal Amount, estimasi Lead,
+// anggaran desa Account, dst — canSeeARR, internal/handler/fls.go), bukan
+// cuma ARR Subscriptions. Checkbox tetap satu, TAK dipindah/diduplikasi ke
+// modul lain — menghindari kolom "Lihat ARR" ganda yang membingungkan.
 var crmModules = []ModuleDef{
 	{"crm:dashboard", "Dashboard", false, false},
 	{"crm:accounts", "Accounts (Desa)", false, false},

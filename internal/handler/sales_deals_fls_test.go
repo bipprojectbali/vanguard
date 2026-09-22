@@ -26,11 +26,11 @@ import (
 // jalurnya: csm → 403 nyata (bukti gate BL-11), Support → dealDetailView
 // langsung utk masking.
 
-// TestDealRowView_AmountMasked: Amount tersamar utk Support, tampil apa adanya
-// utk role lain (admin/manager/sales/csm) di baris daftar/pipeline Deal. csm
-// TETAP diuji di sini walau F2-blocked sejak BL-11: ini menguji F4 (canSeeARR,
-// masking field) yang TEGAK LURUS terhadap F2 (gate modul) — csm ada di sisi
-// "boleh lihat Amount" seandainya mencapai baris; cabut-akses BL-11 murni gate.
+// TestDealRowView_AmountMasked: Amount tersamar bila pemanggil TANPA kapabilitas
+// crm:subscriptions/arr (canARR=false), tampil apa adanya bila true, di baris
+// daftar/pipeline Deal. dealRowView murni-data sejak BL-169 (menerima bool,
+// bukan businessRole) — pemetaan role→canARR sendiri diuji di authz/business_
+// defaults (default grant Admin/Manager/Sales/CSM, TANPA Support).
 func TestDealRowView_AmountMasked(t *testing.T) {
 	d := db.Deal{
 		DealName: "Deal Baris",
@@ -39,16 +39,14 @@ func TestDealRowView_AmountMasked(t *testing.T) {
 	}
 	const wantAmount = "Rp 7.500.000"
 
-	v := dealRowView(d, nil, "support")
+	v := dealRowView(d, nil, false)
 	if v.Amount != flsHidden {
-		t.Errorf("support: Amount harus tersamar (%s), got %q", flsHidden, v.Amount)
+		t.Errorf("canARR=false: Amount harus tersamar (%s), got %q", flsHidden, v.Amount)
 	}
 
-	for _, role := range []string{"admin", "manager", "sales", "csm"} {
-		v := dealRowView(d, nil, role)
-		if v.Amount != wantAmount {
-			t.Errorf("role %q: Amount harus %q, got %q", role, wantAmount, v.Amount)
-		}
+	v = dealRowView(d, nil, true)
+	if v.Amount != wantAmount {
+		t.Errorf("canARR=true: Amount harus %q, got %q", wantAmount, v.Amount)
 	}
 }
 

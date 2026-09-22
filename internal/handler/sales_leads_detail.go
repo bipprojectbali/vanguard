@@ -63,7 +63,6 @@ func (h *Handler) LeadDetail(w http.ResponseWriter, r *http.Request) {
 // leadDetailView merakit detail lengkap + F4 (estimated_value & telepon tersamar).
 // Menerima ctx untuk business_role aktor (dasar masking) & peta nama anggota.
 func (h *Handler) leadDetailView(ctx context.Context, base string, l db.Lead, names map[int64]string) panel.LeadDetailView {
-	br := session.BusinessRole(ctx)
 	canWrite := canWriteLeads(ctx)
 	// Konversi hanya untuk lead Qualified yang belum dikonversi & aktor boleh tulis.
 	canConvert := canWrite && l.LeadStatus == "Qualified" && !l.Converted
@@ -87,7 +86,7 @@ func (h *Handler) leadDetailView(ctx context.Context, base string, l db.Lead, na
 		Statuses:          leadStatusOptions, // BL-83: opsi kontrol "Ubah Status"
 		Rating:            deref(l.Rating),
 		UnqualifiedReason: deref(l.UnqualifiedReason),
-		EstValue:          maskARR(formatRupiah(l.EstimatedValue), br),
+		EstValue:          maskARR(formatRupiah(l.EstimatedValue), canSeeARR(ctx)),
 		Province:          province,
 		Regency:           regency,
 		District:          district,

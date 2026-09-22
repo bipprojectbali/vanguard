@@ -28,7 +28,7 @@ func (h *Handler) SubscriptionRenewalsExport(w http.ResponseWriter, r *http.Requ
 	window := normalizeRenewalWindow(r.URL.Query().Get("window"))
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 	now := time.Now().In(appTZ)
 	today := pgtype.Date{
 		Time:  time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC),
@@ -45,7 +45,7 @@ func (h *Handler) SubscriptionRenewalsExport(w http.ResponseWriter, r *http.Requ
 	headers := []string{"Desa", "Paket", "Tgl Perpanjang", "Sisa Hari", "Jenis", "Status", "Nilai Sebelumnya", "MRR Kini"}
 	rows := make([][]string, 0, len(all))
 	for _, s := range all {
-		v := renewalRowView(renewalListRowFromDefault(s), now, br)
+		v := renewalRowView(renewalListRowFromDefault(s), now, canARR)
 		rows = append(rows, []string{
 			v.Village, v.Plan, v.RenewalDate, v.DaysLeft, v.Type, v.Status, v.PrevValue, v.CurrentMRR,
 		})

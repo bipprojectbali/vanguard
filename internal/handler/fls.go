@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 
-	"go_starter/internal/authz"
 	"go_starter/internal/fls"
 	"go_starter/internal/session"
 )
@@ -29,27 +28,28 @@ import (
 
 // flsHidden = penanda universal "disembunyikan". Dipakai untuk field yang, saat
 // tak berhak, tetap perlu MENGISI kolom (mis. ARR di tabel langganan) agar tata
-// letak tak berubah antar-role — beda dengan catatan internal yang justru lebih
-// aman bila kolomnya kosong sama sekali (lihat maskInternalNotes).
+// letak tak berubah antar-role.
 const flsHidden = "•••"
 
-// canSeeARR — Nilai Kontrak / ARR terbuka bagi semua business_role KECUALI
-// Support (§5): agen tiket tak perlu tahu nilai komersial. Manager SENGAJA tetap
-// melihat (§8.3) — ia butuh angka itu untuk menyetujui diskon; itulah satu-
-// satunya field yang mengecualikan Manager dari FLS.
-//
-// Allow-list, bukan deny-list ("!= support"): FLS wajib fail-CLOSED seperti F2
-// (Casbin deny-default) & F3 (ScopeNone). Role tak dikenal / role platform yang
-// tersasar ke sini (super_admin/owner/staff BUKAN business_role) → tersembunyi,
-// bukan lolos diam-diam. Sumbu tetap tegak lurus (§3).
-func canSeeARR(businessRole string) bool {
-	switch businessRole {
-	case authz.BusinessRoleAdmin, authz.BusinessRoleManager,
-		authz.BusinessRoleSales, authz.BusinessRoleCSM:
-		return true
-	default: // support, "", role platform, nilai liar
-		return false
-	}
+// canSeeARR — Nilai Kontrak/ARR/MRR (Deal Amount, estimasi Lead, anggaran
+// desa Account, MRR/ARR Subscription, quote, & turunannya di Reports) kini
+// KAPABILITAS ter-matriks YANG SAMA dgn canSeeSubscriptionARR (crm:
+// subscriptions/arr, BL-58) — disatukan BL-169. Sebelumnya switch atas 4 nama
+// role literal (Admin/Manager/Sales/CSM), buta terhadap role kustom/rename:
+// tenant yang memberi peran kustom kapabilitas setara tetap tersembunyi krn
+// namanya tak dikenal switch. Dua fungsi (canSeeARR/canSeeSubscriptionARR)
+// SENGAJA dipertahankan terpisah namanya walau isinya sama — kejelasan di
+// titik panggil ("field apa yang sedang di-mask"), bukan dua kebijakan.
+// Objek Casbin TETAP "crm:subscriptions" (bukan diganti nama umum) krn
+// checkbox "Lihat ARR" di matriks editor peran sudah terikat ke situ sejak
+// BL-58 — mengganti nama objek berarti migrasi data tenant existing tanpa
+// manfaat tambahan; cakupannya kini memang lebih luas dari sekadar modul
+// Subscriptions, checkbox itu jadi gerbang tunggal Nilai Kontrak lintas modul.
+// Default grant (business_defaults.go): Admin (glob crm:*) + Manager (BL-58)
+// + Sales & CSM (BL-169, supaya tenant existing tak regresi — allow-list lama
+// meluluskan keduanya).
+func canSeeARR(ctx context.Context) bool {
+	return canSeeSubscriptionARR(ctx)
 }
 
 // canSeeFullPhone — boleh melihat nomor HP/WhatsApp kontak UTUH. Kebijakan kini
@@ -75,14 +75,14 @@ func canEditPhone(ctx context.Context) bool {
 	return fls.CanEditPhone(session.TenantID(ctx), session.BusinessRole(ctx))
 }
 
-// canSeeInternalNotes — Catatan Internal HANYA Admin & CSM (§5): isinya penilaian
-// jujur tentang pelanggan, jadi Sales/Manager/Support tak melihatnya. Predikat
-// diekspos terpisah agar handler/view bisa memutuskan menampilkan penanda
-// "terkunci" alih-alih kolom kosong, bila memang diinginkan.
-func canSeeInternalNotes(businessRole string) bool {
-	return businessRole == authz.BusinessRoleAdmin || businessRole == authz.BusinessRoleCSM
-}
-
+// Catatan Internal (Activity.Notes) & Health Score SENGAJA tanpa predikat FLS:
+// keduanya terbuka untuk semua business role yang sudah lolos F2 (crm:
+// sales_activity) atas targetnya. Gate Admin/CSM-only utk Catatan Internal
+// (canSeeInternalNotes/maskInternalNotes) DIHAPUS — terbuka untuk semua role
+// yang bisa membuka aktivitasnya (dihilangkan sementara; kalau perlu
+// dikembalikan, pertimbangkan lewat kapabilitas Casbin bukan switch nama role,
+// pola sama BL-169 canSeeARR).
+//
 // Health Score SENGAJA tanpa predikat: §5 menyatakannya terbuka untuk SEMUA role
 // ("justru harus dilihat bersama"). Tidak ada gate di sini adalah keputusan, bukan
 // kelalaian — menambahkannya akan mengingkari maksud spec. Jangan tambahkan.
@@ -91,9 +91,13 @@ func canSeeInternalNotes(businessRole string) bool {
 // berhak, atau penanda tersembunyi bila tidak. Sengaja menerima string
 // terformat (bukan angka) supaya urusan format mata uang tetap di handler dan
 // FLS hanya soal boleh-tampil-atau-tidak. Nilai asli tak pernah keluar saat
-// tersembunyi.
-func maskARR(formatted, businessRole string) string {
-	if canSeeARR(businessRole) {
+// tersembunyi. Menerima bool (bukan ctx/businessRole) — pola sama
+// maskSubscriptionARR (BL-58) sejak canSeeARR disatukan ke kapabilitas Casbin
+// (BL-169): pemanggil hitung SEKALI via canSeeARR(ctx) lalu alirkan bool ke
+// row-mapper murni-data (tak boleh panggil authz/session di dalamnya, §
+// "View murni-data").
+func maskARR(formatted string, canSee bool) string {
+	if canSee {
 		return formatted
 	}
 	return flsHidden
@@ -115,17 +119,4 @@ func maskPhone(ctx context.Context, phone string) string {
 		return phone
 	}
 	return flsHidden
-}
-
-// maskInternalNotes mengembalikan catatan bila berhak (Admin/CSM), atau string
-// KOSONG bila tidak — bukan penanda "•••". Untuk catatan, mengosongkan lebih
-// aman daripada menandai: menandai membocorkan bahwa catatan ITU ADA, dan
-// keberadaannya sendiri sudah sinyal ("desa ini dicatati diam-diam"). Bila kelak
-// perlu membedakan "kosong" dari "terkunci" di UI, pakai canSeeInternalNotes di
-// handler untuk merender penanda — JANGAN oper isinya lalu sembunyikan di view.
-func maskInternalNotes(notes, businessRole string) string {
-	if canSeeInternalNotes(businessRole) {
-		return notes
-	}
-	return ""
 }

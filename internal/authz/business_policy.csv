@@ -52,6 +52,7 @@ p, sales, crm:leads, write
 p, sales, crm:deals, write
 p, sales, crm:sales_activity, write
 p, sales, crm:subscriptions, read
+p, sales, crm:subscriptions, arr
 p, sales, crm:renewals, read
 p, sales, crm:plans, read
 p, sales, crm:churn, read
@@ -68,6 +69,7 @@ p, csm, crm:dashboard, read
 p, csm, crm:accounts, write
 p, csm, crm:contacts, write
 p, csm, crm:subscriptions, read
+p, csm, crm:subscriptions, arr
 p, csm, crm:renewals, read
 p, csm, crm:plans, read
 p, csm, crm:churn, write

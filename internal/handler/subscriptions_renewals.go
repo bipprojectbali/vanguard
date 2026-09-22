@@ -47,7 +47,7 @@ func (h *Handler) SubscriptionRenewals(w http.ResponseWriter, r *http.Request) {
 	window := normalizeRenewalWindow(r.URL.Query().Get("window"))
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 
 	now := time.Now().In(appTZ)
 	today := pgtype.Date{
@@ -96,7 +96,7 @@ func (h *Handler) SubscriptionRenewals(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.RenewalRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, renewalRowView(renewalListRowFromVillageSort(s), now, br))
+			items = append(items, renewalRowView(renewalListRowFromVillageSort(s), now, canARR))
 		}
 	case "plan":
 		cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
@@ -127,7 +127,7 @@ func (h *Handler) SubscriptionRenewals(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.RenewalRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, renewalRowView(renewalListRowFromPlanSort(s), now, br))
+			items = append(items, renewalRowView(renewalListRowFromPlanSort(s), now, canARR))
 		}
 	case "date":
 		// end_date DIJAMIN terisi di dasbor ini (ListRenewals: WHERE end_date IS
@@ -160,7 +160,7 @@ func (h *Handler) SubscriptionRenewals(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.RenewalRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, renewalRowView(renewalListRowFromDateSort(s), now, br))
+			items = append(items, renewalRowView(renewalListRowFromDateSort(s), now, canARR))
 		}
 	case "type":
 		// Kunci cursor = renewalTypeLabel PERSIS logika tampil (COALESCE
@@ -190,7 +190,7 @@ func (h *Handler) SubscriptionRenewals(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.RenewalRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, renewalRowView(renewalListRowFromTypeSort(s), now, br))
+			items = append(items, renewalRowView(renewalListRowFromTypeSort(s), now, canARR))
 		}
 	case "mrr":
 		cursorRaw, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
@@ -225,7 +225,7 @@ func (h *Handler) SubscriptionRenewals(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.RenewalRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, renewalRowView(renewalListRowFromMrrSort(s), now, br))
+			items = append(items, renewalRowView(renewalListRowFromMrrSort(s), now, canARR))
 		}
 	default:
 		cursorAt, cursorID := pageCursor(r)
@@ -250,7 +250,7 @@ func (h *Handler) SubscriptionRenewals(w http.ResponseWriter, r *http.Request) {
 		nextCursor = nc
 		items = make([]panel.RenewalRow, 0, len(shown))
 		for _, s := range shown {
-			items = append(items, renewalRowView(renewalListRowFromDefault(s), now, br))
+			items = append(items, renewalRowView(renewalListRowFromDefault(s), now, canARR))
 		}
 	}
 	if items == nil {

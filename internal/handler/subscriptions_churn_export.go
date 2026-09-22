@@ -26,7 +26,7 @@ func (h *Handler) SubscriptionChurnExport(w http.ResponseWriter, r *http.Request
 	typeFilter := normalizeChurnTypeFilter(r.URL.Query().Get("type"))
 	filter := db.SubscriptionsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 
 	all, err := h.allChurned(ctx, filter, uid, typeFilter)
 	if err != nil {
@@ -44,7 +44,7 @@ func (h *Handler) SubscriptionChurnExport(w http.ResponseWriter, r *http.Request
 	headers := []string{"Desa", "Paket", "MRR Hilang", "Alasan", "Tipe", "Tgl Churn", "Tenure", "CS"}
 	rows := make([][]string, 0, len(all))
 	for _, s := range all {
-		v := churnRowView(s, names, br)
+		v := churnRowView(s, names, canARR)
 		rows = append(rows, []string{
 			v.Village, v.Plan, v.LostMRR, v.Reason, v.Type, v.ChurnDate, v.Tenure, v.CSM,
 		})

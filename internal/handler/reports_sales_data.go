@@ -23,7 +23,7 @@ func (h *Handler) reportsSalesData(ctx context.Context, f salesReportFilter) (pa
 	lead := db.LeadsListFilterFor(session.BusinessDataScope(ctx))
 	act := db.ActivitiesListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 	q := h.q(ctx)
 
 	stats, err := q.DealPipelineStats(ctx, db.DealPipelineStatsParams{
@@ -98,11 +98,11 @@ func (h *Handler) reportsSalesData(ctx context.Context, f salesReportFilter) (pa
 		Filter: filterView,
 
 		OpenCount:     stats.OpenCount,
-		PipelineValue: maskARR(formatRupiah(stats.PipelineValue), br),
+		PipelineValue: maskARR(formatRupiah(stats.PipelineValue), canARR),
 		WinRate:       winRate,
 
-		Pipeline: buildPipelinePanel(stages, br),
-		Forecast: buildForecastPanel(forecast, br),
+		Pipeline: buildPipelinePanel(stages, canARR),
+		Forecast: buildForecastPanel(forecast, canARR),
 
 		WinPct:      pctStr(stats.WonCount, total),
 		LossPct:     pctStr(stats.LostCount, total),

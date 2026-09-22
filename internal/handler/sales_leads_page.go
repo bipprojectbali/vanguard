@@ -68,7 +68,7 @@ func (h *Handler) LeadsList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 
 	var shown []db.Lead
 	var nextCursor string
@@ -292,7 +292,7 @@ func (h *Handler) LeadsList(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]panel.LeadRow, 0, len(shown))
 	for _, l := range shown {
-		items = append(items, leadRowView(l, names, br))
+		items = append(items, leadRowView(l, names, canARR))
 	}
 
 	base := wsPath(slugFromRequest(r), "")
@@ -333,9 +333,11 @@ func (h *Handler) renderLeadsForbidden(w http.ResponseWriter, r *http.Request) {
 	h.renderWorkspaceShell(w, r, "Leads", "/leads", panel.SalesForbidden("Leads"))
 }
 
-// leadRowView memetakan satu baris daftar + F4 (estimated_value tersamar untuk
-// Support). Nama pemilik diresolusi dari peta anggota (bukan id telanjang).
-func leadRowView(l db.Lead, names map[int64]string, businessRole string) panel.LeadRow {
+// leadRowView memetakan satu baris daftar + F4 (estimated_value tersamar bagi
+// pemanggil tanpa kapabilitas crm:subscriptions/arr, BL-169). Nama pemilik
+// diresolusi dari peta anggota (bukan id telanjang). canARR dihitung SEKALI
+// oleh pemanggil (canSeeARR(ctx)).
+func leadRowView(l db.Lead, names map[int64]string, canARR bool) panel.LeadRow {
 	return panel.LeadRow{
 		ID:            l.ID,
 		EntityCode:    deref(l.EntityCode),
@@ -344,7 +346,7 @@ func leadRowView(l db.Lead, names map[int64]string, businessRole string) panel.L
 		LeadSource:    deref(l.LeadSource),
 		Status:        l.LeadStatus,
 		Rating:        deref(l.Rating),
-		EstValue:      maskARR(formatRupiah(l.EstimatedValue), businessRole),
+		EstValue:      maskARR(formatRupiah(l.EstimatedValue), canARR),
 		Owner:         ownerName(l.LeadOwner, names),
 	}
 }
