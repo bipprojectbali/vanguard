@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// subscriptions.go — ~28 langganan tersebar ke status yang BISA DICAPAI app
+// subscriptions.go — ~10 langganan tersebar ke status yang BISA DICAPAI app
 // (Trial/Active/Expired/Cancelled/Churned/PendingApproval). "Suspended" SENGAJA
 // TAK di-seed (BL-22): nilai cadangan belum di-wire, tak ada aksi yang
 // menghasilkannya — menyeed-nya cuma memunculkan baris di state mustahil saat QC.
-// Enum DB tetap menerima "Suspended". Fokus dasbor Renewals: ≥10 Active dengan
+// Enum DB tetap menerima "Suspended". Fokus dasbor Renewals: ≥3 Active dengan
 // end_date di jendela due RELATIF (0..30 hari sejak hari run — lihat
 // renewalWindowStart/End), sisanya Active end_date jauh (baseline ARR, sebagian
 // sudah 'Renewed'). Jendela relatif (bukan tanggal tetap) supaya seed tetap
@@ -26,13 +26,13 @@ import (
 
 const renewalWindowStart = 0 // hari sejak "hari ini" run — awal jendela due
 const renewalWindowEnd = 30  // akhir jendela due (30 hari, sama dgn ListRenewals)
-const dueSubsCount = 10      // Active dgn end_date di jendela due
-const farActiveCount = 3     // Active dgn end_date jauh (baseline ARR)
-const churnedCount = 6
-const trialCount = 3
-const expiredCount = 2
-const pendingApprovalCount = 2
-const cancelledCount = 2
+const dueSubsCount = 3       // Active dgn end_date di jendela due
+const farActiveCount = 1     // Active dgn end_date jauh (baseline ARR)
+const churnedCount = 2       // = len(churnSpecs) di bawah; tak dipakai langsung di loop (iterasi churnSpecs), dijaga selaras sbg dokumentasi
+const trialCount = 1
+const expiredCount = 1
+const pendingApprovalCount = 1
+const cancelledCount = 1
 
 func seedSubscriptions(ctx context.Context, q *db.Queries, tenantID int64, tag string, rng *rand.Rand, owner *int64, accounts []accountInfo, plans []int64) ([]int64, error) {
 	var ids []int64
@@ -92,11 +92,7 @@ func seedSubscriptions(ctx context.Context, q *db.Queries, tenantID int64, tag s
 		winBack     bool
 	}{
 		{"Voluntary", "Budget", true},
-		{"Voluntary", "Competitor", false},
-		{"Voluntary", "Dissatisfaction", true},
 		{"Involuntary", "No Adoption", false},
-		{"Involuntary", "Change of Leadership", true},
-		{"Involuntary", "Feature Gap", false},
 	}
 	for i, c := range churnSpecs {
 		acc := accounts[seq%len(accounts)]

@@ -9,7 +9,7 @@ import (
 	"go_starter/internal/db"
 )
 
-// accounts.go — 40 "desa" (Account), hub seluruh modul CRM. BL-66: tiap desa
+// accounts.go — 10 "desa" (Account), hub seluruh modul CRM. BL-66: tiap desa
 // diambil dari villagePool (Desa/Kelurahan REAL regions level 4) — nama,
 // village_code Kemendagri asli, dan district_id induk semua dari baris master
 // yang sama (satu sumber kebenaran), bukan lagi nama fiktif + kode buatan.
@@ -29,10 +29,12 @@ type accountInfo struct {
 	Type string
 }
 
-// seedAccounts membuat 40 desa: 28 customer / 8 prospect / 4 former_customer
-// (weightedPick). Tiap desa mengambil satu Desa REAL dari pool (DISTINCT).
+// seedAccounts membuat 10 desa, account_type dipilih via weightedPick dengan
+// bobot relatif customer:prospect:former_customer = 28:8:4 (bukan jumlah baris
+// literal — proporsi tetap terjaga di skala total berapa pun). Tiap desa
+// mengambil satu Desa REAL dari pool (DISTINCT).
 func seedAccounts(ctx context.Context, q *db.Queries, tenantID int64, tag string, rng *rand.Rand, owner *int64, pool *villagePool) ([]accountInfo, error) {
-	const total = 40
+	const total = 10
 	typeWeights := []weighted[string]{
 		{"customer", 28}, {"prospect", 8}, {"former_customer", 4},
 	}

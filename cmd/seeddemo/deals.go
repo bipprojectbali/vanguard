@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// deals.go — 48 deals: taper 5 stage terbuka (Prospecting 15/Qualification
-// 10/Demo 6/Proposal 4/Negotiation 2) + Closed Won 8 + Closed Lost 3, agar
+// deals.go — 10 deals: taper 5 stage terbuka (Prospecting 3/Qualification
+// 2/Demo 1/Proposal 1/Negotiation 1) + Closed Won 1 + Closed Lost 1, agar
 // win-rate & pipeline-by-stage (Sales Report) proporsional bukan rata.
 
 var dealStageSpecs = []struct {
@@ -22,13 +22,13 @@ var dealStageSpecs = []struct {
 	probability int16
 	pastClose   bool // true = expected_close_date di MASA LALU (deal closed)
 }{
-	{"Prospecting", 15, 10, false},
-	{"Qualification", 10, 30, false},
-	{"Demo", 6, 50, false},
-	{"Proposal", 4, 70, false},
-	{"Negotiation", 2, 85, false},
-	{"Closed Won", 8, 100, true},
-	{"Closed Lost", 3, 0, true},
+	{"Prospecting", 3, 10, false},
+	{"Qualification", 2, 30, false},
+	{"Demo", 1, 50, false},
+	{"Proposal", 1, 70, false},
+	{"Negotiation", 1, 85, false},
+	{"Closed Won", 1, 100, true},
+	{"Closed Lost", 1, 0, true},
 }
 
 func seedDeals(ctx context.Context, q *db.Queries, tenantID int64, tag string, rng *rand.Rand, owner *int64, accounts []accountInfo, plans []int64) ([]int64, error) {
