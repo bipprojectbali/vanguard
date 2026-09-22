@@ -126,11 +126,20 @@ func TestRoleEdit_RenewalApproveMovedToRenewals(t *testing.T) {
 // satu-satunya CanApprove sejak subtask 2) & "Lihat ARR" (Subscriptions,
 // satu-satunya CanARR) ter-render reaktif Datastar (BL-145 subtask 4/5) — level
 // select ter-bind signal per baris, checkbox terkait ter-bind signal SENDIRI +
-// dinonaktifkan kondisional saat level baris itu "none", dan handler on:change
-// level memaksa signal checkbox itu balik ke false saat level diganti ke
-// "none". Reaktivitas ini murni UX klien — backend (readRoleMatrix guard
-// hasLevel, BL-145 subtask 0) tetap penjaga sesungguhnya, tak diuji ulang di
+// dinonaktifkan kondisional, dan handler on:change level memaksa signal
+// checkbox itu balik ke false saat kondisi disabled terpenuhi. Reaktivitas ini
+// murni UX klien — backend (readRoleMatrix guard hasLevel/arrGateOpen, BL-145
+// subtask 0 + fix cross-module) tetap penjaga sesungguhnya, tak diuji ulang di
 // sini.
+//
+// arr_subscriptions kini digerbangi LINTAS MODUL (authz.ARRGateObjects, fix
+// checkbox "Lihat Nilai Kontrak" tak terbuka walau modul lain sudah "Kelola")
+// — disabled/reset checkbox bukan lagi semata $lvl_subscriptions=='none',
+// tapi AND semua modul gate == 'none' (urut mengikuti crmModules: accounts,
+// leads, deals, subscriptions, renewals, churn, reports_sales, reports_cs,
+// reports_subscriptions). resetStmt itu terpasang di on:change SETIAP baris
+// gate, termasuk Renewals (makanya baris Renewals kini juga membawa reset arr
+// setelah reset apv miliknya sendiri, dipisah ";").
 func TestRoleEdit_ApproveARRReactiveToLevel(t *testing.T) {
 	env, uid := setupRoles(t)
 	req := rolesReq(http.MethodGet, "/w/test/roles/manager", nil, "manager")
@@ -139,15 +148,23 @@ func TestRoleEdit_ApproveARRReactiveToLevel(t *testing.T) {
 		t.Fatalf("harus 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
+	const arrGateDisabled = `$lvl_accounts==&#39;none&#39;&amp;&amp;$lvl_leads==&#39;none&#39;&amp;&amp;` +
+		`$lvl_deals==&#39;none&#39;&amp;&amp;$lvl_subscriptions==&#39;none&#39;&amp;&amp;` +
+		`$lvl_renewals==&#39;none&#39;&amp;&amp;$lvl_churn==&#39;none&#39;&amp;&amp;` +
+		`$lvl_reports_sales==&#39;none&#39;&amp;&amp;$lvl_reports_cs==&#39;none&#39;&amp;&amp;` +
+		`$lvl_reports_subscriptions==&#39;none&#39;`
 	for _, want := range []string{
 		`data-bind="lvl_renewals"`, // level select baris Renewals ter-bind
 		`data-bind="apv_renewals"`, // checkbox Setujui ter-bind signal sendiri
 		`data-attr="{disabled: $lvl_renewals == &#39;none&#39;}"`,
-		`data-on:change="evt.target.value===&#39;none&#39;&amp;&amp;($apv_renewals=false)"`,
+		// baris Renewals: reset apv (kondisi sendiri) + reset arr (gate lintas modul), digabung ";"
+		`data-on:change="evt.target.value===&#39;none&#39;&amp;&amp;($apv_renewals=false);` +
+			`(` + arrGateDisabled + `)&amp;&amp;($arr_subscriptions=false)"`,
 		`data-bind="lvl_subscriptions"`, // level select baris Subscriptions ter-bind
 		`data-bind="arr_subscriptions"`, // checkbox Lihat ARR ter-bind signal sendiri
-		`data-attr="{disabled: $lvl_subscriptions == &#39;none&#39;}"`,
-		`data-on:change="evt.target.value===&#39;none&#39;&amp;&amp;($arr_subscriptions=false)"`,
+		`data-attr="{disabled: ` + arrGateDisabled + `}"`,
+		// baris Subscriptions: cuma reset arr (tak CanApprove)
+		`data-on:change="(` + arrGateDisabled + `)&amp;&amp;($arr_subscriptions=false)"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("matriks harus memuat %q (reaktivitas approve/arr ↔ level):\n%s", want, body)

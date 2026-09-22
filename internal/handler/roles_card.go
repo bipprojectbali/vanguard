@@ -71,13 +71,14 @@ func roleModuleRows(cells map[string]*permCell) []panel.RoleModulePerm {
 			arr = c.arr && m.CanARR
 		}
 		rows = append(rows, panel.RoleModulePerm{
-			Obj:        m.Obj,
-			Label:      m.Label,
-			CanApprove: m.CanApprove,
-			CanARR:     m.CanARR,
-			Level:      level,
-			Approve:    approve,
-			ARR:        arr,
+			Obj:         m.Obj,
+			Label:       m.Label,
+			CanApprove:  m.CanApprove,
+			CanARR:      m.CanARR,
+			ARREligible: authz.ModuleARRGate(m.Obj),
+			Level:       level,
+			Approve:     approve,
+			ARR:         arr,
 		})
 	}
 	return rows

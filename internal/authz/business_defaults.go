@@ -198,7 +198,10 @@ type ModuleDef struct {
 // menggerbangi Nilai Kontrak lintas modul (Deal Amount, estimasi Lead,
 // anggaran desa Account, dst — canSeeARR, internal/handler/fls.go), bukan
 // cuma ARR Subscriptions. Checkbox tetap satu, TAK dipindah/diduplikasi ke
-// modul lain — menghindari kolom "Lihat ARR" ganda yang membingungkan.
+// modul lain — menghindari kolom "Lihat ARR" ganda yang membingungkan. Syarat
+// aktif/simpannya sendiri diperluas lintas modul lewat ARRGateObjects (lihat
+// di bawah) — sebelumnya cuma bisa dicentang bila Subscriptions sendiri
+// granted, walau field yang sama sudah tampil di modul lain.
 var crmModules = []ModuleDef{
 	{"crm:dashboard", "Dashboard", false, false},
 	{"crm:accounts", "Accounts (Desa)", false, false},
@@ -243,6 +246,36 @@ func CRMModules() []ModuleDef {
 	return out
 }
 
+// ARRGateObjects = modul yang levelnya (read/write) memenuhi syarat mengaktifkan
+// & menyimpan (crm:subscriptions, arr) — checkbox "Lihat Nilai Kontrak" TETAP
+// SATU (dirender hanya di baris Subscriptions, CanARR di atas, hindari kolom
+// ganda yg membingungkan), tapi kapabilitasnya sendiri sudah lintas modul sejak
+// BL-169 (canSeeARR, internal/handler/fls.go, menggerbangi Deal Amount, estimasi
+// Lead, anggaran desa Account, Quote, Renewals & Churn (nilai kontrak yg akan
+// habis/hilang), & 3 dari 4 Reports). Sebelum daftar ini, checkbox itu hanya
+// bisa dicentang/tersimpan bila Subscriptions sendiri punya akses baca/tulis —
+// role yang cuma diberi mis. Leads="Kelola" tak pernah bisa mengaktifkannya
+// walau field yang sama sudah kelihatan di halaman Leads. Dipakai DUA sisi:
+// backend (readRoleMatrix, roles_rest.go — guard simpan) & frontend
+// (role_edit.go — ekspresi disabled reaktif checkbox), jadi keduanya tak bisa
+// menyimpang. crm:dashboard SENGAJA TAK diikutkan walau widget MRR di sana
+// juga memanggil canSeeARR: crm:dashboard/read ada di SEMUA peran bawaan
+// (lihat grant di atas) — memasukkannya bikin gate ini nyaris selalu terbuka,
+// meniadakan gunanya. Reports_support SENGAJA tak diikutkan juga — halaman itu
+// tak punya field finance apa pun (nol enforcement point utk canSeeARR di
+// sana), jadi menyertakannya cuma memperluas gate tanpa efek nyata.
+var ARRGateObjects = []string{
+	"crm:subscriptions",
+	"crm:deals",
+	"crm:leads",
+	"crm:accounts",
+	"crm:renewals",
+	"crm:churn",
+	"crm:reports_sales",
+	"crm:reports_cs",
+	"crm:reports_subscriptions",
+}
+
 // ValidModuleObj melaporkan apakah obj adalah objek modul CRM yang boleh muncul
 // di matriks editor — penjaga RoleUpdate agar hanya sel yang dikenal ditulis
 // (input datang dari form user; objek liar tak boleh menyelinap jadi p-rule).
@@ -272,6 +305,18 @@ func ModuleCanARR(obj string) bool {
 	for _, m := range crmModules {
 		if m.Obj == obj {
 			return m.CanARR
+		}
+	}
+	return false
+}
+
+// ModuleARRGate melaporkan apakah objek modul ada di ARRGateObjects — dipakai
+// roleModuleRows (roles_card.go) menandai RoleModulePerm.ARREligible tiap baris,
+// dikonsumsi view role_edit.go utk ekspresi disabled reaktif checkbox ARR.
+func ModuleARRGate(obj string) bool {
+	for _, o := range ARRGateObjects {
+		if o == obj {
+			return true
 		}
 	}
 	return false

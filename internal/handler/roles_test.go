@@ -347,6 +347,35 @@ func TestRoleUpdate_BlocksARRWithoutLevel(t *testing.T) {
 	}
 }
 
+// TestRoleUpdate_AllowsARRWhenEligibleModuleHasLevel: skenario persis laporan
+// bug — Subscriptions level=none TAPI Leads="Kelola" (write). arr.crm:
+// subscriptions=1 harus TETAP tersimpan krn crm:leads ada di
+// authz.ARRGateObjects (fix checkbox "Lihat Nilai Kontrak" tak terbuka walau
+// modul lain sudah "Kelola"). Pembanding positif dari TestRoleUpdate_
+// BlocksARRWithoutLevel (yang membuktikan floor masih berlaku saat BENAR-BENAR
+// nol akses di semua modul gate).
+func TestRoleUpdate_AllowsARRWhenEligibleModuleHasLevel(t *testing.T) {
+	env, uid := setupRoles(t)
+	env.seedRole(t, "finance", "Keuangan", "all", false)
+
+	form := roleFormValues("Keuangan", "all")
+	form.Set("level.crm:subscriptions", "none")
+	form.Set("level.crm:leads", "write")
+	form.Set("arr.crm:subscriptions", "1")
+	req := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleUpdate)
+
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=saved") {
+		t.Fatalf("harus ok=saved, got %q (status %d)\n%s", loc, rec.Code, rec.Body.String())
+	}
+	if !env.hasPerm(t, "finance", "crm:subscriptions", "arr") {
+		t.Error("arr harus tersimpan: crm:leads='write' membuka gate lintas modul (authz.ARRGateObjects) walau Subscriptions sendiri level=none")
+	}
+	if env.hasPerm(t, "finance", "crm:subscriptions", "read") || env.hasPerm(t, "finance", "crm:subscriptions", "write") {
+		t.Error("level.crm:subscriptions=none tak boleh menyimpan read/write Subscriptions apa pun")
+	}
+}
+
 // TestRoleUpdate_AllowsApproveWithReadOnly: floor approve/arr adalah "read"
 // (BUKAN "write") — pola maker-checker sengaja tak butuh hak sunting utk
 // menyetujui (business.conf). level="read" + approve=1 harus TERSIMPAN.
