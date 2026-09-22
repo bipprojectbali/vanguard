@@ -229,9 +229,11 @@ type ModuleDef struct {
 // endpoint POST (canRenewSubscriptions/canChurnSubscriptions, subscriptions_
 // renew.go/churn.go, tak ikut mengecek crm:subscriptions), hanya saja tak ada
 // jalur UI utk memicunya tanpa Active Subscriptions ≥ Lihat juga. Diputuskan
-// didokumentasikan (bukan diubah gate-nya) — lihat moduleHints di role_edit.go
-// (peringatan kecil di editor) & canViewRenewals (subscriptions_view.go, gerbang
-// READ Renewals yg simetris tapi tanpa pemanggil krn alasan yang sama).
+// didokumentasikan (bukan diubah gate-nya) — lihat moduleHints/moduleHint di
+// role_edit.go (peringatan kecil KONDISIONAL di editor, hanya tampil saat
+// kombinasi bermasalah nyata terjadi — bukan selalu tampil) & canViewRenewals
+// (subscriptions_view.go, gerbang READ Renewals yg simetris tapi tanpa
+// pemanggil krn alasan yang sama).
 var crmModules = []ModuleDef{
 	{"crm:dashboard", "Dashboard", false, false, false},
 	{"crm:accounts", "Accounts (Desa)", false, false, true},
