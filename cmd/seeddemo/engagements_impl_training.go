@@ -22,9 +22,9 @@ var implTaskNames = []string{
 	"Uji coba modul presensi", "Setup template surat menyurat", "Aktivasi notifikasi WhatsApp",
 }
 
-const implTaskTotal = 40
+const implTaskTotal = 10
 
-// seedImplTasks — 40 baris, sebar ke seluruh 4 task_status.
+// seedImplTasks — 10 baris, sebar ke seluruh 4 task_status.
 func seedImplTasks(ctx context.Context, q *db.Queries, tenantID int64, rng *rand.Rand, owner *int64, accounts []accountInfo) (int, error) {
 	statuses := []string{"to_do", "in_progress", "done", "blocked"}
 	today := time.Now()
@@ -74,9 +74,9 @@ var trainingTopics = []string{
 	"Pelatihan Pengaduan Warga", "Pelatihan Arsip Digital", "Pelatihan Surat Menyurat",
 }
 
-const trainingTotal = 20
+const trainingTotal = 10
 
-// seedTrainings — 20 baris, sebar ke seluruh 4 training_status.
+// seedTrainings — 10 baris, sebar ke seluruh 4 training_status.
 func seedTrainings(ctx context.Context, q *db.Queries, tenantID int64, rng *rand.Rand, owner *int64, accounts []accountInfo) (int, error) {
 	statuses := []string{"scheduled", "completed", "rescheduled", "cancelled"}
 	today := time.Now()

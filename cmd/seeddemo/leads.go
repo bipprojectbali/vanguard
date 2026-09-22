@@ -9,9 +9,9 @@ import (
 	"go_starter/internal/db"
 )
 
-// leads.go — 25 leads across 5 status (8 New/6 Contacted/5 Qualified/
-// 3 Unqualified/3 Converted). Tiap lead mengambil satu Desa REAL dari pool
-// (BL-66): lead_name = nama Desa asli, district_id = kecamatan induk. 3 Converted
+// leads.go — 10 leads across 5 status (3 New/2 Contacted/2 Qualified/
+// 1 Unqualified/2 Converted). Tiap lead mengambil satu Desa REAL dari pool
+// (BL-66): lead_name = nama Desa asli, district_id = kecamatan induk. 2 Converted
 // MENIRU alur nyata internal/handler/sales_convert_action.go (buat account+
 // contact+deal lalu MarkLeadConverted) dan account hasilnya MEMAKAI Desa yang
 // sama (nama + village_code Kemendagri asli), bukan cuma set kolom status.
@@ -38,7 +38,7 @@ func seedLeads(ctx context.Context, q *db.Queries, tenantID int64, tag string, r
 		status string
 		count  int
 	}{
-		{"New", 8}, {"Contacted", 6}, {"Qualified", 5}, {"Unqualified", 3}, {"Converted", 3},
+		{"New", 3}, {"Contacted", 2}, {"Qualified", 2}, {"Unqualified", 1}, {"Converted", 2},
 	}
 
 	seq := 0

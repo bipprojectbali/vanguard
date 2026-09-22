@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// quotes.go — ~15 quotes tersebar ke SEMUA 6 status, 1-4 quote_items per
+// quotes.go — ~10 quotes tersebar ke SEMUA 6 status, 1-4 quote_items per
 // quote merujuk plan nyata. grand_total/tax_amount = SNAPSHOT (komentar
 // quotes.sql.go): dihitung di sini dari item lalu ditulis via
 // UpdateQuoteTotals — meniru cara app menghitung ulang, bukan agregat live.
@@ -22,7 +22,7 @@ var quoteStatuses = []string{"Draft", "Sent", "Under Review", "Accepted", "Rejec
 const taxRatePct = 11 // PPN 11% — konstanta bisnis lokal, bukan hardcode env-dependent.
 
 func seedQuotes(ctx context.Context, q *db.Queries, tenantID int64, tag string, rng *rand.Rand, owner *int64, accounts []accountInfo, deals []int64, plans []int64) (int, int, error) {
-	const total = 15
+	const total = 10
 	quoteCount, itemCount := 0, 0
 
 	for i := 0; i < total; i++ {

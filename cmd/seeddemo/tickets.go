@@ -11,11 +11,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// tickets.go — 25 tiket dukungan tersebar ke SEMUA 4 status (baru/diproses/
+// tickets.go — 10 tiket dukungan tersebar ke SEMUA 4 status (baru/diproses/
 // menunggu/selesai; enum disederhanakan BL-38, migrasi 00036). sla_deadline_at
 // disimpan sbg snapshot saat create
 // (00021_crm_cs_tickets.sql) — bukan dihitung ulang dari sla_policies — jadi
-// bebas ditulis di MASA LALU utk ≥5 tiket TERBUKA (breach), independen dari
+// bebas ditulis di MASA LALU utk ≥2 tiket TERBUKA (breach), independen dari
 // created_at.
 
 var ticketSubjects = []string{
@@ -25,7 +25,7 @@ var ticketSubjects = []string{
 	"Perlu pelatihan ulang modul keuangan", "Server lambat diakses", "Data ganda pada arsip surat",
 }
 
-const ticketTotal = 25
+const ticketTotal = 10
 
 // seedTickets mengembalikan ID tiap tiket yang dibuat (dipakai activities.go
 // sbg target_id nyata utk target_type='ticket').
@@ -33,23 +33,23 @@ func seedTickets(ctx context.Context, q *db.Queries, tenantID int64, rng *rand.R
 	var ids []int64
 	today := time.Now()
 
-	// Distribusi status: 8 baru, 6 diproses, 5 menunggu, 6 selesai (total 25).
+	// Distribusi status: 3 baru, 2 diproses, 2 menunggu, 3 selesai (total 10).
 	statusPlan := make([]string, 0, ticketTotal)
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 3; i++ {
 		statusPlan = append(statusPlan, "baru")
 	}
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 2; i++ {
 		statusPlan = append(statusPlan, "diproses")
 	}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 2; i++ {
 		statusPlan = append(statusPlan, "menunggu")
 	}
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 3; i++ {
 		statusPlan = append(statusPlan, "selesai")
 	}
 	rng.Shuffle(len(statusPlan), func(i, j int) { statusPlan[i], statusPlan[j] = statusPlan[j], statusPlan[i] })
 
-	breachBudget := 5 // ≥5 tiket TERBUKA dgn sla_deadline_at di masa lalu.
+	breachBudget := 2 // ≥2 tiket TERBUKA dgn sla_deadline_at di masa lalu.
 	for i, finalStatus := range statusPlan {
 		acc := accounts[i%len(accounts)]
 		priority := weightedPick(rng, []weighted[string]{
