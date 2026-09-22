@@ -60,15 +60,17 @@ func TestSubscriptions_DetailNotFoundWhenOutOfScope(t *testing.T) {
 
 // --- F4: masking ARR -------------------------------------------------------
 
-// TestSubscriptions_ARRMaskedForNonManager: ARR disamarkan (flsHidden) untuk
-// sales & csm, tampil apa adanya untuk admin & manager — DEFAULT grant
-// kapabilitas crm:subscriptions/arr (BL-58, business_defaults.go). MRR terlihat
-// di SEMUA kasus. Diuji di detail (satu halaman memuat MRR & ARR sekaligus).
-// Matriks 4-role via HTTP; Support tak diuji di sini — F2 (crm:subscriptions)
-// memblokirnya total sebelum halaman ini terbuka (lihat TestSubscriptions_GateRead
-// di subscriptions_test.go). Peran CUSTOM ber-grant/tanpa-grant diuji di
-// TestSubscriptions_ARRCustomRoleCapability.
-func TestSubscriptions_ARRMaskedForNonManager(t *testing.T) {
+// TestSubscriptions_ARRVisibleForDefaultRoles: MRR & ARR tampil apa adanya
+// untuk KEEMPAT peran bawaan (admin/manager/sales/csm) — DEFAULT grant
+// kapabilitas crm:subscriptions/arr (BL-58 admin+manager, BL-169 menambah
+// sales+csm agar tenant existing tak regresi dari perilaku lama, business_
+// defaults.go). Support tak diuji di sini — F2 (crm:subscriptions) memblokirnya
+// total sebelum halaman ini terbuka (lihat TestSubscriptions_GateRead di
+// subscriptions_test.go); ia tersamar via TestSubRowView_MRRMasked dkk. Peran
+// CUSTOM ber-grant/tanpa-grant diuji di TestSubscriptions_ARRCustomRoleCapability
+// (satu-satunya jalur nyata untuk melihat ARR tersamar via HTTP, sejak BL-169
+// menyamakan sumbu MRR & ARR untuk keempat peran bawaan).
+func TestSubscriptions_ARRVisibleForDefaultRoles(t *testing.T) {
 	env, uid := setupAccounts(t)
 	planID := env.seedPlan(t, "Paket Nilai", "PLAN-VAL", "1000000")
 	acc := env.seedAccount(t, "Desa Nilai", &uid, nil, nil)
@@ -77,42 +79,19 @@ func TestSubscriptions_ARRMaskedForNonManager(t *testing.T) {
 	const wantMRR = "Rp 5.000.000"
 	const wantARR = "Rp 60.000.000"
 
-	openDetail := func(t *testing.T, role string) string {
-		t.Helper()
-		req := accountsReq(http.MethodGet, "/w/test/subscriptions/"+itoa(sub.ID), nil, itoa(sub.ID))
-		rec := env.runAccount(uid, "owner", role, req, env.h.SubscriptionDetail)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("role %q detail status = %d, want 200\n%s", role, rec.Code, rec.Body.String())
-		}
-		return rec.Body.String()
-	}
-
-	cases := []struct {
-		role   string
-		seeARR bool
-	}{
-		{"sales", false},
-		{"csm", false},
-		{"admin", true},
-		{"manager", true},
-	}
-	for _, c := range cases {
-		t.Run("role="+c.role, func(t *testing.T) {
-			body := openDetail(t, c.role)
-			if !strings.Contains(body, wantMRR) {
-				t.Errorf("role %q: MRR %q harus terlihat", c.role, wantMRR)
+	for _, role := range []string{"sales", "csm", "admin", "manager"} {
+		t.Run("role="+role, func(t *testing.T) {
+			req := accountsReq(http.MethodGet, "/w/test/subscriptions/"+itoa(sub.ID), nil, itoa(sub.ID))
+			rec := env.runAccount(uid, "owner", role, req, env.h.SubscriptionDetail)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("role %q detail status = %d, want 200\n%s", role, rec.Code, rec.Body.String())
 			}
-			if c.seeARR {
-				if !strings.Contains(body, wantARR) {
-					t.Errorf("role %q: ARR %q harus terlihat", c.role, wantARR)
-				}
-			} else {
-				if !strings.Contains(body, flsHidden) {
-					t.Errorf("role %q: ARR harus tersamar (%s)", c.role, flsHidden)
-				}
-				if strings.Contains(body, wantARR) {
-					t.Errorf("role %q: ARR mentah %q tak boleh bocor", c.role, wantARR)
-				}
+			body := rec.Body.String()
+			if !strings.Contains(body, wantMRR) {
+				t.Errorf("role %q: MRR %q harus terlihat", role, wantMRR)
+			}
+			if !strings.Contains(body, wantARR) {
+				t.Errorf("role %q: ARR %q harus terlihat", role, wantARR)
 			}
 		})
 	}
@@ -126,8 +105,11 @@ func TestSubscriptions_ARRMaskedForNonManager(t *testing.T) {
 // custom bercakupan 'all' diuji berdampingan: "direktur" DIBERI grant arr →
 // melihat ARR; "finance" TANPA grant → tersamar (flsHidden). Keduanya punya read
 // (agar F2 lolos) & scope 'all' (agar F3 tak menyaring baris), jadi satu-satunya
-// pembeda adalah grant arr. MRR (maskARR) berbasis NAMA role & ortogonal (peran
-// custom melihatnya tersamar) — di luar cakupan BL-58, jadi tak di-assert di sini.
+// pembeda adalah grant arr. Sejak BL-169, MRR (canSeeARR) & ARR (canSeeSubscriptionARR)
+// adalah KAPABILITAS YANG SAMA — beda dari sebelum BL-169 saat MRR berbasis nama
+// role & ortogonal (custom role selalu melihatnya tersamar terlepas grant arr).
+// Jadi di sini MRR diuji BERSAMA ARR: keduanya ikut grant arr yang sama untuk
+// "direktur" (lihat) maupun "finance" (tersamar).
 func TestSubscriptions_ARRCustomRoleCapability(t *testing.T) {
 	env, uid := setupAccounts(t)
 	// Peran custom: keduanya read (lolos F2). "direktur" + arr, "finance" tanpa.
@@ -140,6 +122,7 @@ func TestSubscriptions_ARRCustomRoleCapability(t *testing.T) {
 	acc := env.seedAccount(t, "Desa Custom", &uid, nil, nil)
 	sub := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "5000000", "60000000")
 
+	const wantMRR = "Rp 5.000.000"
 	const wantARR = "Rp 60.000.000"
 
 	open := func(t *testing.T, role string) string {
@@ -152,17 +135,28 @@ func TestSubscriptions_ARRCustomRoleCapability(t *testing.T) {
 		return rec.Body.String()
 	}
 
-	t.Run("custom role WITH arr grant sees ARR", func(t *testing.T) {
+	t.Run("custom role WITH arr grant sees MRR & ARR", func(t *testing.T) {
 		body := open(t, "direktur")
+		if !strings.Contains(body, wantMRR) {
+			t.Errorf("direktur: MRR %q harus terlihat (grant crm:subscriptions/arr, BL-169)", wantMRR)
+		}
 		if !strings.Contains(body, wantARR) {
 			t.Errorf("direktur: ARR %q harus terlihat (grant crm:subscriptions/arr)", wantARR)
 		}
 	})
 
-	t.Run("custom role WITHOUT arr grant masks ARR", func(t *testing.T) {
+	t.Run("custom role WITHOUT arr grant masks MRR & ARR", func(t *testing.T) {
 		body := open(t, "finance")
 		if !strings.Contains(body, flsHidden) {
-			t.Errorf("finance: ARR harus tersamar (%s) — tanpa grant arr", flsHidden)
+			t.Errorf("finance: MRR/ARR harus tersamar (%s) — tanpa grant arr", flsHidden)
+		}
+		// wantMRR SATU kali wajar: harga satuan item (UnitPrice) sengaja TAK
+		// disamarkan (subItemRows — kuantitas & harga satuan bukan sensitif),
+		// kebetulan sama angka dgn MRR krn seedSubscription mem-seed 1 item cermin
+		// (qty=1, unit_price=mrr). Field MRR yg SEHARUSNYA tersamar (header,
+		// PrevToCurrent, item MRR/Subtotal, chain) tak boleh menambah kemunculan.
+		if n := strings.Count(body, wantMRR); n > 1 {
+			t.Errorf("finance: MRR mentah %q bocor di luar harga satuan item (muncul %dx, want 1)", wantMRR, n)
 		}
 		if strings.Contains(body, wantARR) {
 			t.Errorf("finance: ARR mentah %q tak boleh bocor tanpa grant", wantARR)

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"go_starter/internal/db"
-	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 )
 
@@ -19,8 +18,8 @@ import (
 // Langganan Aktif, Renewal Rate/Jatuh Tempo, chart MRR-movement & Revenue-by-Plan
 // dipindah ke Subscription Report (ditautkan "Lihat Laporan →"). REUSE agregasi
 // Report 8.4 (BL-47): ReportSubMRR (MRR) + ReportRetention (churn). F3 via
-// SubscriptionsListFilterFor(dataScope). F4: MRR tersamar maskARR (nama role,
-// sama dgn Report 8.4).
+// SubscriptionsListFilterFor(dataScope). F4: MRR tersamar maskARR — kapabilitas
+// crm:subscriptions/arr sejak BL-169, sama dgn Report 8.4.
 //
 // BL-142 (membalik BL-98 KHUSUS Beranda): tambah 2 chart inline.
 //   - Revenue per Paket (bar, Rp): F4 LEBIH KETAT dari KPI MRR di atas — chart
@@ -38,11 +37,11 @@ import (
 func (h *Handler) dashSubscriptionDomain(ctx context.Context, dataScope string, uid int64) (panel.DashDomain, bool, error) {
 	d := panel.DashDomain{Title: "Langganan"}
 	q := h.q(ctx)
-	br := session.BusinessRole(ctx)
 	filter := db.SubscriptionsListFilterFor(dataScope)
 	canSubs, canChurn := canViewSubscriptions(ctx), canViewChurn(ctx)
 
 	if canSubs {
+		canARR := canSeeSubscriptionARR(ctx)
 		mrr, err := q.ReportSubMRR(ctx, db.ReportSubMRRParams{
 			Today:    reportTodayDate(time.Now().In(appTZ)),
 			ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
@@ -51,12 +50,12 @@ func (h *Handler) dashSubscriptionDomain(ctx context.Context, dataScope string, 
 			return panel.DashDomain{}, false, err
 		}
 		d.KPIs = append(d.KPIs, panel.DashKPI{
-			Label: "MRR", Value: maskARR(formatRupiah(mrr.MrrActive), br), ValueClass: "text-primary",
+			Label: "MRR", Value: maskARR(formatRupiah(mrr.MrrActive), canARR), ValueClass: "text-primary",
 		})
 
 		// Chart: Revenue per Paket (bar, Rp) — HANYA bila berhak lihat ARR
 		// (chart tak bisa memasking per-bar); skip diam-diam bila tidak (F4).
-		if canSeeSubscriptionARR(ctx) {
+		if canARR {
 			rev, err := q.ReportRevenueByPlan(ctx, db.ReportRevenueByPlanParams{
 				ScopeAll: filter.ScopeAll, IsOwn: filter.IsOwn, Uid: &uid,
 			})

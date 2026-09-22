@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"go_starter/internal/db"
-	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -50,7 +49,7 @@ func (h *Handler) QuoteDetail(w http.ResponseWriter, r *http.Request) {
 // umum kecuali Support). Diperbaiki audit FLS M9-1; laten krn Support F2-blocked
 // total dari crm:deals (business_policy.csv) — defense in depth.
 func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64, q db.Quote, stage string) panel.QuoteDetailView {
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 	items, err := h.q(ctx).ListQuoteItems(ctx, q.ID)
 	if err != nil {
 		h.Log.Error("quotes: list items", "err", err)
@@ -69,7 +68,7 @@ func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64
 	itemRows := make([]panel.QuoteItemRow, 0, len(items))
 	for _, it := range items {
 		subtotal = addNumeric(subtotal, it.Subtotal)
-		itemRows = append(itemRows, quoteItemRowView(it, labels, br))
+		itemRows = append(itemRows, quoteItemRowView(it, labels, canARR))
 	}
 
 	planOpts := make([]panel.QuotePlanOption, 0, len(plans))
@@ -100,9 +99,9 @@ func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64
 		PreparedBy:   ownerName(q.PreparedBy, names),
 		PaymentTerms: deref(q.PaymentTerms),
 		NotesTerms:   deref(q.NotesTerms),
-		Subtotal:     maskARR(formatRupiah(subtotal), br),
-		Tax:          maskARR(formatRupiah(q.TaxAmount), br),
-		GrandTotal:   maskARR(formatRupiah(q.GrandTotal), br),
+		Subtotal:     maskARR(formatRupiah(subtotal), canARR),
+		Tax:          maskARR(formatRupiah(q.TaxAmount), canARR),
+		GrandTotal:   maskARR(formatRupiah(q.GrandTotal), canARR),
 
 		TaxMode:        taxMode,
 		TaxRateInput:   taxRateInput,
@@ -121,8 +120,9 @@ func (h *Handler) quoteDetailView(ctx context.Context, base string, dealID int64
 
 // quoteItemRowView memetakan satu quote_item → baris tabel builder. Angka
 // diformat; qty/diskon mentah dipertahankan untuk prefill form sunting. F4:
-// UnitPrice/Subtotal → maskARR (lihat quoteDetailView).
-func quoteItemRowView(it db.QuoteItem, labels map[int64]string, businessRole string) panel.QuoteItemRow {
+// UnitPrice/Subtotal → maskARR (lihat quoteDetailView). canARR dihitung SEKALI
+// oleh pemanggil (canSeeARR(ctx)).
+func quoteItemRowView(it db.QuoteItem, labels map[int64]string, canARR bool) panel.QuoteItemRow {
 	label := "Plan #—"
 	if it.PlanID != nil {
 		if l, ok := labels[*it.PlanID]; ok {
@@ -135,8 +135,8 @@ func quoteItemRowView(it db.QuoteItem, labels map[int64]string, businessRole str
 		ID:        it.ID,
 		PlanLabel: label,
 		Quantity:  strconv.FormatInt(int64(it.Quantity), 10),
-		UnitPrice: maskARR(formatRupiah(it.UnitPrice), businessRole),
+		UnitPrice: maskARR(formatRupiah(it.UnitPrice), canARR),
 		Discount:  numericStr(it.DiscountPct),
-		Subtotal:  maskARR(formatRupiah(it.Subtotal), businessRole),
+		Subtotal:  maskARR(formatRupiah(it.Subtotal), canARR),
 	}
 }

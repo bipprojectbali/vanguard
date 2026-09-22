@@ -50,7 +50,7 @@ func (h *Handler) dealsPipeline(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	filter := db.DealsListFilterFor(session.BusinessDataScope(ctx))
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 	mineOnly := dealMineOnly(r)
 
 	stats, err := h.q(ctx).DealPipelineStats(ctx, db.DealPipelineStatsParams{
@@ -82,7 +82,7 @@ func (h *Handler) dealsPipeline(w http.ResponseWriter, r *http.Request) {
 	// stage tak dikenal (mustahil lewat CHECK) diabaikan diam-diam agar papan tetap rapi.
 	buckets := make(map[string][]panel.DealRow, len(dealStageOptions))
 	for _, d := range rows {
-		buckets[d.Stage] = append(buckets[d.Stage], dealRowView(d, names, br))
+		buckets[d.Stage] = append(buckets[d.Stage], dealRowView(d, names, canARR))
 	}
 	cols := make([]panel.DealStageColumn, 0, len(dealStageOptions))
 	for _, s := range dealStageOptions {
@@ -99,7 +99,7 @@ func (h *Handler) dealsPipeline(w http.ResponseWriter, r *http.Request) {
 		Err:            wsErrMsg(r.URL.Query().Get("err")),
 		Msg:            dealsMsg(r.URL.Query().Get("ok")),
 		OpenCount:      strconv.FormatInt(stats.OpenCount, 10),
-		PipelineValue:  maskARR(formatRupiah(stats.PipelineValue), br),
+		PipelineValue:  maskARR(formatRupiah(stats.PipelineValue), canARR),
 		WinRate:        winRate(stats.WonCount, stats.LostCount),
 		Stages:         cols,
 	}))

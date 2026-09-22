@@ -59,7 +59,7 @@ func buildOnboardingBands(o db.ReportOnboardingRow) []panel.ReportBandRow {
 // buildChurnRows — panel 3 tabel Alasan Churn. Nilai Hilang di-mask F4
 // (maskARR): Support lihat penanda tersembunyi, bukan Rupiah. Porsi relatif
 // total desa churned (jumlah semua baris).
-func buildChurnRows(rows []db.ReportChurnReasonsRow, businessRole string) []panel.CSChurnRow {
+func buildChurnRows(rows []db.ReportChurnReasonsRow, canARR bool) []panel.CSChurnRow {
 	var total int64
 	for _, r := range rows {
 		total += r.AccountCount
@@ -70,7 +70,7 @@ func buildChurnRows(rows []db.ReportChurnReasonsRow, businessRole string) []pane
 			Reason:    r.ChurnReason,
 			Count:     r.AccountCount,
 			Porsi:     pctStr(r.AccountCount, total),
-			LostValue: maskARR(formatRupiah(r.LostValue), businessRole),
+			LostValue: maskARR(formatRupiah(r.LostValue), canARR),
 		})
 	}
 	return out

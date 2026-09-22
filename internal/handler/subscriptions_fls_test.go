@@ -25,8 +25,11 @@ import (
 // berlapis bila F2/F3 berubah di masa depan (pola sama dgn
 // TestReportsSales_Export_NoLeak_Support).
 
-// TestSubRowView_MRRMasked: MRR tersamar utk Support, tampil apa adanya utk
-// role lain (admin/manager/sales/csm) di baris daftar Active Subscriptions.
+// TestSubRowView_MRRMasked: MRR tersamar bila pemanggil TANPA kapabilitas
+// crm:subscriptions/arr (canARR=false), tampil apa adanya bila true, di baris
+// daftar Active Subscriptions. subRowView murni-data sejak BL-169 (menerima
+// bool, bukan businessRole) — pemetaan role→canARR sendiri diuji di authz/
+// business_defaults (default grant admin/manager/sales/csm, TANPA support).
 func TestSubRowView_MRRMasked(t *testing.T) {
 	row := db.ListSubscriptionsRow{
 		VillageName: "Desa MRR",
@@ -35,23 +38,22 @@ func TestSubRowView_MRRMasked(t *testing.T) {
 		Arr:         numFrom(t, "60000000"),
 	}
 	const wantMRR = "Rp 5.000.000"
-	now := time.Now() // uji sumbu role (MRR), bukan derivasi status → now bebas
+	now := time.Now() // uji sumbu canARR (MRR), bukan derivasi status → now bebas
 
-	v := subRowView(subListRowFromDefault(row), nil, "support", now)
+	v := subRowView(subListRowFromDefault(row), nil, false, now)
 	if v.MRR != flsHidden {
-		t.Errorf("support: MRR harus tersamar (%s), got %q", flsHidden, v.MRR)
+		t.Errorf("canARR=false: MRR harus tersamar (%s), got %q", flsHidden, v.MRR)
 	}
 
-	for _, role := range []string{"admin", "manager", "sales", "csm"} {
-		v := subRowView(subListRowFromDefault(row), nil, role, now)
-		if v.MRR != wantMRR {
-			t.Errorf("role %q: MRR harus %q, got %q", role, wantMRR, v.MRR)
-		}
+	v = subRowView(subListRowFromDefault(row), nil, true, now)
+	if v.MRR != wantMRR {
+		t.Errorf("canARR=true: MRR harus %q, got %q", wantMRR, v.MRR)
 	}
 }
 
-// TestRenewalRowView_MRRMasked: Prev→Current (previous_value/MRR) tersamar utk
-// Support di baris Renewals, tampil apa adanya utk role lain.
+// TestRenewalRowView_MRRMasked: Prev→Current (previous_value/MRR) tersamar bila
+// canARR=false, tampil apa adanya bila true, di baris Renewals. renewalRowView
+// murni-data sejak BL-169 — pemetaan role→canARR diuji terpisah.
 func TestRenewalRowView_MRRMasked(t *testing.T) {
 	row := db.ListRenewalsRow{
 		VillageName:   "Desa Renewal",
@@ -62,27 +64,26 @@ func TestRenewalRowView_MRRMasked(t *testing.T) {
 	now := time.Now()
 	const wantMRR, wantPrev = "Rp 5.000.000", "Rp 4.500.000"
 
-	v := renewalRowView(renewalListRowFromDefault(row), now, "support")
+	v := renewalRowView(renewalListRowFromDefault(row), now, false)
 	if v.CurrentMRR != flsHidden {
-		t.Errorf("support: CurrentMRR harus tersamar (%s), got %q", flsHidden, v.CurrentMRR)
+		t.Errorf("canARR=false: CurrentMRR harus tersamar (%s), got %q", flsHidden, v.CurrentMRR)
 	}
 	if v.PrevValue != flsHidden {
-		t.Errorf("support: PrevValue harus tersamar (%s), got %q", flsHidden, v.PrevValue)
+		t.Errorf("canARR=false: PrevValue harus tersamar (%s), got %q", flsHidden, v.PrevValue)
 	}
 
-	for _, role := range []string{"admin", "manager", "sales", "csm"} {
-		v := renewalRowView(renewalListRowFromDefault(row), now, role)
-		if v.CurrentMRR != wantMRR {
-			t.Errorf("role %q: CurrentMRR harus %q, got %q", role, wantMRR, v.CurrentMRR)
-		}
-		if v.PrevValue != wantPrev {
-			t.Errorf("role %q: PrevValue harus %q, got %q", role, wantPrev, v.PrevValue)
-		}
+	v = renewalRowView(renewalListRowFromDefault(row), now, true)
+	if v.CurrentMRR != wantMRR {
+		t.Errorf("canARR=true: CurrentMRR harus %q, got %q", wantMRR, v.CurrentMRR)
+	}
+	if v.PrevValue != wantPrev {
+		t.Errorf("canARR=true: PrevValue harus %q, got %q", wantPrev, v.PrevValue)
 	}
 }
 
-// TestChurnRowView_MRRMasked: MRR Hilang (lost_value_mrr) tersamar utk Support
-// di baris Churn, tampil apa adanya utk role lain.
+// TestChurnRowView_MRRMasked: MRR Hilang (lost_value_mrr) tersamar bila
+// canARR=false, tampil apa adanya bila true, di baris Churn. churnRowView
+// murni-data sejak BL-169 — pemetaan role→canARR diuji terpisah.
 func TestChurnRowView_MRRMasked(t *testing.T) {
 	row := db.ListChurnedRow{
 		VillageName:  "Desa Churn",
@@ -91,15 +92,13 @@ func TestChurnRowView_MRRMasked(t *testing.T) {
 	}
 	const wantLostMRR = "Rp 500.000"
 
-	v := churnRowView(row, nil, "support")
+	v := churnRowView(row, nil, false)
 	if v.LostMRR != flsHidden {
-		t.Errorf("support: LostMRR harus tersamar (%s), got %q", flsHidden, v.LostMRR)
+		t.Errorf("canARR=false: LostMRR harus tersamar (%s), got %q", flsHidden, v.LostMRR)
 	}
 
-	for _, role := range []string{"admin", "manager", "sales", "csm"} {
-		v := churnRowView(row, nil, role)
-		if v.LostMRR != wantLostMRR {
-			t.Errorf("role %q: LostMRR harus %q, got %q", role, wantLostMRR, v.LostMRR)
-		}
+	v = churnRowView(row, nil, true)
+	if v.LostMRR != wantLostMRR {
+		t.Errorf("canARR=true: LostMRR harus %q, got %q", wantLostMRR, v.LostMRR)
 	}
 }

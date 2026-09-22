@@ -37,8 +37,8 @@ func TestRoleEdit_MatrixHeaderHasNoApproveOrARRColumn(t *testing.T) {
 	if strings.Contains(body, "Setujui") {
 		t.Error("kolom 'Setujui' tak boleh lagi ada di matriks — pindah ke Pengaturan Tambahan")
 	}
-	if !strings.Contains(body, "MRR dan ARR") {
-		t.Fatal("prasyarat: label 'Lihat MRR dan ARR pelanggan' harus tetap muncul (di Pengaturan Tambahan)")
+	if !strings.Contains(body, "Nilai Kontrak (MRR/ARR/Deal Amount)") {
+		t.Fatal("prasyarat: label 'Lihat Nilai Kontrak (MRR/ARR/Deal Amount) pelanggan' harus tetap muncul (di Pengaturan Tambahan)")
 	}
 }
 
@@ -55,11 +55,20 @@ func TestRoleEdit_AdditionalSettingsRendersApproveAndARR(t *testing.T) {
 	if !strings.Contains(body, "Boleh menyetujui Renewals") {
 		t.Error("checklist approve Renewals harus muncul")
 	}
-	if !strings.Contains(body, "Lihat MRR dan ARR pelanggan") {
-		t.Error("checklist ARR harus berlabel 'Lihat MRR dan ARR pelanggan' (bukan lagi diselipi nama modul)")
+	if !strings.Contains(body, "Lihat Nilai Kontrak (MRR/ARR/Deal Amount) pelanggan") {
+		t.Error("checklist ARR harus berlabel 'Lihat Nilai Kontrak (MRR/ARR/Deal Amount) pelanggan'")
 	}
 	if strings.Contains(body, "Nilai Kontrak/MRR") {
 		t.Error("catatan 'Nilai Kontrak/MRR' terpisah harus sudah dibuang (perbaikan tampilan 2026-09-17)")
+	}
+	// Cakupan lintas modul pindah ke tap-info ⓘ grup "Keuangan" (keuanganHint) —
+	// tak boleh lagi jadi <p> statis selalu-tampil di bawah checkbox ARR.
+	if strings.Contains(body, `<p class="text-xs text-base-content/60">Berlaku lintas modul`) {
+		t.Error("'Berlaku lintas modul' tak boleh lagi jadi catatan <p> statis di bawah checkbox ARR")
+	}
+	hintIdx := strings.Index(body, `class="hint-summary`)
+	if hintIdx < 0 || !strings.Contains(body[hintIdx:], "Berlaku lintas modul") {
+		t.Error("'Berlaku lintas modul' harus pindah ke tap-info ⓘ grup Keuangan (sectionHeading/keuanganHint)")
 	}
 }
 

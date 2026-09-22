@@ -202,13 +202,12 @@ func (h *Handler) jenaGetAccountSummary(ctx context.Context, input json.RawMessa
 		return `{"error":"desa tidak ditemukan"}`, nil
 	}
 
-	br := session.BusinessRole(ctx)
 	out := map[string]any{
 		"village_name":   a.VillageName,
 		"account_type":   a.AccountType,
 		"village_status": deref(a.VillageStatus),
 		"territory":      deref(a.Territory),
-		"village_budget": maskARR(formatRupiah(a.VillageBudget), br),
+		"village_budget": maskARR(formatRupiah(a.VillageBudget), canSeeARR(ctx)),
 	}
 	result, err := json.Marshal(out)
 	if err != nil {
@@ -238,14 +237,14 @@ func (h *Handler) jenaGetSubscriptionStatus(ctx context.Context, input json.RawM
 		return "", fmt.Errorf("ambil langganan: %w", err)
 	}
 
-	br := session.BusinessRole(ctx)
+	canARR := canSeeSubscriptionARR(ctx)
 	out := map[string]any{
 		"village_name": a.VillageName,
 		"status":       sub.Status,
 		"start_date":   dateStr(sub.StartDate),
 		"end_date":     dateStr(sub.EndDate),
-		"mrr":          maskARR(formatRupiah(sub.Mrr), br),
-		"arr":          maskSubscriptionARR(formatRupiah(sub.Arr), canSeeSubscriptionARR(ctx)),
+		"mrr":          maskARR(formatRupiah(sub.Mrr), canARR),
+		"arr":          maskSubscriptionARR(formatRupiah(sub.Arr), canARR),
 	}
 	result, err := json.Marshal(out)
 	if err != nil {
@@ -260,7 +259,7 @@ func (h *Handler) jenaListMyDeals(ctx context.Context) (string, error) {
 	}
 
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 	rows, err := h.q(ctx).ListDealsForPipeline(ctx, db.ListDealsForPipelineParams{
 		ScopeAll: false,
 		IsOwn:    true,
@@ -281,7 +280,7 @@ func (h *Handler) jenaListMyDeals(ctx context.Context) (string, error) {
 		results = append(results, row{
 			DealName: d.DealName,
 			Stage:    d.Stage,
-			Amount:   maskARR(formatRupiah(d.Amount), br),
+			Amount:   maskARR(formatRupiah(d.Amount), canARR),
 		})
 	}
 	out, err := json.Marshal(results)
@@ -297,7 +296,7 @@ func (h *Handler) jenaListMyLeads(ctx context.Context) (string, error) {
 	}
 
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 	cursorAt, cursorID := firstPageCursor()
 	rows, err := h.q(ctx).ListLeads(ctx, db.ListLeadsParams{
 		CursorCreatedAt: cursorAt,
@@ -324,7 +323,7 @@ func (h *Handler) jenaListMyLeads(ctx context.Context) (string, error) {
 		results = append(results, row{
 			LeadName: l.LeadName,
 			Status:   l.LeadStatus,
-			EstValue: maskARR(formatRupiah(l.EstimatedValue), br),
+			EstValue: maskARR(formatRupiah(l.EstimatedValue), canARR),
 		})
 	}
 	out, err := json.Marshal(results)

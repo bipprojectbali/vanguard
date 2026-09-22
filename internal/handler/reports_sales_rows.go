@@ -14,7 +14,7 @@ import (
 
 // buildPipelinePanel — panel 1: baris per-stage + bar relatif nilai stage
 // terbesar. Value & Weighted (keduanya Rp) di-mask.
-func buildPipelinePanel(stages []db.ReportPipelineByStageRow, br string) []panel.PipelineRow {
+func buildPipelinePanel(stages []db.ReportPipelineByStageRow, canARR bool) []panel.PipelineRow {
 	var max float64
 	for _, s := range stages {
 		if v := numericFloat(s.StageValue); v > max {
@@ -26,9 +26,9 @@ func buildPipelinePanel(stages []db.ReportPipelineByStageRow, br string) []panel
 		rows = append(rows, panel.PipelineRow{
 			Stage:       s.Stage,
 			Count:       s.DealCount,
-			Value:       maskARR(formatRupiah(s.StageValue), br),
+			Value:       maskARR(formatRupiah(s.StageValue), canARR),
 			Probability: strconv.FormatInt(s.AvgProbability, 10) + "%",
-			Weighted:    maskARR(formatRupiah(s.WeightedValue), br),
+			Weighted:    maskARR(formatRupiah(s.WeightedValue), canARR),
 			BarPct:      barPct(numericFloat(s.StageValue), max),
 		})
 	}
@@ -37,7 +37,7 @@ func buildPipelinePanel(stages []db.ReportPipelineByStageRow, br string) []panel
 
 // buildForecastPanel — panel 2: bucket bulan + bar relatif bulan terbesar.
 // Forecast (Rp tertimbang) di-mask.
-func buildForecastPanel(buckets []db.ReportSalesForecastRow, br string) []panel.ForecastRow {
+func buildForecastPanel(buckets []db.ReportSalesForecastRow, canARR bool) []panel.ForecastRow {
 	var max float64
 	for _, b := range buckets {
 		if v := numericFloat(b.WeightedValue); v > max {
@@ -48,7 +48,7 @@ func buildForecastPanel(buckets []db.ReportSalesForecastRow, br string) []panel.
 	for _, b := range buckets {
 		rows = append(rows, panel.ForecastRow{
 			Period:   forecastPeriodLabel(b.Period),
-			Forecast: maskARR(formatRupiah(b.WeightedValue), br),
+			Forecast: maskARR(formatRupiah(b.WeightedValue), canARR),
 			BarPct:   barPct(numericFloat(b.WeightedValue), max),
 		})
 	}

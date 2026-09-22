@@ -16,63 +16,24 @@ import (
 // tersisa untuk phone: ketegaklurusan sumbu (role platform tak pernah lolos default),
 // dan bocor-digit level-render diuji end-to-end via harness (contacts/sales_leads).
 
-const (
-	arrValue  = "Rp 120.000.000"
-	noteValue = "Kades sulit dihubungi; perpanjangan berisiko."
-)
+const arrValue = "Rp 120.000.000"
 
-// TestFLS_ARR — terbuka bagi semua KECUALI Support. Manager SENGAJA lolos (§8.3:
-// butuh angka untuk menyetujui diskon) — satu-satunya pengecualian FLS Manager.
+// TestFLS_ARR — kontrak masker Nilai Kontrak/ARR/MRR murni-data (BL-169): canSee=true
+// → nilai utuh, false → penanda tersembunyi (flsHidden), nilai asli tak pernah bocor.
+// Sejak BL-169 canSeeARR = canSeeSubscriptionARR, KAPABILITAS ter-matriks (crm:
+// subscriptions/arr, BL-58), bukan cek nama role — pemetaan role→canARR (default
+// admin/manager/sales/csm lolos, support tidak, peran CUSTOM ber-grant lolos) diuji
+// end-to-end di subscriptions_test.go/dashboard_subscription_charts_test.go. Di sini
+// dikunci maskernya sendiri, murni-data, tanpa enforcer.
 func TestFLS_ARR(t *testing.T) {
-	cases := []struct {
-		role string
-		see  bool
-	}{
-		{"admin", true},
-		{"manager", true}, // pengecualian §8.3
-		{"sales", true},
-		{"csm", true},
-		{"support", false}, // §5: agen tiket tak perlu nilai komersial
-		{"", false},        // bukan pemegang peran CRM → deny-default
+	if got := maskARR(arrValue, true); got != arrValue {
+		t.Errorf("canSee=true: ARR harus tampil utuh, got %q", got)
 	}
-	for _, c := range cases {
-		got := maskARR(arrValue, c.role)
-		if c.see && got != arrValue {
-			t.Errorf("ARR untuk %q harus tampil utuh, got %q", c.role, got)
-		}
-		if !c.see && got == arrValue {
-			t.Errorf("ARR untuk %q BOCOR — nilai asli lolos ke yang tak berhak", c.role)
-		}
+	if got := maskARR(arrValue, false); got != flsHidden {
+		t.Errorf("canSee=false: ARR harus tersamar (%s), got %q", flsHidden, got)
 	}
-}
-
-// TestFLS_InternalNotes — HANYA Admin & CSM (§5). Non-berhak menerima string
-// KOSONG, bukan penanda: keberadaan catatan itu sendiri sudah sinyal.
-func TestFLS_InternalNotes(t *testing.T) {
-	cases := []struct {
-		role string
-		see  bool
-	}{
-		{"admin", true},
-		{"csm", true},
-		{"sales", false},
-		{"manager", false}, // §5 mengikat Manager juga
-		{"support", false},
-		{"", false},
-	}
-	for _, c := range cases {
-		got := maskInternalNotes(noteValue, c.role)
-		if c.see && got != noteValue {
-			t.Errorf("catatan untuk %q harus tampil, got %q", c.role, got)
-		}
-		if !c.see {
-			if got == noteValue {
-				t.Errorf("catatan untuk %q BOCOR — penilaian internal lolos", c.role)
-			}
-			if got != "" {
-				t.Errorf("catatan untuk %q harus KOSONG (bukan penanda), got %q", c.role, got)
-			}
-		}
+	if maskARR(arrValue, false) == arrValue {
+		t.Error("canSee=false: nilai asli ARR BOCOR ke yang tak berhak")
 	}
 }
 
@@ -98,21 +59,18 @@ func TestFLS_SubscriptionARR(t *testing.T) {
 
 // TestFLS_TegakLurusRolePlatform: FLS memakai business_role, BUKAN role tenant/
 // platform. super_admin/owner yang bukan pemegang peran CRM ("") tak lolos apa
-// pun — wewenang platform ≠ melihat field komersial/PII (§3).
+// pun — wewenang platform ≠ melihat field komersial/PII (§3). ARR sejak BL-169
+// adalah kapabilitas Casbin (canSeeARR/canSeeSubscriptionARR), bukan lagi cek
+// nama role di sini — tegak-lurusnya dijamin structural (business_policy.csv
+// tak punya baris utk role platform → business_role "" tak pernah match) &
+// diuji end-to-end di subscriptions_test.go, bukan lewat maskARR (kini bool murni).
 func TestFLS_TegakLurusRolePlatform(t *testing.T) {
 	for _, role := range []string{"", "super_admin", "owner", "staff"} {
-		if maskARR(arrValue, role) == arrValue && role != "" {
-			// "super_admin" dll BUKAN business_role valid → harus tersembunyi.
-			t.Errorf("ARR lolos untuk role non-bisnis %q — sumbu tercampur", role)
-		}
 		// Phone konfigurabel per-tenant: pada tenant belum-dikonfigurasi (tenantID 0),
 		// default = Sales+Admin. Role platform (super_admin/owner/staff) & "" BUKAN
 		// business_role → CanViewPhone false. Sumbu F4 tegak lurus dari role platform.
 		if fls.CanViewPhone(0, role) {
 			t.Errorf("HP lolos untuk role non-bisnis %q — sumbu tercampur", role)
-		}
-		if maskInternalNotes(noteValue, role) == noteValue {
-			t.Errorf("catatan lolos untuk role non-bisnis %q — sumbu tercampur", role)
 		}
 	}
 }

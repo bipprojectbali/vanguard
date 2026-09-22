@@ -15,7 +15,7 @@ import (
 // buildMRRComponents — Panel 1 tabel pergerakan MRR bulan ini. Nilai Rp
 // di-mask F4 (maskARR); Porsi = magnitudo komponen relatif TOTAL magnitudo 4
 // komponen (distribusi pergerakan, bukan nilai absolut — tak di-mask, bukan Rp).
-func buildMRRComponents(m db.ReportSubMRRRow, br string) []panel.SubMRRComponentRow {
+func buildMRRComponents(m db.ReportSubMRRRow, canARR bool) []panel.SubMRRComponentRow {
 	newV := numericFloat(m.NewMrr)
 	expV := numericFloat(m.ExpansionMrr)
 	conV := numericFloat(m.ContractionMrr)
@@ -37,7 +37,7 @@ func buildMRRComponents(m db.ReportSubMRRRow, br string) []panel.SubMRRComponent
 	for _, c := range comps {
 		rows = append(rows, panel.SubMRRComponentRow{
 			Component: c.label,
-			Value:     maskARR(formatRupiah(c.num), br),
+			Value:     maskARR(formatRupiah(c.num), canARR),
 			Count:     c.count,
 			Porsi:     sharePct(c.val, total),
 		})
@@ -63,7 +63,7 @@ func buildRenewalMonths(rows []db.ReportRenewalByMonthRow) []panel.SubRenewalMon
 // buildSubChurnReasons — Panel 3 breakdown alasan (REUSE ReportChurnReasons).
 // Reason = label Indonesia (churnReasonID). Nilai Hilang Rp di-mask F4. Porsi =
 // desa alasan itu relatif TOTAL desa churn (distribusi, bukan Rp → tak di-mask).
-func buildSubChurnReasons(rows []db.ReportChurnReasonsRow, br string) []panel.SubChurnReasonRow {
+func buildSubChurnReasons(rows []db.ReportChurnReasonsRow, canARR bool) []panel.SubChurnReasonRow {
 	var total int64
 	for _, r := range rows {
 		total += r.AccountCount
@@ -73,7 +73,7 @@ func buildSubChurnReasons(rows []db.ReportChurnReasonsRow, br string) []panel.Su
 		out = append(out, panel.SubChurnReasonRow{
 			Reason:    churnReasonID(r.ChurnReason),
 			Count:     r.AccountCount,
-			LostValue: maskARR(formatRupiah(r.LostValue), br),
+			LostValue: maskARR(formatRupiah(r.LostValue), canARR),
 			Porsi:     pctStr(r.AccountCount, total),
 		})
 	}
@@ -82,7 +82,7 @@ func buildSubChurnReasons(rows []db.ReportChurnReasonsRow, br string) []panel.Su
 
 // buildRevenueByPlan — Panel 4. MRR & Rata per Desa di-mask F4. Bar relatif
 // paket MRR terbesar. Rata per Desa = mrr/desa (guard desa=0).
-func buildRevenueByPlan(rows []db.ReportRevenueByPlanRow, br string) []panel.SubPlanRevenueRow {
+func buildRevenueByPlan(rows []db.ReportRevenueByPlanRow, canARR bool) []panel.SubPlanRevenueRow {
 	var max float64
 	for _, r := range rows {
 		if v := numericFloat(r.Mrr); v > max {
@@ -99,8 +99,8 @@ func buildRevenueByPlan(rows []db.ReportRevenueByPlanRow, br string) []panel.Sub
 		out = append(out, panel.SubPlanRevenueRow{
 			Plan:   r.PlanName,
 			Count:  r.VillageCount,
-			MRR:    maskARR(formatRupiah(r.Mrr), br),
-			AvgPer: maskARR(rupiahFromFloat(avg), br),
+			MRR:    maskARR(formatRupiah(r.Mrr), canARR),
+			AvgPer: maskARR(rupiahFromFloat(avg), canARR),
 			BarPct: barPct(mrr, max),
 		})
 	}
@@ -110,13 +110,13 @@ func buildRevenueByPlan(rows []db.ReportRevenueByPlanRow, br string) []panel.Sub
 // buildSubAging — Panel 5. Label & Catatan per bucket (const). MRR di-mask F4.
 // Renewal Rate = diperpanjang/jatuh-tempo; Churn Rate = churned/total bucket.
 // Rata Health agregat (bukan PII per-desa).
-func buildSubAging(rows []db.ReportSubscriptionAgingRow, br string) []panel.SubAgingRow {
+func buildSubAging(rows []db.ReportSubscriptionAgingRow, canARR bool) []panel.SubAgingRow {
 	out := make([]panel.SubAgingRow, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, panel.SubAgingRow{
 			Bucket:      agingBucketLabel(r.Bucket),
 			Villages:    r.ActiveVillages,
-			MRR:         maskARR(formatRupiah(r.Mrr), br),
+			MRR:         maskARR(formatRupiah(r.Mrr), canARR),
 			AvgHealth:   healthStr(r.AvgHealth),
 			RenewalRate: ratePct(r.RenewedPast, r.DuePast),
 			ChurnRate:   ratePct(r.Churned, r.Total),

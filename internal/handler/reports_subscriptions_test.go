@@ -214,37 +214,38 @@ func TestReportsSubscriptions_ScopedByOwnership(t *testing.T) {
 // --- F4: masking (builder-level) -------------------------------------------
 
 // TestReportsSubscriptions_MaskingF4: nilai Rp (Revenue-by-Plan & komponen MRR)
-// tersamar bagi role tanpa akses ARR (canSeeARR=false, mis. "support") tetapi
-// utuh bagi "admin". Diuji di level builder (pola reports_cs_test).
+// tersamar bagi pemanggil tanpa kapabilitas crm:subscriptions/arr (canSeeARR=
+// false) tetapi utuh bila true. Builder murni-data menerima bool (bukan
+// businessRole) sejak BL-169. Diuji di level builder (pola reports_cs_test).
 func TestReportsSubscriptions_MaskingF4(t *testing.T) {
 	planRows := []db.ReportRevenueByPlanRow{
 		{PlanName: "Paket Emas", VillageCount: 2, Mrr: numFrom(t, "1000000")},
 	}
-	masked := buildRevenueByPlan(planRows, "support")
+	masked := buildRevenueByPlan(planRows, false)
 	if len(masked) != 1 {
-		t.Fatalf("buildRevenueByPlan(support) len = %d, want 1", len(masked))
+		t.Fatalf("buildRevenueByPlan(false) len = %d, want 1", len(masked))
 	}
 	if masked[0].MRR != flsHidden || masked[0].AvgPer != flsHidden {
 		t.Errorf("MRR/AvgPer tersamar = %q/%q, want %q", masked[0].MRR, masked[0].AvgPer, flsHidden)
 	}
-	seen := buildRevenueByPlan(planRows, "admin")
+	seen := buildRevenueByPlan(planRows, true)
 	if !strings.Contains(seen[0].MRR, "1.000.000") {
-		t.Errorf("admin harus melihat MRR Rp 1.000.000, got %q", seen[0].MRR)
+		t.Errorf("canARR=true harus melihat MRR Rp 1.000.000, got %q", seen[0].MRR)
 	}
 	if !strings.Contains(seen[0].AvgPer, "500.000") {
-		t.Errorf("admin harus melihat Rata per Desa Rp 500.000, got %q", seen[0].AvgPer)
+		t.Errorf("canARR=true harus melihat Rata per Desa Rp 500.000, got %q", seen[0].AvgPer)
 	}
 
 	mrrRow := db.ReportSubMRRRow{
 		NewMrr: numFrom(t, "500000"), NewCount: 1,
 	}
-	comps := buildMRRComponents(mrrRow, "support")
+	comps := buildMRRComponents(mrrRow, false)
 	if comps[0].Value != flsHidden {
-		t.Errorf("komponen MRR support = %q, want %q (tersamar)", comps[0].Value, flsHidden)
+		t.Errorf("komponen MRR canARR=false = %q, want %q (tersamar)", comps[0].Value, flsHidden)
 	}
-	compsAdmin := buildMRRComponents(mrrRow, "admin")
+	compsAdmin := buildMRRComponents(mrrRow, true)
 	if !strings.Contains(compsAdmin[0].Value, "500.000") {
-		t.Errorf("admin harus melihat MRR Baru Rp 500.000, got %q", compsAdmin[0].Value)
+		t.Errorf("canARR=true harus melihat MRR Baru Rp 500.000, got %q", compsAdmin[0].Value)
 	}
 }
 

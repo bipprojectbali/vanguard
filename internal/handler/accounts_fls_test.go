@@ -218,11 +218,11 @@ func TestAccountDetailView_VillageBudgetMasked(t *testing.T) {
 	}
 }
 
-// TestAccountDetail_F4_ARRMaskedForSupport: MRR (F4 maskARR/canSeeARR) & ARR
-// (F2 canSeeSubscriptionARR, BL-166) di kartu Ringkasan Langganan (M2-8)
-// sama-sama tersamar bagi Support — kebetulan sama hasilnya (Support tak lolos
-// F4 maupun tak punya baris `crm:subscriptions` sama sekali di policy default
-// → F2 fail-closed), meski dua mekanisme berbeda. Pola direct-call sama dgn
+// TestAccountDetail_F4_ARRMaskedForSupport: MRR & ARR di kartu Ringkasan
+// Langganan (M2-8) sama-sama tersamar bagi Support — sejak BL-169 keduanya
+// KAPABILITAS YANG SAMA (canSeeARR = canSeeSubscriptionARR, crm:subscriptions/
+// arr); Support tak punya baris `crm:subscriptions` sama sekali di policy
+// default → fail-closed utk keduanya. Pola direct-call sama dgn
 // TestAccountDetailView_VillageBudgetMasked — Support ScopeNone selalu 404 di
 // jalur HTTP nyata (TestAccounts_F3_SupportNolBaris), jadi wiring masking
 // diuji lewat pemanggilan langsung accountDetailView.
@@ -243,12 +243,13 @@ func TestAccountDetail_F4_ARRMaskedForSupport(t *testing.T) {
 	}
 }
 
-// TestAccountDetail_F4_ARRVisibleForManager: Manager ada di allow-list F4
-// canSeeARR (MRR) DAN punya kapabilitas F2 eksplisit `crm:subscriptions/arr`
-// (ARR, business_policy.csv) → keduanya tampil apa adanya (diformat
-// formatRupiah). Beda dgn Sales/CSM (lihat
-// TestAccountDetail_F2_ARRMaskedForSalesDefault/...CSMDefault) yang lolos F4
-// tapi TIDAK punya kapabilitas `arr` — MRR tampil, ARR tersamar.
+// TestAccountDetail_F4_ARRVisibleForManager: Manager punya kapabilitas
+// crm:subscriptions/arr default (business_policy.csv) → MRR & ARR (sejak
+// BL-169 kapabilitas YANG SAMA, canSeeARR = canSeeSubscriptionARR) tampil apa
+// adanya (diformat formatRupiah). Sales & CSM kini SAMA (lihat
+// TestAccountDetail_ARRVisibleForSalesDefault/...CSMDefault, BL-169 menambah
+// default grant arr ke keduanya) — satu-satunya role default TANPA arr yang
+// tersisa adalah Support (TestAccountDetail_F4_ARRMaskedForSupport).
 func TestAccountDetail_F4_ARRVisibleForManager(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Langganan Terbuka", &uid, nil, nil)
@@ -274,13 +275,14 @@ func TestAccountDetail_F4_ARRVisibleForManager(t *testing.T) {
 	}
 }
 
-// TestAccountDetail_F2_ARRMaskedForSalesDefault: BL-166 regresi. Role default
-// `sales` (business_policy.csv) lolos F4 canSeeARR (MRR tampil), tapi HANYA
-// dapat `crm:subscriptions read` — TANPA kapabilitas `arr` — jadi ARR harus
-// tersamar via canSeeSubscriptionARR (F2), sinkron dgn halaman Subscriptions
-// (subscriptions_detail_view.go). Sebelum fix, ARR di kartu ini ikut F4
-// (allow-list Sales lolos) → bocor; test ini mengunci parity antar-halaman.
-func TestAccountDetail_F2_ARRMaskedForSalesDefault(t *testing.T) {
+// TestAccountDetail_ARRVisibleForSalesDefault: sejak BL-169, role default
+// `sales` (business_policy.csv) DAPAT kapabilitas `crm:subscriptions/arr` by
+// default (menambah dari BL-58 admin+manager, supaya tenant existing tak
+// regresi dari perilaku F4 lama) — MRR & ARR (kapabilitas SAMA sejak BL-169)
+// sama-sama tampil apa adanya. Sebelum BL-169 (era BL-166), sales lolos F4
+// (MRR) tapi TANPA `arr` (ARR tersamar) — dua sumbu terpisah; BL-169
+// menyatukannya jadi satu kapabilitas untuk Sales & CSM juga.
+func TestAccountDetail_ARRVisibleForSalesDefault(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Langganan Sales", &uid, nil, nil)
 	plan := env.seedPlan(t, "Paket Uji F2 Sales", "PLAN-F2-ARR-SALES", "500000")
@@ -291,18 +293,18 @@ func TestAccountDetail_F2_ARRMaskedForSalesDefault(t *testing.T) {
 	env.runAccount(uid, "owner", "sales", req, func(w http.ResponseWriter, r *http.Request) {
 		v = env.h.accountDetailView(r.Context(), "", a)
 	})
-	if v.Subscription.ARR != flsHidden {
-		t.Errorf("BL-166: sales default tak punya kapabilitas arr → ARR harus tersamar (%s), got %q", flsHidden, v.Subscription.ARR)
+	if v.Subscription.ARR == flsHidden || v.Subscription.ARR == "" {
+		t.Errorf("BL-169: sales default punya kapabilitas arr → ARR harus tampil, got %q", v.Subscription.ARR)
 	}
 	if v.Subscription.MRR == flsHidden || v.Subscription.MRR == "" {
-		t.Errorf("sales: MRR tetap F4, harus tampil (allow-list), got %q", v.Subscription.MRR)
+		t.Errorf("sales: MRR harus tampil, got %q", v.Subscription.MRR)
 	}
 }
 
-// TestAccountDetail_F2_ARRMaskedForCSMDefault: sama dgn
-// TestAccountDetail_F2_ARRMaskedForSalesDefault, role `csm` — default policy
-// juga cuma `read` tanpa `arr`.
-func TestAccountDetail_F2_ARRMaskedForCSMDefault(t *testing.T) {
+// TestAccountDetail_ARRVisibleForCSMDefault: sama dgn
+// TestAccountDetail_ARRVisibleForSalesDefault, role `csm` — default policy
+// (BL-169) juga dapat `arr`.
+func TestAccountDetail_ARRVisibleForCSMDefault(t *testing.T) {
 	env, uid := setupAccounts(t)
 	a := env.seedAccount(t, "Desa Langganan CSM", &uid, nil, nil)
 	plan := env.seedPlan(t, "Paket Uji F2 CSM", "PLAN-F2-ARR-CSM", "500000")
@@ -313,10 +315,10 @@ func TestAccountDetail_F2_ARRMaskedForCSMDefault(t *testing.T) {
 	env.runAccount(uid, "owner", "csm", req, func(w http.ResponseWriter, r *http.Request) {
 		v = env.h.accountDetailView(r.Context(), "", a)
 	})
-	if v.Subscription.ARR != flsHidden {
-		t.Errorf("BL-166: csm default tak punya kapabilitas arr → ARR harus tersamar (%s), got %q", flsHidden, v.Subscription.ARR)
+	if v.Subscription.ARR == flsHidden || v.Subscription.ARR == "" {
+		t.Errorf("BL-169: csm default punya kapabilitas arr → ARR harus tampil, got %q", v.Subscription.ARR)
 	}
 	if v.Subscription.MRR == flsHidden || v.Subscription.MRR == "" {
-		t.Errorf("csm: MRR tetap F4, harus tampil (allow-list), got %q", v.Subscription.MRR)
+		t.Errorf("csm: MRR harus tampil, got %q", v.Subscription.MRR)
 	}
 }

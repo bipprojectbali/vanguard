@@ -280,10 +280,11 @@ func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool) g.Node {
 // approve/arr per modul — dulu kolom "Setujui"/"Lihat ARR" di tabel matriks,
 // BL-145 subtask 7) dan "Kontak" (dua checkbox Field Security yang dulu form
 // berdiri sendiri, fieldSecurityRoleSection, kini melebur ke SATU form dgn
-// matriks). Baris ARR berlabel tetap "Lihat MRR dan ARR pelanggan" (dulu
-// disisipi nama modul + catatan kecil Nilai Kontrak/MRR terpisah — dibuang,
-// satu-satunya modul ber-CanARR hari ini adalah Subscriptions jadi label
-// generik sudah cukup jelas tanpa perlu template per-modul). fsec != nil →
+// matriks). Baris ARR berlabel "Lihat Nilai Kontrak (MRR/ARR/Deal Amount)
+// pelanggan" TANPA catatan <p> statis di bawahnya — cakupan lintas modul
+// (Subscriptions/Deals/Leads/Accounts/Quotes/Reports) pindah ke tap-info ⓘ
+// grup "Keuangan" (keuanganHint), pola sama kontakHint (sudah dipindah
+// 2026-09-17), bukan lagi teks selalu-tampil. fsec != nil →
 // sisipkan input hidden fsec_present=1: penanda bagi RoleUpdate (roles.go)
 // bahwa form INI memang menyertakan bagian Field Security (beda dari submit
 // lama/test yang tak menyinggung FLS sama sekali) — tanpanya, view/edit yang
@@ -309,7 +310,8 @@ func additionalSettings(rc RoleCard, canEdit bool, fsec *FieldSecurityRoleView) 
 			if canEdit {
 				cb = reactiveCheckbox("arr."+m.Obj, arrSig, lvlSig)
 			}
-			financeRows = append(financeRows, settingRow(cb, "Lihat MRR dan ARR pelanggan", g.Text("")))
+			financeRows = append(financeRows, settingRow(cb,
+				"Lihat Nilai Kontrak (MRR/ARR/Deal Amount) pelanggan", g.Text("")))
 		}
 	}
 
@@ -364,7 +366,8 @@ var kontakHint = []string{
 }
 
 var keuanganHint = []string{
-	"\"Lihat MRR dan ARR pelanggan\" untuk mengatur akses ke nilai ARR/MRR.",
+	"\"Lihat Nilai Kontrak (MRR/ARR/Deal Amount) pelanggan\" mengatur akses ke nilai kontrak.",
+	"Berlaku lintas modul: Subscriptions, Deals, Leads, Accounts, Quotes, Reports.",
 	"\"Boleh menyetujui\" mengatur wewenang approve Deals/Quotes/Renewal Management, " +
 		"(tak perlu pilih \"Kelola\" untuk bisa menyetujui).",
 }

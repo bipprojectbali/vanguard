@@ -106,10 +106,14 @@ func subscriptionsMsg(code string) string {
 // peran sistem sehingga peran KUSTOM (mis. "Direktur"/"Finance") tak pernah bisa
 // melihat ARR walau diberi data_scope=all — kontra desain role-aware F2/F3.
 // Default kapabilitas ini diberikan ke Administrator (glob crm:*) + Manager
-// (business_defaults.go); operator bisa memberikannya ke peran lain lewat editor
-// peran. Sengaja BEDA dari MRR (maskARR, umum kecuali Support) — ARR langganan
-// lebih sensitif nilai tahunannya (spec M5-4). Dihitung di batas handler (punya
-// ctx ber-sesi), hasilnya (bool) dialirkan ke view-mapper murni-data.
+// (business_defaults.go), + Sales & CSM (BL-169). Operator bisa memberikannya
+// ke peran lain lewat editor peran. SEJAK BL-169, canSeeARR (fls.go — MRR/Deal
+// Amount/anggaran desa/dst) memanggil fungsi ini juga: satu checkbox "Lihat
+// ARR" di matriks editor kini gerbang tunggal Nilai Kontrak lintas modul,
+// bukan cuma ARR Subscriptions (dulu dua kebijakan terpisah — MRR allow-list
+// nama role, ARR Subscriptions kapabilitas Casbin; disatukan krn keduanya
+// gejala bug yang sama: buta terhadap role kustom). Dihitung di batas handler
+// (punya ctx ber-sesi), hasilnya (bool) dialirkan ke view-mapper murni-data.
 func canSeeSubscriptionARR(ctx context.Context) bool {
 	return authz.CanBusiness(ctx, "crm:subscriptions", "arr")
 }
@@ -118,7 +122,9 @@ func canSeeSubscriptionARR(ctx context.Context) bool {
 // canSee, atau penanda tersembunyi (flsHidden) bila tidak. Nilai asli tak pernah
 // keluar saat tersembunyi. Menerima bool (bukan ctx) agar view-mapper tetap
 // murni-data & unit-testable tanpa enforcer — pemanggil hitung sekali via
-// canSeeSubscriptionARR(ctx). MRR pakai kebijakan terpisah (maskARR).
+// canSeeSubscriptionARR(ctx). MRR/Deal Amount/dll pakai maskARR (fls.go),
+// kapabilitas SAMA sejak BL-169 — dua fungsi beda nama demi kejelasan titik
+// panggil.
 func maskSubscriptionARR(formatted string, canSee bool) string {
 	if canSee {
 		return formatted

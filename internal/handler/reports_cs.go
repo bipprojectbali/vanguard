@@ -33,8 +33,8 @@ import (
 //     (session.BusinessDataScope) — sumber SATU dgn modul asal, tak duplikasi
 //     logic scope. CSM (own) hanya lihat desa binaannya lintas ketiga sumber.
 //   - F4 maskARR pada kolom Rp (Nilai Hilang di tabel churn). Support pemegang
-//     crm:reports_cs tapi DI LUAR allow-list canSeeARR (skema.md §9) →
-//     tersamar. Panel lain murni skor/persen/hari → tanpa masking.
+//     crm:reports_cs tapi TANPA kapabilitas crm:subscriptions/arr (canSeeARR,
+//     BL-169) → tersamar. Panel lain murni skor/persen/hari → tanpa masking.
 
 // reportsCSData menjalankan agregasi & merakit view-model 6 panel; dipakai
 // ReportsCS (HTML) & ReportsCSExport (CSV) agar keduanya konsisten (satu sumber
@@ -46,7 +46,7 @@ func (h *Handler) reportsCSData(ctx context.Context, f csReportFilter) (panel.Re
 	sub := db.SubscriptionsListFilterFor(scope)
 	eng := db.EngagementsListFilterFor(scope)
 	uid := session.UserID(ctx)
-	br := session.BusinessRole(ctx)
+	canARR := canSeeARR(ctx)
 	q := h.q(ctx)
 	seg := f.segmentArg() // *string band kesehatan (nil = semua)
 
@@ -118,7 +118,7 @@ func (h *Handler) reportsCSData(ctx context.Context, f csReportFilter) (panel.Re
 		ChurnPct:     ratePct(retention.Churned, retention.Active+retention.Churned),
 		ActiveCount:  retention.Active,
 		ChurnedCount: retention.Churned,
-		ChurnReasons: buildChurnRows(churn, br),
+		ChurnReasons: buildChurnRows(churn, canARR),
 
 		OnboardAvgDuration: daysStr(onboarding.AvgDurationDays, onboarding.CompletedWithDates),
 		OnboardCompleted:   onboarding.Completed,

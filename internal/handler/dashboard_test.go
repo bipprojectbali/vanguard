@@ -191,8 +191,10 @@ func TestDashboard_RenewalsScopedByOwnership(t *testing.T) {
 
 // --- F4: masking ARR ----------------------------------------------------------
 
-// TestDashboard_ARRMaskedForNonManager: admin/manager melihat ARR asli;
-// sales/csm/support melihat flsHidden — kebijakan subscriptions (bukan deals).
+// TestDashboard_ARRMaskedForNonManager: admin/manager/sales/csm (kapabilitas
+// crm:subscriptions/arr, BL-169 — grant default meluas ke Sales & CSM) melihat
+// ARR asli; support (tanpa objek crm:subscriptions sama sekali) melihat
+// flsHidden — kebijakan subscriptions (bukan deals).
 func TestDashboard_ARRMaskedForNonManager(t *testing.T) {
 	env, uid := setupAccounts(t)
 	planID := env.seedPlan(t, "Paket Mask", "PLAN-MASK", "1000000")
@@ -206,8 +208,8 @@ func TestDashboard_ARRMaskedForNonManager(t *testing.T) {
 	}{
 		{"admin", true, false},
 		{"manager", true, false},
-		{"sales", false, true},
-		{"csm", false, true},
+		{"sales", true, false},
+		{"csm", true, false},
 		{"support", false, true},
 	}
 	for _, c := range cases {
