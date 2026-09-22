@@ -101,6 +101,39 @@ func TestRoles_UpdateIgnoresDroppedColumns(t *testing.T) {
 	}
 }
 
+// TestRoles_UpdateMatrixDowngradesUnenforcedWriteToRead: defense-in-depth —
+// form yang (mis. request diketik manual/browser lama/cache) tetap mengirim
+// level.crm:dashboard=write (modul !WriteEnforced, editor sudah tak merender
+// opsi "Kelola"-nya) TAK boleh tersimpan sbg "write". readRoleMatrix
+// (roles_rest.go) menurunkannya jadi "read" — akses tetap berlaku (read),
+// hanya tak dicatat sbg "write" yang tak pernah benar-benar dicek di mana pun.
+func TestRoles_UpdateMatrixDowngradesUnenforcedWriteToRead(t *testing.T) {
+	env, uid := setupRoles(t)
+	env.seedRole(t, "finance", "Keuangan", "own", false)
+
+	form := roleFormValues("Keuangan", "all")
+	form.Set("level.crm:dashboard", "write") // !WriteEnforced — harus diturunkan
+	form.Set("level.crm:accounts", "write")  // WriteEnforced=true — harus tetap write
+	req := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleUpdate)
+
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=saved") {
+		t.Fatalf("harus ok=saved, got %q (status %d)\n%s", loc, rec.Code, rec.Body.String())
+	}
+	if env.hasPerm(t, "finance", "crm:dashboard", "write") {
+		t.Error("crm:dashboard write TAK boleh tersimpan (modul !WriteEnforced)")
+	}
+	if !env.hasPerm(t, "finance", "crm:dashboard", "read") {
+		t.Error("crm:dashboard harus tetap tersimpan sbg read (akses tak hilang)")
+	}
+	if !env.hasPerm(t, "finance", "crm:accounts", "write") {
+		t.Error("crm:accounts write harus tetap tersimpan apa adanya (modul WriteEnforced=true)")
+	}
+	if !env.canBiz(uid, "finance", "crm:dashboard", "read") {
+		t.Error("enforcer harus tetap mengizinkan read crm:dashboard setelah reload")
+	}
+}
+
 // TestRoles_UpdateSystemRejected: peran sistem (admin) kebal sunting → err,
 // nama tampilannya tak berubah.
 func TestRoles_UpdateSystemRejected(t *testing.T) {

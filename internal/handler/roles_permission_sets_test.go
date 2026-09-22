@@ -96,6 +96,34 @@ func TestPermissionSetRows_NoneLevelAllDenied(t *testing.T) {
 	}
 }
 
+// TestPermissionSetRows_WriteEnforcedFalseCapsCreateEditDelete: sel DB
+// crm:subscriptions punya write=true (mis. grant default Manager,
+// business_defaults.go) TAPI modul itu WriteEnforced=false (audit 2026-09:
+// tak ada titik enforcement CanBusiness(ctx,obj,"write")) → View tetap ✓
+// (write mencakup read), Create/Edit/Delete harus TETAP ✗ — moduleLevel
+// (roles_card.go) merendahkan Level ke "read" sebelum sampai ke sini, jadi
+// blok B tak boleh menjanjikan CRUD yang tak pernah benar-benar dicek.
+func TestPermissionSetRows_WriteEnforcedFalseCapsCreateEditDelete(t *testing.T) {
+	cells := map[string]*permCell{"crm:subscriptions": {write: true}}
+	rows := permissionSetRows(roleRow("manager", "Manager", authz.DataScopeAll, false), cells)
+
+	var subs *panel.PermissionSetRow
+	for i := range rows {
+		if rows[i].Label == "Active Subscriptions" {
+			subs = &rows[i]
+		}
+	}
+	if subs == nil {
+		t.Fatal("baris Active Subscriptions harus ada")
+	}
+	if subs.View != panel.PermMarkFull {
+		t.Errorf("View harus tetap ✓ (write mencakup read), got %q", subs.View)
+	}
+	if subs.Create != panel.PermMarkNone || subs.Edit != panel.PermMarkNone || subs.Delete != panel.PermMarkNone {
+		t.Errorf("Create/Edit/Delete harus ✗ walau sel DB write=true (modul !WriteEnforced), got %+v", subs)
+	}
+}
+
 // --- buildPermissionSetView --------------------------------------------------
 
 // TestBuildPermissionSetView_DefaultsToFirstRole: selectedName kosong/tak

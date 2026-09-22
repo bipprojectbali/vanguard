@@ -111,7 +111,13 @@ func readRoleMatrix(r *http.Request) []rolePerm {
 		case "read":
 			perms = append(perms, rolePerm{m.Obj, "read"})
 		case "write":
-			perms = append(perms, rolePerm{m.Obj, "write"})
+			// !WriteEnforced (dashboard/subscriptions/activities/4 Reports,
+			// role_edit_levels.go tak merender "Kelola") → simpan "read".
+			act := "write"
+			if !m.WriteEnforced {
+				act = "read"
+			}
+			perms = append(perms, rolePerm{m.Obj, act})
 		}
 		hasLevel := level == "read" || level == "write"
 		if hasLevel && m.CanApprove && r.FormValue("approve."+m.Obj) == "1" {

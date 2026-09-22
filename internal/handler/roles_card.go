@@ -48,8 +48,16 @@ func scopeLabel(value string) string {
 // roleModuleRows menurunkan satu baris matriks per modul CRM (urut menu §4) dari
 // sel izin peran. cells boleh nil (peran baru tanpa izin) → semua modul "none".
 //
-// Level: write bila ada write, else read bila ada read, else none. write⊇read
-// (business.conf) jadi "write" tak perlu menyimpan read terpisah. approve hanya
+// Level: write bila ada write DAN modul WriteEnforced, else read bila ada write
+// ATAU read, else none. write⊇read (business.conf) jadi "write" tak perlu
+// menyimpan read terpisah. Modul !WriteEnforced (dashboard, subscriptions,
+// activities, 4 Reports) DIRENDAHKAN ke "read" walau sel DB-nya "write" (mis.
+// grant default Manager crm:subscriptions write, business_defaults.go) — bukan
+// kehilangan akses (write tetap mencakup read di enforcer), sekadar memastikan
+// Level yang dioper ke view SELALU punya <option> yang cocok setelah editor
+// berhenti menawarkan "Kelola" untuk modul ini (role_edit_levels.go); tanpa ini
+// select tampak default ke opsi pertama ("Tak ada") dan submit berikutnya diam-
+// diam menghapus akses read yang sebenarnya masih berlaku. approve hanya
 // dibaca untuk modul yang mendukungnya (ModuleCanApprove) — sel approve modul
 // lain tak bermakna dan tak dirender. arr (BL-58, visibilitas ARR) sama: hanya
 // dibaca untuk modul ber-CanARR (Subscriptions).
@@ -57,31 +65,44 @@ func roleModuleRows(cells map[string]*permCell) []panel.RoleModulePerm {
 	mods := authz.CRMModules()
 	rows := make([]panel.RoleModulePerm, 0, len(mods))
 	for _, m := range mods {
-		level := "none"
+		level := moduleLevel(cells[m.Obj], m.WriteEnforced)
 		approve := false
 		arr := false
 		if c := cells[m.Obj]; c != nil {
-			switch {
-			case c.write:
-				level = "write"
-			case c.read:
-				level = "read"
-			}
 			approve = c.approve && m.CanApprove
 			arr = c.arr && m.CanARR
 		}
 		rows = append(rows, panel.RoleModulePerm{
-			Obj:         m.Obj,
-			Label:       m.Label,
-			CanApprove:  m.CanApprove,
-			CanARR:      m.CanARR,
-			ARREligible: authz.ModuleARRGate(m.Obj),
-			Level:       level,
-			Approve:     approve,
-			ARR:         arr,
+			Obj:           m.Obj,
+			Label:         m.Label,
+			CanApprove:    m.CanApprove,
+			CanARR:        m.CanARR,
+			ARREligible:   authz.ModuleARRGate(m.Obj),
+			WriteEnforced: m.WriteEnforced,
+			Level:         level,
+			Approve:       approve,
+			ARR:           arr,
 		})
 	}
 	return rows
+}
+
+// moduleLevel menurunkan Level ("none"/"read"/"write") satu sel dari c
+// (nil → "none"), direndahkan ke "read" bila !writeEnforced walau c.write true
+// — satu fungsi dipakai roleModuleRows & permissionSetRows agar keduanya tak
+// bisa menyimpang (lihat rasional lengkap di roleModuleRows).
+func moduleLevel(c *permCell, writeEnforced bool) string {
+	if c == nil {
+		return "none"
+	}
+	switch {
+	case c.write && writeEnforced:
+		return "write"
+	case c.write || c.read:
+		return "read"
+	default:
+		return "none"
+	}
 }
 
 // permissionSetRows menurunkan matriks presentasional blok B (View/Create/
@@ -109,15 +130,7 @@ func permissionSetRows(role db.ListBusinessRolesRow, cells map[string]*permCell)
 	}
 	own := role.DataScope == authz.DataScopeOwn
 	for _, m := range mods {
-		level := "none"
-		if c := cells[m.Obj]; c != nil {
-			switch {
-			case c.write:
-				level = "write"
-			case c.read:
-				level = "read"
-			}
-		}
+		level := moduleLevel(cells[m.Obj], m.WriteEnforced)
 		rows = append(rows, panel.PermissionSetRow{
 			Label:  m.Label,
 			View:   crudMark(level != "none", own),

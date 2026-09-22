@@ -172,6 +172,63 @@ func TestRoleEdit_ApproveARRReactiveToLevel(t *testing.T) {
 	}
 }
 
+// TestRoleEdit_UnenforcedModulesHideKelolaOption: audit 2026-09 — 7 modul tanpa
+// titik enforcement CanBusiness(ctx,obj,"write") (dashboard/subscriptions/
+// activities/4 Reports) tak boleh lagi menawarkan opsi "Kelola" (value="write")
+// di dropdown levelnya, walau peran Manager punya grant default
+// crm:subscriptions write (business_defaults.go) — moduleLevel (roles_card.go)
+// merendahkannya ke "read" sebelum dirender, jadi select-nya harus tetap
+// ter-render "read" terpilih, BUKAN default diam-diam ke opsi pertama. Baris
+// Accounts (WriteEnforced=true) jadi pembanding positif: opsi "Kelola" harus
+// tetap ada di sana.
+func TestRoleEdit_UnenforcedModulesHideKelolaOption(t *testing.T) {
+	env, uid := setupRoles(t)
+	req := rolesReq(http.MethodGet, "/w/test/roles/manager", nil, "manager")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleEditPage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("harus 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	selectBody := func(t *testing.T, obj string) string {
+		t.Helper()
+		marker := `name="level.` + obj + `"`
+		start := strings.Index(body, marker)
+		if start < 0 {
+			t.Fatalf("select level.%s tak ditemukan", obj)
+		}
+		end := strings.Index(body[start:], "</select>")
+		if end < 0 {
+			t.Fatalf("penutup </select> level.%s tak ditemukan", obj)
+		}
+		return body[start : start+end]
+	}
+
+	for _, obj := range []string{
+		"crm:dashboard", "crm:subscriptions", "crm:activities",
+		"crm:reports_sales", "crm:reports_cs", "crm:reports_support", "crm:reports_subscriptions",
+	} {
+		seg := selectBody(t, obj)
+		if strings.Contains(seg, `value="write"`) {
+			t.Errorf("select level.%s tak boleh punya opsi Kelola (value=\"write\")", obj)
+		}
+	}
+
+	// Manager punya grant default crm:subscriptions write (business_defaults.go)
+	// — setelah direndahkan ke "read", opsi "read" harus tetap terpilih (bukti
+	// moduleLevel bekerja, bukan cuma opsi write yang hilang tanpa fallback).
+	subsSeg := selectBody(t, "crm:subscriptions")
+	if !strings.Contains(subsSeg, `value="read"`) {
+		t.Error("select level.crm:subscriptions harus tetap punya opsi read")
+	}
+
+	// Pembanding positif: modul WriteEnforced=true (Accounts) tetap punya "Kelola".
+	accSeg := selectBody(t, "crm:accounts")
+	if !strings.Contains(accSeg, `value="write"`) {
+		t.Error("select level.crm:accounts harus tetap punya opsi Kelola (WriteEnforced=true)")
+	}
+}
+
 // TestRoleEdit_SystemLocked: peran sistem (admin) → keterangan terkunci, TANPA
 // tombol simpan — admin diwakili glob crm:* yang tak terpetakan ke matriks.
 func TestRoleEdit_SystemLocked(t *testing.T) {

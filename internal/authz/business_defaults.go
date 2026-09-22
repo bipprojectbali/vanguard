@@ -153,6 +153,17 @@ type ModuleDef struct {
 	Label      string // label layar (docs/crm/sistem-dan-role.md §4)
 	CanApprove bool   // true → kolom "approve" aktif (hanya Deals/Renewals)
 	CanARR     bool   // true → kolom "Lihat ARR" aktif (hanya Subscriptions, BL-58)
+	// WriteEnforced: true bila ADA titik enforcement nyata yang membedakan
+	// "write" dari "read" untuk modul ini (mis. CanBusiness(ctx,obj,"write")
+	// di suatu handler). false → modul HANYA pernah dicek "read" di mana pun
+	// (audit 2026-09: dashboard, subscriptions, activities, 4 halaman
+	// Reports) — opsi "Kelola" disembunyikan di editor (role_edit_levels.go)
+	// karena menyetel "write" tak memberi kemampuan tambahan apa pun di atas
+	// "read", hanya menyesatkan admin yang mengira mencentangnya membuka
+	// aksi tulis. business.conf: write MENCAKUP read, jadi baris write LAMA
+	// (mis. Manager crm:subscriptions write) tetap berfungsi sbg read — tak
+	// ada regresi akses, hanya UI-nya yang tak lagi menawarkan "Kelola".
+	WriteEnforced bool
 }
 
 // crmModules = SELURUH modul CRM sebagai kolom matriks, urut sesuai nomor menu
@@ -202,40 +213,43 @@ type ModuleDef struct {
 // aktif/simpannya sendiri diperluas lintas modul lewat ARRGateObjects (lihat
 // di bawah) — sebelumnya cuma bisa dicentang bila Subscriptions sendiri
 // granted, walau field yang sama sudah tampil di modul lain.
+// Kolom ke-5 (WriteEnforced): false pada 7 modul yang diaudit 2026-09 TANPA
+// satu pun CanBusiness(ctx,obj,"write") nyata (hanya "read" di mana pun) —
+// dashboard, subscriptions, activities, & 4 halaman Reports. Sisanya true.
 var crmModules = []ModuleDef{
-	{"crm:dashboard", "Dashboard", false, false},
-	{"crm:accounts", "Accounts (Desa)", false, false},
-	{"crm:contacts", "Contacts", false, false},
-	{"crm:leads", "Leads", false, false},
-	{"crm:deals", "Deals dan Quotes", false, false},
-	{"crm:sales_activity", "Sales Activity Log", false, false},
-	{"crm:subscriptions", "Active Subscriptions", false, true},
-	{"crm:renewals", "Renewals", true, false},
-	{"crm:plans", "Plans & Pricing", false, false},
-	{"crm:churn", "Churn / Cancellations", false, false},
-	{"crm:health", "Health Score", false, false},
-	{"crm:journey", "Journey / Onboarding", false, false},
-	{"crm:success_plans", "Success Plans", false, false},
+	{"crm:dashboard", "Dashboard", false, false, false},
+	{"crm:accounts", "Accounts (Desa)", false, false, true},
+	{"crm:contacts", "Contacts", false, false, true},
+	{"crm:leads", "Leads", false, false, true},
+	{"crm:deals", "Deals dan Quotes", false, false, true},
+	{"crm:sales_activity", "Sales Activity Log", false, false, true},
+	{"crm:subscriptions", "Active Subscriptions", false, true, false},
+	{"crm:renewals", "Renewals", true, false, true},
+	{"crm:plans", "Plans & Pricing", false, false, true},
+	{"crm:churn", "Churn / Cancellations", false, false, true},
+	{"crm:health", "Health Score", false, false, true},
+	{"crm:journey", "Journey / Onboarding", false, false, true},
+	{"crm:success_plans", "Success Plans", false, false, true},
 	// BL-169: crm:adoption dulu "Product Adoption" (gerbang section CS 360
 	// yang kini numpang crm:journey) — dipakai ulang sbg gerbang khusus
 	// "Training Schedule" (modul nyata, dulu numpang crm:journey juga).
 	// Objek Casbin & posisi TETAP; hanya label yang berubah.
-	{"crm:adoption", "Training Schedule", false, false},
-	{"crm:engagements", "Engagements", false, false},
-	{"crm:renewal_mgmt", "Renewal Management", false, false},
-	{"crm:playbooks", "Playbooks", false, false},
-	{"crm:tickets", "Tickets / Cases", false, false},
-	{"crm:kb", "Knowledge Base", false, false},
-	{"crm:sla", "SLA Management", false, false},
-	{"crm:activities", "Activities", false, false},
+	{"crm:adoption", "Training Schedule", false, false, true},
+	{"crm:engagements", "Engagements", false, false, true},
+	{"crm:renewal_mgmt", "Renewal Management", false, false, true},
+	{"crm:playbooks", "Playbooks", false, false, true},
+	{"crm:tickets", "Tickets / Cases", false, false, true},
+	{"crm:kb", "Knowledge Base", false, false, true},
+	{"crm:sla", "SLA Management", false, false, true},
+	{"crm:activities", "Activities", false, false, false},
 	// BL-169: crm:reports (1 objek, gerbang preset Sales/Subscription report)
 	// dipecah jadi 4 objek sesuai 4 halaman Reports nyata di sidebar — admin
 	// bisa memberi akses per-domain (mis. Sales lihat Sales Report saja).
 	// Dirender FLAT (tanpa header grup), sama seperti modul lain.
-	{"crm:reports_sales", "Sales Reports", false, false},
-	{"crm:reports_cs", "Customer Success Reports", false, false},
-	{"crm:reports_support", "Support Reports", false, false},
-	{"crm:reports_subscriptions", "Subscription Reports", false, false},
+	{"crm:reports_sales", "Sales Reports", false, false, false},
+	{"crm:reports_cs", "Customer Success Reports", false, false, false},
+	{"crm:reports_support", "Support Reports", false, false, false},
+	{"crm:reports_subscriptions", "Subscription Reports", false, false, false},
 }
 
 // CRMModules mengembalikan salinan daftar modul (kolom matriks) agar pemanggil
@@ -305,6 +319,22 @@ func ModuleCanARR(obj string) bool {
 	for _, m := range crmModules {
 		if m.Obj == obj {
 			return m.CanARR
+		}
+	}
+	return false
+}
+
+// ModuleWriteEnforced melaporkan apakah modul punya titik enforcement "write"
+// nyata — penjaga agar editor (role_edit_levels.go) hanya menawarkan opsi
+// "Kelola" untuk modul yang benar-benar membedakannya dari "read", dan agar
+// readRoleMatrix (roles_rest.go) menurunkan sel "write" yang nyasar masuk
+// jadi "read" (defense-in-depth; form seharusnya tak pernah mengirim "write"
+// untuk modul ini krn opsinya tak dirender). Objek tak dikenal → false
+// (fail-closed, sejalan ModuleCanApprove/ModuleCanARR).
+func ModuleWriteEnforced(obj string) bool {
+	for _, m := range crmModules {
+		if m.Obj == obj {
+			return m.WriteEnforced
 		}
 	}
 	return false

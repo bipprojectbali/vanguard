@@ -44,3 +44,52 @@ func TestModuleARRGate_UnknownObjFalse(t *testing.T) {
 		t.Error("objek tak dikenal harus false")
 	}
 }
+
+// TestModuleWriteEnforced_UnenforcedModules: audit 2026-09 — 7 modul ini TAK
+// PERNAH dicek CanBusiness(ctx,obj,"write") di mana pun (hanya "read"), jadi
+// editor (role_edit_levels.go) tak boleh menawarkan "Kelola" untuknya. Daftar
+// dikunci persis agar penambahan enforcement "write" baru di masa depan WAJIB
+// mengubah test ini dulu (menandakan modul itu perlu dipindah ke enforced).
+func TestModuleWriteEnforced_UnenforcedModules(t *testing.T) {
+	want := []string{
+		"crm:dashboard",
+		"crm:subscriptions",
+		"crm:activities",
+		"crm:reports_sales",
+		"crm:reports_cs",
+		"crm:reports_support",
+		"crm:reports_subscriptions",
+	}
+	for _, obj := range want {
+		if ModuleWriteEnforced(obj) {
+			t.Errorf("%q harus WriteEnforced=false (tak ada titik enforcement write)", obj)
+		}
+	}
+	gotFalse := 0
+	for _, m := range CRMModules() {
+		if !m.WriteEnforced {
+			gotFalse++
+		}
+	}
+	if gotFalse != len(want) {
+		t.Errorf("harus persis %d modul WriteEnforced=false, got %d", len(want), gotFalse)
+	}
+}
+
+// TestModuleWriteEnforced_EnforcedModulesSample: pembanding positif — beberapa
+// modul dengan titik enforcement write nyata (Accounts, Deals, Renewals) harus
+// tetap WriteEnforced=true, agar test di atas tak lolos dgn menandai SEMUA
+// modul false.
+func TestModuleWriteEnforced_EnforcedModulesSample(t *testing.T) {
+	for _, obj := range []string{"crm:accounts", "crm:deals", "crm:renewals"} {
+		if !ModuleWriteEnforced(obj) {
+			t.Errorf("%q harus WriteEnforced=true", obj)
+		}
+	}
+}
+
+func TestModuleWriteEnforced_UnknownObjFalse(t *testing.T) {
+	if ModuleWriteEnforced("crm:nonexistent") {
+		t.Error("objek tak dikenal harus false (fail-closed)")
+	}
+}
