@@ -100,11 +100,21 @@ func AccountDetail(v AccountDetailView) g.Node {
 				h.Span(h.Class("badge badge-neutral"), g.Text(v.AccountType)),
 			),
 		),
-		ui.When(v.CanWrite, h.Div(
+		h.Div(
 			h.Class("flex flex-wrap items-center gap-2"),
-			h.A(h.Href(base+"/edit"), h.Class("btn btn-sm min-h-11"), g.Text("Sunting")),
-			deleteAccountForm(base),
-		)),
+			// Kontak & Customer Success SENGAJA tanpa gate CanWrite (tautan baca,
+			// dulu di baris terpisah di bawah header) — disejajarkan di sini
+			// dengan Sunting/Hapus (BL-176) tapi tetap tampil ke semua penglihat,
+			// beda dgn Sunting/Hapus yang gated tulis.
+			h.A(h.Href(base+"/contacts"), h.Class("btn btn-sm btn-outline min-h-11"),
+				g.Text("Kontak")),
+			h.A(h.Href(base+"/customer-success"), h.Class("btn btn-sm btn-outline min-h-11"),
+				g.Text("Customer Success")),
+			ui.When(v.CanWrite, g.Group([]g.Node{
+				h.A(h.Href(base+"/edit"), h.Class("btn btn-sm btn-outline min-h-11"), g.Text("Sunting")),
+				deleteAccountForm(base),
+			})),
+		),
 	)
 
 	// BL-130: baris "Induk Akun" (parent_account_id) DISEMBUNYIKAN dari UI — konsep
@@ -165,13 +175,9 @@ func AccountDetail(v AccountDetailView) g.Node {
 	}
 	body = append(body,
 		h.Div(
-			h.Class("flex flex-wrap items-center justify-between gap-2"),
+			h.Class("flex flex-wrap items-center gap-2"),
 			h.A(h.Href(v.Base+"/accounts"), h.Class("text-sm text-base-content/60"),
 				g.Text("« Kembali ke daftar desa")),
-			h.A(h.Href(base+"/contacts"), h.Class("btn btn-sm btn-ghost min-h-11"),
-				g.Text("Kontak »")),
-			h.A(h.Href(base+"/customer-success"), h.Class("btn btn-sm btn-ghost min-h-11"),
-				g.Text("Customer Success »")),
 		),
 		// BL-62: SATU grid 2-kolom (bukan dua stack independen) agar tiap PASANGAN
 		// kartu berbagi baris grid yang sama → tinggi sejajar. Grid item meregang

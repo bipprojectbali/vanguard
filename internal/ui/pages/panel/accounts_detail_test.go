@@ -110,3 +110,67 @@ func TestAccountDetail_PairedSectionsEqualHeight(t *testing.T) {
 		prev = i
 	}
 }
+
+// TestAccountDetail_ContactAndCSButtonsAlwaysVisible (BL-176): Kontak &
+// Customer Success disejajarkan ke baris header bersama Sunting/Hapus, tapi
+// SENGAJA tanpa gate CanWrite (tautan baca) — beda dgn Sunting/Hapus yang
+// gated tulis. Regresi: keduanya ikut hilang saat CanWrite=false.
+func TestAccountDetail_ContactAndCSButtonsAlwaysVisible(t *testing.T) {
+	base := AccountDetailView{
+		Base:        "/w/desa",
+		ID:          5,
+		VillageName: "Desa Tombol",
+		AccountType: "Pelanggan",
+	}
+
+	readOnly := base
+	readOnly.CanWrite = false
+	out := renderAccountDetail(t, readOnly)
+	for _, want := range []string{">Kontak<", ">Customer Success<"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("tombol %q harus tetap tampil walau CanWrite=false:\n%s", want, out)
+		}
+	}
+	for _, notWant := range []string{">Sunting<", ">Hapus<"} {
+		if strings.Contains(out, notWant) {
+			t.Errorf("tombol %q tak boleh tampil saat CanWrite=false:\n%s", notWant, out)
+		}
+	}
+
+	writable := base
+	writable.CanWrite = true
+	out = renderAccountDetail(t, writable)
+	for _, want := range []string{">Kontak<", ">Customer Success<", ">Sunting<", ">Hapus<"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("tombol %q harus tampil saat CanWrite=true:\n%s", want, out)
+		}
+	}
+}
+
+// TestAccountDetail_ActionButtonsBordered (BL-176): Sunting, Kontak, Customer
+// Success kini berbatas (btn-outline) — sebelumnya Kontak/CS btn-ghost
+// (tanpa batas) & Sunting tanpa modifier. Hapus sudah btn-outline sejak
+// semula (destruktif, btn-error btn-outline) — dihitung terpisah dari 3
+// lainnya krn beda warna semantik.
+func TestAccountDetail_ActionButtonsBordered(t *testing.T) {
+	v := AccountDetailView{
+		Base:        "/w/desa",
+		ID:          6,
+		VillageName: "Desa Border",
+		AccountType: "Pelanggan",
+		CanWrite:    true,
+	}
+	out := renderAccountDetail(t, v)
+
+	if strings.Contains(out, "btn-ghost") {
+		t.Errorf("Kontak/Customer Success tak boleh lagi btn-ghost (kini btn-outline):\n%s", out)
+	}
+	// 4 tombol aksi berbatas: Kontak, Customer Success, Sunting (btn-outline
+	// polos) + Hapus (btn-error btn-outline, ikut mengandung substring "btn-outline").
+	if got := strings.Count(out, "btn-outline"); got != 4 {
+		t.Errorf("harus ada 4 tombol btn-outline (Kontak/CS/Sunting/Hapus), got %d:\n%s", got, out)
+	}
+	if !strings.Contains(out, "btn-error btn-outline") {
+		t.Errorf("tombol Hapus harus tetap btn-error btn-outline:\n%s", out)
+	}
+}
