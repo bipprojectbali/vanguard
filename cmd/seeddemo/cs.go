@@ -12,8 +12,8 @@ import (
 )
 
 // cs.go — customer_success 1:1 dgn account (UNIQUE non-partial, maks 1 baris
-// per desa). Cakupan ~75% dari 40 desa (30 baris): 16 Healthy/8 At-Risk/
-// 4 Critical/2 NULL (dinilai tapi belum dikategorikan) — 10 desa SISANYA
+// per desa). Cakupan ~70% dari 10 desa (7 baris): 3 Healthy/2 At-Risk/
+// 1 Critical/1 NULL (dinilai tapi belum dikategorikan) — 3 desa SISANYA
 // sengaja tanpa baris sama sekali (bucket "Belum Dinilai" di health report).
 
 func seedCustomerSuccess(ctx context.Context, q *db.Queries, tenantID int64, rng *rand.Rand, accounts []accountInfo) (int, error) {
@@ -21,7 +21,7 @@ func seedCustomerSuccess(ctx context.Context, q *db.Queries, tenantID int64, rng
 		status string
 		count  int
 	}{
-		{"Healthy", 16}, {"At-Risk", 8}, {"Critical", 4}, {"", 2}, // "" = dinilai tanpa health_status
+		{"Healthy", 3}, {"At-Risk", 2}, {"Critical", 1}, {"", 1}, // "" = dinilai tanpa health_status
 	}
 
 	count := 0

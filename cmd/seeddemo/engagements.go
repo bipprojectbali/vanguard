@@ -55,9 +55,9 @@ var engagementSubjects = []string{
 	"Eskalasi keluhan pengguna", "Diskusi renewal", "Tindak lanjut pelatihan",
 }
 
-const engagementTotal = 30
+const engagementTotal = 10
 
-// seedEngagements — 30 baris, sebar merata ke 5 engagement_type × 4 status.
+// seedEngagements — 10 baris, sebar merata ke 5 engagement_type × 4 status.
 func seedEngagements(ctx context.Context, q *db.Queries, tenantID int64, rng *rand.Rand, owner *int64, accounts []accountInfo) (int, error) {
 	types := []string{"touch_point", "qbr", "onboarding_call", "escalation", "check_in"}
 	statuses := []string{"planned", "done", "skipped", "rescheduled"}
@@ -133,9 +133,9 @@ var successPlanMetrics = []string{
 	"Partisipasi training ≥ 80%",
 }
 
-const successPlanTotal = 15
+const successPlanTotal = 10
 
-// seedSuccessPlans — 15 baris, sebar ke seluruh 5 plan_status.
+// seedSuccessPlans — 10 baris, sebar ke seluruh 5 plan_status.
 func seedSuccessPlans(ctx context.Context, q *db.Queries, tenantID int64, rng *rand.Rand, owner *int64, accounts []accountInfo) (int, error) {
 	statuses := []string{"Draft", "Active", "Achieved", "At-Risk", "Cancelled"}
 	today := time.Now()

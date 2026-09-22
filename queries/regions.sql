@@ -27,11 +27,18 @@ WHERE level = 3 AND parent_region_id = sqlc.arg(parent_region_id)
 ORDER BY name;
 
 -- name: ListAllRegions :many
--- SEMUA ~7.817 baris (3 level), dipakai SEKALI di handler form utk embed
--- <script type="application/json"> yang dibaca static/regions.js — cascading
--- dropdown Provinsi→Kabupaten/Kota→Kecamatan 100% di browser, tanpa round-trip
--- server per pilihan (lihat keputusan desain #5, plan 0009).
+-- SEMUA ~7.837 baris (3 level: Provinsi/Kabupaten-Kota/Kecamatan), dipakai
+-- SEKALI di handler form utk embed <script type="application/json"> yang
+-- dibaca static/regions.js — cascading dropdown Provinsi→Kabupaten/Kota→
+-- Kecamatan 100% di browser, tanpa round-trip server per pilihan (lihat
+-- keputusan desain #5, plan 0009). WHERE level <= 3 WAJIB: tanpa ini query
+-- ikut menyeret ~83.762 baris Desa/Kelurahan (level 4, migrasi 00039) yang
+-- TAK dikonsumsi static/regions.js (level 4 sengaja lazy-fetch terpisah via
+-- ListVillagesByDistrict/data-villages-url, ADR 0009 — "terlalu besar utk
+-- diembed") → payload ~11x lebih besar dari perlu, penyebab loading lambat
+-- form Lead/Account baru saat diakses lewat jalur jaringan lambat (tunnel).
 SELECT id, parent_region_id, level, name FROM regions
+WHERE level <= 3
 ORDER BY level, name;
 
 -- name: GetRegionAncestry :one

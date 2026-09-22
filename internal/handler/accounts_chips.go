@@ -18,7 +18,7 @@ import (
 // Semua fungsi BEST-EFFORT: kegagalan query/pgx.ErrNoRows → nilai kosong, tak
 // pernah menggagalkan halaman.
 // contactsChip: linked ke daftar kontak akun ini (route nested, sudah ada
-// tombol quick-link "Kontak »" yang sama).
+// tombol quick-link "Kontak" yang sama).
 func (h *Handler) contactsChip(ctx context.Context, accountBase string, accountID int64) panel.RelatedRecordChip {
 	chip := panel.RelatedRecordChip{Label: "Kontak", Href: accountBase + "/contacts"}
 	count, err := h.q(ctx).CountContactsByAccount(ctx, accountID)

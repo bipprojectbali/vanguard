@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// activities.go — ±90 aktivitas polimorfik (target account/contact/deal/
+// activities.go — ±10 aktivitas polimorfik (target account/contact/deal/
 // ticket/subscription YANG SUDAH DIBUAT — id nyata per tabel, bukan
 // placeholder), tersebar ke nilai kind/status/priority/direction/
 // call_result (migrasi 00011). context sales/cs/general dipilih mengikuti
@@ -34,7 +34,7 @@ var activityStatusByKind = map[string][]string{
 	// call/chat/note: form tak punya field status → NULL.
 }
 
-const activityTotal = 90
+const activityTotal = 10
 
 // seedActivities menerima ID nyata tiap tabel target polimorfik (accounts,
 // contacts, deals, tickets, subscriptions) — tak boleh pakai account ID sbg
