@@ -940,6 +940,19 @@ type Querier interface {
 	// tak-tersamar yang tampil di tabel (deal_name + entity_code); nilai ARR tersamar
 	// tak dijadikan kunci cari.
 	ListDeals(ctx context.Context, arg ListDealsParams) ([]Deal, error)
+	// Jena AI (BL-162 fase 3, tool search_deals — internal/handler/jena_ai_tools_sales.go):
+	// cermin PERSIS ListLeadsForJena (lihat leads.sql) utk deal — SAMA filter
+	// ownership F3 (scope_all/is_own, sumber SATU dgn DealsListFilterFor) TANPA
+	// mine_only, beda dari list_my_deals yang MEMAKSA deal_owner=uid. Tunduk cakupan
+	// role penanya: scope 'own' nol baris utk deal orang lain, owner_search tak bisa
+	// melebarkannya.
+	//
+	// owner_search '' → tak menyaring; selain itu MEMPERSEMPIT lewat LEFT JOIN users
+	// (ILIKE nama ATAU email). search (deal_name/entity_code) independen, keduanya
+	// AND (mempersempit saja). owner_label = nama > email (pola SAMA dgn
+	// accounts.sql/ListLeadsForJena), string KOSONG (bukan NULL — fallback ''
+	// eksplisit, lihat catatan ListLeadsForJena) bila deal belum berpemilik.
+	ListDealsForJena(ctx context.Context, arg ListDealsForJenaParams) ([]ListDealsForJenaRow, error)
 	// Papan Kanban: seluruh deal hidup dalam cakupan ownership, diurutkan agar kartu
 	// rapi per-stage lalu terbaru dulu. Di-bucket per-stage di handler (bukan N query
 	// per kolom). LIMIT membatasi papan agar tak memuat seluruh tabel (guardrail
@@ -1153,6 +1166,23 @@ type Querier interface {
 	// di Go. Pemanggil mengoper `names` yang SUDAH dinormalisasi (lower+trim
 	// di Go).
 	ListLeadsByNameDistrictCI(ctx context.Context, arg ListLeadsByNameDistrictCIParams) ([]ListLeadsByNameDistrictCIRow, error)
+	// Jena AI (BL-162 fase 3, tool search_leads — internal/handler/jena_ai_tools_sales.go):
+	// SAMA filter ownership F3 dgn ListLeads (scope_all/is_own, sumber SATU dgn
+	// LeadsListFilterFor) TANPA mine_only — beda dari list_my_leads yang MEMAKSA
+	// lead_owner=uid apa pun data_scope. Tool ini menjawab pertanyaan LINTAS-pemilik
+	// ("lead dibuat oleh user X"), tapi TETAP tunduk cakupan role penanya: scope
+	// 'own' berarti nol baris utk lead milik orang lain (owner_search tak bisa
+	// melebarkannya), scope 'all' baru lihat semua.
+	//
+	// owner_search '' → tak menyaring pemilik; selain itu MEMPERSEMPIT lewat LEFT
+	// JOIN users (ILIKE nama ATAU email) DI ATAS ownership — lead tanpa lead_owner
+	// (NULL) otomatis tersisih saat owner_search diisi. search (lead_name/
+	// entity_code) independen dari owner_search, keduanya AND (mempersempit, tak
+	// pernah melebarkan baris yang boleh dilihat aktor). owner_label = nama > email
+	// (pola SAMA dgn accounts.sql), string KOSONG (bukan NULL — ada fallback ''
+	// eksplisit agar sqlc menerbitkan Go string non-nullable, bukan *string) bila
+	// lead belum berpemilik atau pemiliknya sudah dihapus (LEFT JOIN tak cocok).
+	ListLeadsForJena(ctx context.Context, arg ListLeadsForJenaParams) ([]ListLeadsForJenaRow, error)
 	// BL-157b: sort by entity_code ("Kode"). NULLABLE (entity_code diisi
 	// GenerateEntityCode saat create, tapi kolom tetap nullable di skema). Pola
 	// null-aware SAMA dgn ListSubscriptionsSortByPlan — cursor_is_null menandai
