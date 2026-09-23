@@ -72,7 +72,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	h.acceptPendingInvite(r) // datang lewat tautan undangan? langsung gabung
+	h.acceptPendingInvite(r)                            // datang lewat tautan undangan? langsung gabung
+	h.acceptInvitesByEmail(r.Context(), email, user.ID) // BL-170: auto-join undangan yang cocok email
 	http.Redirect(w, r, homeFor(r.Context()), http.StatusSeeOther)
 }
 

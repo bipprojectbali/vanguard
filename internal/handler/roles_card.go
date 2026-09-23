@@ -21,12 +21,13 @@ import (
 // permissionSetRows/crudMark/buildPermissionSetView (blok B), businessScopeOptions,
 // dan rolesMsg dipindah ke roles_permset.go — dipisah krn ambang File Health
 // yang sama.
-func buildRoleCard(name, display, description, scope string, isSystem bool, byRole map[string]map[string]*permCell) panel.RoleCard {
+func buildRoleCard(name, display, description, scope, kind string, isSystem bool, byRole map[string]map[string]*permCell) panel.RoleCard {
 	card := panel.RoleCard{
 		Name:        name,
 		DisplayName: display,
 		Description: description,
 		DataScope:   scope,
+		Kind:        kind,
 		IsSystem:    isSystem,
 	}
 	if !isSystem {

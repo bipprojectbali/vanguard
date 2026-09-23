@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"go_starter/internal/authz"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
 )
@@ -89,27 +90,53 @@ func (h *Handler) MembersPage(w http.ResponseWriter, r *http.Request) {
 		}
 		members = append(members, panel.MemberRow{
 			UserID: m.UserID, Email: email, Name: name, Role: m.Role,
-			BusinessRole: crm, AvatarURL: avatar, Status: m.Status,
+			BusinessRole: crm, Kind: m.Kind, AvatarURL: avatar, Status: m.Status,
 		})
 	}
-	// Peran CRM yang boleh ditugaskan (sumber sama dgn panel /roles). Fail-soft:
-	// gagal → daftar kosong, dropdown hanya menyisakan "(tak ada)".
-	crmRoles := []panel.CRMRoleOption{}
+	// Peran CRM yang boleh ditugaskan (sumber sama dgn panel /roles), DIPECAH per
+	// Jenis Anggota (BL-170): cascading select form Undang & dropdown baris anggota
+	// hanya menawarkan peran yang cocok kind-nya. Fail-soft: gagal → dua daftar
+	// kosong, dropdown hanya menyisakan "(tak ada)".
+	crmRolesInternal := []panel.CRMRoleOption{}
+	crmRolesExternal := []panel.CRMRoleOption{}
 	if canManage {
 		if brs, e := h.q(ctx).ListBusinessRoles(ctx, tenantID); e == nil {
 			for _, br := range brs {
-				crmRoles = append(crmRoles, panel.CRMRoleOption{Name: br.Name, Display: br.DisplayName})
+				opt := panel.CRMRoleOption{Name: br.Name, Display: br.DisplayName}
+				if br.Kind == authz.KindExternal {
+					crmRolesExternal = append(crmRolesExternal, opt)
+				} else {
+					crmRolesInternal = append(crmRolesInternal, opt)
+				}
 			}
 		} else {
 			h.Log.Error("members: list business roles", "err", e)
 		}
 	}
 	// Undangan pending (fail-soft: gagal → daftar kosong, halaman tetap tampil).
+	// crmDisplay: nama mesin → label tampilan, dari daftar yang SAMA sudah
+	// dimuat di atas (bukan query terpisah) — undangan hanya menyimpan nama
+	// mesin (business_role), tampilan butuh label manusia sepertihalnya baris
+	// anggota.
+	crmDisplay := map[string]string{}
+	for _, c := range crmRolesInternal {
+		crmDisplay[c.Name] = c.Display
+	}
+	for _, c := range crmRolesExternal {
+		crmDisplay[c.Name] = c.Display
+	}
 	invites := []panel.InviteRow{}
 	if inv, e := h.q(ctx).ListInvitesByTenant(ctx, tenantID); e == nil {
 		for _, i := range inv {
+			br := ""
+			if i.BusinessRole != nil {
+				br = *i.BusinessRole
+				if d, ok := crmDisplay[br]; ok {
+					br = d
+				}
+			}
 			invites = append(invites, panel.InviteRow{
-				ID: i.ID, Email: i.Email, Role: i.Role,
+				ID: i.ID, Email: i.Email, BusinessRole: br, Kind: i.Kind,
 				Link: inviteLink(r, i.Token), Expires: fmtLocal(i.ExpiresAt),
 			})
 		}
@@ -119,7 +146,7 @@ func (h *Handler) MembersPage(w http.ResponseWriter, r *http.Request) {
 
 	h.renderWorkspaceShell(w, r, "Anggota", "/members",
 		panel.Members(wsPath(slugFromRequest(r), ""),
-			crmRoles, members, invites, canManage, session.UserID(ctx),
+			crmRolesInternal, crmRolesExternal, members, invites, canManage, session.UserID(ctx),
 			wsErrMsg(r.URL.Query().Get("err")), membersMsg(r.URL.Query().Get("ok"))))
 }
 

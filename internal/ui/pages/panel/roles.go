@@ -23,6 +23,7 @@ type RoleRow struct {
 	DisplayName string
 	Description string
 	ScopeLabel  string
+	Kind        string
 	MemberCount int64
 	IsSystem    bool
 }
@@ -114,21 +115,22 @@ func rolesTableCard(base string, rows []RoleRow, canEdit bool) g.Node {
 func rolesTable(base string, rows []RoleRow, canEdit bool) g.Node {
 	trs := make([]g.Node, 0, len(rows))
 	for _, r := range rows {
-		// Penanda Sistem/Kustom di SAMPING nama (seperti wireframe 9.2), bukan kolom
-		// tersendiri — hemat lebar & sesuai rancangan.
-		jenis := h.Span(h.Class("badge badge-ghost badge-sm"), g.Text("Kustom"))
-		if r.IsSystem {
-			jenis = h.Span(h.Class("badge badge-warning badge-sm"), g.Text("Sistem"))
-		}
+		// Penanda Sistem/Kustom (dulu badge terpisah di sini) DIHAPUS: bagi admin
+		// yang mengelola peran, sumbu yang berguna di tabel ini adalah Jenis
+		// Anggota (Internal/Eksternal) — Sistem/Kustom sudah cukup terwakili lewat
+		// ADA/TIDAKnya tombol Hapus di kolom Aksi. roleKindBadge (BUKAN kindBadge
+		// members_roles.go yang badge-outline pudar) — di sini WARNA solid agar
+		// langsung kentara, satu-satunya penanda jenis yang tersisa di baris.
+		anggota := roleKindBadge(r.Kind)
 		desc := g.Node(h.Span(h.Class("text-base-content/40"), g.Text("—")))
 		if r.Description != "" {
 			desc = h.Span(h.Class("text-sm text-base-content/70"), g.Text(r.Description))
 		}
 		actions := []g.Node{
 			h.A(h.Href(base+"/roles?role="+r.Name+"#permission-sets"),
-				h.Class("btn btn-sm btn-ghost min-h-11"), g.Text("Lihat")),
+				h.Class("btn btn-sm btn-outline min-h-11"), g.Text("Lihat")),
 			h.A(h.Href(base+"/roles/"+r.Name),
-				h.Class("btn btn-sm btn-ghost min-h-11"), g.Text("Edit")),
+				h.Class("btn btn-sm btn-outline min-h-11"), g.Text("Edit")),
 		}
 		if canEdit && !r.IsSystem {
 			actions = append(actions, roleDeleteForm(base, r.Name, "Hapus"))
@@ -139,7 +141,7 @@ func rolesTable(base string, rows []RoleRow, canEdit bool) g.Node {
 				h.Div(h.Class("flex flex-col gap-1"),
 					h.Div(h.Class("flex items-center gap-2"),
 						h.Span(h.Class("font-medium"), g.Text(r.DisplayName)),
-						jenis,
+						anggota,
 					),
 					h.Span(h.Class("font-mono text-xs text-base-content/60"), g.Text(r.Name)),
 				)),
@@ -176,7 +178,7 @@ func roleCreateForm(base string, scopes []ScopeOption) g.Node {
 			h.H2(h.Class("font-semibold mb-2"), g.Text("Tambah Peran")),
 			h.FormEl(
 				h.Method("post"), h.Action(base+"/roles"),
-				h.Class("grid gap-3 sm:grid-cols-3 sm:items-end"),
+				h.Class("grid gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:items-end"),
 				h.Div(
 					h.Class("grid gap-2"),
 					ui.Label("Nama (huruf kecil)", h.For("role-name")),
@@ -196,14 +198,19 @@ func roleCreateForm(base string, scopes []ScopeOption) g.Node {
 					scopeSelect("role-scope", "data_scope", "", scopes, false),
 				),
 				h.Div(
-					h.Class("grid gap-2 sm:col-span-3"),
+					h.Class("grid gap-2"),
+					ui.Label("Jenis Anggota", h.For("role-kind")),
+					kindSelect("role-kind", "kind", "internal", false),
+				),
+				h.Div(
+					h.Class("grid gap-2 sm:col-span-2 lg:col-span-4"),
 					ui.Label("Deskripsi (opsional)", h.For("role-desc")),
 					ui.Input(h.ID("role-desc"), h.Name("description"), h.Type("text"),
 						h.Placeholder("mis. Leads, deals, quotes — hanya desa yang ditugaskan"),
 						h.MaxLength("200")),
 				),
 				h.Div(
-					h.Class("sm:col-span-3"),
+					h.Class("sm:col-span-2 lg:col-span-4"),
 					h.Button(h.Type("submit"), h.Class("btn btn-primary min-h-11"),
 						g.Text("Tambah Peran")),
 				),
@@ -230,6 +237,38 @@ func scopeSelect(id, name, current string, scopes []ScopeOption, disabled bool) 
 		opts = append(opts, optionSel(o.Value, o.Label, current))
 	}
 	return h.Select(append(attrs, g.Group(opts))...)
+}
+
+// kindSelect = dropdown Jenis Anggota (internal/eksternal, BL-170). Mirror
+// persis scopeSelect tapi opsi STATIS (dua nilai tetap, tak bergantung DB) —
+// dipakai form tambah (roles.go) DAN editor peran (role_edit.go).
+func kindSelect(id, name, current string, disabled bool) g.Node {
+	attrs := []g.Node{h.Class("select"), h.Name(name)}
+	if id != "" {
+		attrs = append(attrs, h.ID(id))
+	}
+	if disabled {
+		attrs = append(attrs, h.Disabled())
+	}
+	opts := []g.Node{
+		optionSel("internal", "Internal", current),
+		optionSel("external", "Eksternal", current),
+	}
+	return h.Select(append(attrs, g.Group(opts))...)
+}
+
+// roleKindBadge = Jenis Anggota berwarna SOLID, KHUSUS tabel Daftar Peran —
+// beda dari kindBadge (members_roles.go, badge-outline pudar dipakai di
+// Members/Invite) yang sengaja dibiarkan tak berubah. Di halaman ini badge
+// Jenis Anggota kini satu-satunya penanda jenis di baris (Sistem/Kustom
+// dihapus), jadi warnanya perlu langsung kentara, bukan cuma garis tipis.
+// primary/secondary = token semantik daisyUI (gotcha #4/#11), pola sama
+// dgn "Utama" vs sumbu CS/Sales di tempat lain.
+func roleKindBadge(kind string) g.Node {
+	if kind == "external" {
+		return h.Span(h.Class("badge badge-secondary badge-sm"), g.Text("Eksternal"))
+	}
+	return h.Span(h.Class("badge badge-primary badge-sm"), g.Text("Internal"))
 }
 
 // optionSel = <option> dengan selected bila value == current.

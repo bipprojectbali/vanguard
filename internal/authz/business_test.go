@@ -350,6 +350,11 @@ func TestDefaultRolesDataScope(t *testing.T) {
 		if r.Name != BusinessRoleAdmin && r.IsSystem {
 			t.Errorf("hanya admin yang is_system, bukan %q", r.Name)
 		}
+		// BL-170: semua 5 peran bawaan adalah "internal" — organic join (BL-105)
+		// & seed workspace baru tak pernah membuat peran eksternal diam-diam.
+		if r.Kind != KindInternal {
+			t.Errorf("peran bawaan %q harus kind=internal, got %q", r.Name, r.Kind)
+		}
 	}
 	// Semua nama default harus terlihat sekali (guard nama berubah senyap).
 	names := make([]string, 0, len(seen))

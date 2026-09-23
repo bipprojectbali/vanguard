@@ -96,7 +96,7 @@ func (h *Handler) RoleEditPage(w http.ResponseWriter, r *http.Request) {
 	// Editor tak boleh menulis (arsip/read-only) → matriks tampil, tombol simpan
 	// disembunyikan. Dihitung sekali; canManageRoles membaca session tiap panggil.
 	canEdit := !IsReadOnly(ctx)
-	card := buildRoleCard(role.Name, role.DisplayName, role.Description, role.DataScope, role.IsSystem, permsByRole(perms))
+	card := buildRoleCard(role.Name, role.DisplayName, role.Description, role.DataScope, role.Kind, role.IsSystem, permsByRole(perms))
 
 	// fsec nil → peninjau tak berwenang crm:field_security: section Field
 	// Security tak dirender sama sekali (RoleEdit, ADR 0012 F4 tetap gerbang

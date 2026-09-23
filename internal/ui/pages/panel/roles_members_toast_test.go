@@ -33,8 +33,8 @@ func TestRoleEdit_ToastNotAlert(t *testing.T) {
 
 func TestMembers_ToastNotAlert(t *testing.T) {
 	var errOut, okOut strings.Builder
-	Members("/w/acme", nil, nil, nil, true, 1, "Tak bisa menurunkan atau mengeluarkan owner terakhir workspace.", "").Render(&errOut)
-	Members("/w/acme", nil, nil, nil, true, 1, "", "Peran CRM anggota diperbarui.").Render(&okOut)
+	Members("/w/acme", nil, nil, nil, nil, true, 1, "Tak bisa menurunkan atau mengeluarkan owner terakhir workspace.", "").Render(&errOut)
+	Members("/w/acme", nil, nil, nil, nil, true, 1, "", "Peran CRM anggota diperbarui.").Render(&okOut)
 
 	assertToast(t, errOut.String(), "err", "Tak bisa menurunkan atau mengeluarkan owner terakhir workspace.")
 	assertToast(t, okOut.String(), "ok", "Peran CRM anggota diperbarui.")

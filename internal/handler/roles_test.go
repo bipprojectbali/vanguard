@@ -65,9 +65,11 @@ func rolesReq(method, target string, form url.Values, name string) *http.Request
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }
 
-// roleFormValues = form minimal valid untuk create/update peran.
+// roleFormValues = form minimal valid untuk create/update peran. kind default
+// "internal" (BL-170) — kebanyakan test tak peduli sumbu ini, hanya perlu lolos
+// authz.ValidKind.
 func roleFormValues(display, scope string) url.Values {
-	return url.Values{"display_name": {display}, "data_scope": {scope}}
+	return url.Values{"display_name": {display}, "data_scope": {scope}, "kind": {"internal"}}
 }
 
 // seedRole menaruh satu peran langsung lewat pool (bypass handler) — untuk menguji
@@ -76,7 +78,7 @@ func (e *testEnv) seedRole(t *testing.T, name, display, scope string, system boo
 	t.Helper()
 	if _, err := e.q.CreateBusinessRole(t.Context(), db.CreateBusinessRoleParams{
 		TenantID: e.tenantID, Name: name, DisplayName: display,
-		DataScope: scope, IsSystem: system, CreatedBy: nil,
+		DataScope: scope, Kind: "internal", IsSystem: system, CreatedBy: nil,
 	}); err != nil {
 		t.Fatalf("seed role %s: %v", name, err)
 	}
@@ -233,6 +235,80 @@ func TestRoles_CreateSuccess(t *testing.T) {
 		t.Error("peran baru harus bermatriks kosong")
 	}
 	env.assertAudited(t, "crm.role.create")
+}
+
+// TestRoles_CreatePersistsKind: BL-170 — peran CRM baru dgn kind=external
+// tersimpan apa adanya (bukan diam-diam jatuh ke default internal).
+func TestRoles_CreatePersistsKind(t *testing.T) {
+	env, uid := setupRoles(t)
+	form := roleFormValues("Mitra", "own")
+	form.Set("name", "mitra")
+	form.Set("kind", "external")
+	req := rolesReq(http.MethodPost, "/w/test/roles", form, "")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleCreate)
+
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=created") {
+		t.Fatalf("harus ok=created, got %q (status %d)", loc, rec.Code)
+	}
+	got, err := env.q.GetBusinessRole(t.Context(), db.GetBusinessRoleParams{
+		TenantID: env.tenantID, Name: "mitra",
+	})
+	if err != nil {
+		t.Fatalf("peran tak tersimpan: %v", err)
+	}
+	if got.Kind != "external" {
+		t.Errorf("kind = %q, want external", got.Kind)
+	}
+}
+
+// TestRoles_UpdatePersistsKind: sunting kind peran existing (internal→external)
+// tersimpan.
+func TestRoles_UpdatePersistsKind(t *testing.T) {
+	env, uid := setupRoles(t)
+	env.seedRole(t, "finance", "Keuangan", "all", false) // kind=internal (seedRole)
+
+	form := roleFormValues("Keuangan", "all")
+	form.Set("kind", "external")
+	req := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleUpdate)
+
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=saved") {
+		t.Fatalf("harus ok=saved, got %q (status %d)", loc, rec.Code)
+	}
+	got, err := env.q.GetBusinessRole(t.Context(), db.GetBusinessRoleParams{
+		TenantID: env.tenantID, Name: "finance",
+	})
+	if err != nil {
+		t.Fatalf("get peran: %v", err)
+	}
+	if got.Kind != "external" {
+		t.Errorf("kind harus terganti external, got %q", got.Kind)
+	}
+}
+
+// TestRoles_UpdateRejectsInvalidKind: kind tak dikenal ditolak err=kind, tak
+// mengubah kind existing.
+func TestRoles_UpdateRejectsInvalidKind(t *testing.T) {
+	env, uid := setupRoles(t)
+	env.seedRole(t, "finance", "Keuangan", "all", false)
+
+	form := roleFormValues("Keuangan", "all")
+	form.Set("kind", "planet")
+	req := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleUpdate)
+
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=kind") {
+		t.Errorf("kind tak sah harus err=kind, got %q", loc)
+	}
+	got, err := env.q.GetBusinessRole(t.Context(), db.GetBusinessRoleParams{
+		TenantID: env.tenantID, Name: "finance",
+	})
+	if err != nil {
+		t.Fatalf("get peran: %v", err)
+	}
+	if got.Kind != "internal" {
+		t.Errorf("kind tak sah tak boleh mengubah kind existing, got %q", got.Kind)
+	}
 }
 
 // TestRoles_CreateRejectsInvalid: input yang melanggar validasi backend ditolak

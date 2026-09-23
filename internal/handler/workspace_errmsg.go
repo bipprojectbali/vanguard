@@ -102,6 +102,10 @@ func wsErrMsg(code string) string {
 		return "Email wajib diisi dan berformat valid."
 	case "crm_role":
 		return "Peran CRM yang dipilih tidak ada di workspace ini."
+	case "kind":
+		return "Jenis Anggota tidak valid."
+	case "invite_member":
+		return "Orang ini sudah menjadi anggota workspace ini."
 	case "notfound":
 		return "Desa tidak ditemukan atau di luar cakupan Anda."
 	}

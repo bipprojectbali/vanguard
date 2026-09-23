@@ -31,6 +31,7 @@ type DefaultRole struct {
 	Description string // keterangan satu baris (kolom Deskripsi wireframe 9.2)
 	DataScope   string // "all" | "own" | "none" — cakupan desa (F3)
 	IsSystem    bool   // true hanya untuk admin (tak bisa diedit/dihapus)
+	Kind        string // "internal" | "external" (BL-170) — semua bawaan "internal"
 	Perms       []DefaultPerm
 }
 
@@ -40,6 +41,16 @@ const (
 	DataScopeAll  = "all"  // seluruh desa di workspace (Admin, Manager)
 	DataScopeOwn  = "own"  // hanya desa yang ditugaskan (Sales, CSM)
 	DataScopeNone = "none" // tak melihat desa lewat kepemilikan (Support, default)
+)
+
+// Nilai kind — cerminan CHECK business_roles_kind_chk/invites_kind_chk/
+// memberships_kind_chk (00051, BL-170). Menandai peran/undangan/keanggotaan
+// sebagai untuk anggota INTERNAL (tim sendiri) atau EKSTERNAL (mitra/klien,
+// dibuat tenant sendiri lewat Kelola Peran). Organic join (BL-105, single
+// mode) selalu "internal" lewat DEFAULT kolom, tanpa sentuhan kode.
+const (
+	KindInternal = "internal"
+	KindExternal = "external"
 )
 
 // DefaultBusinessRoles mengembalikan 5 peran CRM bawaan + matriksnya, identik
@@ -54,7 +65,7 @@ func DefaultBusinessRoles() []DefaultRole {
 		{
 			Name: BusinessRoleAdmin, DisplayName: "Administrator",
 			Description: "Akses penuh seluruh modul & konfigurasi sistem",
-			DataScope:   DataScopeAll, IsSystem: true,
+			DataScope:   DataScopeAll, IsSystem: true, Kind: KindInternal,
 			Perms: []DefaultPerm{
 				{"crm:*", "write"}, {"crm:*", "approve"}, {"crm:*", "arr"},
 				{"crm:roles", "write"},
@@ -63,7 +74,7 @@ func DefaultBusinessRoles() []DefaultRole {
 		{
 			Name: BusinessRoleManager, DisplayName: "Manager",
 			Description: "Menyetujui diskon & renewal, lihat seluruh tim",
-			DataScope:   DataScopeAll, IsSystem: false,
+			DataScope:   DataScopeAll, IsSystem: false, Kind: KindInternal,
 			Perms: []DefaultPerm{
 				{"crm:dashboard", "read"},
 				{"crm:accounts", "write"}, {"crm:contacts", "write"},
@@ -87,7 +98,7 @@ func DefaultBusinessRoles() []DefaultRole {
 		{
 			Name: BusinessRoleSales, DisplayName: "Sales",
 			Description: "Leads, deals, quotes — hanya desa yang ditugaskan padanya",
-			DataScope:   DataScopeOwn, IsSystem: false,
+			DataScope:   DataScopeOwn, IsSystem: false, Kind: KindInternal,
 			Perms: []DefaultPerm{
 				{"crm:dashboard", "read"},
 				{"crm:accounts", "write"}, {"crm:contacts", "write"},
@@ -107,7 +118,7 @@ func DefaultBusinessRoles() []DefaultRole {
 		{
 			Name: BusinessRoleCSM, DisplayName: "Customer Success",
 			Description: "Health score, renewal, onboarding desa binaan",
-			DataScope:   DataScopeOwn, IsSystem: false,
+			DataScope:   DataScopeOwn, IsSystem: false, Kind: KindInternal,
 			Perms: []DefaultPerm{
 				{"crm:dashboard", "read"},
 				{"crm:accounts", "write"}, {"crm:contacts", "write"},
@@ -130,7 +141,7 @@ func DefaultBusinessRoles() []DefaultRole {
 		{
 			Name: BusinessRoleSupport, DisplayName: "Support",
 			Description: "Tiket & SLA — tanpa akses data komersial",
-			DataScope:   DataScopeNone, IsSystem: false,
+			DataScope:   DataScopeNone, IsSystem: false, Kind: KindInternal,
 			Perms: []DefaultPerm{
 				{"crm:dashboard", "read"},
 				{"crm:accounts", "read"}, {"crm:contacts", "read"},

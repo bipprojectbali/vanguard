@@ -275,6 +275,7 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		// = owner/admin (di-guard handler via canManageMembers).
 		r.Get("/members", h.MembersPage)
 		r.Post("/members/{id}/role", h.MemberSetRole)
+		r.Post("/members/{id}/kind", h.MemberSetKind)
 		r.Post("/members/{id}/remove", h.MemberRemove)
 		r.Post("/members/invite", h.InviteCreate)
 		r.Post("/members/invite/{id}/delete", h.InviteDelete)

@@ -1,9 +1,32 @@
 -- name: CreateInvite :one
 -- Undangan bergabung ke workspace. token = rahasia URL (crypto/rand hex via
--- oauth.NewState). email boleh milik orang yang BELUM punya akun.
-INSERT INTO invites (tenant_id, email, role, token, invited_by, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+-- oauth.NewState). email boleh milik orang yang BELUM punya akun. business_role
+-- (nullable, BL-170) = Peran CRM yang sudah ditentukan admin di muka, diterapkan
+-- otomatis saat invite diterima; kind = Jenis Anggota (internal/eksternal),
+-- dipakai memfilter business_role yang valid di form Undang.
+INSERT INTO invites (tenant_id, email, role, token, invited_by, expires_at, business_role, kind)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
+
+-- name: DeletePendingInviteByEmail :execrows
+-- Hapus undangan PENDING existing utk email yang sama di tenant ini (BL-170,
+-- pola upsert-by-replace §c): dipanggil InviteCreate SEBELUM insert baru, agar
+-- re-undang dengan field terbaru menggantikan yang lama alih-alih ditolak
+-- bentrok atau menumpuk duplikat. :execrows (bukan :exec) agar pemanggil tahu
+-- apakah ini undangan BARU atau KIRIM ULANG (>0 baris terhapus) — dipakai
+-- memilih pesan sukses yang tepat (toast harus selalu tampil, lihat InviteCreate).
+DELETE FROM invites
+WHERE tenant_id = $1 AND lower(email) = lower($2) AND accepted_at IS NULL;
+
+-- name: MemberExistsByEmail :one
+-- Guard InviteCreate (BL-170 §b): true bila email sudah jadi anggota tenant ini.
+-- Query TARGETED (JOIN memberships+users), BUKAN scan ListMembersByTenant penuh
+-- — dipanggil tiap submit form Undang.
+SELECT EXISTS (
+    SELECT 1 FROM memberships m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.tenant_id = $1 AND lower(u.email) = lower($2)
+);
 
 -- name: GetInviteByToken :one
 -- Jalur PUBLIK (/invite/{token}) — penerima belum tentu login/anggota. Validasi

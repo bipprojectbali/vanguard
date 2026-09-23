@@ -45,6 +45,11 @@ func (h *Handler) RoleUpdate(w http.ResponseWriter, r *http.Request) {
 		wsRedirect(w, r, "/roles", "role_scope")
 		return
 	}
+	kind := r.FormValue("kind")
+	if !authz.ValidKind(kind) {
+		wsRedirect(w, r, "/roles", "kind")
+		return
+	}
 	description := strings.TrimSpace(r.FormValue("description"))
 	if len(description) > roleDescMax {
 		wsRedirect(w, r, "/roles", "role_desc")
@@ -55,7 +60,7 @@ func (h *Handler) RoleUpdate(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.q(ctx).UpdateBusinessRole(ctx, db.UpdateBusinessRoleParams{
 		TenantID: tenantID, Name: name, DisplayName: display, Description: description,
-		DataScope: scope, UpdatedBy: &actorID,
+		DataScope: scope, Kind: kind, UpdatedBy: &actorID,
 	}); err != nil {
 		h.Log.Error("roles: update", "err", err)
 		wsRedirect(w, r, "/roles", "failed")
