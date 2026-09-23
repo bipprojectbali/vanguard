@@ -35,8 +35,8 @@ var Releases = []Release{
 			{
 				Title: "Diubah",
 				Items: []string{
-					"Keterangan \"butuh akses Langganan Aktif juga\" pada baris Renewals & Churn di matriks Peran kini hanya muncul saat kombinasi izinnya benar-benar bermasalah, tak lagi selalu tampil untuk semua peran.",
-					"Opsi \"Kelola\" pada beberapa modul (Dashboard, Langganan Aktif, Aktivitas, 4 halaman Laporan) yang sebenarnya tak berefek kini disembunyikan dari matriks Peran — mencegah admin memberi izin yang kelihatannya aktif tapi tak melakukan apa-apa.",
+					"Keterangan \"butuh izin langganan berstatus aktif juga\" pada baris Renewals & Churn di matriks Peran kini hanya muncul saat kombinasi izinnya benar-benar bermasalah, tak lagi selalu tampil untuk semua peran.",
+					"Opsi \"Kelola\" pada 7 modul CRM (ringkasan performa, langganan berstatus aktif, aktivitas, dan 4 halaman laporan) yang sebenarnya tak berefek kini disembunyikan dari matriks Peran — mencegah admin memberi izin yang kelihatannya aktif tapi tak melakukan apa-apa.",
 				},
 			},
 			{
