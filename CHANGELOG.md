@@ -4,6 +4,15 @@ Semua perubahan penting pada go_starter dicatat di sini.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-23
+
+### Changed
+- **Keterangan "belum terjangkau UI" pada baris Renewals/Churn di matriks Peran kini kondisional, bukan selalu tampil.** Audit 2026-09 menemukan grant tulis `crm:renewals`/`crm:churn` memang ditegakkan backend (handler Renew/Activate/Churn) tapi tak terjangkau dari UI tanpa Active Subscriptions ("crm:subscriptions") ≥ Lihat — halaman yang menampilkan tombol Renew/Churn semua digerbangi `canViewSubscriptions`, bukan objek Renewals/Churn itu sendiri. Diputuskan didokumentasikan (bukan diubah gate-nya). Keterangan kini hanya muncul saat kombinasi bermasalah nyata terjadi (baris ≥ Lihat DAN Active Subscriptions = Tak ada) — peran yang sudah benar (mis. Manager bawaan) tak lagi menampilkan peringatan yang tak relevan. Untuk peran yang sedang disunting, keterangan reaktif seketika (Datastar) mengikuti perubahan dropdown; untuk peninjau read-only (workspace arsip), dihitung statis dari level tersimpan.
+
+### Fixed
+- **Opsi "Kelola" pada matriks Peran disembunyikan untuk 7 modul CRM yang penegakannya read-only saja (Dashboard, Active Subscriptions, Activities, 4 halaman Report).** Audit 2026-09 menemukan modul-modul ini menawarkan opsi tulis di editor peran padahal `CanBusiness(ctx, obj, "write")` tak pernah dicek untuk objek tersebut di mana pun — hanya "read" yang ditegakkan. Opsi "Kelola" yang aktif menjanjikan kapabilitas yang sebenarnya tak berefek, menyesatkan admin. Grant `write` lama di database tetap berfungsi sebagai `read` (tanpa regresi akses) — hanya kontrol UI-nya yang tak lagi ditawarkan.
+- **Ukuran dropdown level ("Akses") pada matriks Peran tak lagi mengecil saat keterangan hint Renewals/Churn muncul/hilang.** Tabel sebelumnya memakai `table-layout: auto` sehingga lebar kolom Akses ikut menyusut saat kolom Modul melebar akibat paragraf hint. Dikunci via `table-fixed` + lebar tetap pada kolom Akses, independen dari isi kolom sebelah.
+
 ## [1.9.0] - 2026-09-21
 
 ### Added
