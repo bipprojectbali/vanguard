@@ -2,16 +2,12 @@ package handler
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // all_activities_unified.go — linimasa TERPADU untuk halaman Activities GLOBAL
@@ -66,18 +62,9 @@ import (
 // activities menyaring owner_id (ActivitiesListFilterFor); engagements menyaring
 // via kolom accounts account_owner/assigned_csm/backup_csm (EngagementsListFilterFor).
 // RLS h.q(ctx) mengurung tenant di bawah keduanya. Platform → ScopeAll dua sumber.
-
-// subCursorAsTimestamptz mengubah sub-cursor sumbu Tanggal (val = UnixNano
-// 19-digit via subCursorTimeVal) balik jadi pgtype.Timestamptz untuk param
-// CursorVal ListAllActivitiesSortByDate/ListEngagementsFeedSortByDate.
-// !hasCursor → nilai tak dipakai query (predikat keyset dilewati); kembalikan
-// zero value.
-func subCursorAsTimestamptz(c genSubCursor) pgtype.Timestamptz {
-	if !c.hasCursor {
-		return pgtype.Timestamptz{}
-	}
-	return pgtype.Timestamptz{Time: time.Unix(0, parseSubCursorTimeVal(c.val)).UTC(), Valid: true}
-}
+//
+// Fungsi per-sumbu sort (kind/subject/owner di sort_a.go, status/date di
+// sort_b.go) dipisah krn ambang File Health yang sama.
 
 // buildUnifiedActivityFeed menjalankan satu halaman feed terpadu pada sumbu
 // sortCol/dir (BL-157k): query dua sumber lewat pasangan SortBy* yang cocok
@@ -124,170 +111,22 @@ func (h *Handler) buildUnifiedActivityFeed(
 		}
 	}
 
-	entries := make([]feedEntry, 0, pageSize*2)
-
+	var entries []feedEntry
+	var err error
 	switch axis {
 	case "kind":
-		actRows, err := h.q(ctx).ListAllActivitiesSortByKind(ctx, db.ListAllActivitiesSortByKindParams{
-			HasCursor: dc.act.hasCursor, Dir: useDir, CursorVal: dc.act.val, CursorID: dc.act.id,
-			ScopeAll: actFilter.ScopeAll, IsOwn: actFilter.IsOwn, Uid: &uid, Search: query, PageSize: pageSize + 1,
-		})
-		if err != nil {
-			return nil, "", fmt.Errorf("all-activities: list activities sort kind: %w", err)
-		}
-		for _, a := range actRows {
-			entries = append(entries, feedEntry{id: a.ID, source: "sales", row: activityRowView(a, names), sortVal: a.Kind})
-		}
-		if engGate {
-			engRows, err := h.q(ctx).ListEngagementsFeedSortByType(ctx, db.ListEngagementsFeedSortByTypeParams{
-				HasCursor: dc.eng.hasCursor, Dir: useDir, CursorVal: dc.eng.val, CursorID: dc.eng.id,
-				ScopeAll: engFilter.ScopeAll, IsOwn: engFilter.IsOwn, Uid: &uid, Search: query, PageSize: pageSize + 1,
-			})
-			if err != nil {
-				return nil, "", fmt.Errorf("all-activities: list engagements sort type: %w", err)
-			}
-			for _, e := range engRows {
-				entries = append(entries, feedEntry{
-					id: e.ID, source: "cs",
-					row:     engagementFeedRowCore(e.ID, e.AccountID, e.Subject, e.EngagementType, e.Status, e.CreatedAt, e.OwnerName),
-					sortVal: e.EngagementType,
-				})
-			}
-		}
-
+		entries, err = h.unifiedFeedByKind(ctx, dc, uid, query, useDir, actFilter, engFilter, engGate, names)
 	case "subject":
-		actRows, err := h.q(ctx).ListAllActivitiesSortBySubject(ctx, db.ListAllActivitiesSortBySubjectParams{
-			HasCursor: dc.act.hasCursor, Dir: useDir, CursorVal: dc.act.val, CursorID: dc.act.id,
-			ScopeAll: actFilter.ScopeAll, IsOwn: actFilter.IsOwn, Uid: &uid, Search: query, PageSize: pageSize + 1,
-		})
-		if err != nil {
-			return nil, "", fmt.Errorf("all-activities: list activities sort subject: %w", err)
-		}
-		for _, a := range actRows {
-			entries = append(entries, feedEntry{id: a.ID, source: "sales", row: activityRowView(a, names), sortVal: a.Subject})
-		}
-		if engGate {
-			engRows, err := h.q(ctx).ListEngagementsFeedSortBySubject(ctx, db.ListEngagementsFeedSortBySubjectParams{
-				HasCursor: dc.eng.hasCursor, Dir: useDir, CursorVal: dc.eng.val, CursorID: dc.eng.id,
-				ScopeAll: engFilter.ScopeAll, IsOwn: engFilter.IsOwn, Uid: &uid, Search: query, PageSize: pageSize + 1,
-			})
-			if err != nil {
-				return nil, "", fmt.Errorf("all-activities: list engagements sort subject: %w", err)
-			}
-			for _, e := range engRows {
-				entries = append(entries, feedEntry{
-					id: e.ID, source: "cs",
-					row:     engagementFeedRowCore(e.ID, e.AccountID, e.Subject, e.EngagementType, e.Status, e.CreatedAt, e.OwnerName),
-					sortVal: e.Subject,
-				})
-			}
-		}
-
+		entries, err = h.unifiedFeedBySubject(ctx, dc, uid, query, useDir, actFilter, engFilter, engGate, names)
 	case "owner":
-		actRows, err := h.q(ctx).ListAllActivitiesSortByOwner(ctx, db.ListAllActivitiesSortByOwnerParams{
-			HasCursor: dc.act.hasCursor, Dir: useDir, CursorIsNull: dc.act.isNull, CursorVal: dc.act.val, CursorID: dc.act.id,
-			ScopeAll: actFilter.ScopeAll, IsOwn: actFilter.IsOwn, Uid: &uid, Search: query, PageSize: pageSize + 1,
-		})
-		if err != nil {
-			return nil, "", fmt.Errorf("all-activities: list activities sort owner: %w", err)
-		}
-		for _, a := range actRows {
-			// Kunci sort Pemilik = nama/email resolusi peta anggota (ownerName),
-			// PERSIS yang ditampilkan — sama disiplin dgn ActivitiesList (BL-157j).
-			val, isNull := "", a.OwnerID == nil
-			if !isNull {
-				val = ownerName(a.OwnerID, names)
-			}
-			entries = append(entries, feedEntry{id: a.ID, source: "sales", row: activityRowView(a, names), sortVal: val, sortNull: isNull})
-		}
-		if engGate {
-			engRows, err := h.q(ctx).ListEngagementsFeedSortByOwner(ctx, db.ListEngagementsFeedSortByOwnerParams{
-				HasCursor: dc.eng.hasCursor, Dir: useDir, CursorIsNull: dc.eng.isNull, CursorVal: dc.eng.val, CursorID: dc.eng.id,
-				ScopeAll: engFilter.ScopeAll, IsOwn: engFilter.IsOwn, Uid: &uid, Search: query, PageSize: pageSize + 1,
-			})
-			if err != nil {
-				return nil, "", fmt.Errorf("all-activities: list engagements sort owner: %w", err)
-			}
-			for _, e := range engRows {
-				val, isNull := "", e.OwnerName == nil
-				if !isNull {
-					val = *e.OwnerName
-				}
-				entries = append(entries, feedEntry{
-					id: e.ID, source: "cs",
-					row:      engagementFeedRowCore(e.ID, e.AccountID, e.Subject, e.EngagementType, e.Status, e.CreatedAt, e.OwnerName),
-					sortVal:  val,
-					sortNull: isNull,
-				})
-			}
-		}
-
+		entries, err = h.unifiedFeedByOwner(ctx, dc, uid, query, useDir, actFilter, engFilter, engGate, names)
 	case "status":
-		actRows, err := h.q(ctx).ListAllActivitiesSortByStatus(ctx, db.ListAllActivitiesSortByStatusParams{
-			HasCursor: dc.act.hasCursor, Dir: useDir, CursorIsNull: dc.act.isNull, CursorVal: dc.act.val, CursorID: dc.act.id,
-			ScopeAll: actFilter.ScopeAll, IsOwn: actFilter.IsOwn, Uid: &uid, Search: query, PageSize: pageSize + 1,
-		})
-		if err != nil {
-			return nil, "", fmt.Errorf("all-activities: list activities sort status: %w", err)
-		}
-		for _, a := range actRows {
-			val, isNull := "", a.Status == nil
-			if !isNull {
-				val = *a.Status
-			}
-			entries = append(entries, feedEntry{id: a.ID, source: "sales", row: activityRowView(a, names), sortVal: val, sortNull: isNull})
-		}
-		if engGate {
-			// engagements.status NOT NULL (beda dari activities.status) — selalu
-			// non-null, tapi query & param tetap simetris (tanpa CursorIsNull, lihat
-			// ListEngagementsFeedSortByStatusParams — mirror ListActivitiesSortByKind
-			// bukan ...ByOwner).
-			engRows, err := h.q(ctx).ListEngagementsFeedSortByStatus(ctx, db.ListEngagementsFeedSortByStatusParams{
-				HasCursor: dc.eng.hasCursor, Dir: useDir, CursorVal: dc.eng.val, CursorID: dc.eng.id,
-				ScopeAll: engFilter.ScopeAll, IsOwn: engFilter.IsOwn, Uid: &uid, Search: query, PageSize: pageSize + 1,
-			})
-			if err != nil {
-				return nil, "", fmt.Errorf("all-activities: list engagements sort status: %w", err)
-			}
-			for _, e := range engRows {
-				entries = append(entries, feedEntry{
-					id: e.ID, source: "cs",
-					row:     engagementFeedRowCore(e.ID, e.AccountID, e.Subject, e.EngagementType, e.Status, e.CreatedAt, e.OwnerName),
-					sortVal: e.Status,
-				})
-			}
-		}
-
+		entries, err = h.unifiedFeedByStatus(ctx, dc, uid, query, useDir, actFilter, engFilter, engGate, names)
 	default: // "date"
-		actRows, err := h.q(ctx).ListAllActivitiesSortByDate(ctx, db.ListAllActivitiesSortByDateParams{
-			HasCursor: dc.act.hasCursor, Dir: useDir, CursorVal: subCursorAsTimestamptz(dc.act), CursorID: dc.act.id,
-			ScopeAll: actFilter.ScopeAll, IsOwn: actFilter.IsOwn, Uid: &uid, Search: query, PageSize: pageSize + 1,
-		})
-		if err != nil {
-			return nil, "", fmt.Errorf("all-activities: list activities sort date: %w", err)
-		}
-		for _, a := range actRows {
-			entries = append(entries, feedEntry{
-				id: a.ID, source: "sales", row: activityRowView(a, names),
-				sortVal: subCursorTimeVal(tsTime(a.CreatedAt).UnixNano()),
-			})
-		}
-		if engGate {
-			engRows, err := h.q(ctx).ListEngagementsFeedSortByDate(ctx, db.ListEngagementsFeedSortByDateParams{
-				HasCursor: dc.eng.hasCursor, Dir: useDir, CursorVal: subCursorAsTimestamptz(dc.eng), CursorID: dc.eng.id,
-				ScopeAll: engFilter.ScopeAll, IsOwn: engFilter.IsOwn, Uid: &uid, Search: query, PageSize: pageSize + 1,
-			})
-			if err != nil {
-				return nil, "", fmt.Errorf("all-activities: list engagements sort date: %w", err)
-			}
-			for _, e := range engRows {
-				entries = append(entries, feedEntry{
-					id: e.ID, source: "cs",
-					row:     engagementFeedRowCore(e.ID, e.AccountID, e.Subject, e.EngagementType, e.Status, e.CreatedAt, e.OwnerName),
-					sortVal: subCursorTimeVal(tsTime(e.CreatedAt).UnixNano()),
-				})
-			}
-		}
+		entries, err = h.unifiedFeedByDate(ctx, dc, uid, query, useDir, actFilter, engFilter, engGate, names)
+	}
+	if err != nil {
+		return nil, "", err
 	}
 
 	items, nextCursor := pageEntries(entries, dc, useDir)

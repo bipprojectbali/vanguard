@@ -13,6 +13,9 @@ import (
 // renewal (Modul 5, M5-3b GET-only). Murni-data: MRR/ARR SUDAH disamarkan handler
 // (F4; ARR bisa flsHidden). Reuse detailCard/detailField & subStatusBadge dari
 // subscriptions.go. Aksi (renew/churn) belum ada — hanya bacaan.
+//
+// SubItemRow + subItemsCard (kartu "Rincian Paket") dipindah ke
+// subscriptions_detail_items.go — dipisah krn ambang File Health yang sama.
 
 // SubDetailView = seluruh data satu langganan siap render. Village/Plan sudah
 // diresolusi handler (best-effort, label cadangan bila di luar tenant/terhapus).
@@ -97,17 +100,7 @@ type SubDetailView struct {
 	ChurnTypes   []string
 }
 
-// SubItemRow = satu baris paket langganan (subscription_items). Nilai komersial
-// (Subtotal/MRR/ARR) SUDAH diformat & disamarkan handler (F4); PlanName kosong →
-// dirender "—".
-type SubItemRow struct {
-	PlanName  string
-	Quantity  string
-	UnitPrice string
-	Subtotal  string
-	MRR       string
-	ARR       string
-}
+// SubItemRow — lihat subscriptions_detail_items.go.
 
 // SubChainRow = satu periode di rantai renewal. IsThis menandai baris yang sedang
 // dibuka. MRR/ARR sudah diformat & disamarkan handler.
@@ -192,46 +185,7 @@ func SubDetail(v SubDetailView) g.Node {
 	)
 }
 
-// subItemsCard = rincian paket langganan (subscription_items, BL-88 PR2b). Kosong
-// (langganan lama tanpa item) → kartu tak dirender (nil). Dibungkus ui.TableScroll
-// (scroll terkurung di mobile), mirror subRenewalChainCard.
-func subItemsCard(v SubDetailView) g.Node {
-	if len(v.Items) == 0 {
-		return nil
-	}
-	rows := make([]g.Node, 0, len(v.Items))
-	for _, it := range v.Items {
-		rows = append(rows, h.Tr(
-			h.Class("border-b border-base-300/50 hover:bg-base-200/50"),
-			h.Td(h.Class("py-2 pr-4 font-medium"), g.Text(orDash(it.PlanName))),
-			h.Td(h.Class("py-2 pr-4 text-right"), g.Text(orDash(it.Quantity))),
-			h.Td(h.Class("py-2 pr-4 text-right"), g.Text(orDash(it.UnitPrice))),
-			h.Td(h.Class("py-2 pr-4 text-right"), g.Text(orDash(it.Subtotal))),
-			h.Td(h.Class("py-2 pr-4 text-right"), g.Text(orDash(it.MRR))),
-			h.Td(h.Class("py-2 text-right"), g.Text(orDash(it.ARR))),
-		))
-	}
-	return h.Div(
-		h.Class("card bg-base-100 border border-base-300 min-w-0"),
-		h.Div(
-			h.Class("card-body min-w-0"),
-			h.H2(h.Class("font-semibold mb-2"), g.Text("Rincian Paket")),
-			ui.TableScroll(h.Table(
-				h.Class("w-full text-sm"),
-				h.THead(h.Tr(
-					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Paket")),
-					h.Th(h.Class("py-2 pr-4 font-medium text-right"), g.Text("Qty")),
-					h.Th(h.Class("py-2 pr-4 font-medium text-right"), g.Text("Harga Satuan")),
-					h.Th(h.Class("py-2 pr-4 font-medium text-right"), g.Text("Subtotal")),
-					h.Th(h.Class("py-2 pr-4 font-medium text-right"), g.Text("MRR")),
-					h.Th(h.Class("py-2 font-medium text-right"), g.Text("ARR")),
-				)),
-				h.TBody(g.Group(rows)),
-			)),
-		),
-	)
-}
+// subItemsCard — lihat subscriptions_detail_items.go.
 
 // subIdentityCard = kartu "Identitas & Langganan" (BL-154: diperluas dgn Siklus
 // Tagih/Mulai/Termin Kontrak/Jumlah Seat — pindah dari bekas kartu "Nilai &
