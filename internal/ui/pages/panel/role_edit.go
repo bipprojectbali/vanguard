@@ -190,17 +190,30 @@ func flsReactive(fsec *FieldSecurityRoleView) bool {
 // fls → diteruskan ke roleMatrixRow (lihat flsReactive di atas). BL-169: 4
 // modul Reports (Sales/CS/Support/Subscription) dirender FLAT sebagai baris
 // biasa, sama seperti modul lain — tanpa header grup.
+//
+// table-fixed + lebar tetap kolom "Akses" (w-28, dipasang di <th> — algoritma
+// table-fixed browser mengambil lebar kolom dari baris PERTAMA/thead bila tak
+// ada <colgroup>): TANPA ini, table-layout DEFAULT (auto) menghitung lebar tiap
+// kolom dari preferred-width kontennya, dan kolom "Modul" melebar besar saat
+// moduleHint (paragraf hint) muncul (baris ≥ Lihat & Active Subscriptions=Tak
+// ada) — karena total lebar tabel tetap w-full, kolom "Akses" TERDESAK menyusut
+// ikut mengecilkan <select>-nya secara visual (dilaporkan user: ukuran select
+// tak konsisten saat hint tampil/hilang). Dengan table-fixed, lebar "Akses"
+// dikunci independen dari isi kolom lain — select selalu sama besar, hint
+// membungkus baris dalam lebar "Modul" yang tersisa tanpa memengaruhi kolom
+// sebelahnya.
 func roleMatrix(rc RoleCard, canEdit bool, fls bool, actx arrCrossModuleCtx) g.Node {
+	subsLevel := moduleLevelOf(rc.Modules, "crm:subscriptions")
 	rows := make([]g.Node, 0, len(rc.Modules))
 	for _, m := range rc.Modules {
-		rows = append(rows, roleMatrixRow(m, canEdit, fls, actx))
+		rows = append(rows, roleMatrixRow(m, canEdit, fls, actx, subsLevel))
 	}
 	return ui.TableScroll(h.Table(
-		h.Class("w-full text-sm"),
+		h.Class("w-full text-sm table-fixed"),
 		h.THead(h.Tr(
 			h.Class("border-b border-base-300 text-left text-base-content/70"),
 			h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Modul")),
-			h.Th(h.Class("py-2 font-medium"), g.Text("Akses")),
+			h.Th(h.Class("py-2 font-medium w-28"), g.Text("Akses")),
 		)),
 		h.TBody(g.Group(rows)),
 	))
@@ -229,7 +242,7 @@ func roleMatrix(rc RoleCard, canEdit bool, fls bool, actx arrCrossModuleCtx) g.N
 // sini). Backend (readRoleMatrix, guard hasLevel BL-145 subtask 0;
 // writeFieldSecurity utk FLS) TETAP penjaga sesungguhnya — reaktivitas ini
 // murni UX, bukan pengganti validasi server.
-func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool, actx arrCrossModuleCtx) g.Node {
+func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool, actx arrCrossModuleCtx, subsLevel string) g.Node {
 	levelCell := levelSelect(m.Obj, m.Level, !canEdit, m.WriteEnforced)
 	var rowAttrs []g.Node
 
@@ -277,7 +290,7 @@ func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool, actx arrCrossModule
 
 	return h.Tr(append(rowAttrs,
 		h.Class("border-b border-base-300/50"),
-		h.Td(h.Class("py-2 pr-4"), g.Text(m.Label)),
+		h.Td(h.Class("py-2 pr-4 break-words"), g.Text(m.Label), moduleHint(m, canEdit, subsLevel)),
 		h.Td(h.Class("py-2"), levelCell),
 	)...)
 }

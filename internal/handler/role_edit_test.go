@@ -229,6 +229,130 @@ func TestRoleEdit_UnenforcedModulesHideKelolaOption(t *testing.T) {
 	}
 }
 
+// rowBody mengembalikan potongan HTML satu <tr> yang memuat marker (biasa
+// `name="level.OBJ"`) — <p> hint reachability ada di kolom Label, MENDAHULUI
+// kolom Akses tempat marker berada dalam <tr> yang sama, jadi cari MUNDUR ke
+// <tr pembuka baris ini dulu, baru MAJU ke </tr> penutupnya. Dipakai kedua
+// test reachability hint di bawah.
+func rowBody(t *testing.T, body, marker string) string {
+	t.Helper()
+	pos := strings.Index(body, marker)
+	if pos < 0 {
+		t.Fatalf("penanda %q tak ditemukan", marker)
+	}
+	start := strings.LastIndex(body[:pos], "<tr")
+	if start < 0 {
+		t.Fatalf("pembuka <tr sebelum %q tak ditemukan", marker)
+	}
+	end := strings.Index(body[pos:], "</tr>")
+	if end < 0 {
+		t.Fatalf("penutup </tr> setelah %q tak ditemukan", marker)
+	}
+	return body[start : pos+end]
+}
+
+// TestRoleEdit_RenewalsChurnReachabilityHint: audit 2026-09, mode SUNTING
+// (canEdit=true) — baris Renewals & Churn / Cancellations membawa
+// data-show="$lvl_<obj>!=='none'&&$lvl_subscriptions==='none'" (moduleHint,
+// role_edit.go), reaktif thd dua signal Datastar sekaligus: level baris itu
+// sendiri DAN level baris Active Subscriptions. Sebab izin crm:renewals/
+// crm:churn TERSIMPAN SAH tapi halamannya (SubscriptionDetail/
+// SubscriptionRenewals/SubscriptionChurnList) digerbangi canViewSubscriptions
+// ("crm:subscriptions" read) — bukan objek modul ini sendiri. Dites lewat
+// STRING atribut (pola sama TestRoleEdit_ApproveARRReactiveToLevel), bukan
+// isi teks hint saat render — sebab kondisional: nilai default Manager
+// (Active Subscriptions="Kelola") membuat hint TAK tampil saat render awal;
+// yang mau dibuktikan adalah ekspresi reaktifnya benar, bukan state sesaat.
+// Baris Accounts (tak ada di moduleHints) jadi pembanding negatif — tak boleh
+// punya data-show apa pun terkait reachability.
+func TestRoleEdit_RenewalsChurnReachabilityHint(t *testing.T) {
+	env, uid := setupRoles(t)
+	req := rolesReq(http.MethodGet, "/w/test/roles/manager", nil, "manager")
+	rec := env.runAccount(uid, "owner", "admin", req, env.h.RoleEditPage)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("harus 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, obj := range []string{"crm:renewals", "crm:churn"} {
+		row := rowBody(t, body, `name="level.`+obj+`"`)
+		suffix := strings.TrimPrefix(obj, "crm:")
+		want := `data-show="$lvl_` + suffix + `!==&#39;none&#39;&amp;&amp;` +
+			`$lvl_subscriptions===&#39;none&#39;"`
+		if !strings.Contains(row, want) {
+			t.Errorf("baris %s harus memuat %q (hint reaktif thd level sendiri "+
+				"& Active Subscriptions):\n%s", obj, want, row)
+		}
+	}
+
+	// Pembanding negatif: baris Accounts tak punya entri di moduleHints, tak
+	// boleh punya data-show reachability apa pun.
+	accRow := rowBody(t, body, `name="level.crm:accounts"`)
+	if strings.Contains(accRow, "lvl_subscriptions===&#39;none&#39;") {
+		t.Error("baris Accounts tak boleh memuat data-show reachability Renewals/Churn")
+	}
+}
+
+// TestRoleEdit_RenewalsChurnReachabilityHint_ReadOnly: audit 2026-09, mode
+// READ-ONLY (canEdit=false, mis. workspace arsip — withTenantStatus) — baris
+// ini TAK PERNAH dapat data.Signals (roleMatrixRow), jadi hint dihitung
+// STATIS dari level tersimpan saat render (moduleHint), bukan Datastar.
+//
+// Peran kustom "finance" diset langsung lewat RoleUpdate: Renewals="Lihat",
+// Active Subscriptions="Tak ada" — kombinasi bermasalah NYATA → hint harus
+// tampil TANPA data-show (murni <p> statis, tak ada JS utk dirujuk). Churn
+// dibiarkan "Tak ada" (tak granted) → level baris itu sendiri "none" → hint
+// TAK boleh tampil (pembanding negatif pertama: baris ≥Lihat adalah syarat,
+// bukan cuma Active Subscriptions=Tak ada). Manager bawaan (Active
+// Subscriptions="Kelola" default, business_defaults.go) dites terpisah
+// sebagai pembanding negatif kedua — regresi thd versi PERTAMA hint (selalu
+// tampil): sekarang read-only Manager TAK boleh lagi menampilkannya, sebab
+// kombinasinya sudah benar.
+func TestRoleEdit_RenewalsChurnReachabilityHint_ReadOnly(t *testing.T) {
+	env, uid := setupRoles(t)
+	env.seedRole(t, "finance", "Keuangan", "all", false)
+	form := matrixFormValues("Keuangan", "all", "crm:renewals", "read", false, false)
+	form.Set("level.crm:subscriptions", "none")
+	updReq := rolesReq(http.MethodPost, "/w/test/roles/finance", form, "finance")
+	updRec := env.runAccount(uid, "owner", "admin", updReq, env.h.RoleUpdate)
+	if loc := updRec.Header().Get("Location"); !strings.Contains(loc, "ok=saved") {
+		t.Fatalf("setup: harus ok=saved, got %q (status %d)\n%s", loc, updRec.Code, updRec.Body.String())
+	}
+
+	readOnlyGet := func(role string) string {
+		t.Helper()
+		req := rolesReq(http.MethodGet, "/w/test/roles/"+role, nil, role)
+		rec := env.runAccount(uid, "owner", "admin", req, func(w http.ResponseWriter, r *http.Request) {
+			env.h.RoleEditPage(w, r.WithContext(withTenantStatus(r.Context(), TenantArchived)))
+		})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /roles/%s (read-only) harus 200, got %d", role, rec.Code)
+		}
+		return rec.Body.String()
+	}
+
+	const hint = "Butuh Active Subscriptions"
+
+	financeBody := readOnlyGet("finance")
+	renRow := rowBody(t, financeBody, `name="level.crm:renewals"`)
+	if !strings.Contains(renRow, hint) {
+		t.Error("finance/read-only: baris Renewals (Lihat, subscriptions=Tak ada) harus memuat hint statis")
+	}
+	if strings.Contains(renRow, "data-show") {
+		t.Error("finance/read-only: hint tak boleh membawa data-show (tak ada signal di mode ini)")
+	}
+	churnRow := rowBody(t, financeBody, `name="level.crm:churn"`)
+	if strings.Contains(churnRow, hint) {
+		t.Error("finance/read-only: baris Churn (Tak ada) tak boleh memuat hint")
+	}
+
+	managerBody := readOnlyGet("manager")
+	managerRenRow := rowBody(t, managerBody, `name="level.crm:renewals"`)
+	if strings.Contains(managerRenRow, hint) {
+		t.Error("manager/read-only: baris Renewals tak boleh memuat hint (Active Subscriptions default sudah Kelola)")
+	}
+}
+
 // TestRoleEdit_SystemLocked: peran sistem (admin) → keterangan terkunci, TANPA
 // tombol simpan — admin diwakili glob crm:* yang tak terpetakan ke matriks.
 func TestRoleEdit_SystemLocked(t *testing.T) {

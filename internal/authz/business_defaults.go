@@ -216,6 +216,24 @@ type ModuleDef struct {
 // Kolom ke-5 (WriteEnforced): false pada 7 modul yang diaudit 2026-09 TANPA
 // satu pun CanBusiness(ctx,obj,"write") nyata (hanya "read" di mana pun) —
 // dashboard, subscriptions, activities, & 4 halaman Reports. Sisanya true.
+//
+// crm:renewals & crm:churn (audit 2026-09, KASUS BEDA dari WriteEnforced=false
+// di atas — di sini write-nya NYATA ditegakkan, tapi tak terjangkau UI tanpa
+// modul lain): keduanya berdiri sendiri di matriks ini, TAPI tiga jalur yang
+// membawa ke halaman/tombolnya — SubscriptionDetail (tempat tombol Renew/Churn
+// dirender), dasbor Renewals, dasbor Churn (subscriptions_detail.go,
+// subscriptions_renewals.go, subscriptions_churn_page.go) — semua digerbangi
+// canViewSubscriptions ("crm:subscriptions" read), BUKAN crm:renewals/crm:churn.
+// Jadi peran dgn Active Subscriptions="Tak ada" + Renewals="Kelola" akan 403 di
+// ketiga halaman itu; grant crm:renewals write TETAP tersimpan sah & AKTIF di
+// endpoint POST (canRenewSubscriptions/canChurnSubscriptions, subscriptions_
+// renew.go/churn.go, tak ikut mengecek crm:subscriptions), hanya saja tak ada
+// jalur UI utk memicunya tanpa Active Subscriptions ≥ Lihat juga. Diputuskan
+// didokumentasikan (bukan diubah gate-nya) — lihat moduleHints/moduleHint di
+// role_edit.go (peringatan kecil KONDISIONAL di editor, hanya tampil saat
+// kombinasi bermasalah nyata terjadi — bukan selalu tampil) & canViewRenewals
+// (subscriptions_view.go, gerbang READ Renewals yg simetris tapi tanpa
+// pemanggil krn alasan yang sama).
 var crmModules = []ModuleDef{
 	{"crm:dashboard", "Dashboard", false, false, false},
 	{"crm:accounts", "Accounts (Desa)", false, false, true},
