@@ -7,8 +7,6 @@ import (
 	"go_starter/internal/db"
 	"go_starter/internal/session"
 	"go_starter/internal/ui/pages/panel"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // accounts_page.go — HALAMAN baca hub Desa (Account): daftar & detail. Aksi
@@ -28,6 +26,9 @@ import (
 //   - F4 (field-level, fls.go): dilakukan saat merender detail.
 //
 // RLS tetap mengisolasi WORKSPACE di bawah semua ini (h.q ber-tenant).
+//
+// Fungsi sort per-kolom (village/type/regency di sort_a.go, province/owner/csm/
+// default di sort_b.go) dipisah krn ambang File Health yang sama.
 
 // AccountsList — GET /w/{workspace}/accounts. Daftar desa, keyset + filter
 // kepemilikan F3. Ditolak (bukan pemegang peran CRM) → 403 + penjelasan, BUKAN
@@ -85,189 +86,25 @@ func (h *Handler) AccountsList(w http.ResponseWriter, r *http.Request) {
 
 	var shown []db.Account
 	var nextCursor string
+	var ok bool
 	switch sortCol {
 	case "village":
-		cursorVal, cursorSortID, hasCursor := pageCursorText(r)
-		rows, err := h.q(ctx).ListAccountsSortByVillage(ctx, db.ListAccountsSortByVillageParams{
-			HasCursor: hasCursor,
-			Dir:       dir,
-			CursorVal: cursorVal,
-			CursorID:  cursorSortID,
-			ScopeAll:  params.ScopeAll,
-			IsSales:   params.IsSales,
-			IsCsm:     params.IsCsm,
-			Uid:       params.Uid,
-			Unowned:   params.Unowned,
-			Search:    query,
-			PageSize:  pageSize + 1,
-		})
-		if err != nil {
-			h.Log.Error("accounts: list sort village", "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		shown, nextCursor = splitPageText(rows, func(a db.Account) (string, int64) {
-			return a.VillageName, a.ID
-		})
+		shown, nextCursor, ok = h.accountsSortByVillage(w, r, ctx, params, query, dir)
 	case "type":
-		// Tipe diurut RAW nilai kolom (customer/former_customer/prospect,
-		// alfabetis) — sama keputusan "Status" Leads BL-157b, walau tampilan
-		// pakai label Indonesia (accountTypeLabel).
-		cursorVal, cursorSortID, hasCursor := pageCursorText(r)
-		rows, err := h.q(ctx).ListAccountsSortByType(ctx, db.ListAccountsSortByTypeParams{
-			HasCursor: hasCursor,
-			Dir:       dir,
-			CursorVal: cursorVal,
-			CursorID:  cursorSortID,
-			ScopeAll:  params.ScopeAll,
-			IsSales:   params.IsSales,
-			IsCsm:     params.IsCsm,
-			Uid:       params.Uid,
-			Unowned:   params.Unowned,
-			Search:    query,
-			PageSize:  pageSize + 1,
-		})
-		if err != nil {
-			h.Log.Error("accounts: list sort type", "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		shown, nextCursor = splitPageText(rows, func(a db.Account) (string, int64) {
-			return a.AccountType, a.ID
-		})
+		shown, nextCursor, ok = h.accountsSortByType(w, r, ctx, params, query, dir)
 	case "regency":
-		cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
-		rows, err := h.q(ctx).ListAccountsSortByRegency(ctx, db.ListAccountsSortByRegencyParams{
-			HasCursor:    hasCursor,
-			Dir:          dir,
-			CursorIsNull: isNull,
-			CursorVal:    cursorVal,
-			CursorID:     cursorSortID,
-			ScopeAll:     params.ScopeAll,
-			IsSales:      params.IsSales,
-			IsCsm:        params.IsCsm,
-			Uid:          params.Uid,
-			Unowned:      params.Unowned,
-			Search:       query,
-			PageSize:     pageSize + 1,
-		})
-		if err != nil {
-			h.Log.Error("accounts: list sort regency", "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		// Kunci cursor = regionNames(regions, district_id) PERSIS yang tampil
-		// (accountRowView) — bukan district_id mentah. "" (district_id kosong
-		// ATAU tak ketemu di peta) dianggap kelompok NULL, sama dgn kondisi
-		// rgc.name IS NULL di SQL (LEFT JOIN regions).
-		shown, nextCursor = splitPageTextNullable(rows, func(a db.Account) (string, int64, bool) {
-			_, regency, _ := regionNames(regions, a.DistrictID)
-			if regency == "" {
-				return "", a.ID, true
-			}
-			return regency, a.ID, false
-		})
+		shown, nextCursor, ok = h.accountsSortByRegency(w, r, ctx, params, query, dir, regions)
 	case "province":
-		cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
-		rows, err := h.q(ctx).ListAccountsSortByProvince(ctx, db.ListAccountsSortByProvinceParams{
-			HasCursor:    hasCursor,
-			Dir:          dir,
-			CursorIsNull: isNull,
-			CursorVal:    cursorVal,
-			CursorID:     cursorSortID,
-			ScopeAll:     params.ScopeAll,
-			IsSales:      params.IsSales,
-			IsCsm:        params.IsCsm,
-			Uid:          params.Uid,
-			Unowned:      params.Unowned,
-			Search:       query,
-			PageSize:     pageSize + 1,
-		})
-		if err != nil {
-			h.Log.Error("accounts: list sort province", "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		shown, nextCursor = splitPageTextNullable(rows, func(a db.Account) (string, int64, bool) {
-			_, _, province := regionNames(regions, a.DistrictID)
-			if province == "" {
-				return "", a.ID, true
-			}
-			return province, a.ID, false
-		})
+		shown, nextCursor, ok = h.accountsSortByProvince(w, r, ctx, params, query, dir, regions)
 	case "owner":
-		cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
-		rows, err := h.q(ctx).ListAccountsSortByOwner(ctx, db.ListAccountsSortByOwnerParams{
-			HasCursor:    hasCursor,
-			Dir:          dir,
-			CursorIsNull: isNull,
-			CursorVal:    cursorVal,
-			CursorID:     cursorSortID,
-			ScopeAll:     params.ScopeAll,
-			IsSales:      params.IsSales,
-			IsCsm:        params.IsCsm,
-			Uid:          params.Uid,
-			Unowned:      params.Unowned,
-			Search:       query,
-			PageSize:     pageSize + 1,
-		})
-		if err != nil {
-			h.Log.Error("accounts: list sort owner", "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		// Kunci cursor Owner = nama/email resolusi peta anggota (memberName),
-		// PERSIS yang ditampilkan — bukan account_owner mentah. NULL-nya
-		// mengikuti account_owner asli (bukan string kosong hasil memberName),
-		// sama dgn kondisi NULL di kunci sort SQL (LEFT JOIN users).
-		shown, nextCursor = splitPageTextNullable(rows, func(a db.Account) (string, int64, bool) {
-			if a.AccountOwner == nil {
-				return "", a.ID, true
-			}
-			return memberName(names, a.AccountOwner), a.ID, false
-		})
+		shown, nextCursor, ok = h.accountsSortByOwner(w, r, ctx, params, query, dir, names)
 	case "csm":
-		cursorVal, cursorSortID, isNull, hasCursor := pageCursorTextNullable(r)
-		rows, err := h.q(ctx).ListAccountsSortByCsm(ctx, db.ListAccountsSortByCsmParams{
-			HasCursor:    hasCursor,
-			Dir:          dir,
-			CursorIsNull: isNull,
-			CursorVal:    cursorVal,
-			CursorID:     cursorSortID,
-			ScopeAll:     params.ScopeAll,
-			IsSales:      params.IsSales,
-			IsCsm:        params.IsCsm,
-			Uid:          params.Uid,
-			Unowned:      params.Unowned,
-			Search:       query,
-			PageSize:     pageSize + 1,
-		})
-		if err != nil {
-			h.Log.Error("accounts: list sort csm", "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		shown, nextCursor = splitPageTextNullable(rows, func(a db.Account) (string, int64, bool) {
-			if a.AssignedCsm == nil {
-				return "", a.ID, true
-			}
-			return memberName(names, a.AssignedCsm), a.ID, false
-		})
+		shown, nextCursor, ok = h.accountsSortByCsm(w, r, ctx, params, query, dir, names)
 	default:
-		params.CursorCreatedAt, params.CursorID = pageCursor(r)
-		// Ambil SATU lebih (pageSize+1): kelebihan itulah penanda "masih ada"
-		// untuk splitPage — tanpanya tombol "Berikutnya" muncul di halaman
-		// terakhir lalu berujung kosong.
-		params.PageSize = pageSize + 1
-		rows, err := h.q(ctx).ListAccounts(ctx, params)
-		if err != nil {
-			h.Log.Error("accounts: list", "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		shown, nextCursor = splitPage(rows, func(a db.Account) (pgtype.Timestamptz, int64) {
-			return a.CreatedAt, a.ID
-		})
+		shown, nextCursor, ok = h.accountsSortDefault(w, r, ctx, params)
+	}
+	if !ok {
+		return
 	}
 
 	items := make([]panel.AccountRow, 0, len(shown))
@@ -303,12 +140,4 @@ var accountSortableColumns = map[string]bool{
 	"province": true,
 	"owner":    true,
 	"csm":      true,
-}
-
-// renderAccountsForbidden — 403 + penjelasan bagi anggota yang membuka hub Desa
-// tanpa peran CRM. Status ditulis SEBELUM body (WriteHeader setelah body tak
-// berpengaruh) agar penolakan tak terkirim sebagai 200 yang tampak sukses.
-func (h *Handler) renderAccountsForbidden(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusForbidden)
-	h.renderWorkspaceShell(w, r, "Desa", "/accounts", panel.AccountsForbidden())
 }

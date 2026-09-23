@@ -14,6 +14,9 @@ import (
 // whatsapp_number lama tetap ada di DB tapi tak lagi ditampilkan) — PII, disamarkan
 // bagi non-Sales; telepon kantor = nomor kelembagaan, tak disamarkan (sejajar
 // OfficePhone di accounts).
+//
+// contactListRow + 5 converter dipindah ke contacts_view_rows.go — dipisah
+// krn ambang File Health yang sama.
 
 // contactRowView memetakan satu baris daftar kontak SATU desa. Nomor HP/WhatsApp
 // ikut di baris (wireframe M3) tapi DISAMARKAN di sini (F4) bila aktor bukan Sales —
@@ -32,93 +35,6 @@ func contactRowView(ctx context.Context, c db.Contact) panel.ContactRow {
 		IsTechnical:      c.IsTechnicalContact,
 		EmailOptOut:      c.EmailOptOut,
 		DoNotContact:     c.DoNotContact,
-	}
-}
-
-// contactListRow = bentuk antara SATU baris daftar kontak global, sama untuk
-// KELIMA varian query (default + 4 sort BL-157d). sqlc menghasilkan tipe Go
-// TERPISAH per query bernama walau bentuk SELECT identik (db.ListContactsRow,
-// db.ListContactsSortByCodeRow, dst) — contactListRow + converter di bawah
-// menyatukannya kembali ke SATU pemetaan (mirror pola subListRow Subscriptions
-// BL-157a) agar logika F4/masking tak terduplikasi 5×.
-type contactListRow struct {
-	ID                 int64
-	AccountID          int64
-	FirstName          string
-	LastName           *string
-	PositionCategory   *string
-	ContactRole        *string
-	MobilePhone        *string
-	IsPrimaryContact   bool
-	IsTechnicalContact bool
-	EmailOptOut        bool
-	DoNotContact       bool
-	EntityCode         *string
-	VillageName        string
-}
-
-func contactListRowFromDefault(r db.ListContactsRow) contactListRow {
-	return contactListRow{
-		ID: r.ID, AccountID: r.AccountID,
-		FirstName: r.FirstName, LastName: r.LastName,
-		PositionCategory: r.PositionCategory, ContactRole: r.ContactRole,
-		MobilePhone:        r.MobilePhone,
-		IsPrimaryContact:   r.IsPrimaryContact,
-		IsTechnicalContact: r.IsTechnicalContact,
-		EmailOptOut:        r.EmailOptOut, DoNotContact: r.DoNotContact,
-		EntityCode: r.EntityCode, VillageName: r.VillageName,
-	}
-}
-
-func contactListRowFromCodeSort(r db.ListContactsSortByCodeRow) contactListRow {
-	return contactListRow{
-		ID: r.ID, AccountID: r.AccountID,
-		FirstName: r.FirstName, LastName: r.LastName,
-		PositionCategory: r.PositionCategory, ContactRole: r.ContactRole,
-		MobilePhone:        r.MobilePhone,
-		IsPrimaryContact:   r.IsPrimaryContact,
-		IsTechnicalContact: r.IsTechnicalContact,
-		EmailOptOut:        r.EmailOptOut, DoNotContact: r.DoNotContact,
-		EntityCode: r.EntityCode, VillageName: r.VillageName,
-	}
-}
-
-func contactListRowFromNameSort(r db.ListContactsSortByNameRow) contactListRow {
-	return contactListRow{
-		ID: r.ID, AccountID: r.AccountID,
-		FirstName: r.FirstName, LastName: r.LastName,
-		PositionCategory: r.PositionCategory, ContactRole: r.ContactRole,
-		MobilePhone:        r.MobilePhone,
-		IsPrimaryContact:   r.IsPrimaryContact,
-		IsTechnicalContact: r.IsTechnicalContact,
-		EmailOptOut:        r.EmailOptOut, DoNotContact: r.DoNotContact,
-		EntityCode: r.EntityCode, VillageName: r.VillageName,
-	}
-}
-
-func contactListRowFromRoleSort(r db.ListContactsSortByRoleRow) contactListRow {
-	return contactListRow{
-		ID: r.ID, AccountID: r.AccountID,
-		FirstName: r.FirstName, LastName: r.LastName,
-		PositionCategory: r.PositionCategory, ContactRole: r.ContactRole,
-		MobilePhone:        r.MobilePhone,
-		IsPrimaryContact:   r.IsPrimaryContact,
-		IsTechnicalContact: r.IsTechnicalContact,
-		EmailOptOut:        r.EmailOptOut, DoNotContact: r.DoNotContact,
-		EntityCode: r.EntityCode, VillageName: r.VillageName,
-	}
-}
-
-func contactListRowFromVillageSort(r db.ListContactsSortByVillageRow) contactListRow {
-	return contactListRow{
-		ID: r.ID, AccountID: r.AccountID,
-		FirstName: r.FirstName, LastName: r.LastName,
-		PositionCategory: r.PositionCategory, ContactRole: r.ContactRole,
-		MobilePhone:        r.MobilePhone,
-		IsPrimaryContact:   r.IsPrimaryContact,
-		IsTechnicalContact: r.IsTechnicalContact,
-		EmailOptOut:        r.EmailOptOut, DoNotContact: r.DoNotContact,
-		EntityCode: r.EntityCode, VillageName: r.VillageName,
 	}
 }
 

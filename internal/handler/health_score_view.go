@@ -106,3 +106,42 @@ func healthRowToView(r healthListRow, slug string, tz *time.Location, _ int64) p
 		HrefDetail:  wsPath(slug, "/accounts/"+strconv.FormatInt(r.ID, 10)+"/customer-success"),
 	}
 }
+
+// healthScoreSortableColumns = whitelist kolom yang boleh diminta lewat ?sort=
+// (BL-157i: 7 dari 9 kolom tabel Health Score). Status & kolom aksi SENGAJA
+// absen (lihat komentar di HealthScoreList). ?sort= di luar daftar ini
+// diperlakukan seolah absen (jatuh ke default created_at DESC), TAK error.
+var healthScoreSortableColumns = map[string]bool{
+	"village":    true,
+	"score":      true,
+	"adoption":   true,
+	"engagement": true,
+	"support":    true,
+	"trend":      true,
+	"renewal":    true,
+}
+
+// healthSegment menormalkan ?segment= ke nilai SQL sah. Apa pun selain "churned"
+// → "active" (default aman: nilai janggal jatuh ke populasi pelanggan aktif, tak
+// pernah membuka data churned tanpa diminta eksplisit).
+func healthSegment(seg string) string {
+	if seg == "churned" {
+		return "churned"
+	}
+	return "active"
+}
+
+// healthTabToStatus memetakan nilai query-param ?tab= ke health_status DB.
+// Tab kosong / "semua" → "" (tidak difilter).
+func healthTabToStatus(tab string) string {
+	switch tab {
+	case "sehat":
+		return "Healthy"
+	case "berisiko":
+		return "At-Risk"
+	case "kritis":
+		return "Critical"
+	default:
+		return ""
+	}
+}
