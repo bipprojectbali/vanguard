@@ -322,6 +322,145 @@ func (q *Queries) ListLeadsByNameDistrictCI(ctx context.Context, arg ListLeadsBy
 	return items, nil
 }
 
+const listLeadsForJena = `-- name: ListLeadsForJena :many
+SELECT l.id, l.tenant_id, l.entity_code, l.lead_owner, l.lead_name, l.contact_person, l.job_title, l.lead_source, l.lead_status, l.rating, l.unqualified_reason, l.estimated_value, l.province_legacy, l.regency_legacy, l.district_legacy, l.mobile_phone, l.whatsapp, l.email, l.converted, l.converted_account_id, l.converted_contact_id, l.converted_deal_id, l.converted_at, l.deleted_at, l.created_by, l.created_at, l.updated_by, l.updated_at, l.district_id, COALESCE(NULLIF(u.name, ''), u.email, '') AS owner_label
+FROM leads l
+LEFT JOIN users u ON u.id = l.lead_owner
+WHERE l.deleted_at IS NULL
+  AND (
+      $1::boolean
+      OR ($2::boolean AND l.lead_owner = $3)
+  )
+  AND (
+      $4::text = ''
+      OR l.lead_name ILIKE '%' || $4 || '%'
+      OR l.entity_code ILIKE '%' || $4 || '%'
+  )
+  AND (
+      $5::text = ''
+      OR u.name ILIKE '%' || $5 || '%'
+      OR u.email ILIKE '%' || $5 || '%'
+  )
+ORDER BY l.created_at DESC, l.id DESC
+LIMIT $6
+`
+
+type ListLeadsForJenaParams struct {
+	ScopeAll    bool   `json:"scope_all"`
+	IsOwn       bool   `json:"is_own"`
+	Uid         *int64 `json:"uid"`
+	Search      string `json:"search"`
+	OwnerSearch string `json:"owner_search"`
+	PageSize    int32  `json:"page_size"`
+}
+
+type ListLeadsForJenaRow struct {
+	ID                 int64              `json:"id"`
+	TenantID           int64              `json:"tenant_id"`
+	EntityCode         *string            `json:"entity_code"`
+	LeadOwner          *int64             `json:"lead_owner"`
+	LeadName           string             `json:"lead_name"`
+	ContactPerson      *string            `json:"contact_person"`
+	JobTitle           *string            `json:"job_title"`
+	LeadSource         *string            `json:"lead_source"`
+	LeadStatus         string             `json:"lead_status"`
+	Rating             *string            `json:"rating"`
+	UnqualifiedReason  *string            `json:"unqualified_reason"`
+	EstimatedValue     pgtype.Numeric     `json:"estimated_value"`
+	ProvinceLegacy     *string            `json:"province_legacy"`
+	RegencyLegacy      *string            `json:"regency_legacy"`
+	DistrictLegacy     *string            `json:"district_legacy"`
+	MobilePhone        *string            `json:"mobile_phone"`
+	Whatsapp           *string            `json:"whatsapp"`
+	Email              *string            `json:"email"`
+	Converted          bool               `json:"converted"`
+	ConvertedAccountID *int64             `json:"converted_account_id"`
+	ConvertedContactID *int64             `json:"converted_contact_id"`
+	ConvertedDealID    *int64             `json:"converted_deal_id"`
+	ConvertedAt        pgtype.Timestamptz `json:"converted_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy          *int64             `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy          *int64             `json:"updated_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	DistrictID         *int64             `json:"district_id"`
+	OwnerLabel         string             `json:"owner_label"`
+}
+
+// Jena AI (BL-162 fase 3, tool search_leads — internal/handler/jena_ai_tools_sales.go):
+// SAMA filter ownership F3 dgn ListLeads (scope_all/is_own, sumber SATU dgn
+// LeadsListFilterFor) TANPA mine_only — beda dari list_my_leads yang MEMAKSA
+// lead_owner=uid apa pun data_scope. Tool ini menjawab pertanyaan LINTAS-pemilik
+// ("lead dibuat oleh user X"), tapi TETAP tunduk cakupan role penanya: scope
+// 'own' berarti nol baris utk lead milik orang lain (owner_search tak bisa
+// melebarkannya), scope 'all' baru lihat semua.
+//
+// owner_search ” → tak menyaring pemilik; selain itu MEMPERSEMPIT lewat LEFT
+// JOIN users (ILIKE nama ATAU email) DI ATAS ownership — lead tanpa lead_owner
+// (NULL) otomatis tersisih saat owner_search diisi. search (lead_name/
+// entity_code) independen dari owner_search, keduanya AND (mempersempit, tak
+// pernah melebarkan baris yang boleh dilihat aktor). owner_label = nama > email
+// (pola SAMA dgn accounts.sql), string KOSONG (bukan NULL — ada fallback ”
+// eksplisit agar sqlc menerbitkan Go string non-nullable, bukan *string) bila
+// lead belum berpemilik atau pemiliknya sudah dihapus (LEFT JOIN tak cocok).
+func (q *Queries) ListLeadsForJena(ctx context.Context, arg ListLeadsForJenaParams) ([]ListLeadsForJenaRow, error) {
+	rows, err := q.db.Query(ctx, listLeadsForJena,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.OwnerSearch,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLeadsForJenaRow{}
+	for rows.Next() {
+		var i ListLeadsForJenaRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.LeadOwner,
+			&i.LeadName,
+			&i.ContactPerson,
+			&i.JobTitle,
+			&i.LeadSource,
+			&i.LeadStatus,
+			&i.Rating,
+			&i.UnqualifiedReason,
+			&i.EstimatedValue,
+			&i.ProvinceLegacy,
+			&i.RegencyLegacy,
+			&i.DistrictLegacy,
+			&i.MobilePhone,
+			&i.Whatsapp,
+			&i.Email,
+			&i.Converted,
+			&i.ConvertedAccountID,
+			&i.ConvertedContactID,
+			&i.ConvertedDealID,
+			&i.ConvertedAt,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.DistrictID,
+			&i.OwnerLabel,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLeadsSortByCode = `-- name: ListLeadsSortByCode :many
 SELECT id, tenant_id, entity_code, lead_owner, lead_name, contact_person, job_title, lead_source, lead_status, rating, unqualified_reason, estimated_value, province_legacy, regency_legacy, district_legacy, mobile_phone, whatsapp, email, converted, converted_account_id, converted_contact_id, converted_deal_id, converted_at, deleted_at, created_by, created_at, updated_by, updated_at, district_id FROM leads
 WHERE deleted_at IS NULL

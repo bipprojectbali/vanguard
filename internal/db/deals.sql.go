@@ -380,6 +380,137 @@ func (q *Queries) ListDeals(ctx context.Context, arg ListDealsParams) ([]Deal, e
 	return items, nil
 }
 
+const listDealsForJena = `-- name: ListDealsForJena :many
+SELECT d.id, d.tenant_id, d.entity_code, d.deal_owner, d.account_id, d.primary_contact_id, d.plan_requested_id, d.deal_name, d.deal_type, d.stage, d.amount, d.probability, d.expected_close_date, d.forecast_category, d.next_step, d.closed_date, d.win_loss_reason, d.competitor, d.loss_notes, d.subscription_term, d.created_subscription_id, d.deleted_at, d.created_by, d.created_at, d.updated_by, d.updated_at, d.loss_reason_code, COALESCE(NULLIF(u.name, ''), u.email, '') AS owner_label
+FROM deals d
+LEFT JOIN users u ON u.id = d.deal_owner
+WHERE d.deleted_at IS NULL
+  AND (
+      $1::boolean
+      OR ($2::boolean AND d.deal_owner = $3)
+  )
+  AND (
+      $4::text = ''
+      OR d.deal_name ILIKE '%' || $4 || '%'
+      OR d.entity_code ILIKE '%' || $4 || '%'
+  )
+  AND (
+      $5::text = ''
+      OR u.name ILIKE '%' || $5 || '%'
+      OR u.email ILIKE '%' || $5 || '%'
+  )
+ORDER BY d.created_at DESC, d.id DESC
+LIMIT $6
+`
+
+type ListDealsForJenaParams struct {
+	ScopeAll    bool   `json:"scope_all"`
+	IsOwn       bool   `json:"is_own"`
+	Uid         *int64 `json:"uid"`
+	Search      string `json:"search"`
+	OwnerSearch string `json:"owner_search"`
+	PageSize    int32  `json:"page_size"`
+}
+
+type ListDealsForJenaRow struct {
+	ID                    int64              `json:"id"`
+	TenantID              int64              `json:"tenant_id"`
+	EntityCode            *string            `json:"entity_code"`
+	DealOwner             *int64             `json:"deal_owner"`
+	AccountID             int64              `json:"account_id"`
+	PrimaryContactID      *int64             `json:"primary_contact_id"`
+	PlanRequestedID       *int64             `json:"plan_requested_id"`
+	DealName              string             `json:"deal_name"`
+	DealType              *string            `json:"deal_type"`
+	Stage                 string             `json:"stage"`
+	Amount                pgtype.Numeric     `json:"amount"`
+	Probability           *int16             `json:"probability"`
+	ExpectedCloseDate     pgtype.Date        `json:"expected_close_date"`
+	ForecastCategory      *string            `json:"forecast_category"`
+	NextStep              *string            `json:"next_step"`
+	ClosedDate            pgtype.Date        `json:"closed_date"`
+	WinLossReason         *string            `json:"win_loss_reason"`
+	Competitor            *string            `json:"competitor"`
+	LossNotes             *string            `json:"loss_notes"`
+	SubscriptionTerm      *string            `json:"subscription_term"`
+	CreatedSubscriptionID *int64             `json:"created_subscription_id"`
+	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+	CreatedBy             *int64             `json:"created_by"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy             *int64             `json:"updated_by"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	LossReasonCode        *string            `json:"loss_reason_code"`
+	OwnerLabel            string             `json:"owner_label"`
+}
+
+// Jena AI (BL-162 fase 3, tool search_deals — internal/handler/jena_ai_tools_sales.go):
+// cermin PERSIS ListLeadsForJena (lihat leads.sql) utk deal — SAMA filter
+// ownership F3 (scope_all/is_own, sumber SATU dgn DealsListFilterFor) TANPA
+// mine_only, beda dari list_my_deals yang MEMAKSA deal_owner=uid. Tunduk cakupan
+// role penanya: scope 'own' nol baris utk deal orang lain, owner_search tak bisa
+// melebarkannya.
+//
+// owner_search ” → tak menyaring; selain itu MEMPERSEMPIT lewat LEFT JOIN users
+// (ILIKE nama ATAU email). search (deal_name/entity_code) independen, keduanya
+// AND (mempersempit saja). owner_label = nama > email (pola SAMA dgn
+// accounts.sql/ListLeadsForJena), string KOSONG (bukan NULL — fallback ”
+// eksplisit, lihat catatan ListLeadsForJena) bila deal belum berpemilik.
+func (q *Queries) ListDealsForJena(ctx context.Context, arg ListDealsForJenaParams) ([]ListDealsForJenaRow, error) {
+	rows, err := q.db.Query(ctx, listDealsForJena,
+		arg.ScopeAll,
+		arg.IsOwn,
+		arg.Uid,
+		arg.Search,
+		arg.OwnerSearch,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDealsForJenaRow{}
+	for rows.Next() {
+		var i ListDealsForJenaRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EntityCode,
+			&i.DealOwner,
+			&i.AccountID,
+			&i.PrimaryContactID,
+			&i.PlanRequestedID,
+			&i.DealName,
+			&i.DealType,
+			&i.Stage,
+			&i.Amount,
+			&i.Probability,
+			&i.ExpectedCloseDate,
+			&i.ForecastCategory,
+			&i.NextStep,
+			&i.ClosedDate,
+			&i.WinLossReason,
+			&i.Competitor,
+			&i.LossNotes,
+			&i.SubscriptionTerm,
+			&i.CreatedSubscriptionID,
+			&i.DeletedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+			&i.LossReasonCode,
+			&i.OwnerLabel,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDealsForPipeline = `-- name: ListDealsForPipeline :many
 SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
 WHERE deleted_at IS NULL
