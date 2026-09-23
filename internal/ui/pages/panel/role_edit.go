@@ -190,6 +190,18 @@ func flsReactive(fsec *FieldSecurityRoleView) bool {
 // fls → diteruskan ke roleMatrixRow (lihat flsReactive di atas). BL-169: 4
 // modul Reports (Sales/CS/Support/Subscription) dirender FLAT sebagai baris
 // biasa, sama seperti modul lain — tanpa header grup.
+//
+// table-fixed + lebar tetap kolom "Akses" (w-28, dipasang di <th> — algoritma
+// table-fixed browser mengambil lebar kolom dari baris PERTAMA/thead bila tak
+// ada <colgroup>): TANPA ini, table-layout DEFAULT (auto) menghitung lebar tiap
+// kolom dari preferred-width kontennya, dan kolom "Modul" melebar besar saat
+// moduleHint (paragraf hint) muncul (baris ≥ Lihat & Active Subscriptions=Tak
+// ada) — karena total lebar tabel tetap w-full, kolom "Akses" TERDESAK menyusut
+// ikut mengecilkan <select>-nya secara visual (dilaporkan user: ukuran select
+// tak konsisten saat hint tampil/hilang). Dengan table-fixed, lebar "Akses"
+// dikunci independen dari isi kolom lain — select selalu sama besar, hint
+// membungkus baris dalam lebar "Modul" yang tersisa tanpa memengaruhi kolom
+// sebelahnya.
 func roleMatrix(rc RoleCard, canEdit bool, fls bool, actx arrCrossModuleCtx) g.Node {
 	subsLevel := moduleLevelOf(rc.Modules, "crm:subscriptions")
 	rows := make([]g.Node, 0, len(rc.Modules))
@@ -197,11 +209,11 @@ func roleMatrix(rc RoleCard, canEdit bool, fls bool, actx arrCrossModuleCtx) g.N
 		rows = append(rows, roleMatrixRow(m, canEdit, fls, actx, subsLevel))
 	}
 	return ui.TableScroll(h.Table(
-		h.Class("w-full text-sm"),
+		h.Class("w-full text-sm table-fixed"),
 		h.THead(h.Tr(
 			h.Class("border-b border-base-300 text-left text-base-content/70"),
 			h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Modul")),
-			h.Th(h.Class("py-2 font-medium"), g.Text("Akses")),
+			h.Th(h.Class("py-2 font-medium w-28"), g.Text("Akses")),
 		)),
 		h.TBody(g.Group(rows)),
 	))
@@ -278,83 +290,9 @@ func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool, actx arrCrossModule
 
 	return h.Tr(append(rowAttrs,
 		h.Class("border-b border-base-300/50"),
-		h.Td(h.Class("py-2 pr-4"), g.Text(m.Label), moduleHint(m, canEdit, subsLevel)),
+		h.Td(h.Class("py-2 pr-4 break-words"), g.Text(m.Label), moduleHint(m, canEdit, subsLevel)),
 		h.Td(h.Class("py-2"), levelCell),
 	)...)
-}
-
-// moduleHints = keterangan kecil di bawah nama modul untuk baris yang izinnya
-// bisa tersimpan sah tapi TAK TERJANGKAU UI tanpa Active Subscriptions
-// ("crm:subscriptions") ≥ Lihat juga (audit 2026-09, lihat catatan
-// reachability di business_defaults.go dekat entri crmModules
-// "crm:renewals"/"crm:churn"). Renewals & Churn: SubscriptionDetail/
-// SubscriptionRenewals/SubscriptionChurnList (tempat tombol Renew/Churn
-// dirender) semua digerbangi canViewSubscriptions ("crm:subscriptions" read),
-// BUKAN crm:renewals/crm:churn — jadi "Lihat"/"Kelola" di baris ini percuma
-// selama Active Subscriptions="Tak ada". Sengaja DIDOKUMENTASIKAN (bukan
-// diubah gate-nya) — lihat riwayat commit branch
-// chore/document-renewals-churn-prereq utk diskusi keputusannya.
-//
-// KONDISIONAL (permintaan user, bukan lagi selalu tampil seperti versi
-// pertama commit 89cd1bb): keterangan HANYA muncul saat kombinasi
-// bermasalah NYATA terjadi (baris ini ≥ Lihat DAN Active
-// Subscriptions=Tak ada) — supaya peran yang sudah benar (mis. Manager
-// bawaan, Active Subscriptions="Kelola") tak menampilkan peringatan yang tak
-// relevan baginya. Lihat moduleHint untuk cara kondisinya dihitung di dua
-// mode (canEdit reaktif vs read-only statis).
-var moduleHints = map[string]string{
-	"crm:renewals": "Butuh Active Subscriptions ≥ Lihat juga, agar halamannya terjangkau.",
-	"crm:churn":    "Butuh Active Subscriptions ≥ Lihat juga, agar halamannya terjangkau.",
-}
-
-// moduleHint merender <p> kecil di bawah label modul bila m.Obj punya entri
-// di moduleHints DAN kombinasi levelnya saat ini bermasalah, atau g.Text("")
-// (node kosong, aman digabung g.Group) bila tidak — dipisah dari
-// roleMatrixRow agar map lookup+kondisi tak mengotori badan fungsi yang
-// sudah padat reaktivitas Datastar.
-//
-// canEdit=true → dipasang data.Show mengacu signal LIVE ($lvl_<sufiks baris
-// ini> & $lvl_subscriptions, KEDUANYA sudah dideklarasikan data.Signals oleh
-// baris masing-masing krn canEdit=true, dan baris Active Subscriptions
-// SELALU mendahului Renewals/Churn di crmModules/urutan dokumen — syarat
-// "dideklarasikan lebih dulu di dokumen" di doc roleMatrixRow terpenuhi),
-// sehingga hint muncul/hilang SAAT ITU JUGA ketika admin mengubah salah satu
-// dropdown, tanpa reload. subsLevel (nilai saat render) TAK dipakai di jalur
-// ini — cuma penanda awal, Datastar mengambil alih sepenuhnya setelah
-// hidrasi.
-//
-// canEdit=false (peninjau read-only, mis. workspace arsip) → baris ini tak
-// pernah dapat data.Signals (lihat roleMatrixRow), jadi tak ada signal utk
-// dirujuk; dihitung STATIS dari m.Level & subsLevel (level Active
-// Subscriptions TERSIMPAN, dioper roleMatrix) sekali saat render.
-func moduleHint(m RoleModulePerm, canEdit bool, subsLevel string) g.Node {
-	hint, ok := moduleHints[m.Obj]
-	if !ok {
-		return g.Text("")
-	}
-	if !canEdit {
-		if m.Level == "none" || subsLevel != "none" {
-			return g.Text("")
-		}
-		return h.P(h.Class("text-xs text-warning font-normal"), g.Text(hint))
-	}
-	expr := "$lvl_" + moduleSignal(m.Obj) + "!=='none'&&$lvl_subscriptions==='none'"
-	return h.P(h.Class("text-xs text-warning font-normal"), data.Show(expr), g.Text(hint))
-}
-
-// moduleLevelOf mencari level modul obj dalam mods (dipakai roleMatrix agar
-// moduleHint tahu level Active Subscriptions saat merender baris
-// Renewals/Churn). Tak ketemu (semestinya tak pernah terjadi — crmModules
-// statis & selalu memuat crm:subscriptions) → "none", pilihan paling ketat/
-// aman: hint condong TAMPIL, bukan diam-diam disembunyikan oleh kegagalan
-// pencarian.
-func moduleLevelOf(mods []RoleModulePerm, obj string) string {
-	for _, m := range mods {
-		if m.Obj == obj {
-			return m.Level
-		}
-	}
-	return "none"
 }
 
 // arrCrossModuleCtx = konteks reaktivitas checkbox "Lihat Nilai Kontrak" LINTAS
