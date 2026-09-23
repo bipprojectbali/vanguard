@@ -28,6 +28,26 @@ type Release struct {
 // Nomor versi teratas menjadi acuan badge "ada pembaruan".
 var Releases = []Release{
 	{
+		Version: "1.10.0",
+		Date:    "2026-09-23",
+		Summary: "Perapian matriks Peran & Perizinan: keterangan Renewals/Churn kini kondisional, opsi izin yang tak berefek disembunyikan, dan tampilan kolom Akses lebih konsisten.",
+		Sections: []Section{
+			{
+				Title: "Diubah",
+				Items: []string{
+					"Keterangan \"butuh akses Langganan Aktif juga\" pada baris Renewals & Churn di matriks Peran kini hanya muncul saat kombinasi izinnya benar-benar bermasalah, tak lagi selalu tampil untuk semua peran.",
+					"Opsi \"Kelola\" pada beberapa modul (Dashboard, Langganan Aktif, Aktivitas, 4 halaman Laporan) yang sebenarnya tak berefek kini disembunyikan dari matriks Peran — mencegah admin memberi izin yang kelihatannya aktif tapi tak melakukan apa-apa.",
+				},
+			},
+			{
+				Title: "Diperbaiki",
+				Items: []string{
+					"Lebar kolom pilihan akses pada matriks Peran tak lagi berubah-ubah saat keterangan tambahan muncul/hilang.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.9.0",
 		Date:    "2026-09-21",
 		Summary: "Asisten chat \"Jena AI\" hadir sebagai uji coba terbatas, dan halaman Customer Success kini bisa menyinkronkan data pemakaian desa langsung dari Desa+.",
