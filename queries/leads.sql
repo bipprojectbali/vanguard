@@ -414,3 +414,41 @@ WHERE tenant_id = sqlc.arg(tenant_id)
   AND deleted_at IS NULL
   AND lower(trim(lead_name)) = ANY(sqlc.arg(names)::text[])
   AND district_id = ANY(sqlc.arg(district_ids)::bigint[]);
+
+-- name: ListLeadsForJena :many
+-- Jena AI (BL-162 fase 3, tool search_leads — internal/handler/jena_ai_tools_sales.go):
+-- SAMA filter ownership F3 dgn ListLeads (scope_all/is_own, sumber SATU dgn
+-- LeadsListFilterFor) TANPA mine_only — beda dari list_my_leads yang MEMAKSA
+-- lead_owner=uid apa pun data_scope. Tool ini menjawab pertanyaan LINTAS-pemilik
+-- ("lead dibuat oleh user X"), tapi TETAP tunduk cakupan role penanya: scope
+-- 'own' berarti nol baris utk lead milik orang lain (owner_search tak bisa
+-- melebarkannya), scope 'all' baru lihat semua.
+--
+-- owner_search '' → tak menyaring pemilik; selain itu MEMPERSEMPIT lewat LEFT
+-- JOIN users (ILIKE nama ATAU email) DI ATAS ownership — lead tanpa lead_owner
+-- (NULL) otomatis tersisih saat owner_search diisi. search (lead_name/
+-- entity_code) independen dari owner_search, keduanya AND (mempersempit, tak
+-- pernah melebarkan baris yang boleh dilihat aktor). owner_label = nama > email
+-- (pola SAMA dgn accounts.sql), string KOSONG (bukan NULL — ada fallback ''
+-- eksplisit agar sqlc menerbitkan Go string non-nullable, bukan *string) bila
+-- lead belum berpemilik atau pemiliknya sudah dihapus (LEFT JOIN tak cocok).
+SELECT l.*, COALESCE(NULLIF(u.name, ''), u.email, '') AS owner_label
+FROM leads l
+LEFT JOIN users u ON u.id = l.lead_owner
+WHERE l.deleted_at IS NULL
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND l.lead_owner = sqlc.arg(uid))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR l.lead_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR l.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+  AND (
+      sqlc.arg(owner_search)::text = ''
+      OR u.name ILIKE '%' || sqlc.arg(owner_search) || '%'
+      OR u.email ILIKE '%' || sqlc.arg(owner_search) || '%'
+  )
+ORDER BY l.created_at DESC, l.id DESC
+LIMIT sqlc.arg(page_size);

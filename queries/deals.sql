@@ -460,3 +460,37 @@ UPDATE deals SET
     updated_by = sqlc.narg(updated_by),
     updated_at = now()
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
+
+-- name: ListDealsForJena :many
+-- Jena AI (BL-162 fase 3, tool search_deals — internal/handler/jena_ai_tools_sales.go):
+-- cermin PERSIS ListLeadsForJena (lihat leads.sql) utk deal — SAMA filter
+-- ownership F3 (scope_all/is_own, sumber SATU dgn DealsListFilterFor) TANPA
+-- mine_only, beda dari list_my_deals yang MEMAKSA deal_owner=uid. Tunduk cakupan
+-- role penanya: scope 'own' nol baris utk deal orang lain, owner_search tak bisa
+-- melebarkannya.
+--
+-- owner_search '' → tak menyaring; selain itu MEMPERSEMPIT lewat LEFT JOIN users
+-- (ILIKE nama ATAU email). search (deal_name/entity_code) independen, keduanya
+-- AND (mempersempit saja). owner_label = nama > email (pola SAMA dgn
+-- accounts.sql/ListLeadsForJena), string KOSONG (bukan NULL — fallback ''
+-- eksplisit, lihat catatan ListLeadsForJena) bila deal belum berpemilik.
+SELECT d.*, COALESCE(NULLIF(u.name, ''), u.email, '') AS owner_label
+FROM deals d
+LEFT JOIN users u ON u.id = d.deal_owner
+WHERE d.deleted_at IS NULL
+  AND (
+      sqlc.arg(scope_all)::boolean
+      OR (sqlc.arg(is_own)::boolean AND d.deal_owner = sqlc.arg(uid))
+  )
+  AND (
+      sqlc.arg(search)::text = ''
+      OR d.deal_name ILIKE '%' || sqlc.arg(search) || '%'
+      OR d.entity_code ILIKE '%' || sqlc.arg(search) || '%'
+  )
+  AND (
+      sqlc.arg(owner_search)::text = ''
+      OR u.name ILIKE '%' || sqlc.arg(owner_search) || '%'
+      OR u.email ILIKE '%' || sqlc.arg(owner_search) || '%'
+  )
+ORDER BY d.created_at DESC, d.id DESC
+LIMIT sqlc.arg(page_size);
