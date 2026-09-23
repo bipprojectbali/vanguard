@@ -235,6 +235,13 @@ func ValidDataScope(s string) bool {
 	return s == DataScopeAll || s == DataScopeOwn || s == DataScopeNone
 }
 
+// ValidKind melaporkan apakah s adalah salah satu dari dua Jenis Anggota yang
+// sah (BL-170) — penjaga RoleCreate/RoleUpdate/InviteCreate/applyMemberKind
+// (nilai datang dari dropdown user).
+func ValidKind(s string) bool {
+	return s == KindInternal || s == KindExternal
+}
+
 // DefaultDataScope mengembalikan cakupan data F3 BAWAAN untuk sebuah nama peran.
 // Ini SEKADAR nilai seed: setelah workspace dibuat, cakupan sesungguhnya hidup di
 // kolom business_roles.data_scope dan dibaca per-request (RefreshIdentity) — jadi

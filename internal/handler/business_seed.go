@@ -45,6 +45,7 @@ func seedBusinessRoles(ctx context.Context, q *db.Queries, tenantID int64) error
 			Description: role.Description,
 			DataScope:   role.DataScope,
 			IsSystem:    role.IsSystem,
+			Kind:        role.Kind,
 			CreatedBy:   nil, // seed sistem — bukan tindakan seorang user
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {

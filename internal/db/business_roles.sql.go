@@ -12,10 +12,10 @@ import (
 )
 
 const createBusinessRole = `-- name: CreateBusinessRole :one
-INSERT INTO business_roles (tenant_id, name, display_name, description, data_scope, is_system, created_by, updated_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+INSERT INTO business_roles (tenant_id, name, display_name, description, data_scope, is_system, kind, created_by, updated_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
 ON CONFLICT (tenant_id, name) DO NOTHING
-RETURNING id, tenant_id, name, display_name, description, data_scope, is_system, created_at, updated_at
+RETURNING id, tenant_id, name, display_name, description, data_scope, is_system, kind, created_at, updated_at
 `
 
 type CreateBusinessRoleParams struct {
@@ -25,6 +25,7 @@ type CreateBusinessRoleParams struct {
 	Description string `json:"description"`
 	DataScope   string `json:"data_scope"`
 	IsSystem    bool   `json:"is_system"`
+	Kind        string `json:"kind"`
 	CreatedBy   *int64 `json:"created_by"`
 }
 
@@ -36,6 +37,7 @@ type CreateBusinessRoleRow struct {
 	Description string             `json:"description"`
 	DataScope   string             `json:"data_scope"`
 	IsSystem    bool               `json:"is_system"`
+	Kind        string             `json:"kind"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -43,7 +45,8 @@ type CreateBusinessRoleRow struct {
 // Buat peran baru (atau seed default). name = subject Casbin & nilai
 // memberships.business_role; display_name = label layar; description = keterangan
 // satu baris (kolom Deskripsi wireframe 9.2, boleh ”). is_system hanya true untuk
-// seed admin. created_by NULL untuk seed migrasi/boot.
+// seed admin. kind = internal/eksternal (BL-170, filter cascading select form
+// Undang). created_by NULL untuk seed migrasi/boot.
 func (q *Queries) CreateBusinessRole(ctx context.Context, arg CreateBusinessRoleParams) (CreateBusinessRoleRow, error) {
 	row := q.db.QueryRow(ctx, createBusinessRole,
 		arg.TenantID,
@@ -52,6 +55,7 @@ func (q *Queries) CreateBusinessRole(ctx context.Context, arg CreateBusinessRole
 		arg.Description,
 		arg.DataScope,
 		arg.IsSystem,
+		arg.Kind,
 		arg.CreatedBy,
 	)
 	var i CreateBusinessRoleRow
@@ -63,6 +67,7 @@ func (q *Queries) CreateBusinessRole(ctx context.Context, arg CreateBusinessRole
 		&i.Description,
 		&i.DataScope,
 		&i.IsSystem,
+		&i.Kind,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -106,7 +111,7 @@ func (q *Queries) DeleteBusinessRolePermissionsForRole(ctx context.Context, arg 
 }
 
 const getBusinessRole = `-- name: GetBusinessRole :one
-SELECT id, tenant_id, name, display_name, description, data_scope, is_system, created_at, updated_at
+SELECT id, tenant_id, name, display_name, description, data_scope, is_system, kind, created_at, updated_at
 FROM business_roles
 WHERE tenant_id = $1 AND name = $2
 `
@@ -124,6 +129,7 @@ type GetBusinessRoleRow struct {
 	Description string             `json:"description"`
 	DataScope   string             `json:"data_scope"`
 	IsSystem    bool               `json:"is_system"`
+	Kind        string             `json:"kind"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -141,6 +147,7 @@ func (q *Queries) GetBusinessRole(ctx context.Context, arg GetBusinessRoleParams
 		&i.Description,
 		&i.DataScope,
 		&i.IsSystem,
+		&i.Kind,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -283,7 +290,7 @@ func (q *Queries) ListBusinessRolePermissionsByTenant(ctx context.Context, tenan
 
 const listBusinessRoles = `-- name: ListBusinessRoles :many
 SELECT br.id, br.tenant_id, br.name, br.display_name, br.description,
-       br.data_scope, br.is_system, br.created_at, br.updated_at,
+       br.data_scope, br.is_system, br.kind, br.created_at, br.updated_at,
        COALESCE(COUNT(m.user_id), 0)::bigint AS member_count
 FROM business_roles br
 LEFT JOIN memberships m
@@ -301,6 +308,7 @@ type ListBusinessRolesRow struct {
 	Description string             `json:"description"`
 	DataScope   string             `json:"data_scope"`
 	IsSystem    bool               `json:"is_system"`
+	Kind        string             `json:"kind"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	MemberCount int64              `json:"member_count"`
@@ -328,6 +336,7 @@ func (q *Queries) ListBusinessRoles(ctx context.Context, tenantID int64) ([]List
 			&i.Description,
 			&i.DataScope,
 			&i.IsSystem,
+			&i.Kind,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.MemberCount,
@@ -344,7 +353,7 @@ func (q *Queries) ListBusinessRoles(ctx context.Context, tenantID int64) ([]List
 
 const updateBusinessRole = `-- name: UpdateBusinessRole :exec
 UPDATE business_roles
-SET display_name = $3, description = $4, data_scope = $5, updated_by = $6, updated_at = now()
+SET display_name = $3, description = $4, data_scope = $5, kind = $6, updated_by = $7, updated_at = now()
 WHERE tenant_id = $1 AND name = $2
 `
 
@@ -354,11 +363,12 @@ type UpdateBusinessRoleParams struct {
 	DisplayName string `json:"display_name"`
 	Description string `json:"description"`
 	DataScope   string `json:"data_scope"`
+	Kind        string `json:"kind"`
 	UpdatedBy   *int64 `json:"updated_by"`
 }
 
-// Sunting label, deskripsi & cakupan peran. name (subject Casbin) TAK diubah di
-// sini — mengganti nama peran memutus assign yang sudah ada; kalau perlu, buat
+// Sunting label, deskripsi, cakupan & kind peran. name (subject Casbin) TAK diubah
+// di sini — mengganti nama peran memutus assign yang sudah ada; kalau perlu, buat
 // peran baru. is_system tak bisa disunting (dijaga di handler, bukan di query).
 func (q *Queries) UpdateBusinessRole(ctx context.Context, arg UpdateBusinessRoleParams) error {
 	_, err := q.db.Exec(ctx, updateBusinessRole,
@@ -367,6 +377,7 @@ func (q *Queries) UpdateBusinessRole(ctx context.Context, arg UpdateBusinessRole
 		arg.DisplayName,
 		arg.Description,
 		arg.DataScope,
+		arg.Kind,
 		arg.UpdatedBy,
 	)
 	return err

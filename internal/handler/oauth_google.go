@@ -139,6 +139,7 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// SEBELUM WriteCookie (agar SetActiveTenant/ClearPendingInvite ikut ter-commit
 	// ke cookie). Fail-soft & one-shot tertanam di acceptPendingInvite.
 	h.acceptPendingInvite(r)
+	h.acceptInvitesByEmail(ctx, user.Email, user.ID) // BL-170: auto-join undangan yang cocok email
 	if err := session.WriteCookie(ctx, w); err != nil {
 		h.Log.Error("google callback: write cookie", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)

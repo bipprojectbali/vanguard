@@ -38,22 +38,27 @@ func (q *Queries) CountPendingInvitesByEmail(ctx context.Context, email string) 
 }
 
 const createInvite = `-- name: CreateInvite :one
-INSERT INTO invites (tenant_id, email, role, token, invited_by, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, tenant_id, email, role, token, invited_by, accepted_at, expires_at, created_at
+INSERT INTO invites (tenant_id, email, role, token, invited_by, expires_at, business_role, kind)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, tenant_id, email, role, token, invited_by, accepted_at, expires_at, created_at, business_role, kind
 `
 
 type CreateInviteParams struct {
-	TenantID  int64              `json:"tenant_id"`
-	Email     string             `json:"email"`
-	Role      string             `json:"role"`
-	Token     string             `json:"token"`
-	InvitedBy *int64             `json:"invited_by"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	TenantID     int64              `json:"tenant_id"`
+	Email        string             `json:"email"`
+	Role         string             `json:"role"`
+	Token        string             `json:"token"`
+	InvitedBy    *int64             `json:"invited_by"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	BusinessRole *string            `json:"business_role"`
+	Kind         string             `json:"kind"`
 }
 
 // Undangan bergabung ke workspace. token = rahasia URL (crypto/rand hex via
-// oauth.NewState). email boleh milik orang yang BELUM punya akun.
+// oauth.NewState). email boleh milik orang yang BELUM punya akun. business_role
+// (nullable, BL-170) = Peran CRM yang sudah ditentukan admin di muka, diterapkan
+// otomatis saat invite diterima; kind = Jenis Anggota (internal/eksternal),
+// dipakai memfilter business_role yang valid di form Undang.
 func (q *Queries) CreateInvite(ctx context.Context, arg CreateInviteParams) (Invite, error) {
 	row := q.db.QueryRow(ctx, createInvite,
 		arg.TenantID,
@@ -62,6 +67,8 @@ func (q *Queries) CreateInvite(ctx context.Context, arg CreateInviteParams) (Inv
 		arg.Token,
 		arg.InvitedBy,
 		arg.ExpiresAt,
+		arg.BusinessRole,
+		arg.Kind,
 	)
 	var i Invite
 	err := row.Scan(
@@ -74,6 +81,8 @@ func (q *Queries) CreateInvite(ctx context.Context, arg CreateInviteParams) (Inv
 		&i.AcceptedAt,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.BusinessRole,
+		&i.Kind,
 	)
 	return i, err
 }
@@ -112,25 +121,51 @@ func (q *Queries) DeleteInvite(ctx context.Context, arg DeleteInviteParams) erro
 	return err
 }
 
+const deletePendingInviteByEmail = `-- name: DeletePendingInviteByEmail :execrows
+DELETE FROM invites
+WHERE tenant_id = $1 AND lower(email) = lower($2) AND accepted_at IS NULL
+`
+
+type DeletePendingInviteByEmailParams struct {
+	TenantID int64  `json:"tenant_id"`
+	Lower    string `json:"lower"`
+}
+
+// Hapus undangan PENDING existing utk email yang sama di tenant ini (BL-170,
+// pola upsert-by-replace §c): dipanggil InviteCreate SEBELUM insert baru, agar
+// re-undang dengan field terbaru menggantikan yang lama alih-alih ditolak
+// bentrok atau menumpuk duplikat. :execrows (bukan :exec) agar pemanggil tahu
+// apakah ini undangan BARU atau KIRIM ULANG (>0 baris terhapus) — dipakai
+// memilih pesan sukses yang tepat (toast harus selalu tampil, lihat InviteCreate).
+func (q *Queries) DeletePendingInviteByEmail(ctx context.Context, arg DeletePendingInviteByEmailParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePendingInviteByEmail, arg.TenantID, arg.Lower)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getInviteByToken = `-- name: GetInviteByToken :one
-SELECT i.id, i.tenant_id, i.email, i.role, i.token, i.invited_by, i.accepted_at, i.expires_at, i.created_at, t.name AS tenant_name, t.slug AS tenant_slug
+SELECT i.id, i.tenant_id, i.email, i.role, i.token, i.invited_by, i.accepted_at, i.expires_at, i.created_at, i.business_role, i.kind, t.name AS tenant_name, t.slug AS tenant_slug
 FROM invites i
 JOIN tenants t ON t.id = i.tenant_id
 WHERE i.token = $1
 `
 
 type GetInviteByTokenRow struct {
-	ID         int64              `json:"id"`
-	TenantID   int64              `json:"tenant_id"`
-	Email      string             `json:"email"`
-	Role       string             `json:"role"`
-	Token      string             `json:"token"`
-	InvitedBy  *int64             `json:"invited_by"`
-	AcceptedAt pgtype.Timestamptz `json:"accepted_at"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	TenantName string             `json:"tenant_name"`
-	TenantSlug string             `json:"tenant_slug"`
+	ID           int64              `json:"id"`
+	TenantID     int64              `json:"tenant_id"`
+	Email        string             `json:"email"`
+	Role         string             `json:"role"`
+	Token        string             `json:"token"`
+	InvitedBy    *int64             `json:"invited_by"`
+	AcceptedAt   pgtype.Timestamptz `json:"accepted_at"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	BusinessRole *string            `json:"business_role"`
+	Kind         string             `json:"kind"`
+	TenantName   string             `json:"tenant_name"`
+	TenantSlug   string             `json:"tenant_slug"`
 }
 
 // Jalur PUBLIK (/invite/{token}) — penerima belum tentu login/anggota. Validasi
@@ -148,6 +183,8 @@ func (q *Queries) GetInviteByToken(ctx context.Context, token string) (GetInvite
 		&i.AcceptedAt,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.BusinessRole,
+		&i.Kind,
 		&i.TenantName,
 		&i.TenantSlug,
 	)
@@ -155,7 +192,7 @@ func (q *Queries) GetInviteByToken(ctx context.Context, token string) (GetInvite
 }
 
 const listInvitesByTenant = `-- name: ListInvitesByTenant :many
-SELECT id, tenant_id, email, role, token, invited_by, accepted_at, expires_at, created_at FROM invites
+SELECT id, tenant_id, email, role, token, invited_by, accepted_at, expires_at, created_at, business_role, kind FROM invites
 WHERE tenant_id = $1 AND accepted_at IS NULL AND expires_at > now()
 ORDER BY created_at DESC
 `
@@ -180,6 +217,8 @@ func (q *Queries) ListInvitesByTenant(ctx context.Context, tenantID int64) ([]In
 			&i.AcceptedAt,
 			&i.ExpiresAt,
 			&i.CreatedAt,
+			&i.BusinessRole,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -192,7 +231,7 @@ func (q *Queries) ListInvitesByTenant(ctx context.Context, tenantID int64) ([]In
 }
 
 const listPendingInvitesByEmail = `-- name: ListPendingInvitesByEmail :many
-SELECT i.id, i.tenant_id, i.email, i.role, i.token, i.invited_by, i.accepted_at, i.expires_at, i.created_at, t.name AS tenant_name
+SELECT i.id, i.tenant_id, i.email, i.role, i.token, i.invited_by, i.accepted_at, i.expires_at, i.created_at, i.business_role, i.kind, t.name AS tenant_name
 FROM invites i
 JOIN tenants t ON t.id = i.tenant_id
 WHERE lower(i.email) = $1 AND i.accepted_at IS NULL AND i.expires_at > now()
@@ -200,16 +239,18 @@ ORDER BY i.created_at DESC
 `
 
 type ListPendingInvitesByEmailRow struct {
-	ID         int64              `json:"id"`
-	TenantID   int64              `json:"tenant_id"`
-	Email      string             `json:"email"`
-	Role       string             `json:"role"`
-	Token      string             `json:"token"`
-	InvitedBy  *int64             `json:"invited_by"`
-	AcceptedAt pgtype.Timestamptz `json:"accepted_at"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	TenantName string             `json:"tenant_name"`
+	ID           int64              `json:"id"`
+	TenantID     int64              `json:"tenant_id"`
+	Email        string             `json:"email"`
+	Role         string             `json:"role"`
+	Token        string             `json:"token"`
+	InvitedBy    *int64             `json:"invited_by"`
+	AcceptedAt   pgtype.Timestamptz `json:"accepted_at"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	BusinessRole *string            `json:"business_role"`
+	Kind         string             `json:"kind"`
+	TenantName   string             `json:"tenant_name"`
 }
 
 // Undangan yang ditujukan ke SATU ORANG (halaman notifikasi). Dicari per-email,
@@ -236,6 +277,8 @@ func (q *Queries) ListPendingInvitesByEmail(ctx context.Context, email string) (
 			&i.AcceptedAt,
 			&i.ExpiresAt,
 			&i.CreatedAt,
+			&i.BusinessRole,
+			&i.Kind,
 			&i.TenantName,
 		); err != nil {
 			return nil, err
@@ -246,4 +289,27 @@ func (q *Queries) ListPendingInvitesByEmail(ctx context.Context, email string) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const memberExistsByEmail = `-- name: MemberExistsByEmail :one
+SELECT EXISTS (
+    SELECT 1 FROM memberships m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.tenant_id = $1 AND lower(u.email) = lower($2)
+)
+`
+
+type MemberExistsByEmailParams struct {
+	TenantID int64  `json:"tenant_id"`
+	Lower    string `json:"lower"`
+}
+
+// Guard InviteCreate (BL-170 §b): true bila email sudah jadi anggota tenant ini.
+// Query TARGETED (JOIN memberships+users), BUKAN scan ListMembersByTenant penuh
+// — dipanggil tiap submit form Undang.
+func (q *Queries) MemberExistsByEmail(ctx context.Context, arg MemberExistsByEmailParams) (bool, error) {
+	row := q.db.QueryRow(ctx, memberExistsByEmail, arg.TenantID, arg.Lower)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

@@ -55,7 +55,7 @@ const createMembership = `-- name: CreateMembership :one
 INSERT INTO memberships (user_id, tenant_id, role)
 VALUES ($1, $2, $3)
 ON CONFLICT (user_id, tenant_id) DO NOTHING
-RETURNING id, user_id, tenant_id, role, created_at, business_role
+RETURNING id, user_id, tenant_id, role, created_at, business_role, kind
 `
 
 type CreateMembershipParams struct {
@@ -76,6 +76,7 @@ func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipPara
 		&i.Role,
 		&i.CreatedAt,
 		&i.BusinessRole,
+		&i.Kind,
 	)
 	return i, err
 }
@@ -96,7 +97,7 @@ func (q *Queries) DeleteMembership(ctx context.Context, arg DeleteMembershipPara
 }
 
 const getMembership = `-- name: GetMembership :one
-SELECT id, user_id, tenant_id, role, created_at, business_role FROM memberships WHERE user_id = $1 AND tenant_id = $2
+SELECT id, user_id, tenant_id, role, created_at, business_role, kind FROM memberships WHERE user_id = $1 AND tenant_id = $2
 `
 
 type GetMembershipParams struct {
@@ -116,6 +117,7 @@ func (q *Queries) GetMembership(ctx context.Context, arg GetMembershipParams) (M
 		&i.Role,
 		&i.CreatedAt,
 		&i.BusinessRole,
+		&i.Kind,
 	)
 	return i, err
 }
@@ -156,7 +158,7 @@ func (q *Queries) ListMembersByBusinessRole(ctx context.Context, arg ListMembers
 }
 
 const listMembersByTenant = `-- name: ListMembersByTenant :many
-SELECT m.id, m.user_id, m.role, m.business_role, m.created_at, u.email, u.name, u.avatar_url, u.status
+SELECT m.id, m.user_id, m.role, m.business_role, m.kind, m.created_at, u.email, u.name, u.avatar_url, u.status
 FROM memberships m
 JOIN users u ON u.id = m.user_id
 WHERE m.tenant_id = $1 AND u.deleted_at IS NULL
@@ -168,6 +170,7 @@ type ListMembersByTenantRow struct {
 	UserID       int64              `json:"user_id"`
 	Role         string             `json:"role"`
 	BusinessRole *string            `json:"business_role"`
+	Kind         string             `json:"kind"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	Email        string             `json:"email"`
 	Name         *string            `json:"name"`
@@ -185,7 +188,8 @@ type ListMembersByTenantRow struct {
 //
 // m.business_role (sumbu CRM, tegak lurus role tenant) ikut agar kolom "Peran
 // CRM" di /members bisa memilih nilai saat ini tanpa query per-baris (Rule 13);
-// NULL = belum diberi peran CRM.
+// NULL = belum diberi peran CRM. m.kind (BL-170) = Jenis Anggota (internal/
+// eksternal), independen dari Peran CRM, diedit lewat select terpisah.
 func (q *Queries) ListMembersByTenant(ctx context.Context, tenantID int64) ([]ListMembersByTenantRow, error) {
 	rows, err := q.db.Query(ctx, listMembersByTenant, tenantID)
 	if err != nil {
@@ -200,6 +204,7 @@ func (q *Queries) ListMembersByTenant(ctx context.Context, tenantID int64) ([]Li
 			&i.UserID,
 			&i.Role,
 			&i.BusinessRole,
+			&i.Kind,
 			&i.CreatedAt,
 			&i.Email,
 			&i.Name,
@@ -363,5 +368,23 @@ type UpdateMemberRoleParams struct {
 
 func (q *Queries) UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) error {
 	_, err := q.db.Exec(ctx, updateMemberRole, arg.UserID, arg.TenantID, arg.Role)
+	return err
+}
+
+const updateMembershipKind = `-- name: UpdateMembershipKind :exec
+UPDATE memberships SET kind = $3 WHERE user_id = $1 AND tenant_id = $2
+`
+
+type UpdateMembershipKindParams struct {
+	UserID   int64  `json:"user_id"`
+	TenantID int64  `json:"tenant_id"`
+	Kind     string `json:"kind"`
+}
+
+// Set/ganti Jenis Anggota (kind, BL-170) satu anggota — independen dari Peran
+// CRM (business_role), diedit lewat select terpisah di panel Anggota. Dipakai
+// juga saat invite diterima (menerapkan kind yang admin tentukan di form Undang).
+func (q *Queries) UpdateMembershipKind(ctx context.Context, arg UpdateMembershipKindParams) error {
+	_, err := q.db.Exec(ctx, updateMembershipKind, arg.UserID, arg.TenantID, arg.Kind)
 	return err
 }

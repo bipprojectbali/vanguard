@@ -43,6 +43,11 @@ func (h *Handler) RoleCreate(w http.ResponseWriter, r *http.Request) {
 		wsRedirect(w, r, "/roles", "role_scope")
 		return
 	}
+	kind := r.FormValue("kind")
+	if !authz.ValidKind(kind) {
+		wsRedirect(w, r, "/roles", "kind")
+		return
+	}
 	// Deskripsi opsional (boleh kosong) — hanya panjangnya dibatasi. TrimSpace agar
 	// spasi belaka = kosong, bukan "deskripsi berisi spasi".
 	description := strings.TrimSpace(r.FormValue("description"))
@@ -56,7 +61,7 @@ func (h *Handler) RoleCreate(w http.ResponseWriter, r *http.Request) {
 	// zero rows → pgx.ErrNoRows. Itu bukan galat internal, tapi "nama bentrok".
 	if _, err := h.q(ctx).CreateBusinessRole(ctx, db.CreateBusinessRoleParams{
 		TenantID: tenantID, Name: name, DisplayName: display, Description: description,
-		DataScope: scope, IsSystem: false, CreatedBy: &actorID,
+		DataScope: scope, Kind: kind, IsSystem: false, CreatedBy: &actorID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			wsRedirect(w, r, "/roles", "role_exists")

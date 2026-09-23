@@ -46,6 +46,7 @@ func roleRows(roles []db.ListBusinessRolesRow) []panel.RoleRow {
 			DisplayName: r.DisplayName,
 			Description: r.Description,
 			ScopeLabel:  scopeLabel(r.DataScope),
+			Kind:        r.Kind,
 			MemberCount: r.MemberCount,
 			IsSystem:    r.IsSystem,
 		})

@@ -39,8 +39,9 @@ ORDER BY m.created_at, m.id;
 --
 -- m.business_role (sumbu CRM, tegak lurus role tenant) ikut agar kolom "Peran
 -- CRM" di /members bisa memilih nilai saat ini tanpa query per-baris (Rule 13);
--- NULL = belum diberi peran CRM.
-SELECT m.id, m.user_id, m.role, m.business_role, m.created_at, u.email, u.name, u.avatar_url, u.status
+-- NULL = belum diberi peran CRM. m.kind (BL-170) = Jenis Anggota (internal/
+-- eksternal), independen dari Peran CRM, diedit lewat select terpisah.
+SELECT m.id, m.user_id, m.role, m.business_role, m.kind, m.created_at, u.email, u.name, u.avatar_url, u.status
 FROM memberships m
 JOIN users u ON u.id = m.user_id
 WHERE m.tenant_id = $1 AND u.deleted_at IS NULL
@@ -55,6 +56,12 @@ UPDATE memberships SET role = $3 WHERE user_id = $1 AND tenant_id = $2;
 -- tak lagi punya CHECK sejak 00007. NULL = cabut peran CRM (mis. saat perannya
 -- dihapus) — pgtype/pointer NULL diteruskan apa adanya.
 UPDATE memberships SET business_role = $3 WHERE user_id = $1 AND tenant_id = $2;
+
+-- name: UpdateMembershipKind :exec
+-- Set/ganti Jenis Anggota (kind, BL-170) satu anggota — independen dari Peran
+-- CRM (business_role), diedit lewat select terpisah di panel Anggota. Dipakai
+-- juga saat invite diterima (menerapkan kind yang admin tentukan di form Undang).
+UPDATE memberships SET kind = $3 WHERE user_id = $1 AND tenant_id = $2;
 
 -- name: UnassignBusinessRole :exec
 -- Cabut satu business_role dari SEMUA anggota workspace yang memegangnya —

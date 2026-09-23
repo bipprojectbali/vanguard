@@ -23,6 +23,7 @@ func (e *testEnv) mkInvite(t *testing.T, token, email, role string, ttl time.Dur
 		Role:      role,
 		Token:     token,
 		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(ttl), Valid: true},
+		Kind:      "internal",
 	})
 	if err != nil {
 		t.Fatalf("seed invite: %v", err)

@@ -194,7 +194,8 @@ type Querier interface {
 	// Buat peran baru (atau seed default). name = subject Casbin & nilai
 	// memberships.business_role; display_name = label layar; description = keterangan
 	// satu baris (kolom Deskripsi wireframe 9.2, boleh ''). is_system hanya true untuk
-	// seed admin. created_by NULL untuk seed migrasi/boot.
+	// seed admin. kind = internal/eksternal (BL-170, filter cascading select form
+	// Undang). created_by NULL untuk seed migrasi/boot.
 	CreateBusinessRole(ctx context.Context, arg CreateBusinessRoleParams) (CreateBusinessRoleRow, error)
 	// cs_impl_tasks.sql — Query Implementation Tracker (CRM Modul 6, sub-item
 	// Onboarding 6.2.1.1). RLS mengisolasi workspace; F3 ownership ditegakkan
@@ -263,7 +264,10 @@ type Querier interface {
 	// Buat engagement baru. next_due_date dan outcome opsional.
 	CreateEngagement(ctx context.Context, arg CreateEngagementParams) (Engagement, error)
 	// Undangan bergabung ke workspace. token = rahasia URL (crypto/rand hex via
-	// oauth.NewState). email boleh milik orang yang BELUM punya akun.
+	// oauth.NewState). email boleh milik orang yang BELUM punya akun. business_role
+	// (nullable, BL-170) = Peran CRM yang sudah ditentukan admin di muka, diterapkan
+	// otomatis saat invite diterima; kind = Jenis Anggota (internal/eksternal),
+	// dipakai memfilter business_role yang valid di form Undang.
 	CreateInvite(ctx context.Context, arg CreateInviteParams) (Invite, error)
 	// Buat artikel. tenant_id eksplisit (RLS WITH CHECK memverifikasinya = GUC).
 	// author_id = created_by (penulis awal; slice ini tak sediakan picker
@@ -433,6 +437,13 @@ type Querier interface {
 	DeleteInvite(ctx context.Context, arg DeleteInviteParams) error
 	// Keluarkan anggota dari workspace (atau user keluar sendiri).
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
+	// Hapus undangan PENDING existing utk email yang sama di tenant ini (BL-170,
+	// pola upsert-by-replace §c): dipanggil InviteCreate SEBELUM insert baru, agar
+	// re-undang dengan field terbaru menggantikan yang lama alih-alih ditolak
+	// bentrok atau menumpuk duplikat. :execrows (bukan :exec) agar pemanggil tahu
+	// apakah ini undangan BARU atau KIRIM ULANG (>0 baris terhapus) — dipakai
+	// memilih pesan sukses yang tepat (toast harus selalu tampil, lihat InviteCreate).
+	DeletePendingInviteByEmail(ctx context.Context, arg DeletePendingInviteByEmailParams) (int64, error)
 	// Hard-delete satu baris item (tanpa soft-delete). Total quote direkalkulasi app
 	// setelahnya via UpdateQuoteTotals.
 	DeleteQuoteItem(ctx context.Context, id int64) error
@@ -1238,7 +1249,8 @@ type Querier interface {
 	//
 	// m.business_role (sumbu CRM, tegak lurus role tenant) ikut agar kolom "Peran
 	// CRM" di /members bisa memilih nilai saat ini tanpa query per-baris (Rule 13);
-	// NULL = belum diberi peran CRM.
+	// NULL = belum diberi peran CRM. m.kind (BL-170) = Jenis Anggota (internal/
+	// eksternal), independen dari Peran CRM, diedit lewat select terpisah.
 	ListMembersByTenant(ctx context.Context, tenantID int64) ([]ListMembersByTenantRow, error)
 	// Daftar workspace milik user (untuk switcher sidebar). Urut terlama dulu agar
 	// workspace pertama (dari register) jadi default stabil.
@@ -1608,6 +1620,10 @@ type Querier interface {
 	// warisan field manual yang mungkin tak berformat 4-segmen. COALESCE → 0 bila
 	// belum ada, jadi pemanggil cukup +1.
 	MaxVillageSeqForPrefix(ctx context.Context, arg MaxVillageSeqForPrefixParams) (int32, error)
+	// Guard InviteCreate (BL-170 §b): true bila email sudah jadi anggota tenant ini.
+	// Query TARGETED (JOIN memberships+users), BUKAN scan ListMembersByTenant penuh
+	// — dipanggil tiap submit form Undang.
+	MemberExistsByEmail(ctx context.Context, arg MemberExistsByEmailParams) (bool, error)
 	// Alokasi nomor urut BERIKUTNYA untuk (tenant, entity), ATOMIK.
 	//
 	// Kenapa satu pernyataan INSERT..ON CONFLICT dan bukan SELECT max+1 di Go: ON
@@ -2141,8 +2157,8 @@ type Querier interface {
 	// Ubah status (aksi tersendiri, cermin UpdateDealStage). Validasi enum di handler
 	// (allowlist) + CHECK DB sebagai jaring terakhir.
 	UpdateActivityStatus(ctx context.Context, arg UpdateActivityStatusParams) error
-	// Sunting label, deskripsi & cakupan peran. name (subject Casbin) TAK diubah di
-	// sini — mengganti nama peran memutus assign yang sudah ada; kalau perlu, buat
+	// Sunting label, deskripsi, cakupan & kind peran. name (subject Casbin) TAK diubah
+	// di sini — mengganti nama peran memutus assign yang sudah ada; kalau perlu, buat
 	// peran baru. is_system tak bisa disunting (dijaga di handler, bukan di query).
 	UpdateBusinessRole(ctx context.Context, arg UpdateBusinessRoleParams) error
 	// Ubah status task + due_date (dapat digeser saat status = in_progress) +
@@ -2202,6 +2218,10 @@ type Querier interface {
 	// dihapus) — pgtype/pointer NULL diteruskan apa adanya.
 	UpdateMemberBusinessRole(ctx context.Context, arg UpdateMemberBusinessRoleParams) error
 	UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) error
+	// Set/ganti Jenis Anggota (kind, BL-170) satu anggota — independen dari Peran
+	// CRM (business_role), diedit lewat select terpisah di panel Anggota. Dipakai
+	// juga saat invite diterima (menerapkan kind yang admin tentukan di form Undang).
+	UpdateMembershipKind(ctx context.Context, arg UpdateMembershipKindParams) error
 	// Sunting profil plan. is_active TAK di sini (SetPlanActive) — pensiun/aktifkan
 	// adalah aksi tersendiri, bukan efek samping edit. plan_code boleh diubah (tetap
 	// tunduk idx_plans_code unik).

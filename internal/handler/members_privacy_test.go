@@ -218,6 +218,7 @@ func TestMembers_UndanganTakBocorKeMember(t *testing.T) {
 		Role: authz.RoleNameMember, Token: "token-rahasia-uji",
 		InvitedBy: &uid,
 		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(inviteTTL), Valid: true},
+		Kind:      "internal",
 	}); err != nil {
 		t.Fatalf("seed undangan: %v", err)
 	}

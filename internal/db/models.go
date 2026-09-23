@@ -117,6 +117,7 @@ type BusinessRole struct {
 	UpdatedBy   *int64             `json:"updated_by"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	Description string             `json:"description"`
+	Kind        string             `json:"kind"`
 }
 
 type BusinessRolePermission struct {
@@ -306,15 +307,17 @@ type FieldSecurityPolicy struct {
 }
 
 type Invite struct {
-	ID         int64              `json:"id"`
-	TenantID   int64              `json:"tenant_id"`
-	Email      string             `json:"email"`
-	Role       string             `json:"role"`
-	Token      string             `json:"token"`
-	InvitedBy  *int64             `json:"invited_by"`
-	AcceptedAt pgtype.Timestamptz `json:"accepted_at"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ID           int64              `json:"id"`
+	TenantID     int64              `json:"tenant_id"`
+	Email        string             `json:"email"`
+	Role         string             `json:"role"`
+	Token        string             `json:"token"`
+	InvitedBy    *int64             `json:"invited_by"`
+	AcceptedAt   pgtype.Timestamptz `json:"accepted_at"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	BusinessRole *string            `json:"business_role"`
+	Kind         string             `json:"kind"`
 }
 
 type KbArticle struct {
@@ -374,6 +377,7 @@ type Membership struct {
 	Role         string             `json:"role"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	BusinessRole *string            `json:"business_role"`
+	Kind         string             `json:"kind"`
 }
 
 type Notification struct {

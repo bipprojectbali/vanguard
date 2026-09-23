@@ -27,7 +27,7 @@ ORDER BY role, obj, act;
 -- tanpa pemegang tetap muncul dengan 0. COALESCE ke bigint: sqlc emit int64, bukan
 -- interface{}. GROUP BY br.id (PK) sah — kolom br.* bergantung fungsional padanya.
 SELECT br.id, br.tenant_id, br.name, br.display_name, br.description,
-       br.data_scope, br.is_system, br.created_at, br.updated_at,
+       br.data_scope, br.is_system, br.kind, br.created_at, br.updated_at,
        COALESCE(COUNT(m.user_id), 0)::bigint AS member_count
 FROM business_roles br
 LEFT JOIN memberships m
@@ -39,7 +39,7 @@ ORDER BY br.is_system DESC, br.name;
 -- name: GetBusinessRole :one
 -- Satu peran (edit/validasi). tenant_id di predikat = pertahanan berlapis di atas
 -- RLS: nama peran datang dari URL, jadi cocokkan eksplisit ke workspace aktif.
-SELECT id, tenant_id, name, display_name, description, data_scope, is_system, created_at, updated_at
+SELECT id, tenant_id, name, display_name, description, data_scope, is_system, kind, created_at, updated_at
 FROM business_roles
 WHERE tenant_id = $1 AND name = $2;
 
@@ -55,18 +55,19 @@ WHERE tenant_id = $1 AND name = $2;
 -- Buat peran baru (atau seed default). name = subject Casbin & nilai
 -- memberships.business_role; display_name = label layar; description = keterangan
 -- satu baris (kolom Deskripsi wireframe 9.2, boleh ''). is_system hanya true untuk
--- seed admin. created_by NULL untuk seed migrasi/boot.
-INSERT INTO business_roles (tenant_id, name, display_name, description, data_scope, is_system, created_by, updated_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+-- seed admin. kind = internal/eksternal (BL-170, filter cascading select form
+-- Undang). created_by NULL untuk seed migrasi/boot.
+INSERT INTO business_roles (tenant_id, name, display_name, description, data_scope, is_system, kind, created_by, updated_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
 ON CONFLICT (tenant_id, name) DO NOTHING
-RETURNING id, tenant_id, name, display_name, description, data_scope, is_system, created_at, updated_at;
+RETURNING id, tenant_id, name, display_name, description, data_scope, is_system, kind, created_at, updated_at;
 
 -- name: UpdateBusinessRole :exec
--- Sunting label, deskripsi & cakupan peran. name (subject Casbin) TAK diubah di
--- sini — mengganti nama peran memutus assign yang sudah ada; kalau perlu, buat
+-- Sunting label, deskripsi, cakupan & kind peran. name (subject Casbin) TAK diubah
+-- di sini — mengganti nama peran memutus assign yang sudah ada; kalau perlu, buat
 -- peran baru. is_system tak bisa disunting (dijaga di handler, bukan di query).
 UPDATE business_roles
-SET display_name = $3, description = $4, data_scope = $5, updated_by = $6, updated_at = now()
+SET display_name = $3, description = $4, data_scope = $5, kind = $6, updated_by = $7, updated_at = now()
 WHERE tenant_id = $1 AND name = $2;
 
 -- name: DeleteBusinessRole :exec

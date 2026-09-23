@@ -45,6 +45,7 @@ type RoleCard struct {
 	DisplayName string
 	Description string
 	DataScope   string
+	Kind        string
 	IsSystem    bool
 	Modules     []RoleModulePerm
 }
@@ -112,6 +113,11 @@ func RoleEdit(base string, rc RoleCard, scopes []ScopeOption, canEdit bool, errM
 				h.Class("grid gap-2"),
 				ui.Label("Cakupan data"),
 				scopeSelect("", "data_scope", rc.DataScope, scopes, !canEdit),
+			),
+			h.Div(
+				h.Class("grid gap-2"),
+				ui.Label("Jenis Anggota"),
+				kindSelect("", "kind", rc.Kind, !canEdit),
 			),
 		),
 		h.Div(

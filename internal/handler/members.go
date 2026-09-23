@@ -63,6 +63,61 @@ func (h *Handler) MemberSetRole(w http.ResponseWriter, r *http.Request) {
 	wsRedirectOK(w, r, "/members", okCode)
 }
 
+// MemberSetKind — POST /w/{workspace}/members/{id}/kind. Satu POST, DUA sumbu:
+// Jenis Anggota (BL-170, kind) & peran CRM (business_role) — digabung SATU
+// form/tombol Simpan di baris anggota (memberKindRoleForm) agar ubah kind yang
+// otomatis menukar cascading select Peran CRM tersimpan sekaligus, bukan dua
+// klik terpisah. business_role OPSIONAL (Has-gated) demi kompatibilitas mundur
+// dgn pemanggil yang cuma mengirim kind. Boleh menyentuh diri sendiri (bukan
+// sumbu lockout seperti role tenant).
+func (h *Handler) MemberSetKind(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !canManageMembers(ctx) {
+		wsRedirect(w, r, "/members", "forbidden")
+		return
+	}
+	targetID, ok := h.parseTargetID(w, r)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		wsRedirect(w, r, "/members", "failed")
+		return
+	}
+	tenantID := session.TenantID(ctx)
+
+	kindChanged, resetRole, code := h.applyMemberKind(ctx, targetID, tenantID, r.PostForm.Get("kind"))
+	if code != "" {
+		wsRedirect(w, r, "/members", code)
+		return
+	}
+
+	roleChanged, warnLastAdmin := false, false
+	if r.PostForm.Has("business_role") {
+		var roleCode string
+		roleChanged, warnLastAdmin, roleCode = h.applyBusinessRole(ctx, targetID, tenantID, r.PostForm.Get("business_role"))
+		if roleCode != "" {
+			wsRedirect(w, r, "/members", roleCode)
+			return
+		}
+	}
+
+	okCode := ""
+	switch {
+	case warnLastAdmin:
+		okCode = "crm_lastadmin"
+	case kindChanged && roleChanged:
+		okCode = "kind_role_changed"
+	case kindChanged && resetRole:
+		okCode = "kind_changed_reset"
+	case kindChanged:
+		okCode = "kind_changed"
+	case roleChanged:
+		okCode = "crm_assigned"
+	}
+	wsRedirectOK(w, r, "/members", okCode)
+}
+
 // MemberRemove — POST /w/{workspace}/members/{id}/remove. Keluarkan anggota dari
 // workspace aktif (membership dihapus; USER-nya tetap ada — identitas global).
 func (h *Handler) MemberRemove(w http.ResponseWriter, r *http.Request) {
