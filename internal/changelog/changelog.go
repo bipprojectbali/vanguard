@@ -39,6 +39,7 @@ var currentReleases = []Release{
 					"Anggota yang sudah didaftarkan admin lewat form \"Undang\" kini langsung masuk dengan peran yang ditentukan begitu ia login atau mendaftar — tak perlu lagi mengklik tautan undangan.",
 					"Form Undang kini juga meminta Jenis Anggota (internal/eksternal), dan pilihan Peran CRM otomatis menyesuaikan jenis yang dipilih.",
 					"Halaman Peran & Perizinan kini punya izin baru \"User management\" — admin bisa memberi peran tertentu akses Lihat atau Kelola ke halaman Anggota, dibatasi hanya boleh melihat/mengelola anggota berjenis internal, eksternal, atau keduanya sesuai yang diatur.",
+					"Jena AI kini bisa menjawab pertanyaan tentang deal/lead milik anggota tim lain (mis. \"deal yang dibuat oleh Budi\") untuk peran yang memang berwenang melihat semua data — sebelumnya selalu dianggap menanyakan data milik sendiri saja.",
 				},
 			},
 		},
