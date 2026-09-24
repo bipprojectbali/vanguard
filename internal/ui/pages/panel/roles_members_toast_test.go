@@ -24,8 +24,8 @@ func TestRoles_ToastNotAlert(t *testing.T) {
 func TestRoleEdit_ToastNotAlert(t *testing.T) {
 	rc := RoleCard{Name: "finance", DisplayName: "Keuangan"}
 	var errOut, okOut strings.Builder
-	RoleEdit("/w/acme", rc, nil, true, "Role tidak valid.", "", nil).Render(&errOut)
-	RoleEdit("/w/acme", rc, nil, true, "", "Peran disimpan.", nil).Render(&okOut)
+	RoleEdit("/w/acme", rc, nil, true, "Role tidak valid.", "", nil, MemberScopeRoleView{}).Render(&errOut)
+	RoleEdit("/w/acme", rc, nil, true, "", "Peran disimpan.", nil, MemberScopeRoleView{}).Render(&okOut)
 
 	assertToast(t, errOut.String(), "err", "Role tidak valid.")
 	assertToast(t, okOut.String(), "ok", "Peran disimpan.")
@@ -33,8 +33,8 @@ func TestRoleEdit_ToastNotAlert(t *testing.T) {
 
 func TestMembers_ToastNotAlert(t *testing.T) {
 	var errOut, okOut strings.Builder
-	Members("/w/acme", nil, nil, nil, nil, true, 1, "Tak bisa menurunkan atau mengeluarkan owner terakhir workspace.", "").Render(&errOut)
-	Members("/w/acme", nil, nil, nil, nil, true, 1, "", "Peran CRM anggota diperbarui.").Render(&okOut)
+	Members("/w/acme", nil, nil, nil, nil, true, true, false, 1, "Tak bisa menurunkan atau mengeluarkan owner terakhir workspace.", "").Render(&errOut)
+	Members("/w/acme", nil, nil, nil, nil, true, true, false, 1, "", "Peran CRM anggota diperbarui.").Render(&okOut)
 
 	assertToast(t, errOut.String(), "err", "Tak bisa menurunkan atau mengeluarkan owner terakhir workspace.")
 	assertToast(t, okOut.String(), "ok", "Peran CRM anggota diperbarui.")

@@ -27,19 +27,26 @@ import (
 // agar token bocor tak berlaku selamanya.
 const inviteTTL = 7 * 24 * time.Hour
 
-// InviteCreate — POST /w/{workspace}/members/invite. Buat undangan (owner/admin
-// saja). BL-170: role tenant SELALU "member" (promosi admin terjadi PASCA-join
-// lewat panel Anggota, bukan lagi dipilih di form Undang) — form kini menentukan
-// Peran CRM (business_role, opsional) + Jenis Anggota (kind, wajib), sepasang
-// sumbu yang diterapkan otomatis saat undangan diterima (acceptInvite/
-// acceptInvitesByEmail).
+// InviteCreate — POST /w/{workspace}/members/invite. Buat undangan. BL-170: role
+// tenant SELALU "member" (promosi admin terjadi PASCA-join lewat panel Anggota,
+// bukan lagi dipilih di form Undang) — form kini menentukan Peran CRM
+// (business_role, opsional) + Jenis Anggota (kind, wajib), sepasang sumbu yang
+// diterapkan otomatis saat undangan diterima (acceptInvite/acceptInvitesByEmail).
+//
+// Gerbang MELEBAR (BL-171): pengelola tenant ATAU aktor business-axis
+// ber-"Kelola" crm:members. Role tenant sudah SELALU "member" apa pun aktornya
+// (tak perlu dipaksa terpisah — tak pernah ada input form untuk itu). kind
+// dibatasi actorKindScope: aktor bercakupan sempit tak bisa mengundang di luar
+// jenis yang boleh ia lihat sendiri (defense-in-depth — UI sudah menguncinya
+// via hidden input saat !canEditKind, lihat inviteForm).
 func (h *Handler) InviteCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !canManageMembers(ctx) {
+	if !canManageMembers(ctx) && crmMemberAccess(ctx) != memberAccessManage {
 		wsRedirect(w, r, "/members", "forbidden")
 		return
 	}
 	tenantID := session.TenantID(ctx)
+	q := h.q(ctx)
 	email := strings.TrimSpace(strings.ToLower(r.FormValue("email")))
 	if email == "" || !strings.Contains(email, "@") {
 		wsRedirect(w, r, "/members", "email")
@@ -50,12 +57,16 @@ func (h *Handler) InviteCreate(w http.ResponseWriter, r *http.Request) {
 		wsRedirect(w, r, "/members", "kind")
 		return
 	}
+	if scope := actorKindScope(ctx, q); !scope.Allows(kind) {
+		wsRedirect(w, r, "/members", "forbidden")
+		return
+	}
 	businessRole := strings.TrimSpace(r.FormValue("business_role"))
 	var businessRolePtr *string
 	if businessRole != "" {
 		// Tenant-aware DAN cocok Kind yang dipilih — pertahanan berlapis di atas
 		// cascading select (yang bisa dilewati manipulasi form langsung).
-		br, e := h.q(ctx).GetBusinessRole(ctx, db.GetBusinessRoleParams{TenantID: tenantID, Name: businessRole})
+		br, e := q.GetBusinessRole(ctx, db.GetBusinessRoleParams{TenantID: tenantID, Name: businessRole})
 		if e != nil || br.Kind != kind {
 			wsRedirect(w, r, "/members", "crm_role")
 			return
@@ -64,7 +75,7 @@ func (h *Handler) InviteCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	// Guard (b): email yang sudah jadi anggota tak boleh diundang ulang — bukan
 	// error DB (invites tak punya UNIQUE lintas-member), jadi dicek eksplisit.
-	if exists, e := h.q(ctx).MemberExistsByEmail(ctx, db.MemberExistsByEmailParams{TenantID: tenantID, Lower: email}); e == nil && exists {
+	if exists, e := q.MemberExistsByEmail(ctx, db.MemberExistsByEmailParams{TenantID: tenantID, Lower: email}); e == nil && exists {
 		wsRedirect(w, r, "/members", "invite_member")
 		return
 	}
@@ -80,12 +91,12 @@ func (h *Handler) InviteCreate(w http.ResponseWriter, r *http.Request) {
 	// terbarunya yang berlaku. rows>0 = ini KIRIM ULANG (bukan undangan baru) —
 	// dipakai memilih pesan sukses; tanpa pembeda ini, re-undang tampak seperti
 	// tak terjadi apa-apa (baris "Undangan Menunggu" tak berubah kasat mata).
-	rows, e := h.q(ctx).DeletePendingInviteByEmail(ctx, db.DeletePendingInviteByEmailParams{TenantID: tenantID, Lower: email})
+	rows, e := q.DeletePendingInviteByEmail(ctx, db.DeletePendingInviteByEmailParams{TenantID: tenantID, Lower: email})
 	if e != nil {
 		h.Log.Warn("invite: hapus pending lama", "err", e)
 	}
 	resent := rows > 0
-	if _, err := h.q(ctx).CreateInvite(ctx, db.CreateInviteParams{
+	if _, err := q.CreateInvite(ctx, db.CreateInviteParams{
 		TenantID:     tenantID,
 		Email:        email,
 		Role:         authz.RoleNameMember,
@@ -109,9 +120,16 @@ func (h *Handler) InviteCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 // InviteDelete — POST /w/{workspace}/members/invite/{id}/delete. Batalkan undangan.
+//
+// Gerbang MELEBAR (BL-171): pengelola tenant ATAU aktor business-axis
+// ber-"Kelola" crm:members, dibatasi target invite ∈ actorKindScope. Tak ada
+// query GetInviteByID tenant-scoped di sqlc — dipakai ListInvitesByTenant
+// (sudah dimuat halaman Anggota, daftar undangan pending kecil) untuk
+// menemukan kind target sebelum hapus, alih-alih menambah query baru untuk
+// satu pemakaian.
 func (h *Handler) InviteDelete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !canManageMembers(ctx) {
+	if !canManageMembers(ctx) && crmMemberAccess(ctx) != memberAccessManage {
 		wsRedirect(w, r, "/members", "forbidden")
 		return
 	}
@@ -120,8 +138,33 @@ func (h *Handler) InviteDelete(w http.ResponseWriter, r *http.Request) {
 		wsRedirect(w, r, "/members", "notfound")
 		return
 	}
-	if err := h.q(ctx).DeleteInvite(ctx, db.DeleteInviteParams{
-		ID: id, TenantID: session.TenantID(ctx), // filter tenant: tak bisa hapus milik orang lain
+	tenantID := session.TenantID(ctx)
+	q := h.q(ctx)
+	if !canManageMembers(ctx) {
+		scope := actorKindScope(ctx, q)
+		invites, e := q.ListInvitesByTenant(ctx, tenantID)
+		if e != nil {
+			wsRedirect(w, r, "/members", "failed")
+			return
+		}
+		found := false
+		for _, inv := range invites {
+			if inv.ID == id {
+				found = true
+				if !scope.Allows(inv.Kind) {
+					wsRedirect(w, r, "/members", "forbidden")
+					return
+				}
+				break
+			}
+		}
+		if !found {
+			wsRedirect(w, r, "/members", "notfound")
+			return
+		}
+	}
+	if err := q.DeleteInvite(ctx, db.DeleteInviteParams{
+		ID: id, TenantID: tenantID, // filter tenant: tak bisa hapus milik orang lain
 	}); err != nil {
 		h.Log.Error("invite: delete", "err", err)
 	}

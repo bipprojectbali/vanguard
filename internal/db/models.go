@@ -370,6 +370,18 @@ type Lead struct {
 	DistrictID         *int64             `json:"district_id"`
 }
 
+type MemberScopePolicy struct {
+	ID              int64              `json:"id"`
+	TenantID        int64              `json:"tenant_id"`
+	BusinessRole    string             `json:"business_role"`
+	CanViewInternal bool               `json:"can_view_internal"`
+	CanViewExternal bool               `json:"can_view_external"`
+	CreatedBy       *int64             `json:"created_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedBy       *int64             `json:"updated_by"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Membership struct {
 	ID           int64              `json:"id"`
 	UserID       int64              `json:"user_id"`

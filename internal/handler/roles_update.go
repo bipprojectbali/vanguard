@@ -116,6 +116,36 @@ func (h *Handler) RoleUpdate(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
+	// Cakupan Jenis Anggota (BL-171): melebur ke form yang sama (mscope_present,
+	// pola persis fsec_present di atas) — beda dari Field Security, gatenya SAMA
+	// dengan matriks (canManageRoles, sudah diperiksa di awal fungsi), tak perlu
+	// diperiksa ulang. Level crm:members bukan "read"/"write" (atau field level
+	// absen) → hapus baris (CHECK DB msp_at_least_one_chk menolak false/false,
+	// jadi "nonaktif" direpresentasikan lewat ABSENnya baris, bukan dua kolom
+	// false — lihat migrasi 00052). Kedua checkbox tak tercentang saat level
+	// aktif → coerce true/true (default terbuka, opt-in) alih-alih menolak submit
+	// (JS sudah mencegahnya, ini lapis server).
+	if r.FormValue("mscope_present") == "1" {
+		if lvl := r.FormValue("level.crm:members"); lvl == "read" || lvl == "write" {
+			viewInternal := r.FormValue("mscope_internal") == "1"
+			viewExternal := r.FormValue("mscope_external") == "1"
+			if !viewInternal && !viewExternal {
+				viewInternal, viewExternal = true, true
+			}
+			if err := h.q(ctx).UpsertMemberScopePolicy(ctx, db.UpsertMemberScopePolicyParams{
+				TenantID: tenantID, BusinessRole: name,
+				CanViewInternal: viewInternal, CanViewExternal: viewExternal,
+				CreatedBy: &actorID,
+			}); err != nil {
+				h.Log.Error("roles: save member scope", "err", err)
+			}
+		} else if err := h.q(ctx).DeleteMemberScopePolicyForRole(ctx, db.DeleteMemberScopePolicyForRoleParams{
+			TenantID: tenantID, BusinessRole: name,
+		}); err != nil {
+			h.Log.Error("roles: clear member scope", "err", err)
+		}
+	}
+
 	h.auditWorkspace(ctx, actorID, "crm.role.update", tenantID, map[string]string{"role": name})
 	wsRedirectOK(w, r, "/roles", "saved")
 }

@@ -58,8 +58,11 @@ type RoleCard struct {
 // submit yang tak disengaja tak bisa memicu hapus. base = prefix URL workspace
 // (dioper handler). canEdit=false → form terkunci & tombol simpan/hapus
 // disembunyikan. fsec nil → peninjau tak berwenang crm:field_security, section
-// Field Security tak dirender sama sekali.
-func RoleEdit(base string, rc RoleCard, scopes []ScopeOption, canEdit bool, errMsg, okMsg string, fsec *FieldSecurityRoleView) g.Node {
+// Field Security tak dirender sama sekali. mscope (BL-171) hanya bermakna
+// utk peran kustom (dipakai additionalSettings) — diabaikan di cabang peran
+// sistem, tak perlu pointer krn selalu ada nilai default {true,true} dioper
+// handler (roles_page.go) walau baris DB belum ada.
+func RoleEdit(base string, rc RoleCard, scopes []ScopeOption, canEdit bool, errMsg, okMsg string, fsec *FieldSecurityRoleView, mscope MemberScopeRoleView) g.Node {
 	header := []g.Node{
 		h.A(h.Href(base+"/roles"), h.Class("link text-sm text-base-content/70"),
 			g.Text("← Kembali ke daftar peran")),
@@ -129,7 +132,7 @@ func RoleEdit(base string, rc RoleCard, scopes []ScopeOption, canEdit bool, errM
 				disabledIf(!canEdit)),
 		),
 		roleMatrix(rc, canEdit, flsReactive(fsec), actx),
-		additionalSettings(rc, canEdit, fsec, actx),
+		additionalSettings(rc, canEdit, fsec, mscope, actx),
 		ui.When(canEdit, h.Button(h.Type("submit"),
 			h.Class("btn btn-primary min-h-11 justify-self-start"),
 			g.Text("Simpan Perubahan"))),

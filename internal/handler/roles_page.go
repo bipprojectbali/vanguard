@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"errors"
 	"net/http"
 
 	"go_starter/internal/db"
@@ -9,6 +11,7 @@ import (
 	"go_starter/internal/ui/pages/panel"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 )
 
 // roles_page.go — HALAMAN baca peran CRM: DAFTAR (tabel) + DETAIL/EDIT satu peran.
@@ -124,7 +127,31 @@ func (h *Handler) RoleEditPage(w http.ResponseWriter, r *http.Request) {
 			wsErrMsg(r.URL.Query().Get("err")),
 			rolesMsg(r.URL.Query().Get("ok")),
 			fsec,
+			memberScopeView(ctx, h, tenantID, role.Name),
 		))
+}
+
+// memberScopeView (BL-171) membaca cakupan "Anggota" tersimpan SATU peran —
+// dipanggil tanpa syarat (termasuk peran sistem, walau RoleEdit lalu
+// mengabaikannya di cabang itu: tak ada matriks Contacts/Leads-nya utk
+// direaksikan bila IsSystem, sama alasan fsec.Reactive). Baris tak ada
+// (pgx.ErrNoRows, role baru saja diberi akses crm:members, atau memang belum
+// pernah dikonfigurasi) → default KEDUA jenis terbuka (beda dari FLS —
+// komentar migrasi 00052). Error lain (koneksi dsb.) → fail-closed ke default
+// yang SAMA (bukan {false,false}, krn CHECK DB menolak itu & sengaja opt-in
+// terbuka): baris terlindungi RLS/CHECK di tulis, baca gagal tak boleh
+// mengunci admin dari peran yang baru dibuatnya.
+func memberScopeView(ctx context.Context, h *Handler, tenantID int64, roleName string) panel.MemberScopeRoleView {
+	pol, err := h.q(ctx).GetMemberScopePolicy(ctx, db.GetMemberScopePolicyParams{
+		TenantID: tenantID, BusinessRole: roleName,
+	})
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			h.Log.Error("roles: get member scope", "err", err)
+		}
+		return panel.MemberScopeRoleView{CanViewInternal: true, CanViewExternal: true}
+	}
+	return panel.MemberScopeRoleView{CanViewInternal: pol.CanViewInternal, CanViewExternal: pol.CanViewExternal}
 }
 
 // renderRolesForbidden menjawab anggota tanpa izin crm:roles yang membuka panel

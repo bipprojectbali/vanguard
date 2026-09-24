@@ -108,6 +108,14 @@ func roleMatrixRow(m RoleModulePerm, canEdit bool, fls bool, actx arrCrossModule
 				"($lvl_contacts==='none'&&$lvl_leads==='none')&&($fls_view=false)",
 				"!($lvl_contacts==='write'||$lvl_leads==='write')&&($fls_edit=false)")
 		}
+		if m.Obj == "crm:members" {
+			// Auto-buka penuh saat modul baru saja diaktifkan (beda dari FLS di
+			// atas yang mereset ke false) — signal msp_internal/msp_external
+			// dideklarasikan memberScopeRows (additionalSettings), tak butuh
+			// gerbang terpisah spt fls krn crm:members tak punya gate lain.
+			stmts = append(stmts,
+				"evt.target.value!=='none'&&($msp_internal=true,$msp_external=true)")
+		}
 		selectAttrs := []g.Node{
 			h.Class("select select-sm"), h.Name("level." + m.Obj),
 			data.Bind(lvlSig),
@@ -173,6 +181,18 @@ func buildARRCrossModuleCtx(rc RoleCard) arrCrossModuleCtx {
 		resetStmt:    "(" + disabled + ")&&($" + arrSig + "=false)",
 		unlockedNow:  unlocked,
 	}
+}
+
+// hasModule = baris obj ada di mods? (BL-171, additionalSettings) — beda dari
+// moduleLevelOf yang mengembalikan "none" baik utk ketemu-level-none MAUPUN
+// tak-ketemu (tak bisa dipakai membedakan keduanya).
+func hasModule(mods []RoleModulePerm, obj string) bool {
+	for _, m := range mods {
+		if m.Obj == obj {
+			return true
+		}
+	}
+	return false
 }
 
 // moduleSignal mengubah objek Casbin ("crm:renewals") jadi sufiks aman-sinyal

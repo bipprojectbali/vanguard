@@ -25,9 +25,15 @@ type MemberRow struct {
 	Role      string
 	AvatarURL string
 	Status    string
-	// BusinessRole = peran CRM saat ini (sumbu bisnis, tegak lurus Role tenant);
-	// "" = belum diberi peran CRM. Dipakai memilih nilai awal dropdown "Peran CRM".
+	// BusinessRole = peran CRM saat ini, KODE MESIN (sumbu bisnis, tegak lurus
+	// Role tenant); "" = belum diberi peran CRM. Dipakai memilih nilai awal
+	// dropdown "Peran CRM" (memberKindRoleForm/crmRoleOpts mencocokkan ke value
+	// opsi select, yang juga kode mesin) — BUKAN untuk ditampilkan ke layar.
 	BusinessRole string
+	// BusinessRoleDisplay = label manusia dari BusinessRole di atas (diterjemahkan
+	// handler via ListBusinessRoles), dipakai tampilan baca-saja (roleBadges).
+	// "" = sama seperti BusinessRole, belum diberi peran CRM.
+	BusinessRoleDisplay string
 	// Kind = Jenis Anggota saat ini ("internal"/"external", BL-170) — sumbu KETIGA,
 	// tegak lurus Role & BusinessRole. Menentukan daftar Peran CRM mana (internal/
 	// eksternal) yang ditawarkan dropdown baris ini. Kind & BusinessRole kini
@@ -71,7 +77,21 @@ type InviteRow struct {
 // prefix URL workspace ini (mis. "/w/acme"), DIOPER dari handler — view
 // tak boleh merakit path sendiri: sejak 0004 setiap aksi bergantung slug, dan
 // path yang di-hardcode di view akan diam-diam menunjuk workspace yang salah.
-func Members(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption, members []MemberRow, invites []InviteRow, canManage bool, selfID int64, errMsg, okMsg string) g.Node {
+//
+// canEditKind (BL-171): kolom/field Jenis Anggota boleh DIUBAH hanya bila
+// true — aktor bercakupan (actorKindScope) KEDUA jenis. Bila false, baris
+// anggota menampilkan kindBadge read-only (business_role TETAP editable bila
+// canManage — dua hal berbeda, lihat memberKindRoleForm) dan form Undang
+// mengunci Jenis Anggota ke satu nilai lewat input hidden alih-alih select
+// (kindLockedTo menentukan nilainya; "" = canEditKind true, tak dikunci).
+//
+// selfIsAdmin (BL-171): baris anggota MILIK AKTOR SENDIRI hanya menawarkan
+// form ubah Peran CRM/Jenis Anggota bila true (peran CRM aktor saat ini
+// "admin") — dihitung handler (members_page.go) dari data yang sama,
+// bukan di sini (view murni-data). Non-admin yang membuka baris dirinya
+// sendiri melihat roleBadges read-only, sama seperti penglihat tanpa
+// canManage; anggota LAIN tetap mengikuti canManage seperti biasa.
+func Members(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption, members []MemberRow, invites []InviteRow, canManage, canEditKind, selfIsAdmin bool, selfID int64, errMsg, okMsg string) g.Node {
 	body := []g.Node{
 		h.H1(h.Class("text-xl font-semibold mb-2"), g.Text("Anggota")),
 		h.P(h.Class("text-base-content/70 mb-4"),
@@ -84,9 +104,9 @@ func Members(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption, me
 		body = append(body, ui.Toast(ui.VariantSuccess, "members-ok", g.Text(okMsg)))
 	}
 	if canManage {
-		body = append(body, inviteForm(base, crmRolesInternal, crmRolesExternal))
+		body = append(body, inviteForm(base, crmRolesInternal, crmRolesExternal, canEditKind))
 	}
-	body = append(body, memberList(base, crmRolesInternal, crmRolesExternal, members, canManage, selfID))
+	body = append(body, memberList(base, crmRolesInternal, crmRolesExternal, members, canManage, canEditKind, selfIsAdmin, selfID))
 	if canManage && len(invites) > 0 {
 		body = append(body, inviteList(base, invites))
 	}
@@ -106,7 +126,8 @@ func MembersForbidden() g.Node {
 		h.Class("grid gap-4 min-w-0 max-w-xl mx-auto py-8"),
 		h.H1(h.Class("text-xl font-semibold mb-2"), g.Text("Anggota")),
 		h.P(h.Class("text-base-content/70"),
-			g.Text("Daftar anggota hanya bisa dibuka oleh owner & admin workspace.")),
+			g.Text("Daftar anggota hanya bisa dibuka oleh owner & admin workspace, "+
+				"atau peran dengan akses \"User Management\" di Kelola Peran.")),
 		h.P(h.Class("text-sm text-base-content/60"),
 			g.Text("Hubungi mereka bila Anda perlu mengundang seseorang atau "+
 				"mengubah akses.")),
@@ -115,32 +136,23 @@ func MembersForbidden() g.Node {
 
 // memberList = tabel anggota. Tabel dibungkus ui.TableScroll agar scroll-nya
 // terkurung, tak mendorong lebar halaman di mobile (konvensi mobile-first).
-func memberList(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption, members []MemberRow, canManage bool, selfID int64) g.Node {
+func memberList(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption, members []MemberRow, canManage, canEditKind, selfIsAdmin bool, selfID int64) g.Node {
 	rows := make([]g.Node, 0, len(members))
 	for _, m := range members {
-		rows = append(rows, memberRow(base, crmRolesInternal, crmRolesExternal, m, canManage, selfID))
+		rows = append(rows, memberRow(base, crmRolesInternal, crmRolesExternal, m, canManage, canEditKind, selfIsAdmin, selfID))
 	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
 		h.Div(
 			h.Class("card-body min-w-0"),
 			h.H2(h.Class("font-semibold mb-2"), g.Text("Anggota")),
-			// Ketiadaan email WAJIB dijelaskan. Tanpa keterangan ini, baris tanpa
-			// alamat (atau "mal•••@gmail.com" bagi yang tak punya nama) terbaca
-			// seperti data rusak — dan orang akan melaporkannya sebagai bug alih-alih
-			// memahaminya sebagai perlindungan.
-			g.If(!canManage, h.P(
-				h.Class("text-xs text-base-content/60 mb-2"),
-				g.Text("Alamat email rekan disembunyikan. Hanya owner & admin "+
-					"workspace yang melihatnya."),
-			)),
 			ui.TableScroll(h.Table(
 				h.Class("w-full text-sm"),
 				h.THead(h.Tr(
 					h.Class("border-b border-base-300 text-left text-base-content/70"),
-					// "Anggota", bukan "Email": kolomnya kini berisi nama orang, dan
-					// bagi anggota biasa email tak muncul di sana sama sekali.
-					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Anggota")),
+					// "Nama", bukan "Email": kolomnya berisi nama orang (+ email sebagai
+					// baris pendamping bagi yang berhak melihatnya).
+					h.Th(h.Class("py-2 pr-4 font-medium"), g.Text("Nama")),
 					// "Peran" (bukan "Role"): kolom memuat TIGA sumbu — role tenant,
 					// peran CRM, Jenis Anggota (BL-170) — disimpan bersama SATU
 					// tombol (memberKindRoleForm), bukan lagi kolom+tombol sendiri.
@@ -153,19 +165,32 @@ func memberList(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption,
 	)
 }
 
-func memberRow(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption, m MemberRow, canManage bool, selfID int64) g.Node {
+func memberRow(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption, m MemberRow, canManage, canEditKind, selfIsAdmin bool, selfID int64) g.Node {
 	id := strconv.FormatInt(m.UserID, 10)
 	roleCell := roleBadges(m)
 	action := g.Node(g.Text(""))
-	if canManage {
+	// editableRow (BL-171): baris MILIK AKTOR SENDIRI hanya boleh disunting bila
+	// peran CRM-nya saat ini "admin" (selfIsAdmin, dihitung handler) — mencegah
+	// non-admin (mis. Field Officer) mengubah/mengunci perannya sendiri lewat
+	// dropdown yang sama dipakai mengelola anggota lain. Anggota LAIN tetap
+	// mengikuti canManage seperti biasa, tak terpengaruh guard ini.
+	editableRow := m.UserID != selfID || selfIsAdmin
+	if canManage && editableRow {
 		// SATU form Peran CRM + Jenis Anggota, SATU tombol Simpan
 		// (memberKindRoleForm, members_roles.go) — dulu dua form/tombol
 		// terpisah; digabung agar ubah Jenis Anggota & Peran CRM tersimpan
 		// dalam satu POST (MemberSetKind menilai dua sumbu, pola sama
 		// MemberSetRole lama utk role+business_role). Role TENANT tetap tak
 		// disentuh di baris ini (diubah lewat /dev/users, BL-135); sumbu CRM
-		// boleh menyentuh diri sendiri (opt-in owner ke CRM).
-		roleCell = memberKindRoleForm(base, id, crmRolesInternal, crmRolesExternal, m)
+		// boleh menyentuh diri sendiri HANYA bila aktor admin (editableRow di
+		// atas) — sebelumnya opt-in owner ke CRM tanpa syarat, kini dibatasi
+		// agar non-admin tak mengubah perannya sendiri. canEditKind (BL-171):
+		// aktor bercakupan satu jenis saja melihat Jenis Anggota read-only
+		// (kindBadge) di sini, tapi Peran CRM TETAP bisa disunting — dua sumbu
+		// berbeda, lihat memberKindRoleForm.
+		roleCell = memberKindRoleForm(base, id, crmRolesInternal, crmRolesExternal, m, canEditKind)
+	}
+	if canManage {
 		// Keluarkan tak pernah terhadap diri sendiri (cegah mengunci diri keluar).
 		if m.UserID != selfID {
 			action = h.FormEl(
@@ -200,7 +225,46 @@ func memberRow(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption, 
 // reactiveCheckbox, role_edit_additional.go). Guard sesungguhnya tetap di
 // backend (InviteCreate: kind divalidasi ValidKind, business_role dicocokkan
 // ulang ke kind via GetBusinessRole) — toggle ini murni UX.
-func inviteForm(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption) g.Node {
+//
+// canEditKind=false (BL-171: aktor bercakupan satu jenis saja) → Jenis
+// Anggota TAK dipilih di sini sama sekali: dikunci lewat input hidden ke
+// satu-satunya jenis yang crmRolesInternal/crmRolesExternal-nya terisi
+// (handler sudah memfilter dua daftar itu sesuai cakupan aktor sebelum
+// sampai ke sini, members_page.go), select "Internal"/"Eksternal" & toggle
+// showWhen-nya tak dirender. Backend (InviteCreate) TETAP penjaga
+// sesungguhnya — ini murni mencegah aktor mencoba mengundang jenis di luar
+// cakupannya lewat UI, bukan satu-satunya lapisan.
+func inviteForm(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption, canEditKind bool) g.Node {
+	lockedKind := ""
+	if !canEditKind {
+		lockedKind = "internal"
+		if len(crmRolesExternal) > 0 && len(crmRolesInternal) == 0 {
+			lockedKind = "external"
+		}
+	}
+	kindField := g.Node(h.Div(
+		h.Class("grid gap-2"),
+		ui.Label("Jenis Anggota", h.For("invite-kind")),
+		h.Select(h.ID("invite-kind"), h.Class("select"), h.Name("kind"),
+			data.Bind("invkind"),
+			// Ganti Jenis Anggota → reset peran CRM ke "(tak ada)": daftar
+			// pilihan berubah total (internal↔eksternal), pilihan lama dari
+			// daftar sebelumnya tak lagi berarti apa-apa untuk kind baru.
+			// Tanpa reset ini, invrole (dibagikan kedua select business_role)
+			// bisa tetap berisi nama peran dari kind SEBELUMNYA → tombol
+			// Daftar terlihat aktif padahal peran itu tak valid utk kind baru.
+			data.On("change", "$invrole = ''"),
+			h.Option(h.Value("internal"), g.Text("Internal")),
+			h.Option(h.Value("external"), g.Text("Eksternal")),
+		),
+	))
+	if lockedKind != "" {
+		kindField = h.Input(h.Type("hidden"), h.Name("kind"), h.Value(lockedKind))
+	}
+	initKind := "internal"
+	if lockedKind != "" {
+		initKind = lockedKind
+	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300"),
 		h.Div(
@@ -214,7 +278,7 @@ func inviteForm(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption)
 				// atau belum, siapa pun yang sedang aktif. "" (opsi "(tak ada)") = belum
 				// memilih; peran CRM WAJIB dipilih (keputusan produk) — tombol Daftar
 				// disable selama itu, bukan divalidasi setelah submit gagal.
-				data.Signals(map[string]any{"invkind": "internal", "invrole": ""}),
+				data.Signals(map[string]any{"invkind": initKind, "invrole": ""}),
 				h.Class("flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"),
 				h.Div(
 					h.Class("grid gap-2 flex-1 min-w-0"),
@@ -222,22 +286,7 @@ func inviteForm(base string, crmRolesInternal, crmRolesExternal []CRMRoleOption)
 					ui.Input(h.ID("invite-email"), h.Name("email"), h.Type("email"),
 						h.Placeholder("nama@contoh.com")),
 				),
-				h.Div(
-					h.Class("grid gap-2"),
-					ui.Label("Jenis Anggota", h.For("invite-kind")),
-					h.Select(h.ID("invite-kind"), h.Class("select"), h.Name("kind"),
-						data.Bind("invkind"),
-						// Ganti Jenis Anggota → reset peran CRM ke "(tak ada)": daftar
-						// pilihan berubah total (internal↔eksternal), pilihan lama dari
-						// daftar sebelumnya tak lagi berarti apa-apa untuk kind baru.
-						// Tanpa reset ini, invrole (dibagikan kedua select business_role)
-						// bisa tetap berisi nama peran dari kind SEBELUMNYA → tombol
-						// Daftar terlihat aktif padahal peran itu tak valid utk kind baru.
-						data.On("change", "$invrole = ''"),
-						h.Option(h.Value("internal"), g.Text("Internal")),
-						h.Option(h.Value("external"), g.Text("Eksternal")),
-					),
-				),
+				kindField,
 				showWhen("$invkind == 'internal'", "grid gap-2 min-w-0",
 					g.Group([]g.Node{
 						ui.Label("Peran CRM", h.For("invite-role-internal")),

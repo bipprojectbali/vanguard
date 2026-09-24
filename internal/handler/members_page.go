@@ -15,52 +15,110 @@ import (
 
 // MembersPage — GET /w/{workspace}/members. Daftar anggota + undangan pending.
 //
-// HANYA PENGELOLA (owner/admin/platform), di mode single MAUPUN multi. Ini
-// MEMBALIK 0004, yang membuka halaman ini untuk semua anggota dengan alasan
-// "tahu siapa yang punya akses adalah bagian dari mempercayai ruang bersama".
-// Alasan itu benar untuk ruang kerja kecil yang saling kenal, tapi daftar
-// anggota adalah DIREKTORI ORANG: ia mengumpulkan nama, wajah, dan keanggotaan
-// setiap orang di satu tempat yang bisa disalin sekaligus. Yang membutuhkannya
-// untuk bekerja hanyalah yang mengelola keanggotaan; bagi yang lain ia
-// pengetahuan tanpa kegunaan, dan kumpulan PII selalu punya biaya.
+// PENGELOLA (owner/admin/platform) ATAU role kustom ber-akses "User Management"
+// (crm:members, BL-171) — ini MEMBALIK 0004, yang membuka halaman ini untuk
+// SEMUA anggota dengan alasan "tahu siapa yang punya akses adalah bagian dari
+// mempercayai ruang bersama". Alasan itu benar untuk ruang kerja kecil yang
+// saling kenal, tapi daftar anggota adalah DIREKTORI ORANG: ia mengumpulkan
+// nama, wajah, dan keanggotaan setiap orang di satu tempat yang bisa disalin
+// sekaligus. BL-171 MELEBARKAN (bukan mengganti) 0004: role kustom yang diberi
+// Lihat/Kelola pada "User Management" kini juga dianggap "mengelola
+// keanggotaan", tapi dibatasi actorKindScope — hanya melihat/mengelola anggota
+// berjenis (internal/eksternal) yang cakupannya izinkan (member_scope_policies,
+// diatur di /roles). Perubahan role TENANT (member/admin/owner) tetap TERKUNCI
+// ke canManageMembers — lihat member_access.go.
 //
-// Penyamaran email (maskEmail) TETAP ADA di jalur ini walau kini semua penglihat
-// adalah pengelola: aturan tampilan dan aturan akses adalah dua hal berbeda, dan
-// yang satu tak boleh diam-diam bergantung pada yang lain. Kalau kelak halaman
-// ini dibuka lagi untuk sebagian orang, perlindungannya sudah di tempatnya —
-// bukan sesuatu yang harus diingat untuk dipasang kembali.
+// Email TAK disamarkan (maskEmail dicabut dari jalur ini): gerbang halaman
+// (canViewMembers) sudah mempersempit penglihat ke pengelola tenant ATAU role
+// bisnis ber-akses "User Management", jadi siapa pun yang sampai ke sini sudah
+// dipercaya melihat direktori penuh — menyamarkannya lagi tak melindungi
+// siapa pun, cuma menyembunyikan pembeda yang justru dicari.
 //
-// PENANDA ORANG = NAMA, bukan email. Email adalah PII yang bisa dipakai
-// menghubungi & mencoba masuk sebagai orangnya. Bagi pengelola email tetap
-// tampil sebagai baris pendamping: nama TIDAK unik (dua "Budi" itu lumrah, dan
-// nilainya dikendalikan user di Google), jadi yang hendak mengeluarkan atau
-// menaikkan seseorang butuh sesuatu yang benar-benar membedakan.
+// PENANDA ORANG = NAMA, lalu email sebagai baris pendamping: nama TIDAK unik
+// (dua "Budi" itu lumrah, dan nilainya dikendalikan user di Google), jadi yang
+// hendak mengeluarkan atau menaikkan seseorang butuh sesuatu yang benar-benar
+// membedakan.
 //
-// Penyamaran & pemilihan dilakukan DI SINI, bukan di view: dengan begitu email
-// asli tak pernah sampai ke browser yang tak berhak, tempat ia terbaca di
-// view-source meski tak tampak di layar.
+// Keputusan DILAKUKAN DI SINI, bukan di view: dengan begitu view tinggal
+// merender apa yang dioper (view murni-data), tak perlu tahu aturan izinnya.
 func (h *Handler) MembersPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	// Gerbang di HANDLER, bukan di route: sejak 0004 satu alamat melayani semua
 	// role, dan yang membedakan adalah apa yang boleh dilakukan di dalamnya.
 	// Menu yang disembunyikan bukan pengaman — URL-nya tetap bisa diketik.
-	if !canManageMembers(ctx) {
+	if !canViewMembers(ctx) {
 		h.renderMembersForbidden(w, r)
 		return
 	}
 	tenantID := session.TenantID(ctx)
-	rows, err := h.q(ctx).ListMembersByTenant(ctx, tenantID)
+	q := h.q(ctx)
+	rows, err := q.ListMembersByTenant(ctx, tenantID)
 	if err != nil {
 		h.Log.Error("members: list", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	// Dihitung SEKALI di luar loop: nilainya sama untuk semua baris, dan
-	// canManageMembers membaca session tiap kali dipanggil.
-	canManage := canManageMembers(ctx) && !IsReadOnly(ctx)
+	// Dihitung SEKALI di luar loop: nilainya sama untuk semua baris.
+	// manage = boleh mengubah data (bukan cuma melihat) — sumbu tenant
+	// (canManageMembers) ATAU sumbu bisnis "Kelola" (crmMemberAccess).
+	manage := (canManageMembers(ctx) || crmMemberAccess(ctx) == memberAccessManage) && !IsReadOnly(ctx)
+	// scope = Jenis Anggota yang boleh dilihat aktor ini (BL-171). Pengelola
+	// tenant selalu dapat cakupan penuh (actorKindScope); aktor business-axis
+	// dibatasi member_scope_policies perannya.
+	scope := actorKindScope(ctx, q)
+	// canEditKind: kolom Kind hanya bisa diubah aktor yang cakupannya mencakup
+	// KEDUA jenis (keputusan desain #3 plan BL-171) — mencegah aktor bercakupan
+	// sempit memindahkan anggota ke jenis yang tak bisa ia lihat sendiri.
+	canEditKind := manage && scope.Both()
 
+	// Peran CRM workspace ini, DIMUAT SEKALI, dipakai dua cara: crmDisplay (nama
+	// mesin → label tampilan, UNTUK SEMUA peran — menerjemahkan BusinessRole tiap
+	// baris anggota & undangan ke bentuk yang dibaca manusia, terlepas dari
+	// apakah penglihatnya "Kelola" atau cuma "Lihat") dan crmRolesInternal/
+	// External (opsi form Undang/edit, DIPECAH per Jenis Anggota, hanya diisi
+	// bila manage — penglihat "Lihat" tak pernah menyunting apa pun jadi tak
+	// butuh opsinya). Fail-soft: gagal → crmDisplay kosong (baris jatuh ke kode
+	// mesin apa adanya), dua daftar opsi kosong (dropdown hanya "(tak ada)").
+	crmDisplay := map[string]string{}
+	crmRolesInternal := []panel.CRMRoleOption{}
+	crmRolesExternal := []panel.CRMRoleOption{}
+	if brs, e := q.ListBusinessRoles(ctx, tenantID); e == nil {
+		for _, br := range brs {
+			crmDisplay[br.Name] = br.DisplayName
+			if !manage {
+				continue
+			}
+			opt := panel.CRMRoleOption{Name: br.Name, Display: br.DisplayName}
+			if br.Kind == authz.KindExternal {
+				if scope.Allows(authz.KindExternal) {
+					crmRolesExternal = append(crmRolesExternal, opt)
+				}
+			} else {
+				if scope.Allows(authz.KindInternal) {
+					crmRolesInternal = append(crmRolesInternal, opt)
+				}
+			}
+		}
+	} else {
+		h.Log.Error("members: list business roles", "err", e)
+	}
+
+	selfID := session.UserID(ctx)
+	// selfIsAdmin (BL-171): aktor boleh menyunting PERAN CRM dirinya sendiri di
+	// baris anggota bila (a) pengelola TENANT (owner/admin/platform — otoritasnya
+	// sudah lengkap dari sumbu tenant, cermin pengecualian yang sama di
+	// MemberSetRole/MemberSetKind, TestMemberBiz_SelfOptIn) ATAU (b) peran CRM-nya
+	// SAAT INI "admin" — mencegah aktor business-axis MURNI non-admin (mis. Field
+	// Officer) tanpa sengaja mengubah/mengunci perannya sendiri lewat dropdown yang
+	// sama dipakai mengelola anggota lain. Ditentukan di sini (bukan view) dari
+	// baris anggota SENDIRI di loop di bawah — data yang sama yang sudah dimuat,
+	// tak perlu query terpisah.
+	selfIsAdmin := canManageMembers(ctx)
 	members := make([]panel.MemberRow, 0, len(rows))
 	for _, m := range rows {
+		if !scope.Allows(m.Kind) {
+			continue
+		}
 		avatar := ""
 		if m.AvatarUrl != nil {
 			avatar = *m.AvatarUrl
@@ -69,65 +127,43 @@ func (h *Handler) MembersPage(w http.ResponseWriter, r *http.Request) {
 		if m.Name != nil {
 			name = *m.Name
 		}
-		// Diri sendiri SELALU utuh: menyamarkan email orang dari dirinya sendiri
-		// hanya membuat ia mengira melihat baris orang lain.
+		// Email TAMPIL PENUH bagi siapa pun yang sampai ke baris ini: gerbang
+		// halaman (canViewMembers, di atas) sudah mempersempit penglihat ke
+		// pengelola tenant ATAU role bisnis ber-akses "User Management" —
+		// populasi yang dulu disamarkan (anggota biasa tanpa akses apa pun)
+		// sudah ditolak sebelum mencapai baris ini, jadi menyamarkannya lagi
+		// tak melindungi siapa pun.
 		email := m.Email
-		if !canManage && m.UserID != session.UserID(ctx) {
-			// Tanpa nama, samaran email adalah SATU-SATUNYA pembeda baris ini —
-			// dikirim. Dengan nama, email tak dikirim sama sekali: yang tak pernah
-			// sampai ke browser tak bisa bocor dari sana.
-			if name != "" {
-				email = ""
-			} else {
-				email = maskEmail(email)
-			}
-		}
 		// business_role (sumbu CRM) ikut dari ListMembersByTenant — NULL = belum
-		// diberi peran CRM. Dropdown "Peran CRM" memilih nilai ini.
+		// diberi peran CRM. BusinessRole (kode mesin) tetap dipakai form edit
+		// (memberKindRoleForm mencocokkannya ke value opsi select);
+		// BusinessRoleDisplay (label manusia, via crmDisplay) dipakai tampilan
+		// baca-saja (roleBadges) — dua field dari nilai yang sama, dipakai dua
+		// jalur berbeda.
 		crm := ""
 		if m.BusinessRole != nil {
 			crm = *m.BusinessRole
 		}
+		crmLabel := crm
+		if d, ok := crmDisplay[crm]; ok {
+			crmLabel = d
+		}
+		if m.UserID == selfID && crm == authz.BusinessRoleAdmin {
+			selfIsAdmin = true
+		}
 		members = append(members, panel.MemberRow{
 			UserID: m.UserID, Email: email, Name: name, Role: m.Role,
-			BusinessRole: crm, Kind: m.Kind, AvatarURL: avatar, Status: m.Status,
+			BusinessRole: crm, BusinessRoleDisplay: crmLabel, Kind: m.Kind,
+			AvatarURL: avatar, Status: m.Status,
 		})
 	}
-	// Peran CRM yang boleh ditugaskan (sumber sama dgn panel /roles), DIPECAH per
-	// Jenis Anggota (BL-170): cascading select form Undang & dropdown baris anggota
-	// hanya menawarkan peran yang cocok kind-nya. Fail-soft: gagal → dua daftar
-	// kosong, dropdown hanya menyisakan "(tak ada)".
-	crmRolesInternal := []panel.CRMRoleOption{}
-	crmRolesExternal := []panel.CRMRoleOption{}
-	if canManage {
-		if brs, e := h.q(ctx).ListBusinessRoles(ctx, tenantID); e == nil {
-			for _, br := range brs {
-				opt := panel.CRMRoleOption{Name: br.Name, Display: br.DisplayName}
-				if br.Kind == authz.KindExternal {
-					crmRolesExternal = append(crmRolesExternal, opt)
-				} else {
-					crmRolesInternal = append(crmRolesInternal, opt)
-				}
-			}
-		} else {
-			h.Log.Error("members: list business roles", "err", e)
-		}
-	}
 	// Undangan pending (fail-soft: gagal → daftar kosong, halaman tetap tampil).
-	// crmDisplay: nama mesin → label tampilan, dari daftar yang SAMA sudah
-	// dimuat di atas (bukan query terpisah) — undangan hanya menyimpan nama
-	// mesin (business_role), tampilan butuh label manusia sepertihalnya baris
-	// anggota.
-	crmDisplay := map[string]string{}
-	for _, c := range crmRolesInternal {
-		crmDisplay[c.Name] = c.Display
-	}
-	for _, c := range crmRolesExternal {
-		crmDisplay[c.Name] = c.Display
-	}
 	invites := []panel.InviteRow{}
-	if inv, e := h.q(ctx).ListInvitesByTenant(ctx, tenantID); e == nil {
+	if inv, e := q.ListInvitesByTenant(ctx, tenantID); e == nil {
 		for _, i := range inv {
+			if !scope.Allows(i.Kind) {
+				continue
+			}
 			br := ""
 			if i.BusinessRole != nil {
 				br = *i.BusinessRole
@@ -146,7 +182,7 @@ func (h *Handler) MembersPage(w http.ResponseWriter, r *http.Request) {
 
 	h.renderWorkspaceShell(w, r, "Anggota", "/members",
 		panel.Members(wsPath(slugFromRequest(r), ""),
-			crmRolesInternal, crmRolesExternal, members, invites, canManage, session.UserID(ctx),
+			crmRolesInternal, crmRolesExternal, members, invites, manage, canEditKind, selfIsAdmin, selfID,
 			wsErrMsg(r.URL.Query().Get("err")), membersMsg(r.URL.Query().Get("ok"))))
 }
 

@@ -81,7 +81,7 @@ func TestModuleWriteEnforced_UnenforcedModules(t *testing.T) {
 // tetap WriteEnforced=true, agar test di atas tak lolos dgn menandai SEMUA
 // modul false.
 func TestModuleWriteEnforced_EnforcedModulesSample(t *testing.T) {
-	for _, obj := range []string{"crm:accounts", "crm:deals", "crm:renewals"} {
+	for _, obj := range []string{"crm:accounts", "crm:deals", "crm:renewals", "crm:members"} {
 		if !ModuleWriteEnforced(obj) {
 			t.Errorf("%q harus WriteEnforced=true", obj)
 		}
@@ -91,5 +91,27 @@ func TestModuleWriteEnforced_EnforcedModulesSample(t *testing.T) {
 func TestModuleWriteEnforced_UnknownObjFalse(t *testing.T) {
 	if ModuleWriteEnforced("crm:nonexistent") {
 		t.Error("objek tak dikenal harus false (fail-closed)")
+	}
+}
+
+// TestCRMModules_Members: BL-171 — crm:members ("User Management") harus valid
+// sbg sel matriks (ValidModuleObj), boleh "Kelola" (WriteEnforced), TAPI tak
+// punya approve/ARR (bukan Deals/Renewals/Subscriptions) & sengaja TAK ikut
+// ARRGateObjects (bukan modul finansial).
+func TestCRMModules_Members(t *testing.T) {
+	if !ValidModuleObj("crm:members") {
+		t.Fatal("crm:members harus jadi modul matriks yang sah")
+	}
+	if !ModuleWriteEnforced("crm:members") {
+		t.Error("crm:members harus WriteEnforced=true (Kelola membuka aksi nyata)")
+	}
+	if ModuleCanApprove("crm:members") {
+		t.Error("crm:members tak punya alur approve")
+	}
+	if ModuleCanARR("crm:members") {
+		t.Error("crm:members tak punya kolom Lihat ARR")
+	}
+	if ModuleARRGate("crm:members") {
+		t.Error("crm:members bukan modul finansial — tak boleh ikut ARRGateObjects")
 	}
 }

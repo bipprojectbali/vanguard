@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go_starter/internal/appmode"
+	"go_starter/internal/authz"
 	"go_starter/internal/session"
 	"go_starter/internal/ui"
 )
@@ -72,9 +73,10 @@ func TestNavFor_PengaturanIkutIzin(t *testing.T) {
 }
 
 // TestNavFor_AnggotaIkutIzin: menu "Anggota" mengikuti izin yang SAMA dengan
-// gerbang halamannya (canManageMembers). Menu yang tampil lalu ditolak 403
-// adalah menu hantu — dan di sini ia lebih buruk daripada sekadar mengganggu:
-// ia menjanjikan direktori orang yang memang sengaja tak dibuka untuk member.
+// gerbang halamannya (canViewMembers: canManageMembers ATAU crmMemberAccess,
+// lihat member_access.go). Menu yang tampil lalu ditolak 403 adalah menu
+// hantu — dan di sini ia lebih buruk daripada sekadar mengganggu: ia
+// menjanjikan direktori orang yang memang sengaja tak dibuka untuk member.
 func TestNavFor_AnggotaIkutIzin(t *testing.T) {
 	// Berlaku di KEDUA mode: pembatasan ini soal siapa yang mengelola
 	// keanggotaan, bukan soal bentuk aplikasinya.
@@ -89,6 +91,39 @@ func TestNavFor_AnggotaIkutIzin(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestNavFor_AnggotaIkutIzinBisnis: sejak BL-171 gerbang /members MELEBAR ke
+// sumbu bisnis (crmMemberAccess, member_access.go) — role kustom (mis. Field
+// Officer) yang diberi Lihat/Kelola pada modul "crm:members" lewat matrix
+// /roles kini bisa membuka /members langsung lewat URL. Regresi konkret yang
+// dites di sini: workspaceNavCtx (pending_member.go) sempat cuma mengoper
+// canManageMembers ke workspaceNav, bukan canViewMembers — akibatnya role
+// bisnis ber-izin tetap TAK melihat menunya sendiri (kebalikan menu hantu:
+// pintu yang benar-benar terbuka tapi tak ditawarkan).
+func TestNavFor_AnggotaIkutIzinBisnis(t *testing.T) {
+	be, err := authz.NewBusinessEmpty()
+	if err != nil {
+		t.Fatalf("authz.NewBusinessEmpty: %v", err)
+	}
+	if err := authz.LoadBusiness(be, []authz.BusinessPerm{
+		{TenantID: 1, Role: "field_officer", Obj: "crm:members", Act: "read"},
+	}); err != nil {
+		t.Fatalf("authz.LoadBusiness: %v", err)
+	}
+	authz.InitBusiness(be)
+
+	ctxDiberi := ctxWithRole(t, "member")
+	session.SetBusinessRole(ctxDiberi, "field_officer")
+	if !navContainsSuffix(navFor(ctxDiberi), "/members") {
+		t.Error("role bisnis dgn crm:members Lihat harus melihat menu Anggota")
+	}
+
+	ctxTakDiberi := ctxWithRole(t, "member")
+	session.SetBusinessRole(ctxTakDiberi, "sales")
+	if navContainsSuffix(navFor(ctxTakDiberi), "/members") {
+		t.Error("role bisnis TANPA crm:members tak boleh melihat menu Anggota")
 	}
 }
 

@@ -28,8 +28,11 @@ import (
 // lama/test yang tak menyinggung FLS sama sekali) — tanpanya, view/edit yang
 // absen tak bisa dibedakan dari "form tak pernah render bagian ini". Kosong
 // sama sekali (nol approve/arr & fsec nil) → g.Text("") (pola ui.When, BUKAN
-// nil).
-func additionalSettings(rc RoleCard, canEdit bool, fsec *FieldSecurityRoleView, actx arrCrossModuleCtx) g.Node {
+// nil). mscope (BL-171, MemberScopeRoleView) selalu dioper NON-pointer (beda
+// dari fsec) — additionalSettings hanya dipanggil utk peran kustom (role_edit.go),
+// dan crm:members SELALU ada di rc.Modules (CRMModules() daftar statis), jadi
+// tak ada kondisi "bagian ini absen" spt fsec yang bergantung gate terpisah.
+func additionalSettings(rc RoleCard, canEdit bool, fsec *FieldSecurityRoleView, mscope MemberScopeRoleView, actx arrCrossModuleCtx) g.Node {
 	var financeRows []g.Node
 	for _, m := range rc.Modules {
 		suffix := moduleSignal(m.Obj)
@@ -78,7 +81,17 @@ func additionalSettings(rc RoleCard, canEdit bool, fsec *FieldSecurityRoleView, 
 		}
 	}
 
-	if len(financeRows) == 0 && len(fsecRows) == 0 {
+	// hasModule guard (bukan unconditional): fixture test lama (role_edit_test.go)
+	// merakit RoleCard.Modules manual TANPA baris crm:members — render tanpa
+	// syarat akan memunculkan "Pengaturan Tambahan" di skenario yang justru
+	// menguji KETIADAANnya. Di produksi rc.Modules SELALU memuat crm:members
+	// (authz.CRMModules(), roleModuleRows), jadi guard ini transparan.
+	var mscopeRows, mscopeAttrs []g.Node
+	if hasModule(rc.Modules, "crm:members") {
+		mscopeRows, mscopeAttrs = memberScopeRows(mscope, canEdit)
+	}
+
+	if len(financeRows) == 0 && len(fsecRows) == 0 && len(mscopeRows) == 0 {
 		return g.Text("")
 	}
 
@@ -87,10 +100,12 @@ func additionalSettings(rc RoleCard, canEdit bool, fsec *FieldSecurityRoleView, 
 		inner = append(inner, settingsGroup("Keuangan", keuanganHint, financeRows))
 	}
 	if len(fsecRows) > 0 {
-		inner = append(inner, settingsGroup("Kontak", kontakHint, fsecRows))
+		inner = append(inner, settingsGroup("Kontak", kontakHint, fsecRows, fsecAttrs...))
 	}
-	divArgs := append([]g.Node{h.Class("grid gap-3 border-t border-base-300 pt-3 mt-1")}, fsecAttrs...)
-	divArgs = append(divArgs, inner...)
+	if len(mscopeRows) > 0 {
+		inner = append(inner, settingsGroup("Anggota", anggotaHint, mscopeRows, mscopeAttrs...))
+	}
+	divArgs := append([]g.Node{h.Class("grid gap-3 border-t border-base-300 pt-3 mt-1")}, inner...)
 	return h.Div(divArgs...)
 }
 
@@ -111,13 +126,36 @@ var keuanganHint = []string{
 		"(tak perlu pilih \"Kelola\" untuk bisa menyetujui).",
 }
 
+// anggotaHint = keterangan tap-info grup "Anggota" (BL-171, cakupan halaman
+// Anggota via module "User Management"/crm:members) — jelaskan beda dgn
+// dropdown "Jenis Anggota" (business_roles.kind, di atas form) agar admin tak
+// rancu: yang satu soal peran ini UNTUK siapa, yang ini soal peran ini boleh
+// MELIHAT data anggota jenis apa.
+var anggotaHint = []string{
+	"Menentukan anggota berjenis apa yang boleh dilihat/dikelola peran ini di " +
+		"halaman Anggota, lewat akses \"User Management\".",
+	"Beda dari \"Jenis Anggota\" di atas (peran ini UNTUK anggota internal/eksternal) " +
+		"— ini soal DATA anggota siapa yang terlihat.",
+	"Aktif otomatis (kedua jenis tercentang) saat \"User Management\" diubah ke " +
+		"\"Lihat\"/\"Kelola\"; minimal satu jenis harus tetap tercentang.",
+}
+
 // settingsGroup = sub-judul di dalam "Pengaturan Tambahan" yang mengelompokkan
 // baris terkait tema yang sama (mis. "Keuangan" utk approve/ARR, "Kontak" utk
 // Field Security) — perbaikan tampilan agar admin langsung tahu KONTEKS tiap
 // checklist tanpa menerka dari label baris saja. hint kosong → judul polos.
-func settingsGroup(title string, hint []string, rows []g.Node) g.Node {
+// attrs (BL-171 fix) diletakkan pada DIV GRUP INI, bukan dititipkan ke div
+// pembungkus "Pengaturan Tambahan" bersama — sebelumnya fsecAttrs & mscopeAttrs
+// sama-sama menumpuk di satu div luar, menghasilkan DUA atribut data-signals
+// pada elemen yang sama; parser HTML membuang duplikat kedua (msp_* Field
+// Officer selalu ke-drop), jadi checkbox "Lihat anggota internal/eksternal"
+// selalu unchecked walau data DB benar. Tiap grup kini bawa data-signals
+// sendiri, tak ada lagi tabrakan.
+func settingsGroup(title string, hint []string, rows []g.Node, attrs ...g.Node) g.Node {
 	inner := append([]g.Node{sectionHeading(title, hint)}, rows...)
-	return h.Div(append([]g.Node{h.Class("grid gap-2")}, inner...)...)
+	divArgs := append([]g.Node{h.Class("grid gap-2")}, attrs...)
+	divArgs = append(divArgs, inner...)
+	return h.Div(divArgs...)
 }
 
 // sectionHeading = judul settingsGroup + ikon ⓘ tap-friendly opsional, pola

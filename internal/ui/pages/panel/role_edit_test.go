@@ -29,7 +29,7 @@ func sampleCustomRoleCard() RoleCard {
 
 func TestRoleEdit_MatrixHeaderHasNoApproveOrARRColumn(t *testing.T) {
 	var out strings.Builder
-	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, true, "", "", nil).Render(&out)
+	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, true, "", "", nil, MemberScopeRoleView{}).Render(&out)
 	body := out.String()
 	if !strings.Contains(body, "Modul") || !strings.Contains(body, "Akses") {
 		t.Fatal("header matriks harus tetap punya Modul & Akses")
@@ -44,7 +44,7 @@ func TestRoleEdit_MatrixHeaderHasNoApproveOrARRColumn(t *testing.T) {
 
 func TestRoleEdit_AdditionalSettingsRendersApproveAndARR(t *testing.T) {
 	var out strings.Builder
-	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, true, "", "", nil).Render(&out)
+	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, true, "", "", nil, MemberScopeRoleView{}).Render(&out)
 	body := out.String()
 	if !strings.Contains(body, "Pengaturan Tambahan") {
 		t.Fatal("heading 'Pengaturan Tambahan' harus muncul saat ada approve/arr")
@@ -80,7 +80,7 @@ func TestRoleEdit_AdditionalSettingsAbsentWhenNoApproveNoARRNoFsec(t *testing.T)
 		},
 	}
 	var out strings.Builder
-	RoleEdit("/w/acme", rc, nil, true, "", "", nil).Render(&out)
+	RoleEdit("/w/acme", rc, nil, true, "", "", nil, MemberScopeRoleView{}).Render(&out)
 	if strings.Contains(out.String(), "Pengaturan Tambahan") {
 		t.Error("heading 'Pengaturan Tambahan' tak boleh muncul tanpa approve/arr/FLS")
 	}
@@ -92,7 +92,7 @@ func TestRoleEdit_MergedFormIncludesMatrixAndFieldSecurity(t *testing.T) {
 		CanViewPhone: true, CanEditPhone: false, Reactive: true,
 	}
 	var out strings.Builder
-	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, true, "", "", fsec).Render(&out)
+	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, true, "", "", fsec, MemberScopeRoleView{}).Render(&out)
 	body := out.String()
 
 	if !strings.Contains(body, `action="/w/acme/roles/finance"`) {
@@ -121,7 +121,7 @@ func TestRoleEdit_MergedFormIncludesMatrixAndFieldSecurity(t *testing.T) {
 
 func TestRoleEdit_FieldSecurityAbsentWhenFsecNil(t *testing.T) {
 	var out strings.Builder
-	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, true, "", "", nil).Render(&out)
+	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, true, "", "", nil, MemberScopeRoleView{}).Render(&out)
 	body := out.String()
 	if strings.Contains(body, `name="fsec_present"`) {
 		t.Error("fsec nil: sentinel fsec_present tak boleh dirender sama sekali")
@@ -131,9 +131,41 @@ func TestRoleEdit_FieldSecurityAbsentWhenFsecNil(t *testing.T) {
 	}
 }
 
+// TestRoleEdit_FieldSecurityAndMemberScopeRenderSeparateSignals: regresi bug
+// tabrakan data-signals (lihat komentar settingsGroup, role_edit_additional.go)
+// — dulu fsecAttrs & mscopeAttrs sama-sama menumpuk di SATU div luar, sehingga
+// browser membuang atribut data-signals kedua dan checkbox "Lihat anggota
+// internal/eksternal" SELALU tampil unchecked walau data DB benar. fsec &
+// mscope diberi nilai BERBEDA satu sama lain (CanViewPhone=false vs
+// CanViewInternal=true, CanEditPhone=false vs CanViewExternal=false) — bila
+// keduanya tabrakan lagi, salah satu blok data-signals akan hilang atau
+// nilainya salah.
+func TestRoleEdit_FieldSecurityAndMemberScopeRenderSeparateSignals(t *testing.T) {
+	// crm:members WAJIB ada di Modules — mscope hanya dirender bila hasModule
+	// menemukannya (role_edit_additional.go); sampleCustomRoleCard() tak
+	// menyertakannya (fixture lama, ditulis sebelum BL-171).
+	rc := sampleCustomRoleCard()
+	rc.Modules = append(rc.Modules, RoleModulePerm{Obj: "crm:members", Label: "User Management", Level: "read"})
+	fsec := &FieldSecurityRoleView{
+		Base: "/w/acme", Name: "finance", CanEdit: true,
+		CanViewPhone: false, CanEditPhone: false, Reactive: true,
+	}
+	mscope := MemberScopeRoleView{CanViewInternal: true, CanViewExternal: false}
+	var out strings.Builder
+	RoleEdit("/w/acme", rc, nil, true, "", "", fsec, mscope).Render(&out)
+	body := out.String()
+
+	if !strings.Contains(body, `data-signals="{&#34;fls_edit&#34;:false,&#34;fls_view&#34;:false}"`) {
+		t.Error("blok data-signals Field Security (fls_view/fls_edit) harus tetap utuh & benar nilainya")
+	}
+	if !strings.Contains(body, `data-signals="{&#34;msp_external&#34;:false,&#34;msp_internal&#34;:true}"`) {
+		t.Error("blok data-signals Anggota (msp_internal/msp_external) harus tetap utuh & benar nilainya — inilah bug yang pernah bikin checkbox Anggota selalu unchecked")
+	}
+}
+
 func TestRoleEdit_ZonaBerbahayaIsSeparateCardAndForm(t *testing.T) {
 	var out strings.Builder
-	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, true, "", "", nil).Render(&out)
+	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, true, "", "", nil, MemberScopeRoleView{}).Render(&out)
 	body := out.String()
 
 	if !strings.Contains(body, "Zona Berbahaya") {
@@ -150,7 +182,7 @@ func TestRoleEdit_ZonaBerbahayaIsSeparateCardAndForm(t *testing.T) {
 
 func TestRoleEdit_ZonaBerbahayaHiddenWhenNotEditable(t *testing.T) {
 	var out strings.Builder
-	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, false, "", "", nil).Render(&out)
+	RoleEdit("/w/acme", sampleCustomRoleCard(), nil, false, "", "", nil, MemberScopeRoleView{}).Render(&out)
 	body := out.String()
 	if strings.Contains(body, "Zona Berbahaya") {
 		t.Error("canEdit=false: Zona Berbahaya (hapus peran) tak boleh dirender")
@@ -178,7 +210,7 @@ func TestRoleEdit_ARRCheckboxUnlockedByOtherGateModule(t *testing.T) {
 		},
 	}
 	var out strings.Builder
-	RoleEdit("/w/acme", rc, nil, true, "", "", nil).Render(&out)
+	RoleEdit("/w/acme", rc, nil, true, "", "", nil, MemberScopeRoleView{}).Render(&out)
 	body := out.String()
 
 	if strings.Contains(body, `data-attr="{disabled: $lvl_subscriptions == &#39;none&#39;}"`) {
@@ -203,7 +235,7 @@ func TestRoleEdit_SystemRoleKeepsSeparateFieldSecurityForm(t *testing.T) {
 		CanViewPhone: true, CanEditPhone: true, Reactive: false,
 	}
 	var out strings.Builder
-	RoleEdit("/w/acme", rc, nil, true, "", "", fsec).Render(&out)
+	RoleEdit("/w/acme", rc, nil, true, "", "", fsec, MemberScopeRoleView{}).Render(&out)
 	body := out.String()
 	if !strings.Contains(body, `action="/w/acme/roles/admin/field-security"`) {
 		t.Error("peran sistem harus tetap punya form Field Security TERPISAH")

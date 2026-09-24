@@ -25,7 +25,8 @@ func workspaceSettingsGroup(slug string, canMembers, canRoles, canSettings bool)
 	// (BL-53). Yang tersisa di grup Settings ruang kerja: Anggota, Peran, dan
 	// Customization (format kode) — semuanya memang milik pengelola workspace.
 
-	// User Management → /members (canManageMembers, sama dengan gerbang MembersPage).
+	// User Management → /members (canViewMembers: canManageMembers ATAU crmMemberAccess
+	// Lihat/Kelola, sama dengan gerbang MembersPage — lihat member_access.go).
 	if canMembers {
 		children = append(children, ui.NavItem{
 			Label: "User Management", Href: wsPath(slug, "/members"),

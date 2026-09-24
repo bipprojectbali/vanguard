@@ -435,6 +435,10 @@ type Querier interface {
 	DeleteFieldSecurityPoliciesForTenant(ctx context.Context, tenantID int64) error
 	// Batalkan undangan yang belum diterima (sisi PENGUNDANG, di panel anggota).
 	DeleteInvite(ctx context.Context, arg DeleteInviteParams) error
+	// Hapus baris cakupan SATU peran — dipanggil saat level crm:members peran itu
+	// kembali ke "none" (CHECK minimal-satu tak mengizinkan false/false, jadi
+	// "nonaktif" direpresentasikan lewat ABSENnya baris, bukan dua kolom false).
+	DeleteMemberScopePolicyForRole(ctx context.Context, arg DeleteMemberScopePolicyForRoleParams) error
 	// Keluarkan anggota dari workspace (atau user keluar sendiri).
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
 	// Hapus undangan PENDING existing utk email yang sama di tenant ini (BL-170,
@@ -544,6 +548,11 @@ type Querier interface {
 	// Satu lead hidup. RLS menjamin tenant_id; filter deleted_at menyembunyikan yang
 	// ter-soft-delete. Ownership diputuskan handler (LeadsListFilter.Allows) atas baris.
 	GetLead(ctx context.Context, id int64) (Lead, error)
+	// Cakupan jenis anggota SATU peran — dipanggil tiap request oleh
+	// actorKindScope (BL-171) untuk aktor yang masuk lewat sumbu bisnis (bukan
+	// canManageMembers). Baris tak ada = pgx.ErrNoRows → pemanggil jatuh ke
+	// default KEDUA jenis terbuka (beda dari FLS yang defaultnya tertutup).
+	GetMemberScopePolicy(ctx context.Context, arg GetMemberScopePolicyParams) (MemberScopePolicy, error)
 	// Validasi keanggotaan — dipakai middleware Scope SEBELUM membuka tx ber-tenant
 	// (memastikan tenant aktif di session memang milik user; anti tenant-forcing).
 	GetMembership(ctx context.Context, arg GetMembershipParams) (Membership, error)
@@ -2301,6 +2310,12 @@ type Querier interface {
 	// dari "default" (= tanpa baris sama sekali). created_by diisi saat pertama; updated_*
 	// tiap kali diubah. CHECK edit⇒view ditegakkan DB (handler juga meng-coerce).
 	UpsertFieldSecurityPolicy(ctx context.Context, arg UpsertFieldSecurityPolicyParams) error
+	// Simpan cakupan SATU peran (dipanggil dari RoleUpdate, bukan replace-all
+	// tenant — beda dari field_security karena cakupan ini murni properti peran
+	// yang sedang disunting, tak membekukan peran lain). created_by diisi saat
+	// pertama; updated_* tiap kali diubah. CHECK minimal-satu ditegakkan DB
+	// (handler juga meng-coerce sebelum sampai sini).
+	UpsertMemberScopePolicy(ctx context.Context, arg UpsertMemberScopePolicyParams) error
 	// Simpan pengaturan. UPSERT karena baris mungkin belum ada (deployment baru yang
 	// tak menjalankan seed): pemanggil tak perlu tahu bedanya.
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error

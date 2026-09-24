@@ -11,29 +11,34 @@ import (
 // agar tiap file di bawah ambang tipe View/Component (300). Shell daftar anggota +
 // form undang tetap di members.go — satu paket.
 
-// roleBadges = tampilan baca-saja TIGA sumbu (dipakai saat bukan pengelola): role
-// tenant selalu tampil; peran CRM hanya bila diberikan (kosong = tak diberi);
-// Jenis Anggota (kindBadge) selalu tampil — bukan nullable.
+// roleBadges = tampilan baca-saja (dipakai saat bukan pengelola): peran CRM
+// sebagai TEKS BIASA (label, bukan kode mesin — pakai BusinessRoleDisplay,
+// bukan BusinessRole) tanpa bingkai badge, hanya bila diberikan (kosong = tak
+// diberi); Jenis Anggota (kindBadge) selalu tampil sebagai badge — bukan
+// nullable. Role TENANT (m.Role) SENGAJA tak ditampilkan di sini: bagi
+// penglihat yang sampai ke halaman ini (canViewMembers, BL-171) nilainya
+// nyaris selalu "member" dan tak menambah informasi apa pun.
 func roleBadges(m MemberRow) g.Node {
-	badges := []g.Node{h.Span(h.Class("badge badge-neutral"), g.Text(m.Role))}
-	if m.BusinessRole != "" {
-		badges = append(badges, h.Span(h.Class("badge badge-ghost"), g.Text(m.BusinessRole)))
+	nodes := make([]g.Node, 0, 2)
+	if m.BusinessRoleDisplay != "" {
+		nodes = append(nodes, h.Span(h.Class("text-sm"), g.Text(m.BusinessRoleDisplay)))
 	}
-	badges = append(badges, kindBadge(m.Kind))
-	return h.Div(h.Class("flex flex-wrap gap-1"), g.Group(badges))
+	nodes = append(nodes, kindBadge(m.Kind))
+	return h.Div(h.Class("flex flex-wrap items-center gap-1"), g.Group(nodes))
 }
 
 // inviteRoleBadges = tampilan Peran satu undangan pending: Peran CRM (bila
-// dipilih saat mengundang) + Jenis Anggota. Role tenant TAK disertakan di sini
-// (beda dari roleBadges) — undangan BL-170 selalu "member", jadi menampilkannya
-// tak menambah informasi apa pun bagi pengundang.
+// dipilih saat mengundang, TEKS BIASA — bukan badge, sama pola roleBadges) +
+// Jenis Anggota (tetap badge). Role tenant TAK disertakan di sini (beda dari
+// roleBadges) — undangan BL-170 selalu "member", jadi menampilkannya tak
+// menambah informasi apa pun bagi pengundang.
 func inviteRoleBadges(i InviteRow) g.Node {
 	badges := []g.Node{}
 	if i.BusinessRole != "" {
-		badges = append(badges, h.Span(h.Class("badge badge-ghost"), g.Text(i.BusinessRole)))
+		badges = append(badges, h.Span(h.Class("text-sm"), g.Text(i.BusinessRole)))
 	}
 	badges = append(badges, kindBadge(i.Kind))
-	return h.Div(h.Class("flex flex-wrap gap-1"), g.Group(badges))
+	return h.Div(h.Class("flex flex-wrap items-center gap-1"), g.Group(badges))
 }
 
 // memberRoleSelect = label kecil + select mungil dgn opsi SIAP-RENDER, dipakai
@@ -65,7 +70,15 @@ func memberRoleSelect(caption, name string, opts []g.Node, extra ...g.Node) g.No
 // (applyMemberKind + applyBusinessRole lewat MemberSetKind) tetap penjaga
 // sesungguhnya; toggle ini murni UX. Signal per-baris ("mk"+id) agar banyak
 // baris di halaman yang sama tak bentrok satu sama lain.
-func memberKindRoleForm(base, id string, crmRolesInternal, crmRolesExternal []CRMRoleOption, m MemberRow) g.Node {
+//
+// canEditKind=false (BL-171: aktor bercakupan satu jenis saja) → Jenis
+// Anggota dirender kindBadge READ-ONLY + input hidden (agar tetap terkirim
+// apa adanya, tak berubah), Peran CRM TETAP select yang bisa disunting — dua
+// sumbu berbeda (plan BL-171: "business_role tetap editable jika manage").
+// sig tetap diinisialisasi ke m.Kind & tak pernah berubah (tak ada elemen yang
+// men-trigger data.On("change") kind), jadi showWhen di bawah tetap menampilkan
+// cabang Peran CRM yang cocok dengan kind anggota saat ini.
+func memberKindRoleForm(base, id string, crmRolesInternal, crmRolesExternal []CRMRoleOption, m MemberRow, canEditKind bool) g.Node {
 	sig := "mk" + id
 	// rsig: dibagikan KEDUA select business_role (internal & external, sama pola
 	// invrole/inviteForm) — peran CRM kini WAJIB dipilih, tombol Simpan disable
@@ -73,15 +86,25 @@ func memberKindRoleForm(base, id string, crmRolesInternal, crmRolesExternal []CR
 	// yang SUDAH punya peran CRM bisa langsung Simpan (mis. hanya ganti Kind)
 	// tanpa dipaksa memilih ulang peran yang sama.
 	rsig := "mkr" + id
+	kindField := g.Node(memberRoleSelect("Jenis Anggota", "kind", kindOpts(m.Kind), data.Bind(sig),
+		// Ganti Kind → reset peran CRM: daftar pilihan berubah total, peran dari
+		// kind sebelumnya tak valid utk kind baru (lihat catatan sama di inviteForm).
+		data.On("change", "$"+rsig+" = ''")))
+	if !canEditKind {
+		kindField = g.Group([]g.Node{
+			h.Div(h.Class("grid gap-1 min-w-0"),
+				h.Span(h.Class("text-xs text-base-content/60"), g.Text("Jenis Anggota")),
+				kindBadge(m.Kind),
+			),
+			h.Input(h.Type("hidden"), h.Name("kind"), h.Value(m.Kind)),
+		})
+	}
 	return h.FormEl(
 		h.Method("post"), h.Action(base+"/members/"+id+"/kind"),
 		data.Signals(map[string]any{sig: m.Kind, rsig: m.BusinessRole}),
 		// Mobile-first: tumpuk 1 kolom di ponsel, sejajar+wrap mulai sm.
 		h.Class("flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"),
-		memberRoleSelect("Jenis Anggota", "kind", kindOpts(m.Kind), data.Bind(sig),
-			// Ganti Kind → reset peran CRM: daftar pilihan berubah total, peran dari
-			// kind sebelumnya tak valid utk kind baru (lihat catatan sama di inviteForm).
-			data.On("change", "$"+rsig+" = ''")),
+		kindField,
 		showWhen("$"+sig+" == 'internal'", "",
 			memberRoleSelect("Peran CRM", "business_role", crmRoleOpts(crmRolesInternal, m.BusinessRole),
 				data.Bind(rsig), data.Attr("disabled", "$"+sig+" != 'internal'")),

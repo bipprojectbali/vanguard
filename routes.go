@@ -271,8 +271,13 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/codes", h.WorkspaceCodeFormats)
 		r.Post("/codes", h.WorkspaceCodeFormatUpdate)
 
-		// Anggota (model membership). Lihat = semua anggota; ubah/keluarkan/undang
-		// = owner/admin (di-guard handler via canManageMembers).
+		// Anggota (model membership). Gerbang GANDA di handler (BL-171): pengelola
+		// tenant (owner/admin/platform, canManageMembers) ATAU role kustom
+		// ber-akses "User Management" (crm:members, dibatasi actorKindScope —
+		// hanya anggota berjenis internal/eksternal yang cakupannya izinkan).
+		// Perubahan role TENANT (member/admin/owner) tetap terkunci
+		// canManageMembers murni, tak ikut melebar — lihat member_access.go &
+		// doc comment MembersPage/MemberSetRole.
 		r.Get("/members", h.MembersPage)
 		r.Post("/members/{id}/role", h.MemberSetRole)
 		r.Post("/members/{id}/kind", h.MemberSetKind)

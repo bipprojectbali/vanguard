@@ -127,6 +127,18 @@ var crmModules = []ModuleDef{
 	{"crm:reports_cs", "Customer Success Reports", false, false, false},
 	{"crm:reports_support", "Support Reports", false, false, false},
 	{"crm:reports_subscriptions", "Subscription Reports", false, false, false},
+	// BL-171: crm:members — bukan domain §4, melainkan akses ke halaman Anggota
+	// workspace (/w/{slug}/members) lewat sumbu business role, MELEBARKAN gate
+	// lama yang hanya owner/admin/platform (canManageMembers, invite_service.go)
+	// — keputusan sadar, lihat ADR-0013 (bukan ADR-0009 — slot itu sudah dipakai
+	// topik lain). WriteEnforced=true: "Kelola" (write)
+	// membuka aksi nyata (ubah business_role/kind, keluarkan, undang), "Lihat"
+	// (read) hanya menampilkan daftar tanpa tombol aksi (lihat
+	// crmMemberAccess/canViewMembers, member_access.go). Cakupan jenis anggota
+	// (internal/eksternal) yang boleh dilihat/dikelola role ini diatur TERPISAH
+	// lewat member_scope_policies (bukan kolom di sini) — lihat
+	// memberScopeRoleSection (panel) & writeMemberScope (handler).
+	{"crm:members", "User Management", false, false, true},
 }
 
 // CRMModules mengembalikan salinan daftar modul (kolom matriks) agar pemanggil
