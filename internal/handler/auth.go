@@ -18,7 +18,7 @@ const maxWorkspaceNameLen = 60
 // ?err= (dari redirect PRG) → alert. Menutup juga jalur /login?err=inactive dari
 // RefreshIdentity/OAuth yang dulu tak pernah dirender (pesan hilang senyap).
 func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
-	h.renderPage(w, r, "Masuk", pages.Login(devMode, authErrMsg(r.URL.Query().Get("err"))))
+	h.renderPage(w, r, "Masuk", pages.Login(devMode, authErrMsg(r.URL.Query().Get("err")), appName))
 }
 
 // RegisterPage — GET /register (full page). ?err= → alert (pola PRG).
