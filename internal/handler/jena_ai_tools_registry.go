@@ -108,5 +108,35 @@ func (h *Handler) jenaTools() []claudeai.Tool {
 				}
 			}`),
 		},
+		{
+			Name: "search_contacts",
+			Description: "Cari Kontak (orang di dalam sebuah desa/Account) berdasarkan " +
+				"nama. Kembalikan daftar id+nama+nama desa saja (tanpa data kontak " +
+				"sensitif) — dipakai untuk menemukan contact_id sebelum memanggil " +
+				"get_contact_summary. Cakupan kontak MEWARISI kepemilikan desa induk " +
+				"(sama seperti search_accounts), bukan filter kontak sendiri.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"query": {"type": "string", "description": "nama kontak yang dicari"}
+				},
+				"required": ["query"]
+			}`),
+		},
+		{
+			Name: "get_contact_summary",
+			Description: "Ambil ringkasan satu Kontak berdasarkan contact_id — nama, " +
+				"jabatan, desa induk, dan info kontak (nomor HP/WhatsApp tersamar bagi " +
+				"role yang tak berhak melihat nomor penuh; email & telepon kantor tak " +
+				"disamarkan). Hanya berhasil untuk kontak yang desa induknya boleh " +
+				"dilihat penanya.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"contact_id": {"type": "integer", "description": "id kontak, hasil search_contacts"}
+				},
+				"required": ["contact_id"]
+			}`),
+		},
 	}
 }

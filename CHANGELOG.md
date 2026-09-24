@@ -4,6 +4,9 @@ Semua perubahan penting pada go_starter dicatat di sini.
 
 ## [Unreleased]
 
+### Added
+- **Jena AI: tool baru `search_contacts`/`get_contact_summary` untuk modul Kontak (BL-162 fase 4).** Cakupan kontak MEWARISI kepemilikan desa (Account) induk untuk F3 (bukan filter kontak sendiri, sama pola `loadOwnedContactAccount`), F2 (`canViewContacts`) SENGAJA terpisah arsitektural dari F2 Accounts, F4 nomor HP/WhatsApp disamarkan lewat `maskPhone`/`canSeeFullPhone` (BL-107) — email & telepon kantor tak disamarkan di app ini. `get_contact_summary` menggabung F2+F3 jadi satu pesan "tidak ditemukan" (pola sama `get_account_summary`, menghindari bocor keberadaan data ke role tak berwenang); `search_contacts` tetap membalas pesan F2 eksplisit (pola sama `search_accounts`). File health: implementasi dipisah ke `jena_ai_tools_contacts.go`.
+
 ## [1.11.0] - 2026-09-24
 
 ### Added

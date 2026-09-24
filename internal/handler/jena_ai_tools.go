@@ -27,14 +27,16 @@ import (
 // jenaLoadAccount, jenaGetAccountSummary) di jena_ai_tools_accounts.go;
 // get_subscription_status di jena_ai_tools_pipeline.go; tool Deal/Lead
 // (list_my_deals/list_my_leads/search_deals/search_leads, BL-162 fase 3) di
-// jena_ai_tools_sales.go — dipisah krn ambang File Health (Route/Handler 150
-// baris) yang sama.
+// jena_ai_tools_sales.go; tool Kontak (search_contacts/get_contact_summary,
+// BL-162 fase 4) di jena_ai_tools_contacts.go — dipisah krn ambang File
+// Health (Route/Handler 150 baris) yang sama.
 
 const jenaSearchAccountsLimit = 5
 const jenaMyDealsLimit = 10
 const jenaMyLeadsLimit = 10
 const jenaSearchDealsLimit = 10
 const jenaSearchLeadsLimit = 10
+const jenaSearchContactsLimit = 5
 
 // jenaDispatch adalah claudeai.ToolDispatcher — switch ke satu fungsi per tool.
 // Audit RINGAN per panggilan (nama tool saja, bukan input/hasil — gotcha
@@ -60,6 +62,10 @@ func (h *Handler) jenaDispatch(ctx context.Context, name string, input json.RawM
 		return h.jenaSearchDeals(ctx, input)
 	case "search_leads":
 		return h.jenaSearchLeads(ctx, input)
+	case "search_contacts":
+		return h.jenaSearchContacts(ctx, input)
+	case "get_contact_summary":
+		return h.jenaGetContactSummary(ctx, input)
 	default:
 		return `{"error":"tool tidak dikenal"}`, nil
 	}
