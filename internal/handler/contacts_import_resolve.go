@@ -9,7 +9,9 @@ import (
 
 // contacts_import_resolve.go — BL-134: resolusi baris CSV kontak ke master
 // data. Dipisah dari contacts_import_parse.go (parse murni tanpa I/O) agar
-// tiap file di bawah ambang Utility=200.
+// tiap file di bawah ambang tipe Route/Handler (150). Deteksi duplikat klaim
+// primary dipisah lagi ke contacts_import_primary.go agar file ini tetap di
+// bawah ambang yang sama.
 
 // contactImportAccountParams merakit flag ownership F3 (SAMA sumber dgn
 // writableAccountSelectParams, contacts_global.go) + kode desa yang perlu
@@ -103,42 +105,9 @@ func resolveContactImportRows(ctx context.Context, h *Handler, rows []contactImp
 		out[i] = rr
 	}
 
-	// Duplikat klaim primary DALAM FILE: >1 baris menandai is_primary_contact
-	// utk account_id yang sama → SEMUA baris terkait ditolak (bukan hanya
-	// baris ke-2 dst.) — operator tak dibiarkan menebak mana yang "menang".
-	primaryRowsByAccount := make(map[int64][]int)
-	for i, rr := range out {
-		if rr.errCode == "" && rr.form.IsPrimaryContact {
-			primaryRowsByAccount[rr.accountID] = append(primaryRowsByAccount[rr.accountID], i)
-		}
-	}
-	for accountID, idxs := range primaryRowsByAccount {
-		if len(idxs) > 1 {
-			for _, i := range idxs {
-				out[i].errCode = "contact_primary_dup_file"
-			}
-			delete(primaryRowsByAccount, accountID)
-		}
-	}
-
-	// Klaim primary vs primary yang SUDAH hidup di DB — hanya dicek utk akun
-	// yang masih punya SATU klaim (dup-dalam-file di atas sudah menyingkirkan
-	// yang >1), satu query batch terlepas dari jumlahnya.
-	if len(primaryRowsByAccount) > 0 {
-		accountIDs := make([]int64, 0, len(primaryRowsByAccount))
-		for accountID := range primaryRowsByAccount {
-			accountIDs = append(accountIDs, accountID)
-		}
-		existing, err := h.q(ctx).ListAccountsWithPrimaryContact(ctx, accountIDs)
-		if err != nil {
-			h.Log.Error("contacts import: resolve existing primary", "err", err)
-			return failAllContactRows(rows, "failed"), true
-		}
-		for _, accountID := range existing {
-			for _, i := range primaryRowsByAccount[accountID] {
-				out[i].errCode = "contact_primary_exists"
-			}
-		}
+	out, failed := resolveContactPrimaryDuplicates(ctx, h, rows, out)
+	if failed {
+		return out, true
 	}
 
 	for _, rr := range out {

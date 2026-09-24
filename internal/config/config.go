@@ -2,15 +2,8 @@
 // Semua env dibaca HANYA di sini — tidak tersebar ke package lain.
 package config
 
-// MinSessionKeyLen = panjang minimum SESSION_KEY di production. 32 karakter
-// setara ~192 bit bila di-generate acak (base64) — cukup jauh di atas ambang
-// tebak-paksa, dan cukup rendah untuk tak menolak kunci yang sah.
-const MinSessionKeyLen = 32
-
-// MinMCPTokenLen = panjang minimum MCP_TOKEN bila diisi. Sama dengan SESSION_KEY
-// dan alasannya sama: token ini membuka pembacaan runtime database ke pemegangnya,
-// jadi harus tak-bisa-ditebak. Kosong (fitur mati) sah; diisi tapi lemah tidak.
-const MinMCPTokenLen = 32
+// MinSessionKeyLen & MinMCPTokenLen dipisah ke config_limits.go agar file ini
+// (struct Config) tetap di bawah ambang tipe Config (100).
 
 // Config menampung seluruh konfigurasi runtime aplikasi.
 type Config struct {

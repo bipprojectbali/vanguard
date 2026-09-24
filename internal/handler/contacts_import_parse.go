@@ -9,10 +9,14 @@ import (
 // contacts_import_parse.go — BL-134: parse CSV mentah (tanpa I/O DB) menjadi
 // baris data kontak. Pola SAMA dgn accounts_import_parse.go (BL-63) — dipisah
 // dari resolusi (contacts_import_resolve.go) agar tiap file di bawah ambang
-// Utility=200. Dipakai IDENTIK oleh ContactImportPreview (dry-run) &
-// ContactImportConfirm (re-validasi wajib) — SATU sumber kebenaran, menutup
-// celah TOCTOU by construction. allFieldsEmpty (accounts_import_parse.go)
-// dipakai ulang APA ADANYA — generik, tak spesifik akun.
+// tipe Route/Handler (150). Dipakai IDENTIK oleh ContactImportPreview
+// (dry-run) & ContactImportConfirm (re-validasi wajib) — SATU sumber
+// kebenaran, menutup celah TOCTOU by construction. allFieldsEmpty
+// (accounts_import_parse.go) dipakai ulang APA ADANYA — generik, tak
+// spesifik akun.
+//
+// normalizeContactPrimaryFlag & failAllContactRows dipisah ke
+// contacts_import_validate.go agar file ini tetap di bawah ambang yang sama.
 
 // contactImportColumnMap = header CSV → nama field yang dibaca parseContactForm
 // (contacts_form.go). Beda dgn importColumnMap (BL-63, Indonesia→Inggris),
@@ -123,34 +127,4 @@ func parseContactImportCSV(r io.Reader) ([]contactImportRow, string) {
 		return nil, "import_too_many"
 	}
 	return rows, ""
-}
-
-// normalizeContactPrimaryFlag memvalidasi & menormalkan nilai mentah kolom
-// is_primary_contact dari CSV. SENGAJA lebih ketat drpd optBool form manual
-// (checkbox HTML: hadir apa pun isinya = true) — di CSV teks bebas, nilai
-// seperti "FALSE"/"tidak"/"0" gampang disalahartikan operator sbg false
-// padahal optBool akan membacanya true krn sel tak kosong (keputusan 15 Sep,
-// respons atas risiko itu). Jalur impor HANYA menerima tiga bentuk
-// (case-insensitive, spasi diabaikan): "true" → true, "false"/kosong →
-// false; nilai lain = baris invalid ("contact_primary_invalid"), bukan diam-
-// diam ditafsir true.
-func normalizeContactPrimaryFlag(raw string) (normalized string, ok bool) {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "false":
-		return "", true
-	case "true":
-		return "true", true
-	default:
-		return "", false
-	}
-}
-
-// failAllContactRows menandai SELURUH baris gagal dgn kode yang sama — dipakai
-// saat query batch resolusi sendiri gagal (galat DB, bukan galat data baris).
-func failAllContactRows(rows []contactImportRow, code string) []contactResolvedRow {
-	out := make([]contactResolvedRow, len(rows))
-	for i, row := range rows {
-		out[i] = contactResolvedRow{rowNum: row.rowNum, villageCode: row.villageCode, errCode: code}
-	}
-	return out
 }

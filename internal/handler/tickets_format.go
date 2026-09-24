@@ -16,6 +16,10 @@ import (
 // tickets_helpers.go (enum sah + tipe ticketForm + parseTicketForm) agar keduanya
 // di bawah ambang tipe Route/Handler (150). Izin/pesan/forbidden ada di
 // tickets_view.go. Satu paket; enum tetap SATU sumber.
+//
+// ticketListRow (tipe penyatu TUJUH struct sqlc) + 7 ticketListRowFrom*
+// dipisah ke tickets_list_row.go agar file ini di bawah ambang yang sama.
+
 // ticketNumber memformat nomor tiket yang ditampilkan di UI.
 // Format: "#TK-{id}". Disimpan sbg ID di DB, diformat di layer aplikasi.
 func ticketNumber(id int64) string {
@@ -61,78 +65,6 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dj", h)
 	}
 	return fmt.Sprintf("%dm", m)
-}
-
-// ticketListRow = field YANG DIPAKAI ticketRowView, diekstrak dari TUJUH
-// struct sqlc berbeda (db.ListTicketsRow & 6× db.ListTicketsSortByXRow — satu
-// query = satu struct meski SELECT sama persis, BL-157h) agar logika mapping
-// (nomor tiket, label SLA derivasi) TAK diduplikasi per query. Pola sama
-// subListRow (subscriptions_page.go) / renewalListRow (subscriptions_renewals_row.go).
-type ticketListRow struct {
-	ID             int64
-	AccountName    string
-	Subject        string
-	Priority       string
-	Status         string
-	SlaDeadlineAt  pgtype.Timestamptz
-	ResolvedAt     pgtype.Timestamptz
-	AssignedToName *string
-}
-
-func ticketListRowFromDefault(r db.ListTicketsRow) ticketListRow {
-	return ticketListRow{
-		ID: r.ID, AccountName: r.AccountName, Subject: r.Subject, Priority: r.Priority,
-		Status: r.Status, SlaDeadlineAt: r.SlaDeadlineAt, ResolvedAt: r.ResolvedAt,
-		AssignedToName: r.AssignedToName,
-	}
-}
-
-func ticketListRowFromVillageSort(r db.ListTicketsSortByVillageRow) ticketListRow {
-	return ticketListRow{
-		ID: r.ID, AccountName: r.AccountName, Subject: r.Subject, Priority: r.Priority,
-		Status: r.Status, SlaDeadlineAt: r.SlaDeadlineAt, ResolvedAt: r.ResolvedAt,
-		AssignedToName: r.AssignedToName,
-	}
-}
-
-func ticketListRowFromSubjectSort(r db.ListTicketsSortBySubjectRow) ticketListRow {
-	return ticketListRow{
-		ID: r.ID, AccountName: r.AccountName, Subject: r.Subject, Priority: r.Priority,
-		Status: r.Status, SlaDeadlineAt: r.SlaDeadlineAt, ResolvedAt: r.ResolvedAt,
-		AssignedToName: r.AssignedToName,
-	}
-}
-
-func ticketListRowFromPrioritySort(r db.ListTicketsSortByPriorityRow) ticketListRow {
-	return ticketListRow{
-		ID: r.ID, AccountName: r.AccountName, Subject: r.Subject, Priority: r.Priority,
-		Status: r.Status, SlaDeadlineAt: r.SlaDeadlineAt, ResolvedAt: r.ResolvedAt,
-		AssignedToName: r.AssignedToName,
-	}
-}
-
-func ticketListRowFromStatusSort(r db.ListTicketsSortByStatusRow) ticketListRow {
-	return ticketListRow{
-		ID: r.ID, AccountName: r.AccountName, Subject: r.Subject, Priority: r.Priority,
-		Status: r.Status, SlaDeadlineAt: r.SlaDeadlineAt, ResolvedAt: r.ResolvedAt,
-		AssignedToName: r.AssignedToName,
-	}
-}
-
-func ticketListRowFromAgentSort(r db.ListTicketsSortByAgentRow) ticketListRow {
-	return ticketListRow{
-		ID: r.ID, AccountName: r.AccountName, Subject: r.Subject, Priority: r.Priority,
-		Status: r.Status, SlaDeadlineAt: r.SlaDeadlineAt, ResolvedAt: r.ResolvedAt,
-		AssignedToName: r.AssignedToName,
-	}
-}
-
-func ticketListRowFromSlaSort(r db.ListTicketsSortBySlaRow) ticketListRow {
-	return ticketListRow{
-		ID: r.ID, AccountName: r.AccountName, Subject: r.Subject, Priority: r.Priority,
-		Status: r.Status, SlaDeadlineAt: r.SlaDeadlineAt, ResolvedAt: r.ResolvedAt,
-		AssignedToName: r.AssignedToName,
-	}
 }
 
 // ticketRowView memetakan satu baris daftar → TicketRow view.
