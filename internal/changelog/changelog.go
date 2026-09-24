@@ -54,12 +54,15 @@ var currentReleases = []Release{
 				Items: []string{
 					"Keterangan \"butuh izin langganan berstatus aktif juga\" pada baris Renewals & Churn di matriks Peran kini hanya muncul saat kombinasi izinnya benar-benar bermasalah, tak lagi selalu tampil untuk semua peran.",
 					"Opsi \"Kelola\" pada 7 modul CRM (ringkasan performa, langganan berstatus aktif, aktivitas, dan 4 halaman laporan) yang sebenarnya tak berefek kini disembunyikan dari matriks Peran — mencegah admin memberi izin yang kelihatannya aktif tapi tak melakukan apa-apa.",
+					"Peran kustom yang diberi kemampuan setara Admin/Manager/Sales/CSM kini bisa melihat nilai kontrak/MRR/anggaran sesuai kapabilitas yang diberikan — sebelumnya dibatasi hanya untuk 4 nama peran baku, peran hasil rename/tambahan tenant selalu dianggap tak berhak walau sudah diberi izinnya.",
 				},
 			},
 			{
 				Title: "Diperbaiki",
 				Items: []string{
 					"Lebar kolom pilihan akses pada matriks Peran tak lagi berubah-ubah saat keterangan tambahan muncul/hilang.",
+					"Kotak centang \"Lihat Nilai Kontrak\" di editor Peran kini bisa dicentang untuk peran mana pun yang memang berhak melihat nilai kontrak/MRR — sebelumnya cuma bisa dicentang kalau peran itu juga punya akses ke halaman Langganan, walau haknya sendiri sudah berlaku di halaman lain (Leads, Akun, dsb).",
+					"Formulir tambah Lead dan Akun baru kini lebih cepat dimuat di jaringan lambat — daftar wilayah yang ikut dikirim ke halaman sempat membengkak tanpa perlu.",
 				},
 			},
 		},
