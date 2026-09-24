@@ -29,6 +29,21 @@ type Release struct {
 // 300 baris). Releases (di bawah) menggabungkan keduanya.
 var currentReleases = []Release{
 	{
+		Version: "1.11.0",
+		Date:    "2026-09-24",
+		Summary: "Undangan anggota kini otomatis diterapkan saat login (tanpa perlu klik tautan), dan admin bisa memberi peran tertentu akses ke halaman Anggota.",
+		Sections: []Section{
+			{
+				Title: "Baru",
+				Items: []string{
+					"Anggota yang sudah didaftarkan admin lewat form \"Undang\" kini langsung masuk dengan peran yang ditentukan begitu ia login atau mendaftar — tak perlu lagi mengklik tautan undangan.",
+					"Form Undang kini juga meminta Jenis Anggota (internal/eksternal), dan pilihan Peran CRM otomatis menyesuaikan jenis yang dipilih.",
+					"Halaman Peran & Perizinan kini punya izin baru \"User management\" — admin bisa memberi peran tertentu akses Lihat atau Kelola ke halaman Anggota, dibatasi hanya boleh melihat/mengelola anggota berjenis internal, eksternal, atau keduanya sesuai yang diatur.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.10.0",
 		Date:    "2026-09-23",
 		Summary: "Perapian matriks Peran & Perizinan: keterangan Renewals/Churn kini kondisional, opsi izin yang tak berefek disembunyikan, dan tampilan kolom Akses lebih konsisten.",
