@@ -61,7 +61,7 @@ func (h *Handler) SubscriptionDetail(w http.ResponseWriter, r *http.Request) {
 		title = "Langganan #" + strconv.FormatInt(s.ID, 10)
 	}
 	view := h.subDetailView(ctx, base, s, names)
-	view.Msg = subscriptionsMsg(r.URL.Query().Get("ok"))
+	view.Msg = subscriptionsMsg(r.URL.Query().Get("ok"), view.RenewalTypeLabel)
 	view.Err = wsErrMsg(r.URL.Query().Get("err"))
 	h.renderWorkspaceShell(w, r, title, "/subscriptions", panel.SubDetail(view))
 }

@@ -23,6 +23,7 @@ type notifPayload struct {
 	EntityCode  string `json:"entity_code,omitempty"`  // kode entitas (mis. SUB-0007); BUKAN PII
 	VillageName string `json:"village_name,omitempty"` // nama desa/akun (BL-158, subscription.renewal.reminder)
 	DaysLeft    *int   `json:"days_left,omitempty"`    // sisa hari ke end_date (BL-158); pointer agar 0 (hari-H) terbedakan dari absen
+	Direction   string `json:"direction,omitempty"`    // "Upsell"/"Downgrade" (BL-172, renewal.pending) — label arah, bukan data sensitif
 }
 
 // buildNotifRows memetakan peristiwa ke baris view + menyusun kalimatnya.
@@ -74,7 +75,17 @@ func notifText(kind, workspace string, p notifPayload) string {
 	case "workspace.joined":
 		return "Anda bergabung ke " + orDefault(workspace, "sebuah workspace") + "."
 	case "renewal.upsell.pending":
+		// Kind lama (pra-BL-172), disimpan untuk baris histori — jalur baru pakai
+		// "renewal.pending" (satu kind, teks context-aware via Direction).
 		return "Renewal upsell " + orDefault(p.EntityCode, "langganan") + " menunggu persetujuan Anda."
+	case "renewal.pending":
+		// BL-172: gate approval diperluas ke arah turun juga — satu kind, teks
+		// dibedakan Direction ("Downgrade" vs default "Upsell"/tak terisi).
+		verb := "kenaikan"
+		if p.Direction == "Downgrade" {
+			verb = "penurunan"
+		}
+		return "Renewal dengan " + verb + " harga untuk " + orDefault(p.EntityCode, "langganan") + " menunggu persetujuan Anda."
 	case "renewal.approved":
 		return "Renewal " + orDefault(p.EntityCode, "langganan") + " Anda telah disetujui."
 	case "renewal.rejected":

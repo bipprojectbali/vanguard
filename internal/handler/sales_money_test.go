@@ -86,6 +86,30 @@ func TestAddNumeric(t *testing.T) {
 	}
 }
 
+// TestNumericEqual: gerbang renewal BL-172 — SAMA PERSIS (termasuk bentuk berbeda
+// mis. "500000" vs "500000.00", dan NULL vs "0") harus true; BEDA (naik/turun) false.
+func TestNumericEqual(t *testing.T) {
+	cases := []struct {
+		name, a, b string
+		want       bool
+	}{
+		{"sama persis", "500000", "500000", true},
+		{"bentuk berbeda", "500000.00", "500000", true},
+		{"naik", "500000", "800000", false},
+		{"turun", "500000", "300000", false},
+		{"keduanya NULL", "", "", true},
+		{"NULL vs nol", "", "0", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := numericEqual(numFrom(t, c.a), numFrom(t, c.b))
+			if got != c.want {
+				t.Errorf("numericEqual(%q,%q) = %v, want %v", c.a, c.b, got, c.want)
+			}
+		})
+	}
+}
+
 // TestNumericGuards: guard validasi form (non-negatif & rentang inklusif diskon).
 func TestNumericGuards(t *testing.T) {
 	if numericNonNegative(numFrom(t, "-0.01")) {

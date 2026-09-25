@@ -70,14 +70,21 @@ func subActionDialogs(v SubDetailView) []g.Node {
 	return nodes
 }
 
-// subApproveBody = isi modal persetujuan: keputusan Setujui/Tolak renewal Upsell
-// (dua form POST terpisah).
+// subApproveBody = isi modal persetujuan: keputusan Setujui/Tolak renewal yang
+// pending (BL-172: arah naik "Upsell" maupun turun "Downgrade", dua form POST
+// terpisah). v.RenewalTypeLabel selalu "Upsell"/"Downgrade" di sini — modal ini
+// cuma dirender saat v.Status == "PendingApproval" (subActions), status yang
+// hanya dihasilkan renewPending.
 func subApproveBody(v SubDetailView) g.Node {
 	base := v.Base + "/subscriptions/" + strconv.FormatInt(v.ID, 10)
+	desc := "Renewal dengan kenaikan harga ini menunggu keputusan Anda."
+	if v.RenewalTypeLabel == "Downgrade" {
+		desc = "Renewal dengan penurunan harga ini menunggu keputusan Anda."
+	}
 	return h.Div(
 		h.Class("grid gap-3"),
 		h.P(h.Class("text-sm text-base-content/70"),
-			g.Text("Renewal upsell ini menunggu keputusan Anda.")),
+			g.Text(desc)),
 		h.Div(
 			h.Class("flex flex-wrap gap-2"),
 			h.FormEl(h.Method("post"), h.Action(base+"/approve"),

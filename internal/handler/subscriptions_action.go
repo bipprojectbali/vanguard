@@ -101,10 +101,13 @@ func renewMRR(raw string, oldMRR pgtype.Numeric) (pgtype.Numeric, string) {
 	return n, ""
 }
 
-// notifyManagersUpsell memberi tahu SEMUA Manager workspace bahwa ada renewal
-// upsell menunggu persetujuan. Fail-soft: gagal daftar/notify tak membatalkan
-// renewal (baris Pending sudah tertulis). Payload = entity_code (bukan PII).
-func (h *Handler) notifyManagersUpsell(ctx context.Context, tenantID int64, sub db.Subscription) {
+// notifyManagersRenewalPending memberi tahu SEMUA Manager workspace bahwa ada
+// renewal (naik ATAU turun harga, BL-172) menunggu persetujuan. SATU notification
+// kind ("renewal.pending") dgn teks context-aware via Direction — bukan dua kind
+// terpisah (keputusan #2, disepakati user). Fail-soft: gagal daftar/notify tak
+// membatalkan renewal (baris Pending sudah tertulis). Payload = entity_code
+// (bukan PII) + direction (label arah, bukan data sensitif).
+func (h *Handler) notifyManagersRenewalPending(ctx context.Context, tenantID int64, sub db.Subscription, dir renewalDirection) {
 	ids, err := h.q(ctx).ListMembersByBusinessRole(ctx, db.ListMembersByBusinessRoleParams{
 		TenantID: tenantID, BusinessRole: authz.BusinessRoleManager,
 	})
@@ -113,6 +116,9 @@ func (h *Handler) notifyManagersUpsell(ctx context.Context, tenantID int64, sub 
 		return
 	}
 	for _, uid := range ids {
-		h.notify(ctx, uid, tenantID, "renewal.upsell.pending", notifPayload{EntityCode: deref(sub.EntityCode)})
+		h.notify(ctx, uid, tenantID, "renewal.pending", notifPayload{
+			EntityCode: deref(sub.EntityCode),
+			Direction:  string(dir),
+		})
 	}
 }

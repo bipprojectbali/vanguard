@@ -10,18 +10,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// subscriptions_renew_actions.go — dua jalur eksekusi perpanjangan (upsell &
+// subscriptions_renew_actions.go — dua jalur eksekusi perpanjangan (pending &
 // straight) + kloning paket, dipisah dari subscriptions_renew.go (entry point
 // SubscriptionRenew) untuk file health.
 
-// renewUpsell membuat baris renewal 'PendingApproval' (JANGAN expire baris lama —
-// keputusan itu milik Manager) lalu memberi tahu semua Manager.
-func (h *Handler) renewUpsell(w http.ResponseWriter, r *http.Request, old db.Subscription, code string, newMRR, newARR pgtype.Numeric, uid, tenantID int64, idStr string) {
+// renewalDirection membedakan arah perubahan harga renewal (BL-172): dipakai
+// menurunkan renewal_type, action audit, dan teks notifikasi. Hanya berlaku saat
+// harga BERBEDA (numericEqual gagal di SubscriptionRenew) — harga SAMA PERSIS lewat
+// renewStraight, tak pernah sampai ke fungsi yang memakai tipe ini.
+type renewalDirection string
+
+const (
+	renewalUp   renewalDirection = "Upsell"    // MRR baru > lama
+	renewalDown renewalDirection = "Downgrade" // MRR baru < lama
+)
+
+// auditAction = string action audit per arah (Opsi A, BL-172, disetujui user):
+// DUA string berbeda, BUKAN satu action generik + flag di metadata — /dev/logs
+// (ListActivityTrailParams.ActionPrefix, dev_logs_trail.go) hanya bisa memfilter
+// kolom action, metadata cuma tampil sbg detail tambahan saat baris dibuka.
+func (d renewalDirection) auditAction() string {
+	if d == renewalDown {
+		return "subscription.renew.downgrade"
+	}
+	return "subscription.renew.upsell"
+}
+
+// renewPending membuat baris renewal 'PendingApproval' (JANGAN expire baris lama —
+// keputusan itu milik Manager) lalu memberi tahu semua Manager. Generalisasi arah
+// naik (Upsell) MAUPUN turun (Downgrade, BL-172) — satu fungsi, dibedakan oleh dir;
+// approve/reject sesudahnya generik ke status PendingApproval (subscriptions_approve.go,
+// tak berubah oleh BL-172).
+func (h *Handler) renewPending(w http.ResponseWriter, r *http.Request, old db.Subscription, code string, newMRR, newARR pgtype.Numeric, uid, tenantID int64, idStr string, dir renewalDirection) {
 	ctx := r.Context()
 	sub, err := h.q(ctx).CreateSubscription(ctx,
-		renewParams(old, code, uid, newMRR, newARR, "PendingApproval", optTrim("Pending"), "Upsell", "In Progress", todayInAppTZ()))
+		renewParams(old, code, uid, newMRR, newARR, "PendingApproval", optTrim("Pending"), string(dir), "In Progress", todayInAppTZ()))
 	if err != nil {
-		h.Log.Error("subscriptions: renew upsell", "previous_id", old.ID, "err", err)
+		h.Log.Error("subscriptions: renew pending", "direction", string(dir), "previous_id", old.ID, "err", err)
 		wsRedirect(w, r, "/subscriptions/"+idStr, "failed")
 		return
 	}
@@ -29,8 +54,8 @@ func (h *Handler) renewUpsell(w http.ResponseWriter, r *http.Request, old db.Sub
 	// paket. Status PendingApproval → item parent_active=false (trigger) → tak bentrok
 	// dgn item lama yg masih Active; aktivasi menyusul di approve (expire lama dulu).
 	h.cloneSubscriptionItems(ctx, old.ID, sub.ID, tenantID)
-	h.notifyManagersUpsell(ctx, tenantID, sub)
-	h.auditWorkspace(ctx, uid, "subscription.renew.upsell", tenantID, map[string]string{
+	h.notifyManagersRenewalPending(ctx, tenantID, sub, dir)
+	h.auditWorkspace(ctx, uid, dir.auditAction(), tenantID, map[string]string{
 		"subscription_id": strconv.FormatInt(sub.ID, 10),
 		"previous_id":     idStr,
 	})

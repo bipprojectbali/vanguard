@@ -99,10 +99,18 @@ func numericBetween(n pgtype.Numeric, lo, hi int64) bool {
 }
 
 // numericGreater benar bila a > b (perbandingan EKSAK via big.Rat, tanpa galat
-// float). Dipakai deteksi Upsell renewal (MRR baru > previous_value) — batas yang
-// menentukan apakah renewal butuh persetujuan.
+// float). Dipakai menentukan ARAH renewal (MRR baru > lama → Upsell, selain itu →
+// Downgrade) untuk renewal_type/teks/audit — BUKAN lagi penentu butuh-approval
+// (itu tugas numericEqual, BL-172: harga turun pun butuh persetujuan).
 func numericGreater(a, b pgtype.Numeric) bool {
 	return ratFromNumeric(a).Cmp(ratFromNumeric(b)) > 0
+}
+
+// numericEqual benar bila a == b (perbandingan EKSAK via big.Rat — bentuk berbeda
+// mis. "500000" vs "500000.00" tetap sama). Dipakai gerbang renewal (BL-172): SAMA
+// PERSIS → auto-approve (renewStraight); BERBEDA (naik ATAU turun) → PendingApproval.
+func numericEqual(a, b pgtype.Numeric) bool {
+	return ratFromNumeric(a).Cmp(ratFromNumeric(b)) == 0
 }
 
 // mulNumericInt mengalikan NUMERIC dengan bilangan bulat (EKSAK, lalu dibulatkan ke
