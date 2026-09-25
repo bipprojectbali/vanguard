@@ -39,7 +39,6 @@ var currentReleases = []Release{
 					"Kartu Deal pada papan Kanban kini bisa diseret (drag-and-drop) langsung ke kolom tahap tujuan untuk memindahkannya — tak perlu lagi membuka halaman detail tiap deal satu per satu. Tujuan yang tak valid dari tahap asal otomatis ditolak, mengikuti alur tahap yang sama seperti kontrol pindah tahap di halaman detail.",
 					"Bisa memilih beberapa kartu Deal sekaligus (dalam satu tahap yang sama) lalu menyeretnya bersamaan ke tahap lain — termasuk pindah massal ke Closed Won atau Closed Lost, dengan pilihan mengisi satu alasan untuk semua deal atau alasan masing-masing per deal.",
 					"Kolom pada papan Kanban kini bisa dilebarkan/diciutkan agar lebih mudah fokus pada satu tahap saat deal-nya banyak.",
-					"Deal yang dimenangkan (Closed Won) kini otomatis membuat baris Customer Success untuk desa tersebut — sebelumnya tim Customer Success harus membuatnya sendiri secara manual saat pertama kali membuka data desa itu, kini serah-terima dari Sales ke CS langsung terjadi begitu deal ditutup menang.",
 					"Jena AI kini bisa mencari kontak dan merangkum detail satu kontak lewat chat, serta menampilkan seluruh kontak milik penanya sekaligus — mengikuti hak akses dan penyamaran nomor HP/WhatsApp yang sama seperti halaman Kontak.",
 				},
 			},
