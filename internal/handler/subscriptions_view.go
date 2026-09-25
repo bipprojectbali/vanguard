@@ -90,12 +90,21 @@ func canApproveRenewal(ctx context.Context) bool {
 
 // subscriptionsMsg memetakan kode sukses PRG (`?ok=CODE`) → kalimat konfirmasi di
 // halaman detail langganan. Pasangan positif wsErrMsg; kode tak dikenal → "".
-func subscriptionsMsg(code string) string {
+//
+// renewalType = RenewalTypeLabel baris yang SEDANG ditampilkan (view.RenewalTypeLabel,
+// sudah dihitung h.subDetailView) — dipakai HANYA oleh "renew_pending" agar toast
+// context-aware (BL-172: harga turun pun butuh persetujuan, jangan selalu bilang
+// "upsell"). "renew_pending" cuma dipicu renewPending (subscriptions_renew_actions.go)
+// yang nilainya selalu "Upsell"/"Downgrade" — tak pernah "Manual"/"Auto"/kosong.
+func subscriptionsMsg(code, renewalType string) string {
 	switch code {
 	case "renewed":
 		return "Langganan diperpanjang — periode baru aktif."
 	case "renew_pending":
-		return "Renewal upsell dibuat — menunggu persetujuan Manager."
+		if renewalType == "Downgrade" {
+			return "Renewal dengan penurunan harga dibuat — menunggu persetujuan Manager."
+		}
+		return "Renewal dengan kenaikan harga dibuat — menunggu persetujuan Manager."
 	case "renew_approved":
 		return "Renewal disetujui — langganan periode baru aktif."
 	case "renew_rejected":
