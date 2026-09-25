@@ -138,7 +138,7 @@ func (h *Handler) CSRenewalEdit(w http.ResponseWriter, r *http.Request) {
 			CurrentNextAction: dateStr(sub.RenewalNextActionDate),
 			CurrentOwnerID:    preselectOwner,
 			Members:           memberOpts,
-			Stages:            csRenewalStageValues,
+			Stages:            csRenewalStageOptions,
 			Risks:             csRenewalRiskValues,
 			Err:               csRenewalsErrMsg(r.URL.Query().Get("err")),
 		}))
