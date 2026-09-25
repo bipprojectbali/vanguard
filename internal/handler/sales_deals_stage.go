@@ -96,6 +96,7 @@ func (h *Handler) DealStage(w http.ResponseWriter, r *http.Request) {
 		WinLossReason:  winLoss,
 		LossReasonCode: lossCode,
 		LossNotes:      lossNotes,
+		PrevStage:      deal.Stage,
 		UpdatedBy:      &uid,
 		ID:             id,
 	}); err != nil {

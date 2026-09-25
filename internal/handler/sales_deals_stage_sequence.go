@@ -10,12 +10,14 @@ package handler
 // minus dua tahap terminal di ekor (Closed Won, Closed Lost). Basis urutan maju.
 var activeDealStages = dealStageOptions[:len(dealStageOptions)-2]
 
-// nextDealStages mengembalikan tahap SAH berikutnya dari `current` (BL-159,
-// sequential-only; keputusan user 14 Sep): SATU opsi (tahap aktif berikutnya)
-// untuk tahap aktif biasa; DUA opsi (Closed Won, Closed Lost) khusus dari tahap
-// aktif TERAKHIR ("Negotiation") — deal hanya boleh gugur (Closed Lost) dari
-// tahap terakhir sebelum ditutup, BUKAN dari tahap manapun (opsi awal "izinkan
-// dari mana saja" eksplisit dibalik user). `current` sudah terminal atau tak
+// nextDealStages mengembalikan tahap SAH berikutnya dari `current` (BL-159
+// sequential-only + revisi BL-173, keputusan user 25 Sep): dari tahap aktif
+// BIASA — DUA opsi (tahap aktif berikutnya, "Closed Lost") — deal realistis
+// bisa gugur di tahap mana pun, bukan cuma setelah march-through penuh; dari
+// tahap aktif TERAKHIR ("Negotiation") — DUA opsi ("Closed Won", "Closed
+// Lost"), tanpa "next" linear karena memang tahap aktif terakhir. "Closed Won"
+// SENGAJA TAK diperluas (tetap hanya dari Negotiation) — hanya cakupan
+// "Closed Lost" yang diperluas BL-173. `current` sudah terminal atau tak
 // dikenal → nil (form ubah tahap disembunyikan di view utk deal terminal,
 // lihat canAct di sales_deals_detail.go).
 func nextDealStages(current string) []string {
@@ -26,7 +28,7 @@ func nextDealStages(current string) []string {
 		if i == len(activeDealStages)-1 {
 			return []string{"Closed Won", "Closed Lost"}
 		}
-		return []string{activeDealStages[i+1]}
+		return []string{activeDealStages[i+1], "Closed Lost"}
 	}
 	return nil
 }

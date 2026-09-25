@@ -59,7 +59,7 @@ func TestDisplayStages_TerminalLabel(t *testing.T) {
 // TestDealStepper_RendersSixNodes: stepper merender tepat 6 <li> dan menandai
 // node terminal "Closed Won" sebagai posisi saat ini (deal menang).
 func TestDealStepper_RendersSixNodes(t *testing.T) {
-	out := renderLeads(t, dealStepper(displayStages(pipelineStages, "Closed Won"), "Closed Won"))
+	out := renderLeads(t, dealStepper(displayStages(pipelineStages, "Closed Won"), "Closed Won", "Negotiation"))
 	if n := strings.Count(out, "<li"); n != 6 {
 		t.Errorf("stepper harus 6 <li>, dapat %d:\n%s", n, out)
 	}
@@ -215,7 +215,7 @@ func TestDealQuotesCard_ButtonGatedByStage(t *testing.T) {
 // stepper horizontal (steps-horizontal) dalam kontainer overflow-x-auto agar tak
 // meluber di mobile.
 func TestDealStepper_Horizontal(t *testing.T) {
-	out := renderLeads(t, dealStepper(displayStages(pipelineStages, "Demo"), "Demo"))
+	out := renderLeads(t, dealStepper(displayStages(pipelineStages, "Demo"), "Demo", ""))
 	if !strings.Contains(out, "steps-horizontal") {
 		t.Errorf("stepper detail harus steps-horizontal:\n%s", out)
 	}

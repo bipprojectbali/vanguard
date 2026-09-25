@@ -396,6 +396,17 @@ RETURNING *;
 -- diisi saat Closed Won/Lost — validasi "Closed Lost wajib win_loss_reason" di
 -- handler (bukan constraint DB agar pesan bisa diperbaiki user). closed_date =
 -- CURRENT_DATE bila stage terminal, NULL bila dibuka kembali ke stage aktif.
+-- last_active_stage (00053, BL-173): snapshot tahap aktif TERAKHIR sebelum
+-- transisi ke terminal — dipakai stepper utk bedakan "march-through penuh" vs
+-- "gugur langsung dari tahap awal". prev_stage = stage SEBELUM update ini
+-- (dioper handler, dibaca dari h.loadOwnedDeal sebelum UpdateDealStage jalan).
+-- Diisi hanya saat aktif→terminal DAN prev_stage salah satu dari 5 tahap aktif
+-- (ALLOWLIST, bukan "bukan terminal" — pemanggil lama/test yang belum diaudit
+-- & tak mengoper prev_stage jatuh ke zero-value "", yang gagal CHECK
+-- deals_last_active_stage_chk bila dipaksa masuk; allowlist bikin nilai tak
+-- dikenal jatuh ke ELSE-pertahankan alih-alih coba tulis nilai ilegal).
+-- Dikosongkan saat reopen (stage baru aktif); dipertahankan saat
+-- terminal→terminal (mis. Closed Lost → Closed Won tanpa reopen dulu).
 UPDATE deals SET
     stage           = sqlc.arg(stage),
     win_loss_reason = sqlc.narg(win_loss_reason),
@@ -404,6 +415,13 @@ UPDATE deals SET
     closed_date     = CASE
         WHEN sqlc.arg(stage) IN ('Closed Won','Closed Lost') THEN CURRENT_DATE
         ELSE NULL END,
+    last_active_stage = CASE
+        WHEN sqlc.arg(stage) IN ('Closed Won','Closed Lost')
+             AND sqlc.arg(prev_stage)::text IN
+                 ('Prospecting','Qualification','Demo','Proposal','Negotiation')
+            THEN sqlc.arg(prev_stage)::text
+        WHEN sqlc.arg(stage) NOT IN ('Closed Won','Closed Lost') THEN NULL
+        ELSE last_active_stage END,
     updated_by      = sqlc.narg(updated_by),
     updated_at      = now()
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL;

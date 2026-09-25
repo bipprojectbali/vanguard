@@ -273,6 +273,7 @@ type Deal struct {
 	UpdatedBy             *int64             `json:"updated_by"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	LossReasonCode        *string            `json:"loss_reason_code"`
+	LastActiveStage       *string            `json:"last_active_stage"`
 }
 
 type Engagement struct {

@@ -41,7 +41,7 @@ INSERT INTO deals (
     $14, $15,
     $16
 )
-RETURNING id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code
+RETURNING id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage
 `
 
 type CreateDealParams struct {
@@ -120,6 +120,7 @@ func (q *Queries) CreateDeal(ctx context.Context, arg CreateDealParams) (Deal, e
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.LossReasonCode,
+		&i.LastActiveStage,
 	)
 	return i, err
 }
@@ -190,7 +191,7 @@ func (q *Queries) DealPipelineStats(ctx context.Context, arg DealPipelineStatsPa
 }
 
 const getDeal = `-- name: GetDeal :one
-SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage FROM deals
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -227,12 +228,13 @@ func (q *Queries) GetDeal(ctx context.Context, id int64) (Deal, error) {
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.LossReasonCode,
+		&i.LastActiveStage,
 	)
 	return i, err
 }
 
 const getLatestDealForAccount = `-- name: GetLatestDealForAccount :one
-SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage FROM deals
 WHERE account_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT 1
@@ -272,12 +274,13 @@ func (q *Queries) GetLatestDealForAccount(ctx context.Context, accountID int64) 
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.LossReasonCode,
+		&i.LastActiveStage,
 	)
 	return i, err
 }
 
 const listDeals = `-- name: ListDeals :many
-SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage FROM deals
 WHERE deleted_at IS NULL
   AND (created_at, id) < ($1::timestamptz, $2::bigint)
   AND (
@@ -369,6 +372,7 @@ func (q *Queries) ListDeals(ctx context.Context, arg ListDealsParams) ([]Deal, e
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.LossReasonCode,
+			&i.LastActiveStage,
 		); err != nil {
 			return nil, err
 		}
@@ -381,7 +385,7 @@ func (q *Queries) ListDeals(ctx context.Context, arg ListDealsParams) ([]Deal, e
 }
 
 const listDealsForJena = `-- name: ListDealsForJena :many
-SELECT d.id, d.tenant_id, d.entity_code, d.deal_owner, d.account_id, d.primary_contact_id, d.plan_requested_id, d.deal_name, d.deal_type, d.stage, d.amount, d.probability, d.expected_close_date, d.forecast_category, d.next_step, d.closed_date, d.win_loss_reason, d.competitor, d.loss_notes, d.subscription_term, d.created_subscription_id, d.deleted_at, d.created_by, d.created_at, d.updated_by, d.updated_at, d.loss_reason_code, COALESCE(NULLIF(u.name, ''), u.email, '') AS owner_label
+SELECT d.id, d.tenant_id, d.entity_code, d.deal_owner, d.account_id, d.primary_contact_id, d.plan_requested_id, d.deal_name, d.deal_type, d.stage, d.amount, d.probability, d.expected_close_date, d.forecast_category, d.next_step, d.closed_date, d.win_loss_reason, d.competitor, d.loss_notes, d.subscription_term, d.created_subscription_id, d.deleted_at, d.created_by, d.created_at, d.updated_by, d.updated_at, d.loss_reason_code, d.last_active_stage, COALESCE(NULLIF(u.name, ''), u.email, '') AS owner_label
 FROM deals d
 LEFT JOIN users u ON u.id = d.deal_owner
 WHERE d.deleted_at IS NULL
@@ -440,6 +444,7 @@ type ListDealsForJenaRow struct {
 	UpdatedBy             *int64             `json:"updated_by"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	LossReasonCode        *string            `json:"loss_reason_code"`
+	LastActiveStage       *string            `json:"last_active_stage"`
 	OwnerLabel            string             `json:"owner_label"`
 }
 
@@ -499,6 +504,7 @@ func (q *Queries) ListDealsForJena(ctx context.Context, arg ListDealsForJenaPara
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.LossReasonCode,
+			&i.LastActiveStage,
 			&i.OwnerLabel,
 		); err != nil {
 			return nil, err
@@ -512,7 +518,7 @@ func (q *Queries) ListDealsForJena(ctx context.Context, arg ListDealsForJenaPara
 }
 
 const listDealsForPipeline = `-- name: ListDealsForPipeline :many
-SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage FROM deals
 WHERE deleted_at IS NULL
   AND (
       $1::boolean
@@ -580,6 +586,7 @@ func (q *Queries) ListDealsForPipeline(ctx context.Context, arg ListDealsForPipe
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.LossReasonCode,
+			&i.LastActiveStage,
 		); err != nil {
 			return nil, err
 		}
@@ -592,7 +599,7 @@ func (q *Queries) ListDealsForPipeline(ctx context.Context, arg ListDealsForPipe
 }
 
 const listDealsSortByAmount = `-- name: ListDealsSortByAmount :many
-SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage FROM deals
 WHERE deleted_at IS NULL
   AND (
       NOT $1::boolean
@@ -696,6 +703,7 @@ func (q *Queries) ListDealsSortByAmount(ctx context.Context, arg ListDealsSortBy
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.LossReasonCode,
+			&i.LastActiveStage,
 		); err != nil {
 			return nil, err
 		}
@@ -708,7 +716,7 @@ func (q *Queries) ListDealsSortByAmount(ctx context.Context, arg ListDealsSortBy
 }
 
 const listDealsSortByCloseDate = `-- name: ListDealsSortByCloseDate :many
-SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage FROM deals
 WHERE deleted_at IS NULL
   AND (
       NOT $1::boolean
@@ -812,6 +820,7 @@ func (q *Queries) ListDealsSortByCloseDate(ctx context.Context, arg ListDealsSor
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.LossReasonCode,
+			&i.LastActiveStage,
 		); err != nil {
 			return nil, err
 		}
@@ -824,7 +833,7 @@ func (q *Queries) ListDealsSortByCloseDate(ctx context.Context, arg ListDealsSor
 }
 
 const listDealsSortByCode = `-- name: ListDealsSortByCode :many
-SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage FROM deals
 WHERE deleted_at IS NULL
   AND (
       NOT $1::boolean
@@ -930,6 +939,7 @@ func (q *Queries) ListDealsSortByCode(ctx context.Context, arg ListDealsSortByCo
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.LossReasonCode,
+			&i.LastActiveStage,
 		); err != nil {
 			return nil, err
 		}
@@ -942,7 +952,7 @@ func (q *Queries) ListDealsSortByCode(ctx context.Context, arg ListDealsSortByCo
 }
 
 const listDealsSortByName = `-- name: ListDealsSortByName :many
-SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage FROM deals
 WHERE deleted_at IS NULL
   AND (
       NOT $1::boolean
@@ -1035,6 +1045,7 @@ func (q *Queries) ListDealsSortByName(ctx context.Context, arg ListDealsSortByNa
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.LossReasonCode,
+			&i.LastActiveStage,
 		); err != nil {
 			return nil, err
 		}
@@ -1047,7 +1058,7 @@ func (q *Queries) ListDealsSortByName(ctx context.Context, arg ListDealsSortByNa
 }
 
 const listDealsSortByOwner = `-- name: ListDealsSortByOwner :many
-SELECT deals.id, deals.tenant_id, deals.entity_code, deals.deal_owner, deals.account_id, deals.primary_contact_id, deals.plan_requested_id, deals.deal_name, deals.deal_type, deals.stage, deals.amount, deals.probability, deals.expected_close_date, deals.forecast_category, deals.next_step, deals.closed_date, deals.win_loss_reason, deals.competitor, deals.loss_notes, deals.subscription_term, deals.created_subscription_id, deals.deleted_at, deals.created_by, deals.created_at, deals.updated_by, deals.updated_at, deals.loss_reason_code FROM deals
+SELECT deals.id, deals.tenant_id, deals.entity_code, deals.deal_owner, deals.account_id, deals.primary_contact_id, deals.plan_requested_id, deals.deal_name, deals.deal_type, deals.stage, deals.amount, deals.probability, deals.expected_close_date, deals.forecast_category, deals.next_step, deals.closed_date, deals.win_loss_reason, deals.competitor, deals.loss_notes, deals.subscription_term, deals.created_subscription_id, deals.deleted_at, deals.created_by, deals.created_at, deals.updated_by, deals.updated_at, deals.loss_reason_code, deals.last_active_stage FROM deals
 LEFT JOIN users u ON u.id = deal_owner
 WHERE deals.deleted_at IS NULL
   AND (
@@ -1156,6 +1167,7 @@ func (q *Queries) ListDealsSortByOwner(ctx context.Context, arg ListDealsSortByO
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.LossReasonCode,
+			&i.LastActiveStage,
 		); err != nil {
 			return nil, err
 		}
@@ -1168,7 +1180,7 @@ func (q *Queries) ListDealsSortByOwner(ctx context.Context, arg ListDealsSortByO
 }
 
 const listDealsSortByProbability = `-- name: ListDealsSortByProbability :many
-SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage FROM deals
 WHERE deleted_at IS NULL
   AND (
       NOT $1::boolean
@@ -1270,6 +1282,7 @@ func (q *Queries) ListDealsSortByProbability(ctx context.Context, arg ListDealsS
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.LossReasonCode,
+			&i.LastActiveStage,
 		); err != nil {
 			return nil, err
 		}
@@ -1282,7 +1295,7 @@ func (q *Queries) ListDealsSortByProbability(ctx context.Context, arg ListDealsS
 }
 
 const listDealsSortByStage = `-- name: ListDealsSortByStage :many
-SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code FROM deals
+SELECT id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage FROM deals
 WHERE deleted_at IS NULL
   AND (
       NOT $1::boolean
@@ -1377,6 +1390,7 @@ func (q *Queries) ListDealsSortByStage(ctx context.Context, arg ListDealsSortByS
 			&i.UpdatedBy,
 			&i.UpdatedAt,
 			&i.LossReasonCode,
+			&i.LastActiveStage,
 		); err != nil {
 			return nil, err
 		}
@@ -1491,7 +1505,7 @@ UPDATE deals SET
     updated_by          = $14,
     updated_at          = now()
 WHERE id = $15 AND deleted_at IS NULL
-RETURNING id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code
+RETURNING id, tenant_id, entity_code, deal_owner, account_id, primary_contact_id, plan_requested_id, deal_name, deal_type, stage, amount, probability, expected_close_date, forecast_category, next_step, closed_date, win_loss_reason, competitor, loss_notes, subscription_term, created_subscription_id, deleted_at, created_by, created_at, updated_by, updated_at, loss_reason_code, last_active_stage
 `
 
 type UpdateDealParams struct {
@@ -1562,6 +1576,7 @@ func (q *Queries) UpdateDeal(ctx context.Context, arg UpdateDealParams) (Deal, e
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.LossReasonCode,
+		&i.LastActiveStage,
 	)
 	return i, err
 }
@@ -1575,9 +1590,16 @@ UPDATE deals SET
     closed_date     = CASE
         WHEN $1 IN ('Closed Won','Closed Lost') THEN CURRENT_DATE
         ELSE NULL END,
-    updated_by      = $5,
+    last_active_stage = CASE
+        WHEN $1 IN ('Closed Won','Closed Lost')
+             AND $5::text IN
+                 ('Prospecting','Qualification','Demo','Proposal','Negotiation')
+            THEN $5::text
+        WHEN $1 NOT IN ('Closed Won','Closed Lost') THEN NULL
+        ELSE last_active_stage END,
+    updated_by      = $6,
     updated_at      = now()
-WHERE id = $6 AND deleted_at IS NULL
+WHERE id = $7 AND deleted_at IS NULL
 `
 
 type UpdateDealStageParams struct {
@@ -1585,6 +1607,7 @@ type UpdateDealStageParams struct {
 	WinLossReason  *string `json:"win_loss_reason"`
 	LossReasonCode *string `json:"loss_reason_code"`
 	LossNotes      *string `json:"loss_notes"`
+	PrevStage      string  `json:"prev_stage"`
 	UpdatedBy      *int64  `json:"updated_by"`
 	ID             int64   `json:"id"`
 }
@@ -1593,12 +1616,24 @@ type UpdateDealStageParams struct {
 // diisi saat Closed Won/Lost — validasi "Closed Lost wajib win_loss_reason" di
 // handler (bukan constraint DB agar pesan bisa diperbaiki user). closed_date =
 // CURRENT_DATE bila stage terminal, NULL bila dibuka kembali ke stage aktif.
+// last_active_stage (00053, BL-173): snapshot tahap aktif TERAKHIR sebelum
+// transisi ke terminal — dipakai stepper utk bedakan "march-through penuh" vs
+// "gugur langsung dari tahap awal". prev_stage = stage SEBELUM update ini
+// (dioper handler, dibaca dari h.loadOwnedDeal sebelum UpdateDealStage jalan).
+// Diisi hanya saat aktif→terminal DAN prev_stage salah satu dari 5 tahap aktif
+// (ALLOWLIST, bukan "bukan terminal" — pemanggil lama/test yang belum diaudit
+// & tak mengoper prev_stage jatuh ke zero-value "", yang gagal CHECK
+// deals_last_active_stage_chk bila dipaksa masuk; allowlist bikin nilai tak
+// dikenal jatuh ke ELSE-pertahankan alih-alih coba tulis nilai ilegal).
+// Dikosongkan saat reopen (stage baru aktif); dipertahankan saat
+// terminal→terminal (mis. Closed Lost → Closed Won tanpa reopen dulu).
 func (q *Queries) UpdateDealStage(ctx context.Context, arg UpdateDealStageParams) error {
 	_, err := q.db.Exec(ctx, updateDealStage,
 		arg.Stage,
 		arg.WinLossReason,
 		arg.LossReasonCode,
 		arg.LossNotes,
+		arg.PrevStage,
 		arg.UpdatedBy,
 		arg.ID,
 	)
