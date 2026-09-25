@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -28,15 +29,31 @@ type wonSubscriptionInput struct {
 }
 
 // resolveWonSubscriptionInputs mengumpulkan & memvalidasi seluruh input untuk
-// membuat langganan dari deal yang menang — resolusi quote+termin, validasi
-// status, ambil item quote + turunkan plan induk (BL-88 PR2b), dan cek
-// konflik one-active (keputusan c). Menulis wsRedirect & mengembalikan
-// ok=false pada kegagalan apa pun; pemanggil (subscriptionFromWonDeal) WAJIB
-// berhenti tanpa membuat apa pun.
+// membuat langganan dari deal yang menang lewat form single-deal (`DealStage`):
+// baca `subscription_status` dari form lalu delegasi ke resolveWonSubscriptionCore.
+// Menulis wsRedirect & mengembalikan ok=false pada kegagalan apa pun; pemanggil
+// (subscriptionFromWonDeal) WAJIB berhenti tanpa membuat apa pun.
 func (h *Handler) resolveWonSubscriptionInputs(w http.ResponseWriter, r *http.Request, deal db.Deal) (wonSubscriptionInput, bool) {
-	ctx := r.Context()
 	idStr := strconv.FormatInt(deal.ID, 10)
+	// Status awal dari form (keputusan a). Wajib Trial/Active.
+	status := strings.TrimSpace(r.FormValue("subscription_status"))
+	input, reason := h.resolveWonSubscriptionCore(r.Context(), deal, status)
+	if reason != "" {
+		wsRedirect(w, r, "/deals/"+idStr, reason)
+		return wonSubscriptionInput{}, false
+	}
+	return input, true
+}
 
+// resolveWonSubscriptionCore = inti resolveWonSubscriptionInputs TANPA efek samping
+// HTTP (BL-75): status diterima sebagai parameter eksplisit (bukan dibaca dari
+// r.FormValue) agar dipakai bersama oleh jalur single-deal (wrapper di atas, baca
+// form) DAN DealStageBulk (nilai status sudah di-resolve per-baris dari mode
+// shared/individual). Mengembalikan reason code non-kosong ("quote_required",
+// "sub_status", "plan_required", "sub_active_exists", "failed") alih-alih menulis
+// redirect — pemanggil single-deal menerjemahkannya ke wsRedirect, pemanggil bulk
+// cukup skip baris (tak ada rollback tx parsial, lihat catatan subscriptionFromWonDeal).
+func (h *Handler) resolveWonSubscriptionCore(ctx context.Context, deal db.Deal, status string) (wonSubscriptionInput, string) {
 	// BL-88: quote otoritatif → langganan lahir dari quote Accepted, bukan field deal
 	// manual. Tanpa quote Accepted, nilai & termin tak punya sumber sah → tolak (bukan
 	// diam-diam) agar user meng-Accept quote dulu. Index idx_quotes_one_accepted menjamin
@@ -44,12 +61,10 @@ func (h *Handler) resolveWonSubscriptionInputs(w http.ResponseWriter, r *http.Re
 	quote, err := h.q(ctx).GetAcceptedQuoteForDeal(ctx, &deal.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			wsRedirect(w, r, "/deals/"+idStr, "quote_required")
-			return wonSubscriptionInput{}, false
+			return wonSubscriptionInput{}, "quote_required"
 		}
 		h.Log.Error("deals: won accepted-quote", "deal_id", deal.ID, "err", err)
-		wsRedirect(w, r, "/deals/"+idStr, "failed")
-		return wonSubscriptionInput{}, false
+		return wonSubscriptionInput{}, "failed"
 	}
 	// Termin dari QUOTE (BL-88), bukan deal. subscription_term = billing cycle (harus
 	// enum valid Monthly/Annual/Multi-year) + fallback bulan-kontrak; contract_term_months
@@ -58,17 +73,13 @@ func (h *Handler) resolveWonSubscriptionInputs(w http.ResponseWriter, r *http.Re
 	term := deref(quote.SubscriptionTerm)
 	months, termOK := termContractMonths[term]
 	if !termOK {
-		wsRedirect(w, r, "/deals/"+idStr, "quote_required")
-		return wonSubscriptionInput{}, false
+		return wonSubscriptionInput{}, "quote_required"
 	}
 	if quote.ContractTermMonths != nil && *quote.ContractTermMonths > 0 {
 		months = *quote.ContractTermMonths
 	}
-	// Status awal dari form (keputusan a). Wajib Trial/Active.
-	status := strings.TrimSpace(r.FormValue("subscription_status"))
 	if _, ok := validInitialSubStatuses[status]; !ok {
-		wsRedirect(w, r, "/deals/"+idStr, "sub_status")
-		return wonSubscriptionInput{}, false
+		return wonSubscriptionInput{}, "sub_status"
 	}
 	// BL-88 PR2b: identitas paket ada di subscription_items (mirror quote_items). Ambil
 	// baris quote LEBIH DULU: darinya diturunkan (a) plan_id parent — SATU paket distinct →
@@ -78,13 +89,11 @@ func (h *Handler) resolveWonSubscriptionInputs(w http.ResponseWriter, r *http.Re
 	items, err := h.q(ctx).ListQuoteItems(ctx, quote.ID)
 	if err != nil {
 		h.Log.Error("deals: won quote items", "deal_id", deal.ID, "quote_id", quote.ID, "err", err)
-		wsRedirect(w, r, "/deals/"+idStr, "failed")
-		return wonSubscriptionInput{}, false
+		return wonSubscriptionInput{}, "failed"
 	}
 	parentPlan, hasPlan := singleQuotePlan(items)
 	if !hasPlan {
-		wsRedirect(w, r, "/deals/"+idStr, "plan_required")
-		return wonSubscriptionInput{}, false
+		return wonSubscriptionInput{}, "plan_required"
 	}
 	// Konflik one-active (keputusan c: TOLAK) — hanya menggigit bila status Active
 	// (parent_active); Trial boleh koeksis. Pre-check lintas SEMUA paket quote beri pesan
@@ -96,18 +105,16 @@ func (h *Handler) resolveWonSubscriptionInputs(w http.ResponseWriter, r *http.Re
 		})
 		if err != nil {
 			h.Log.Error("deals: won sub active-check", "deal_id", deal.ID, "err", err)
-			wsRedirect(w, r, "/deals/"+idStr, "failed")
-			return wonSubscriptionInput{}, false
+			return wonSubscriptionInput{}, "failed"
 		}
 		if exists {
-			wsRedirect(w, r, "/deals/"+idStr, "sub_active_exists")
-			return wonSubscriptionInput{}, false
+			return wonSubscriptionInput{}, "sub_active_exists"
 		}
 	}
 	return wonSubscriptionInput{
 		quote: quote, term: term, months: months, status: status,
 		items: items, parentPlan: parentPlan,
-	}, true
+	}, ""
 }
 
 // singleQuotePlan menurunkan plan_id PARENT langganan dari baris quote (BL-88 PR2b):

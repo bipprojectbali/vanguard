@@ -76,7 +76,7 @@ func (h *Handler) dealsTable(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]panel.DealRow, 0, len(shown))
 	for _, d := range shown {
-		items = append(items, dealRowView(d, names, canARR))
+		items = append(items, dealRowView(d, names, canARR, nil))
 	}
 
 	base := wsPath(slugFromRequest(r), "")

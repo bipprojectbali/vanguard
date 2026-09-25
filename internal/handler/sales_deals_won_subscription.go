@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"go_starter/internal/codes"
 	"go_starter/internal/db"
@@ -47,23 +49,38 @@ var validInitialSubStatuses = map[string]struct{}{
 // validInitialSubStatuses via test.
 var wonSubStatusOptions = []string{"Active", "Trial"}
 
-// subscriptionFromWonDeal membuat langganan dari deal yang baru di-Closed Won.
-// Mengembalikan (sub, true) bila langganan lahir, (nil, true) bila di-SKIP karena
-// idempoten (deal sudah menautkan langganan — cegah dobel saat Won→lain→Won), atau
-// (nil, false) bila GAGAL/validasi tak lolos (response ?err sudah ditulis; pemanggil
-// WAJIB berhenti tanpa mengubah stage). Semua lewat h.q(ctx) — tx ber-tenant, JANGAN
-// h.DB.
+// subscriptionFromWonDeal membuat langganan dari deal yang baru di-Closed Won lewat
+// form single-deal (`DealStage`): baca `subscription_status` dari form lalu delegasi
+// ke subscriptionFromWonDealCore. Mengembalikan (sub, true) bila langganan lahir,
+// (nil, true) bila di-SKIP karena idempoten (deal sudah menautkan langganan — cegah
+// dobel saat Won→lain→Won), atau (nil, false) bila GAGAL/validasi tak lolos (response
+// ?err sudah ditulis; pemanggil WAJIB berhenti tanpa mengubah stage).
 func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request, deal db.Deal, uid int64) (*db.Subscription, bool) {
-	ctx := r.Context()
 	idStr := strconv.FormatInt(deal.ID, 10)
+	status := strings.TrimSpace(r.FormValue("subscription_status"))
+	sub, reason := h.subscriptionFromWonDealCore(r.Context(), deal, uid, status)
+	if reason != "" {
+		wsRedirect(w, r, "/deals/"+idStr, reason)
+		return nil, false
+	}
+	return sub, true
+}
 
+// subscriptionFromWonDealCore = inti subscriptionFromWonDeal TANPA efek samping HTTP
+// (BL-75): status diterima eksplisit (bukan dibaca dari form) agar dipakai bersama
+// jalur single-deal (wrapper di atas) DAN DealStageBulk (status per-baris sudah
+// di-resolve dari mode shared/individual). Reason code kosong = sukses ATAU skip
+// idempoten (keduanya "tak ada yang perlu dilakukan pemanggil selain lanjut/berhenti
+// wajar"); reason non-kosong = gagal, pemanggil bulk cukup skip baris (tak ada
+// rollback tx parsial). Semua lewat h.q(ctx) — tx ber-tenant, JANGAN h.DB.
+func (h *Handler) subscriptionFromWonDealCore(ctx context.Context, deal db.Deal, uid int64, status string) (*db.Subscription, string) {
 	// Idempotensi: sudah tertaut → jangan buat lagi (re-Won tak menggandakan).
 	if deal.CreatedSubscriptionID != nil {
-		return nil, true
+		return nil, ""
 	}
-	in, ok := h.resolveWonSubscriptionInputs(w, r, deal)
-	if !ok {
-		return nil, false
+	in, reason := h.resolveWonSubscriptionCore(ctx, deal, status)
+	if reason != "" {
+		return nil, reason
 	}
 	months := in.months
 
@@ -80,8 +97,7 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 	code, err := h.q(ctx).GenerateEntityCode(ctx, tenantID, codes.EntitySubscription)
 	if err != nil {
 		h.Log.Error("deals: won sub code", "deal_id", deal.ID, "err", err)
-		wsRedirect(w, r, "/deals/"+idStr, "failed")
-		return nil, false
+		return nil, "failed"
 	}
 
 	billing := in.term
@@ -105,8 +121,7 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 	})
 	if err != nil {
 		h.Log.Error("deals: won sub create", "deal_id", deal.ID, "err", err)
-		wsRedirect(w, r, "/deals/"+idStr, "failed")
-		return nil, false
+		return nil, "failed"
 	}
 
 	// BL-88 PR2a: salin baris quote_items → subscription_items (tulis ganda). Snapshot
@@ -114,7 +129,7 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 	// diturunkan dari subtotal item (bukan grand_total) — Σ item.mrr bisa selisih tipis
 	// dari parent.mrr bila quote punya diskon/pembulatan, item mengikuti subtotalnya.
 	// FAIL-SOFT: parent langganan sudah lahir; gagal buat item TAK menggagalkan Won
-	// (hanya di-log). items sudah diambil resolveWonSubscriptionInputs (dipakai turunkan
+	// (hanya di-log). items sudah diambil resolveWonSubscriptionCore (dipakai turunkan
 	// plan_id parent).
 	for _, it := range in.items {
 		imrr := divNumericInt(it.Subtotal, int64(months))
@@ -134,5 +149,5 @@ func (h *Handler) subscriptionFromWonDeal(w http.ResponseWriter, r *http.Request
 			h.Log.Error("deals: won sub item add", "sub_id", sub.ID, "err", err)
 		}
 	}
-	return &sub, true
+	return &sub, ""
 }

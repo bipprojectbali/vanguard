@@ -1,5 +1,7 @@
 package handler
 
+import "encoding/json"
+
 // sales_deals_stage_sequence.go — aturan URUTAN pipeline (BL-159): form ubah
 // tahap tak boleh lompat. Dipisah dari sales_deals_stage.go (aksi POST) &
 // sales_deals_form_options.go (enum murni) karena ini LOGIKA transisi, dipakai
@@ -50,4 +52,22 @@ func isValidDealStageTransition(current, next string) bool {
 		}
 	}
 	return false
+}
+
+// dealStageRulesJSON (BL-75) serialisasi map stage→next-stage SAH (nextDealStages
+// dipanggil per activeDealStages) ke JSON — satu-satunya sumber aturan transisi
+// ditanam ke klien (dealboard.js), agar JS tak menduplikasi isValidDealStageTransition.
+// Isi HANYA enum internal (nama stage), BUKAN input user — aman ditanam mentah
+// sbg <script type="application/json"> (gotcha #15 soal escape berlaku ke input
+// user, bukan konstanta ini). Gagal marshal (mustahil, tipe statis) → "{}".
+func dealStageRulesJSON() string {
+	rules := make(map[string][]string, len(activeDealStages))
+	for _, s := range activeDealStages {
+		rules[s] = nextDealStages(s)
+	}
+	b, err := json.Marshal(rules)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }

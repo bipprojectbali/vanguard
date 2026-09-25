@@ -39,12 +39,12 @@ func TestDealRowView_AmountMasked(t *testing.T) {
 	}
 	const wantAmount = "Rp 7.500.000"
 
-	v := dealRowView(d, nil, false)
+	v := dealRowView(d, nil, false, nil)
 	if v.Amount != flsHidden {
 		t.Errorf("canARR=false: Amount harus tersamar (%s), got %q", flsHidden, v.Amount)
 	}
 
-	v = dealRowView(d, nil, true)
+	v = dealRowView(d, nil, true, nil)
 	if v.Amount != wantAmount {
 		t.Errorf("canARR=true: Amount harus %q, got %q", wantAmount, v.Amount)
 	}

@@ -387,6 +387,7 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/deals/{id}/edit", h.DealEdit)
 		r.Post("/deals/{id}", h.DealUpdate)
 		r.Post("/deals/{id}/stage", h.DealStage)
+		r.Post("/deals/stage-bulk", h.DealStageBulk) // BL-75: drag-drop Kanban (satu/banyak kartu)
 		r.Post("/deals/{id}/delete", h.DealDelete)
 
 		// Sales Activity Log (Sales, CRM 4.4). VIEW TERFILTER (activity_context=

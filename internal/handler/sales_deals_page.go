@@ -78,11 +78,35 @@ func (h *Handler) dealsPipeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// BL-75: gate drag Negotiation→Closed Won butuh tahu deal mana yang sudah
+	// punya quote Accepted — batched (BUKAN N+1 per kartu, lihat ListAcceptedQuoteDealIDs).
+	// Dikumpulkan HANYA dari kartu Negotiation di papan ini (bukan seluruh tabel).
+	var negotiationIDs []int64
+	for _, d := range rows {
+		if d.Stage == "Negotiation" {
+			negotiationIDs = append(negotiationIDs, d.ID)
+		}
+	}
+	quoted := make(map[int64]bool, len(negotiationIDs))
+	if len(negotiationIDs) > 0 {
+		accepted, err := h.q(ctx).ListAcceptedQuoteDealIDs(ctx, negotiationIDs)
+		if err != nil {
+			h.Log.Error("deals: accepted quote ids", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		for _, id := range accepted {
+			if id != nil {
+				quoted[*id] = true
+			}
+		}
+	}
+
 	// Bucket per-stage mengikuti urutan pipeline (dealStageOptions). Deal dengan
 	// stage tak dikenal (mustahil lewat CHECK) diabaikan diam-diam agar papan tetap rapi.
 	buckets := make(map[string][]panel.DealRow, len(dealStageOptions))
 	for _, d := range rows {
-		buckets[d.Stage] = append(buckets[d.Stage], dealRowView(d, names, canARR))
+		buckets[d.Stage] = append(buckets[d.Stage], dealRowView(d, names, canARR, quoted))
 	}
 	cols := make([]panel.DealStageColumn, 0, len(dealStageOptions))
 	for _, s := range dealStageOptions {
@@ -91,16 +115,20 @@ func (h *Handler) dealsPipeline(w http.ResponseWriter, r *http.Request) {
 
 	base := wsPath(slugFromRequest(r), "")
 	h.renderWorkspaceShell(w, r, "Deals", "/deals", panel.DealPipeline(panel.DealPipelineView{
-		Base:           base,
-		View:           "",
-		CanWrite:       canWriteDeals(ctx),
-		Mine:           mineOnly,
-		ShowMineToggle: filter.ScopeAll, // BL-10: 'own' sudah milik sendiri → redundan
-		Err:            wsErrMsg(r.URL.Query().Get("err")),
-		Msg:            dealsMsg(r.URL.Query().Get("ok")),
-		OpenCount:      strconv.FormatInt(stats.OpenCount, 10),
-		PipelineValue:  maskARR(formatRupiah(stats.PipelineValue), canARR),
-		WinRate:        winRate(stats.WonCount, stats.LostCount),
-		Stages:         cols,
+		Base:            base,
+		View:            "",
+		CanWrite:        canWriteDeals(ctx),
+		Mine:            mineOnly,
+		ShowMineToggle:  filter.ScopeAll, // BL-10: 'own' sudah milik sendiri → redundan
+		Err:             wsErrMsg(r.URL.Query().Get("err")),
+		Msg:             dealsMsg(r.URL.Query().Get("ok")),
+		OpenCount:       strconv.FormatInt(stats.OpenCount, 10),
+		PipelineValue:   maskARR(formatRupiah(stats.PipelineValue), canARR),
+		WinRate:         winRate(stats.WonCount, stats.LostCount),
+		Stages:          cols,
+		LossReasonCodes: lossReasonCodeOptions,
+		WonSubStatuses:  wonSubStatusOptions,
+		StageRulesJSON:  dealStageRulesJSON(),
+		DealboardJSPath: dealboardJSPath,
 	}))
 }
