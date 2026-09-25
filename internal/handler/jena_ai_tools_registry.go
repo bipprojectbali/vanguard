@@ -15,8 +15,11 @@ import (
 
 // jenaTools mendaftarkan allowlist eksplisit tool yang boleh dipanggil Jena AI
 // — dikirim ke claudeai.AskWithTools, dibaca ulang oleh jenaDispatch di bawah.
+// list_my_contacts (BL-162 fase 5) ditambah via jenaContactsMineTools() di
+// jena_ai_tools_registry_contacts_mine.go, BUKAN literal di sini — file ini
+// sudah di ambang 150 baris (File Health, CLAUDE.md §8).
 func (h *Handler) jenaTools() []claudeai.Tool {
-	return []claudeai.Tool{
+	tools := []claudeai.Tool{
 		{
 			Name: "search_accounts",
 			Description: "Cari desa (Account) berdasarkan nama atau kode desa. " +
@@ -139,4 +142,5 @@ func (h *Handler) jenaTools() []claudeai.Tool {
 			}`),
 		},
 	}
+	return append(tools, h.jenaContactsMineTools()...)
 }

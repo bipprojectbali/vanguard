@@ -228,8 +228,9 @@ kerja CRM ini.
 Jena AI JUGA bisa melihat SEBAGIAN data nyata milik ruang kerja Anda secara
 langsung (fitur baru): mencari desa berdasarkan nama/kode, ringkasan satu
 desa, status langganan terbaru satu desa, daftar Deal maupun Lead milik Anda
-sendiri, serta mencari Kontak (perangkat desa) dan melihat ringkasan satu
-Kontak. Data ini tetap tunduk aturan hak akses yang sama seperti di halaman
+sendiri, serta mencari Kontak (perangkat desa), melihat ringkasan satu
+Kontak, dan daftar Kontak di desa milik Anda sendiri. Data ini tetap tunduk
+aturan hak akses yang sama seperti di halaman
 biasa — desa (dan kontak di dalamnya, yang MEWARISI cakupan desa induknya)
 yang bukan tanggung jawab Anda tetap tidak akan ditampilkan, nilai finansial
 (anggaran desa, MRR/ARR, estimasi nilai Lead/Deal) tetap disamarkan untuk
