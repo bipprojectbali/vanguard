@@ -8,18 +8,37 @@ import "go_starter/internal/ui/pages/panel"
 // paket handler — perilaku identik.
 
 // csRenewalTabs — tab filter stage (sumber tunggal handler + view).
+//
+// Label "Won"/"Lost" sengaja ditampilkan sbg "Renewed"/"Terminate" (diskusi
+// user 2026-09-25): "Won/Lost" jargon deal Sales Pipeline, kurang pas utk
+// retensi pelanggan existing. Label ONLY — nilai DB tetap "Won"/"Lost"
+// (cermin CHECK subs_renewal_stage_chk, migrasi 00012) agar tanpa migrasi +
+// tanpa backfill data lama.
 var csRenewalTabs = []panel.CSRenewalTab{
 	{Key: "", Label: "Semua"},
 	{Key: "Not Started", Label: "Belum Dimulai"},
 	{Key: "Outreach", Label: "Outreach"},
 	{Key: "Negotiation", Label: "Negosiasi"},
-	{Key: "Won", Label: "Won"},
-	{Key: "Lost", Label: "Lost"},
+	{Key: "Won", Label: "Renewed"},
+	{Key: "Lost", Label: "Terminate"},
 }
 
-// csRenewalStageValues — nilai sah stage, dipakai validasi + dropdown.
+// csRenewalStageValues — nilai sah stage, dipakai validasi.
 var csRenewalStageValues = []string{
 	"Not Started", "Outreach", "Negotiation", "Won", "Lost",
+}
+
+// csRenewalStageOptions — pilihan dropdown form edit (Value dari DB, Label
+// tampilan via csRenewalStageLabel — lihat catatan csRenewalTabs).
+var csRenewalStageOptions = buildCSRenewalStageOptions()
+
+func buildCSRenewalStageOptions() []panel.CSRenewalStageOption {
+	opts := make([]panel.CSRenewalStageOption, 0, len(csRenewalStageValues))
+	for _, v := range csRenewalStageValues {
+		val := v
+		opts = append(opts, panel.CSRenewalStageOption{Value: val, Label: csRenewalStageLabel(&val)})
+	}
+	return opts
 }
 
 // csRenewalRiskValues — nilai sah risk, dipakai validasi + dropdown.
@@ -60,9 +79,9 @@ func csRenewalStageLabel(s *string) string {
 	case "Negotiation":
 		return "Negosiasi"
 	case "Won":
-		return "Won"
+		return "Renewed"
 	case "Lost":
-		return "Lost"
+		return "Terminate"
 	default:
 		return *s
 	}

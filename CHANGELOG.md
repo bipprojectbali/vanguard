@@ -4,6 +4,9 @@ Semua perubahan penting pada go_starter dicatat di sini.
 
 ## [Unreleased]
 
+### Changed
+- **Label dropdown "Renewal Stage" di Edit Aksi Renewal: "Won"→"Renewed", "Lost"→"Terminate" (BL-174).** Tab filter dan dropdown stage di halaman CS Renewal Management (`/w/{slug}/renewal-management`) kini menampilkan "Renewed"/"Terminate" alih-alih "Won"/"Lost" — istilah lama jargon deal Sales Pipeline, kurang pas untuk konteks retensi pelanggan existing (langganan desa yang diperpanjang/dihentikan, bukan deal baru yang dimenangkan/kalah). Perubahan **label tampilan saja**: nilai yang tersimpan di database tetap `Won`/`Lost` (mengikuti CHECK constraint `subs_renewal_stage_chk`, migrasi 00012), tanpa migrasi schema maupun backfill data lama. Badge warna pada daftar (`csRenewalStageBadge`) tidak berubah — tetap hijau untuk Renewed dan merah untuk Terminate. Dibangun di `internal/handler/cs_renewals_enum.go` (`csRenewalTabs`, `csRenewalStageLabel`) dan tipe baru `panel.CSRenewalStageOption{Value,Label}` di `internal/ui/pages/panel/cs_renewals_form.go` (dropdown sebelumnya memakai `[]string` mentah sehingga Value dan Label selalu sama — kini bisa berbeda), dipasok dari `internal/handler/cs_renewals.go`.
+
 ## [1.11.0] - 2026-09-24
 
 ### Added

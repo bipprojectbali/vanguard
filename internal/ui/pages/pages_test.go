@@ -16,34 +16,41 @@ func render(t *testing.T, node g.Node) string {
 	return sb.String()
 }
 
-func TestLogin_GoogleAlways_NoPasswordInProd(t *testing.T) {
-	out := render(t, Login(false, "")) // production: tanpa form password
-	if !strings.Contains(out, "/api/auth/google") || !strings.Contains(out, "Masuk dengan Google") {
+func TestLogin_GoogleOnly_NoPasswordForm(t *testing.T) {
+	out := render(t, Login("", "Acme")) // Google-only: tak ada form password sama sekali
+	if !strings.Contains(out, "/api/auth/google") || !strings.Contains(out, "Lanjutkan dengan Google") {
 		t.Errorf("tombol Google harus selalu ada:\n%s", out)
 	}
 	if strings.Contains(out, `type="password"`) {
-		t.Errorf("form password tak boleh muncul saat showPassword=false:\n%s", out)
+		t.Errorf("halaman login tak lagi punya form password:\n%s", out)
 	}
 }
 
-func TestLogin_WithPassword_Dev(t *testing.T) {
-	out := render(t, Login(true, ""))
-	// Form NATIVE (method post + action), bukan Datastar @post (redirect SSE
-	// diblokir CSP — lihat gotcha). Assert atribut form native + submit.
-	for _, want := range []string{"Masuk dengan Google", `type="password"`, `method="post"`, `action="/login"`, "/register"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("login dev kurang %q:\n%s", want, out)
-		}
-	}
-	if strings.Contains(out, "@post") {
-		t.Errorf("form auth TAK boleh pakai @post (harus native form):\n%s", out)
-	}
-}
-
+// TestLogin_RendersError: ?err=inactive juga datang dari jalur Google di
+// produksi (oauth_google.go) — errMsg wajib selalu dirender sebagai alert.
 func TestLogin_RendersError(t *testing.T) {
-	out := render(t, Login(true, "Email atau password salah"))
-	if !strings.Contains(out, "Email atau password salah") {
+	out := render(t, Login("Akun tidak aktif. Hubungi administrator.", "Acme"))
+	if !strings.Contains(out, "Akun tidak aktif. Hubungi administrator.") {
 		t.Errorf("errMsg harus dirender sebagai alert:\n%s", out)
+	}
+}
+
+// TestLogin_RendersBrandAndCopy: elemen mockup Penpot "Auth Flow — 2. Landing"
+// (logo+brand, badge internal, headline, subtext, disclaimer) harus ada.
+// Brand DIOPER dari handler (APP_NAME), tak ditulis view — tanpa ini setiap
+// project turunan template memampangkan nama project lain.
+func TestLogin_RendersBrandAndCopy(t *testing.T) {
+	out := render(t, Login("", "Vanguard CRM"))
+	for _, want := range []string{
+		"Vanguard CRM",
+		"INTERNAL USE ONLY",
+		"Kelola relasi pelanggan desa dengan satu platform",
+		"Sales, Customer Success, Support",
+		"Dengan melanjutkan, Anda menyetujui penggunaan data sesuai kebijakan internal.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("login kurang %q:\n%s", want, out)
+		}
 	}
 }
 
