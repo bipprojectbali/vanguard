@@ -4,6 +4,10 @@ Semua perubahan penting pada go_starter dicatat di sini.
 
 ## [Unreleased]
 
+### Added
+- **Jena AI: tool baru `list_my_contacts` untuk modul Kontak (BL-162 fase 5).** Diminta setelah testing live menunjukkan Jena AI tak bisa mendaftar SEMUA kontak milik penanya sekaligus (hanya cari-per-nama/ambil-per-id via `search_contacts`/`get_contact_summary`), beda dari Deal/Lead yang sudah punya `list_my_X`. Pola sama `list_my_deals`/`list_my_leads`: tanpa parameter, SENGAJA memaksa "milik SAYA" (`IsSales=true`+`IsCsm=true`) terlepas dari `data_scope` peran penanya — reuse query `ListContacts` (sqlc) yang sama dipakai `search_contacts`, tanpa query SQL baru. F2 `canViewContacts`; F4 tak berlaku (bentuk baris id+nama+desa sama `search_contacts`, tanpa field sensitif). File health: implementasi dipisah ke `jena_ai_tools_contacts_mine.go` + skema tool ke `jena_ai_tools_registry_contacts_mine.go`.
+- **Jena AI: tool baru `search_contacts`/`get_contact_summary` untuk modul Kontak (BL-162 fase 4).** Cakupan kontak MEWARISI kepemilikan desa (Account) induk untuk F3 (bukan filter kontak sendiri, sama pola `loadOwnedContactAccount`), F2 (`canViewContacts`) SENGAJA terpisah arsitektural dari F2 Accounts, F4 nomor HP/WhatsApp disamarkan lewat `maskPhone`/`canSeeFullPhone` (BL-107) — email & telepon kantor tak disamarkan di app ini. `get_contact_summary` menggabung F2+F3 jadi satu pesan "tidak ditemukan" (pola sama `get_account_summary`, menghindari bocor keberadaan data ke role tak berwenang); `search_contacts` tetap membalas pesan F2 eksplisit (pola sama `search_accounts`). File health: implementasi dipisah ke `jena_ai_tools_contacts.go`.
+
 ## [1.11.0] - 2026-09-24
 
 ### Added
