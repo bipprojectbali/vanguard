@@ -7,14 +7,17 @@ import (
 	"strconv"
 	"testing"
 
-	"go_starter/internal/codes"
 	"go_starter/internal/db"
 )
 
-// subscriptions_renew_test.go — mutasi renewal (M5-3c) di sisi handler: perpanjang
-// (straight & upsell), setujui, tolak, plus gerbang bisnis. Invarian yang dikunci:
-// renewal = INSERT baris baru; straight → baris lama Expired lebih dulu; upsell →
-// baris lama TETAP Active sampai Manager menyetujui (idx_subs_one_active).
+// subscriptions_renew_test.go — mutasi renew (M5-3c) di sisi handler: perpanjang
+// (straight, upsell & downgrade — BL-172) + gerbang renew. Invarian yang dikunci:
+// renewal = INSERT baris baru; straight → baris lama Expired lebih dulu; upsell/
+// downgrade → baris lama TETAP Active sampai Manager menyetujui
+// (idx_subs_one_active); harga BERBEDA (naik ATAU turun) sama-sama butuh
+// persetujuan — hanya harga SAMA PERSIS yang auto-approve (straight).
+//
+// approve/reject dipisah ke subscriptions_renew_approve_test.go (file health).
 //
 // Koneksi test = superuser (bypass RLS) → uji LOGIKA handler. Reuse setupAccounts/
 // accountsReq/runAccount + seedSubscription (subscriptions_test.go).
@@ -34,37 +37,6 @@ func redirectSubID(t *testing.T, loc string) int64 {
 		t.Fatalf("parse id dari %q: %v", loc, err)
 	}
 	return id
-}
-
-// seedPendingRenewal menaruh baris renewal 'PendingApproval' yang menunjuk baris
-// lama (previous). Dipakai menguji approve/reject tanpa merangkai jalur renew.
-func (e *testEnv) seedPendingRenewal(
-	t *testing.T, accountID, planID int64, owner *int64, prevID int64, mrr, prevValue string,
-) db.Subscription {
-	t.Helper()
-	code, err := e.q.GenerateEntityCode(t.Context(), e.tenantID, codes.EntitySubscription)
-	if err != nil {
-		t.Fatalf("generate code: %v", err)
-	}
-	pending := "Pending"
-	s, err := e.q.CreateSubscription(t.Context(), db.CreateSubscriptionParams{
-		TenantID:               e.tenantID,
-		EntityCode:             &code,
-		SubscriptionOwner:      owner,
-		AccountID:              accountID,
-		PlanID:                 &planID,
-		PreviousSubscriptionID: &prevID,
-		Status:                 "PendingApproval",
-		ApprovalStatus:         &pending,
-		Mrr:                    numFrom(t, mrr),
-		Arr:                    numFrom(t, ""),
-		PreviousValue:          numFrom(t, prevValue),
-		CreatedBy:              owner,
-	})
-	if err != nil {
-		t.Fatalf("seed pending renewal: %v", err)
-	}
-	return s
 }
 
 // --- renew: straight -------------------------------------------------------
@@ -118,6 +90,9 @@ func TestSubscriptionRenew_Straight(t *testing.T) {
 	if !numEq(fresh.Arr, "6000000") {
 		t.Errorf("ARR baru harus MRR×12 = 6000000")
 	}
+	// Regresi BL-172: MRR sama persis (kosong = ikut lama) tetap auto-approve,
+	// action audit generik (tak berubah oleh penambahan arah upsell/downgrade).
+	env.assertAudited(t, "subscription.renew")
 }
 
 // --- renew: upsell ---------------------------------------------------------
@@ -178,6 +153,77 @@ func TestSubscriptionRenew_Upsell(t *testing.T) {
 	if n < 1 {
 		t.Errorf("Manager harus menerima notifikasi renewal upsell (unread=%d)", n)
 	}
+	if fresh.RenewalType == nil || *fresh.RenewalType != "Upsell" {
+		t.Errorf("renewal_type = %v, want Upsell", fresh.RenewalType)
+	}
+	// Regresi BL-172: arah naik tetap pakai action audit lama (Opsi A — dua string
+	// berbeda per arah, bukan satu generic + metadata; lihat auditAction()).
+	env.assertAudited(t, "subscription.renew.upsell")
+}
+
+// TestSubscriptionRenew_Downgrade: MRR baru < lama (BL-172) — SEBELUMNYA lolos
+// diam-diam lewat renewStraight (auto-approve); SEKARANG harus lewat jalur sama
+// dgn upsell: baris baru 'PendingApproval' (renewal_type "Downgrade"), baris lama
+// TETAP Active, Manager dinotifikasi, dan action audit
+// "subscription.renew.downgrade" (Opsi A: string terpisah, bukan flag di metadata,
+// agar tetap bisa difilter via ActionPrefix di /dev/logs).
+func TestSubscriptionRenew_Downgrade(t *testing.T) {
+	env, uid := setupAccounts(t)
+	mgr := env.seedMember(t, "mgrd@local", "member", 0)
+	if err := env.q.UpdateMemberBusinessRole(t.Context(), db.UpdateMemberBusinessRoleParams{
+		UserID: mgr.ID, TenantID: env.tenantID, BusinessRole: ptr("manager"),
+	}); err != nil {
+		t.Fatalf("set manager business_role: %v", err)
+	}
+	planID := env.seedPlan(t, "Paket DG", "PLAN-DG", "1000000")
+	acc := env.seedAccount(t, "Desa DG", &uid, nil, nil)
+	old := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "500000", "6000000")
+
+	form := url.Values{"new_mrr": {"300000"}} // di BAWAH MRR lama (500000)
+	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(old.ID)+"/renew", form, itoa(old.ID))
+	rec := env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionRenew)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303\n%s", rec.Code, rec.Body.String())
+	}
+	loc := rec.Header().Get("Location")
+	if !contains(loc, "ok=renew_pending") {
+		t.Errorf("Location %q harus memuat ok=renew_pending (harga turun TETAP butuh approval)", loc)
+	}
+	// Baris lama TETAP Active — downgrade belum disetujui (sama seperti upsell).
+	got, err := env.q.GetSubscription(t.Context(), old.ID)
+	if err != nil {
+		t.Fatalf("get old: %v", err)
+	}
+	if got.Status != "Active" {
+		t.Errorf("baris lama status = %q, want Active (downgrade belum disetujui)", got.Status)
+	}
+	// Baris baru PendingApproval + renewal_type Downgrade.
+	fresh, err := env.q.GetSubscription(t.Context(), redirectSubID(t, loc))
+	if err != nil {
+		t.Fatalf("get new: %v", err)
+	}
+	if fresh.Status != "PendingApproval" {
+		t.Errorf("baris baru status = %q, want PendingApproval", fresh.Status)
+	}
+	if fresh.ApprovalStatus == nil || *fresh.ApprovalStatus != "Pending" {
+		t.Errorf("approval_status = %v, want Pending", fresh.ApprovalStatus)
+	}
+	if !numEq(fresh.Mrr, "300000") {
+		t.Errorf("MRR baru harus 300000")
+	}
+	if fresh.RenewalType == nil || *fresh.RenewalType != "Downgrade" {
+		t.Errorf("renewal_type = %v, want Downgrade", fresh.RenewalType)
+	}
+	// Manager menerima notifikasi (kind digeneralisasi "renewal.pending").
+	n, err := env.q.CountUnreadNotifications(t.Context(), mgr.ID)
+	if err != nil {
+		t.Fatalf("count notif: %v", err)
+	}
+	if n < 1 {
+		t.Errorf("Manager harus menerima notifikasi renewal downgrade (unread=%d)", n)
+	}
+	env.assertAudited(t, "subscription.renew.downgrade")
 }
 
 // --- renew: pengisian periode (BL-126) -------------------------------------
@@ -238,78 +284,7 @@ func TestSubscriptionRenew_FillsDates(t *testing.T) {
 	assertPeriod(t, pend, monthsPerYear)
 }
 
-// --- approve / reject ------------------------------------------------------
-
-// TestSubscriptionRenewApprove_Activates: Manager menyetujui → baris Pending jadi
-// Active, baris lama Expired, approved_by terisi, pemilik dinotifikasi.
-func TestSubscriptionRenewApprove_Activates(t *testing.T) {
-	env, uid := setupAccounts(t)
-	rep := env.seedMember(t, "rep@local", "member", 0)
-	planID := env.seedPlan(t, "Paket A", "PLAN-AP", "1000000")
-	acc := env.seedAccount(t, "Desa A", &rep.ID, nil, nil)
-	old := env.seedSubscription(t, acc.ID, planID, &rep.ID, "Active", "500000", "6000000")
-	pending := env.seedPendingRenewal(t, acc.ID, planID, &rep.ID, old.ID, "800000", "500000")
-
-	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(pending.ID)+"/approve", nil, itoa(pending.ID))
-	rec := env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionRenewApprove)
-
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303\n%s", rec.Code, rec.Body.String())
-	}
-	if !contains(rec.Header().Get("Location"), "ok=renew_approved") {
-		t.Errorf("Location harus ok=renew_approved, got %q", rec.Header().Get("Location"))
-	}
-	gotOld, _ := env.q.GetSubscription(t.Context(), old.ID)
-	if gotOld.Status != "Expired" {
-		t.Errorf("baris lama status = %q, want Expired", gotOld.Status)
-	}
-	gotNew, _ := env.q.GetSubscription(t.Context(), pending.ID)
-	if gotNew.Status != "Active" {
-		t.Errorf("baris pending status = %q, want Active", gotNew.Status)
-	}
-	if gotNew.ApprovalStatus == nil || *gotNew.ApprovalStatus != "Approved" {
-		t.Errorf("approval_status = %v, want Approved", gotNew.ApprovalStatus)
-	}
-	if gotNew.ApprovedBy == nil || *gotNew.ApprovedBy != uid {
-		t.Errorf("approved_by = %v, want %d", gotNew.ApprovedBy, uid)
-	}
-	if n, _ := env.q.CountUnreadNotifications(t.Context(), rep.ID); n < 1 {
-		t.Errorf("pemilik harus dinotifikasi persetujuan (unread=%d)", n)
-	}
-}
-
-// TestSubscriptionRenewReject_Cancels: Manager menolak → baris Pending jadi
-// Cancelled (approval Rejected); baris lama TAK disentuh (tetap Active).
-func TestSubscriptionRenewReject_Cancels(t *testing.T) {
-	env, uid := setupAccounts(t)
-	planID := env.seedPlan(t, "Paket J", "PLAN-RJ", "1000000")
-	acc := env.seedAccount(t, "Desa J", &uid, nil, nil)
-	old := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "500000", "6000000")
-	pending := env.seedPendingRenewal(t, acc.ID, planID, &uid, old.ID, "800000", "500000")
-
-	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(pending.ID)+"/reject", nil, itoa(pending.ID))
-	rec := env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionRenewReject)
-
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303\n%s", rec.Code, rec.Body.String())
-	}
-	if !contains(rec.Header().Get("Location"), "ok=renew_rejected") {
-		t.Errorf("Location harus ok=renew_rejected, got %q", rec.Header().Get("Location"))
-	}
-	gotNew, _ := env.q.GetSubscription(t.Context(), pending.ID)
-	if gotNew.Status != "Cancelled" {
-		t.Errorf("baris pending status = %q, want Cancelled", gotNew.Status)
-	}
-	if gotNew.ApprovalStatus == nil || *gotNew.ApprovalStatus != "Rejected" {
-		t.Errorf("approval_status = %v, want Rejected", gotNew.ApprovalStatus)
-	}
-	gotOld, _ := env.q.GetSubscription(t.Context(), old.ID)
-	if gotOld.Status != "Active" {
-		t.Errorf("baris lama status = %q, want Active (reject tak menyentuhnya)", gotOld.Status)
-	}
-}
-
-// --- gates -----------------------------------------------------------------
+// --- gate --------------------------------------------------------------
 
 // TestSubscriptionRenew_Gate: renew butuh crm:renewals write. sales & csm (read
 // saja) ditolak 403; manager lolos (bukan 403).
@@ -333,29 +308,5 @@ func TestSubscriptionRenew_Gate(t *testing.T) {
 	rec := env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionRenew)
 	if rec.Code == http.StatusForbidden {
 		t.Errorf("manager harus lolos gate renew, got 403")
-	}
-}
-
-// TestSubscriptionRenewApprove_Gate: approve butuh crm:renewals APPROVE (BL-145
-// subtask 2, dipindah dari crm:renewal_mgmt). csm (punya renewal_mgmt write tapi
-// bukan approve) & sales ditolak 403; manager lolos.
-func TestSubscriptionRenewApprove_Gate(t *testing.T) {
-	env, uid := setupAccounts(t)
-	planID := env.seedPlan(t, "Paket AG", "PLAN-AG", "1000000")
-	acc := env.seedAccount(t, "Desa AG", &uid, nil, nil)
-	old := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "500000", "6000000")
-	pending := env.seedPendingRenewal(t, acc.ID, planID, &uid, old.ID, "800000", "500000")
-
-	for _, role := range []string{"sales", "csm"} {
-		req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(pending.ID)+"/approve", nil, itoa(pending.ID))
-		rec := env.runAccount(uid, "owner", role, req, env.h.SubscriptionRenewApprove)
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("role %q harus 403 saat approve, got %d", role, rec.Code)
-		}
-	}
-	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(pending.ID)+"/approve", nil, itoa(pending.ID))
-	rec := env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionRenewApprove)
-	if rec.Code == http.StatusForbidden {
-		t.Errorf("manager harus lolos gate approve, got 403")
 	}
 }
