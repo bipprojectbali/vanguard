@@ -29,6 +29,21 @@ type Release struct {
 // 300 baris). Releases (di bawah) menggabungkan keduanya.
 var currentReleases = []Release{
 	{
+		Version: "1.12.0",
+		Date:    "2026-09-25",
+		Summary: "Papan Kanban Deal kini bisa digeser (drag-and-drop) untuk memindah tahap, termasuk pilih banyak deal sekaligus dan pindah massal ke Closed Won/Lost.",
+		Sections: []Section{
+			{
+				Title: "Baru",
+				Items: []string{
+					"Kartu Deal pada papan Kanban kini bisa diseret (drag-and-drop) langsung ke kolom tahap tujuan untuk memindahkannya — tak perlu lagi membuka halaman detail tiap deal satu per satu. Tujuan yang tak valid dari tahap asal otomatis ditolak, mengikuti alur tahap yang sama seperti kontrol pindah tahap di halaman detail.",
+					"Bisa memilih beberapa kartu Deal sekaligus (dalam satu tahap yang sama) lalu menyeretnya bersamaan ke tahap lain — termasuk pindah massal ke Closed Won atau Closed Lost, dengan pilihan mengisi satu alasan untuk semua deal atau alasan masing-masing per deal.",
+					"Kolom pada papan Kanban kini bisa dilebarkan/diciutkan agar lebih mudah fokus pada satu tahap saat deal-nya banyak.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.11.0",
 		Date:    "2026-09-24",
 		Summary: "Undangan anggota kini otomatis diterapkan saat login (tanpa perlu klik tautan), dan admin bisa memberi peran tertentu akses ke halaman Anggota.",
