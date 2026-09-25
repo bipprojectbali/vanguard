@@ -87,6 +87,7 @@ func (h *Handler) dealDetailView(ctx context.Context, base string, d db.Deal, na
 		LossReasonCodes:  lossReasonCodeOptions,
 		ClosedDate:       dateStr(d.ClosedDate),
 		LossNotes:        deref(d.LossNotes),
+		LastActiveStage:  deref(d.LastActiveStage),
 		Owner:            ownerName(d.DealOwner, names),
 		CanWrite:         canWriteDeals(ctx),
 		CreatedByName:    ownerName(d.CreatedBy, names),

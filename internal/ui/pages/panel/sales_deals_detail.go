@@ -62,6 +62,11 @@ type DealDetailView struct {
 	LossReasonCodes []string
 	ClosedDate      string
 	LossNotes       string
+	// LastActiveStage (BL-173, sub-scope "stepper visual") = snapshot tahap aktif
+	// terakhir sebelum deal ditutup (deals.last_active_stage, migrasi 00053).
+	// Kosong bila deal masih aktif ATAU data lama sebelum backfill. Dipakai
+	// dealStepper membedakan "march-through penuh" vs "gugur langsung".
+	LastActiveStage string
 
 	Owner    string
 	CanWrite bool
@@ -226,7 +231,7 @@ func dealPipelineCard(v DealDetailView) g.Node {
 		h.Div(
 			h.Class("card-body min-w-0 gap-3"),
 			h.H2(h.Class("font-semibold"), g.Text("Tahap Pipeline")),
-			dealStepper(displayStages(v.Stages, v.Stage), v.Stage),
+			dealStepper(displayStages(v.Stages, v.Stage), v.Stage, v.LastActiveStage),
 		),
 	)
 }

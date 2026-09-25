@@ -2200,6 +2200,17 @@ type Querier interface {
 	// diisi saat Closed Won/Lost — validasi "Closed Lost wajib win_loss_reason" di
 	// handler (bukan constraint DB agar pesan bisa diperbaiki user). closed_date =
 	// CURRENT_DATE bila stage terminal, NULL bila dibuka kembali ke stage aktif.
+	// last_active_stage (00053, BL-173): snapshot tahap aktif TERAKHIR sebelum
+	// transisi ke terminal — dipakai stepper utk bedakan "march-through penuh" vs
+	// "gugur langsung dari tahap awal". prev_stage = stage SEBELUM update ini
+	// (dioper handler, dibaca dari h.loadOwnedDeal sebelum UpdateDealStage jalan).
+	// Diisi hanya saat aktif→terminal DAN prev_stage salah satu dari 5 tahap aktif
+	// (ALLOWLIST, bukan "bukan terminal" — pemanggil lama/test yang belum diaudit
+	// & tak mengoper prev_stage jatuh ke zero-value "", yang gagal CHECK
+	// deals_last_active_stage_chk bila dipaksa masuk; allowlist bikin nilai tak
+	// dikenal jatuh ke ELSE-pertahankan alih-alih coba tulis nilai ilegal).
+	// Dikosongkan saat reopen (stage baru aktif); dipertahankan saat
+	// terminal→terminal (mis. Closed Lost → Closed Won tanpa reopen dulu).
 	UpdateDealStage(ctx context.Context, arg UpdateDealStageParams) error
 	// Ubah status engagement. Field hasil/jadwal OPSIONAL: COALESCE(narg, kolom)
 	// menjaga nilai lama saat form tak mengirim (BL-30 #1 — tombol status polos,

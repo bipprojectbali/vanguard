@@ -44,15 +44,32 @@ func displayStages(stages []string, current string) []string {
 // dealStepper = penanda visual posisi stage di sepanjang pipeline. BL-123: kartu
 // "Tahap Pipeline" penuh-lebar di atas → stepper HORIZONTAL, discroll dalam
 // kontainer sendiri (overflow-x-auto) agar tak meluberkan halaman di mobile.
-func dealStepper(stages []string, current string) g.Node {
+//
+// lastActive (BL-173, sub-scope "stepper visual", 25 Sep): snapshot tahap aktif
+// TERAKHIR sebelum deal ditutup (deals.last_active_stage). BL-173 membuka
+// "Closed Lost" dari SETIAP tahap aktif — tanpa ini, deal yang gugur langsung
+// dari Prospecting tampil seolah melewati SEMUA tahap (murni pewarnaan
+// berindeks). `boundary` = node terakhir yang benar-benar dilewati: untuk deal
+// AKTIF tetap `current` (byte-identik perilaku lama — tak ada snapshot
+// relevan); untuk deal TERMINAL dengan snapshot, `lastActive`; node di antara
+// `boundary` (eksklusif) dan `current` (eksklusif) sengaja TAK diwarnai
+// (mencerminkan tahap yang dilompati). lastActive kosong (data lama sebelum
+// migrasi 00053/backfill meleset) → boundary jatuh balik ke `current`,
+// mereproduksi perilaku lama yang aman (tak pernah crash, hanya kurang presisi).
+func dealStepper(stages []string, current, lastActive string) g.Node {
+	boundary := current
+	if (current == stageClosedWon || current == stageClosedLost) && lastActive != "" {
+		boundary = lastActive
+	}
 	items := make([]g.Node, 0, len(stages))
 	passed := true
 	for _, s := range stages {
 		cls := "step"
-		if s == current {
+		switch {
+		case s == current || s == boundary:
 			cls += " step-primary"
 			passed = false
-		} else if passed {
+		case passed:
 			cls += " step-primary"
 		}
 		items = append(items, h.Li(h.Class(cls), g.Text(s)))

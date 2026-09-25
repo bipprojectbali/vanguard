@@ -11,19 +11,21 @@ import (
 // (ukuran file) & sales_deals_lost_test.go (Closed Lost picklist, hal berbeda).
 
 // TestNextDealStages_Sequential: nextDealStages murni-fungsi — tiap tahap aktif
-// biasa punya TEPAT satu tahap berikutnya; tahap aktif TERAKHIR (Negotiation)
-// bercabang dua (Closed Won, Closed Lost — keputusan user 14 Sep: deal hanya
-// boleh gugur dari tahap terakhir, bukan dari mana saja); tahap terminal/tak
-// dikenal → nil (form disembunyikan di view untuk deal terminal).
+// biasa bercabang dua (tahap berikutnya, "Closed Lost" — revisi BL-173, keputusan
+// user 25 Sep: deal realistis bisa gugur di tahap mana pun, bukan cuma setelah
+// march-through penuh); tahap aktif TERAKHIR (Negotiation) bercabang dua juga
+// tapi ("Closed Won", "Closed Lost") — "Closed Won" SENGAJA TAK diperluas, tetap
+// hanya dari Negotiation; tahap terminal/tak dikenal → nil (form disembunyikan
+// di view untuk deal terminal).
 func TestNextDealStages_Sequential(t *testing.T) {
 	cases := []struct {
 		current string
 		want    []string
 	}{
-		{"Prospecting", []string{"Qualification"}},
-		{"Qualification", []string{"Demo"}},
-		{"Demo", []string{"Proposal"}},
-		{"Proposal", []string{"Negotiation"}},
+		{"Prospecting", []string{"Qualification", "Closed Lost"}},
+		{"Qualification", []string{"Demo", "Closed Lost"}},
+		{"Demo", []string{"Proposal", "Closed Lost"}},
+		{"Proposal", []string{"Negotiation", "Closed Lost"}},
 		{"Negotiation", []string{"Closed Won", "Closed Lost"}},
 		{"Closed Won", nil},
 		{"Closed Lost", nil},
@@ -95,22 +97,27 @@ func TestDealStage_RejectsBackwardMove(t *testing.T) {
 	}
 }
 
-// TestDealStage_RejectsClosedLostFromNonLastStage: Closed Lost HANYA sah dari
-// tahap aktif terakhir (Negotiation) — dari tahap lebih awal (mis. Qualification)
-// ditolak (?err=stage_sequence) meski win_loss_reason & loss_reason_code lengkap
-// (isolasi: yang menolak adalah aturan URUTAN, bukan validasi field lain).
-func TestDealStage_RejectsClosedLostFromNonLastStage(t *testing.T) {
-	env, uid := setupAccounts(t)
-	acc := env.seedAccount(t, "Desa Gugur Dini", &uid, nil, nil)
-	deal := env.seedReportDeal(t, acc.ID, &uid, "Qualification", "5000000")
+// TestDealStage_AllowsClosedLostFromAnyActiveStage (BL-173, revisi BL-159):
+// Closed Lost SAH dari SETIAP tahap aktif — termasuk Prospecting (cakupan
+// penuh, keputusan user 25 Sep) — bukan cuma dari Negotiation. Deal realistis
+// bisa gugur di tahap mana pun; march-through penuh sebelum bisa ditandai
+// kalah tak sesuai realita sales.
+func TestDealStage_AllowsClosedLostFromAnyActiveStage(t *testing.T) {
+	for _, stage := range []string{"Prospecting", "Qualification", "Demo", "Proposal"} {
+		t.Run(stage, func(t *testing.T) {
+			env, uid := setupAccounts(t)
+			acc := env.seedAccount(t, "Desa Gugur "+stage, &uid, nil, nil)
+			deal := env.seedReportDeal(t, acc.ID, &uid, stage, "5000000")
 
-	rec := env.postDealStage(uid, deal.ID, lostForm("Kompetitor"))
-	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=stage_sequence") {
-		t.Fatalf("Closed Lost dari tahap bukan Negotiation harus ?err=stage_sequence, got %q (status %d)",
-			loc, rec.Code)
-	}
-	if got := env.freshDeal(t, deal.ID); got.Stage != "Qualification" {
-		t.Errorf("deal tak boleh Closed Lost dari Qualification, stage = %q", got.Stage)
+			rec := env.postDealStage(uid, deal.ID, lostForm("Kompetitor"))
+			if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=staged") {
+				t.Fatalf("Closed Lost dari %s harus sukses (BL-173), got %q (status %d)\n%s",
+					stage, loc, rec.Code, rec.Body.String())
+			}
+			if got := env.freshDeal(t, deal.ID); got.Stage != "Closed Lost" {
+				t.Errorf("stage = %q, want Closed Lost", got.Stage)
+			}
+		})
 	}
 }
 
