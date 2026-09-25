@@ -39,6 +39,23 @@ func (h *Handler) loadOwnedDeal(w http.ResponseWriter, r *http.Request, id int64
 	return d, true
 }
 
+// loadOwnedDealSilent = varian loadOwnedDeal TANPA efek samping HTTP (BL-75):
+// dipakai DealStageBulk yang memuat BANYAK deal dalam satu loop — satu baris
+// tak-ditemukan/di-luar-cakupan harus SKIP baris itu (best-effort per-row, lihat
+// sales_deals_stage_bulk.go), bukan menulis 404 & menghentikan seluruh request
+// seperti loadOwnedDeal (dipakai jalur single-deal). Sama-sama menegakkan F3.
+func (h *Handler) loadOwnedDealSilent(ctx context.Context, id int64) (db.Deal, bool) {
+	d, err := h.q(ctx).GetDeal(ctx, id)
+	if err != nil {
+		return db.Deal{}, false
+	}
+	filter := db.DealsListFilterFor(session.BusinessDataScope(ctx))
+	if !filter.Allows(session.UserID(ctx), d.DealOwner) {
+		return db.Deal{}, false
+	}
+	return d, true
+}
+
 // dealAccountOptions memuat desa dalam cakupan aktor (F3) sebagai pilihan dropdown
 // form deal. Label = kode + nama (kode dulu agar terurut & jelas). Satu query
 // berbatas (bukan N+1, bukan seluruh tabel).

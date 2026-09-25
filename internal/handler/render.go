@@ -8,6 +8,20 @@ var cssPath = "/static/app.css"
 // SetCSSPath menetapkan path CSS ber-hash (dipanggil dari main saat startup).
 func SetCSSPath(p string) { cssPath = p }
 
+// dealboardJSPath = path dealboard.js dengan cache-bust hash, di-set saat
+// startup (SAMA pola cssPath). SEBELUMNYA di-hardcode "/static/dealboard.js"
+// di view (sales_deals.go) TANPA hash — browser (atau proxy) yang meng-cache
+// respons lama bisa menyajikan JS basi tanpa jalan untuk memaksa refresh;
+// ditambah setelah insiden dev-server sempat menyajikan dealboard.js basi
+// (air.toml exclude_dir static/ + go:embed, lihat docs/crm/tasks.md BL-75)
+// yang nyaris identik gejalanya dgn browser-cache basi — hash mencegah KEDUA
+// kelas masalah ini sekaligus utk aset ini ke depannya.
+var dealboardJSPath = "/static/dealboard.js"
+
+// SetDealboardJSPath menetapkan path dealboard.js ber-hash (dipanggil dari
+// main saat startup).
+func SetDealboardJSPath(p string) { dealboardJSPath = p }
+
 // appName = nama aplikasi untuk brand & judul halaman. Di-inject dari config
 // (APP_NAME) via SetAppName, mengikuti pola setter global lainnya di file ini.
 //

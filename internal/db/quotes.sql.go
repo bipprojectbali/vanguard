@@ -241,6 +241,36 @@ func (q *Queries) GetQuote(ctx context.Context, id int64) (Quote, error) {
 	return i, err
 }
 
+const listAcceptedQuoteDealIDs = `-- name: ListAcceptedQuoteDealIDs :many
+SELECT deal_id FROM quotes
+WHERE deal_id = ANY($1::bigint[])
+  AND quote_status = 'Accepted' AND deleted_at IS NULL
+`
+
+// Versi BATCHED GetAcceptedQuoteForDeal (BL-75) — dipakai HANYA saat render papan
+// Kanban (gating affordance drag Negotiation→Closed Won, lihat dealsPipeline) agar
+// tak N+1 per kartu. BUKAN dipakai saat submit (DealStageBulk tetap panggil versi
+// single per-baris, jumlah baris submit dibatasi cap kecil).
+func (q *Queries) ListAcceptedQuoteDealIDs(ctx context.Context, dealIds []int64) ([]*int64, error) {
+	rows, err := q.db.Query(ctx, listAcceptedQuoteDealIDs, dealIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*int64{}
+	for rows.Next() {
+		var deal_id *int64
+		if err := rows.Scan(&deal_id); err != nil {
+			return nil, err
+		}
+		items = append(items, deal_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listQuoteBucketsForDeal = `-- name: ListQuoteBucketsForDeal :many
 SELECT quote_status, expiration_date FROM quotes
 WHERE deal_id = $1 AND deleted_at IS NULL

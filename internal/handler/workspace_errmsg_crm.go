@@ -68,6 +68,9 @@ func wsErrMsgCRM(code string) string {
 		return "Status langganan awal tidak valid (pilih Active atau Trial)."
 	case "sub_active_exists":
 		return "Sudah ada langganan Active untuk desa & paket ini — perpanjang lewat menu renewal, bukan dari deal."
+	// ── Sales: Kanban drag-drop bulk stage (BL-75) ──────────────────────────
+	case "stage_bulk_failed":
+		return "Tak ada deal yang berhasil dipindahkan — periksa validasi (alasan wajib, quote Accepted) atau akses Anda ke deal terpilih."
 	// ── Sales: Quote (Modul 4) ──────────────────────────────────────────────
 	case "quote_name":
 		return "Nama quote terlalu panjang (maks 200 karakter)."

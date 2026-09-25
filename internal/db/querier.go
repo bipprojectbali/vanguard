@@ -628,6 +628,11 @@ type Querier interface {
 	// menentukan bypass RLS (is_super) + role platform. super_admin TIDAK di sini
 	// (env-only via SUPER_ADMIN_EMAILS).
 	IsPlatformStaff(ctx context.Context, email string) (bool, error)
+	// Versi BATCHED GetAcceptedQuoteForDeal (BL-75) — dipakai HANYA saat render papan
+	// Kanban (gating affordance drag Negotiation→Closed Won, lihat dealsPipeline) agar
+	// tak N+1 per kartu. BUKAN dipakai saat submit (DealStageBulk tetap panggil versi
+	// single per-baris, jumlah baris submit dibatasi cap kecil).
+	ListAcceptedQuoteDealIDs(ctx context.Context, dealIds []int64) ([]*int64, error)
 	// Daftar desa, keyset (created_at DESC, id DESC) + filter ownership F3.
 	//
 	// Ownership dikodekan sebagai tiga flag boolean (bukan fragmen SQL dinamis) supaya

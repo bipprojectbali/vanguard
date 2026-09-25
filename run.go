@@ -128,12 +128,15 @@ func run() (err error) {
 	// role users.role hanya owner/admin/member (CHECK). Kehadiran super_admin tak
 	// pernah ditulis; sepenuhnya diturunkan dari env saat identity di-resolve.
 
-	// Static server dengan cache-busting untuk app.css (berubah tiap `make css`).
+	// Static server dengan cache-busting untuk app.css (berubah tiap `make css`)
+	// & dealboard.js (BL-75) — cegah browser/proxy menyajikan JS basi lintas
+	// deploy (kelas masalah sama seperti insiden dev-server exclude_dir static/,
+	// lihat handler.SetDealboardJSPath).
 	staticSub, err := fs.Sub(staticEmbed, "static")
 	if err != nil {
 		return err
 	}
-	assetSrv, err := assets.New(staticSub, "app.css")
+	assetSrv, err := assets.New(staticSub, "app.css", "dealboard.js")
 	if err != nil {
 		return err
 	}
@@ -160,9 +163,10 @@ func run() (err error) {
 	// Alamat publik aplikasi — sumber redirect_uri OAuth & tautan undangan.
 	// Di-set SEBELUM wiring OAuth di bawah (yang merakit redirect_uri darinya).
 	handler.SetAppBaseURL(cfg.AppBaseURL)
-	handler.SetAppName(cfg.AppName)              // brand sidebar & judul halaman
-	handler.SetCSSPath(assetSrv.Path("app.css")) // inject path ber-hash ke Layout
-	handler.SetDevMode(!cfg.IsProduction())      // password auth = dev-only
+	handler.SetAppName(cfg.AppName)                           // brand sidebar & judul halaman
+	handler.SetCSSPath(assetSrv.Path("app.css"))              // inject path ber-hash ke Layout
+	handler.SetDealboardJSPath(assetSrv.Path("dealboard.js")) // idem, papan Deal (BL-75)
+	handler.SetDevMode(!cfg.IsProduction())                   // password auth = dev-only
 	handler.SetSuperAdminChecker(cfg.IsSuperAdminEmail)
 	handler.SetAppTimezone(cfg.Location()) // TZ agregasi panel logs (tampilan jam lokal)
 

@@ -36,6 +36,11 @@ func dealsMsg(code string) string {
 		return "Perubahan deal disimpan."
 	case "staged":
 		return "Tahap deal diperbarui."
+	// BL-75: drag-drop Kanban (satu atau banyak kartu sekaligus) via
+	// DealStageBulk — pesan generik (jumlah dipindah/dilewati tak dibawa di URL,
+	// selaras konvensi kode PRG ringkas lintas modul ini).
+	case "staged_bulk":
+		return "Tahap deal terpilih dipindahkan."
 	case "deleted":
 		return "Deal dihapus."
 	// BL-156c: konversi lead (sales_convert_action.go) redirect PRG SUKSES ke

@@ -4,6 +4,9 @@ Semua perubahan penting pada go_starter dicatat di sini.
 
 ## [Unreleased]
 
+### Added
+- **Deal Closed Won kini auto-create baris Customer Success (handover Sales→CS), onboarding mulai sejak Trial (BL-74).** Sebelumnya tak ada pemicu apa pun dari Sales ke CS — baris `customer_success` (memuat `onboarding_status`) hanya lahir manual saat seseorang pertama kali membuka tab CS desa. `handoverCSFromWonDeal` kini dipanggil di `DealStage` pada transisi ke Closed Won, membuat baris CS untuk desa deal tsb (`onboarding_status='Not Started'`, `lifecycle_stage='Onboarding'`) **apa pun status subscription awal** (Trial atau Active — onboarding independen dari status komersial, `customer_success.account_id` tak punya kolom `subscription_id`). Idempoten (SELECT-dulu via `GetCustomerSuccessByAccountID`, tak menimpa baris CS yang sudah diisi manual) & fail-soft (`db.WithSavepoint`, gagal buat CS tak membatalkan Won/subscription). `created_by` = aktor Sales yang meng-Won-kan deal.
+
 ## [1.11.0] - 2026-09-24
 
 ### Added

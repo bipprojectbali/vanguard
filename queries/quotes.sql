@@ -32,6 +32,15 @@ SELECT * FROM quotes
 WHERE deal_id = sqlc.arg(deal_id)
   AND quote_status = 'Accepted' AND deleted_at IS NULL;
 
+-- name: ListAcceptedQuoteDealIDs :many
+-- Versi BATCHED GetAcceptedQuoteForDeal (BL-75) — dipakai HANYA saat render papan
+-- Kanban (gating affordance drag Negotiation→Closed Won, lihat dealsPipeline) agar
+-- tak N+1 per kartu. BUKAN dipakai saat submit (DealStageBulk tetap panggil versi
+-- single per-baris, jumlah baris submit dibatasi cap kecil).
+SELECT deal_id FROM quotes
+WHERE deal_id = ANY(sqlc.arg(deal_ids)::bigint[])
+  AND quote_status = 'Accepted' AND deleted_at IS NULL;
+
 -- name: GetQuote :one
 -- Satu quote hidup. RLS menjamin tenant_id; kelayakan akses (via deal ber-owner)
 -- diputuskan handler sebelum memanggil ini.

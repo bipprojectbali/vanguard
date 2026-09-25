@@ -10,7 +10,10 @@ import (
 // sales_deals.go — view hub Deal: pipeline (KPI + Kanban) & tampilan Tabel.
 // Murni-data: Amount & PipelineValue SUDAH diformat/disamarkan F4 di handler.
 // Meniru sales_leads.go/accounts.go. Ganti stage = kontrol aksi di detail (native
-// POST), BUKAN drag-drop (keputusan terkunci #1) — papan ini read-only.
+// POST) DAN drag-drop papan Kanban (BL-75, membalik "keputusan terkunci #1" lama
+// — papan tadinya read-only). Drag-drop = affordance TAMBAHAN (dealboard.js,
+// endpoint bulk terpisah, sales_deals_board_bulk.go); kontrol native detail tetap
+// ada sebagai fallback non-drag/mobile wajib.
 
 // DealRow = satu deal untuk kartu Kanban / baris Tabel. Amount SUDAH diformat &
 // disamarkan F4 di handler. Owner = nama orang.
@@ -23,6 +26,10 @@ type DealRow struct {
 	Probability   string
 	ExpectedClose string
 	Owner         string
+	// HasAcceptedQuote (BL-75) = deal punya quote Accepted — HANYA relevan/diisi
+	// untuk kartu Negotiation (gate drag-ke-Closed-Won, cermin
+	// resolveWonSubscriptionCore); default false di stage lain, tak dipakai.
+	HasAcceptedQuote bool
 }
 
 // DealStageColumn = satu kolom Kanban (satu stage + kartu di dalamnya, sudah
@@ -65,6 +72,20 @@ type DealPipelineView struct {
 	// (default) = created_at DESC, tak ditandai di header mana pun.
 	Sort string
 	Dir  string
+
+	// BL-75: drag-drop Kanban. LossReasonCodes/WonSubStatuses = opsi select
+	// modal bulk terminal (mirror DealDetailView, HANYA dipakai view pipeline
+	// non-table). StageRulesJSON = map next-stage (dari nextDealStages, JSON
+	// string, BUKAN input user — lihat sales_deals_page.go) ditanam
+	// dealboard.js sbg satu-satunya sumber aturan transisi di klien.
+	LossReasonCodes []string
+	WonSubStatuses  []string
+	StageRulesJSON  string
+
+	// DealboardJSPath (BL-75) = path /static/dealboard.js, ber-hash cache-bust
+	// bila diisi handler (lihat handler.SetDealboardJSPath) — default statis di
+	// bawah HANYA fallback test/pemanggil yang tak mengisi field ini.
+	DealboardJSPath string
 }
 
 // dealMineParam = "1" bila toggle "Deal Saya" aktif, "" bila tidak — dipakai
@@ -138,7 +159,16 @@ func DealPipeline(v DealPipelineView) g.Node {
 			body = append(body, dealsTable(v), dealsPager(v))
 		}
 	} else {
-		body = append(body, dealKPIs(v), dealKanban(v))
+		// dealboard.js (BL-75) HANYA dimuat di cabang Kanban — view Tabel tak
+		// punya drag-drop, tak perlu skrip. dealBoardControls = hint + tombol
+		// mode Pilih. dealBulkBoard = form+modal bulk (tersembunyi default,
+		// plain JS toggle) dikonsumsi skrip yang sama.
+		jsPath := v.DealboardJSPath
+		if jsPath == "" {
+			jsPath = "/static/dealboard.js"
+		}
+		body = append(body, dealKPIs(v), dealBoardControls(), dealKanban(v), dealBulkBoard(v),
+			h.Script(h.Src(jsPath), h.Defer()))
 	}
 	return h.Div(h.Class("grid gap-4 min-w-0"), g.Group(body))
 }

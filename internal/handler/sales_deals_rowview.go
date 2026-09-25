@@ -21,16 +21,19 @@ func (h *Handler) renderDealsForbidden(w http.ResponseWriter, r *http.Request) {
 // dealRowView memetakan satu deal → baris/kartu + F4 (amount tersamar bagi
 // pemanggil tanpa kapabilitas crm:subscriptions/arr, BL-169). Owner diresolusi
 // dari peta anggota. canARR dihitung SEKALI oleh pemanggil (canSeeARR(ctx)).
-func dealRowView(d db.Deal, names map[int64]string, canARR bool) panel.DealRow {
+// quoted (BL-75) = peta deal_id→quote-Accepted, HANYA dikonsultasi utk kartu
+// Negotiation (gate drag-ke-Won); nil aman (view Tabel, test) → selalu false.
+func dealRowView(d db.Deal, names map[int64]string, canARR bool, quoted map[int64]bool) panel.DealRow {
 	return panel.DealRow{
-		ID:            d.ID,
-		EntityCode:    deref(d.EntityCode),
-		DealName:      d.DealName,
-		Stage:         d.Stage,
-		Amount:        maskARR(formatRupiah(d.Amount), canARR),
-		Probability:   probabilityStr(d.Probability),
-		ExpectedClose: dateStr(d.ExpectedCloseDate),
-		Owner:         ownerName(d.DealOwner, names),
+		ID:               d.ID,
+		EntityCode:       deref(d.EntityCode),
+		DealName:         d.DealName,
+		Stage:            d.Stage,
+		Amount:           maskARR(formatRupiah(d.Amount), canARR),
+		Probability:      probabilityStr(d.Probability),
+		ExpectedClose:    dateStr(d.ExpectedCloseDate),
+		Owner:            ownerName(d.DealOwner, names),
+		HasAcceptedQuote: d.Stage == "Negotiation" && quoted[d.ID],
 	}
 }
 
