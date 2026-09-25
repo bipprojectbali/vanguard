@@ -7,16 +7,10 @@ import (
 	h "maragu.dev/gomponents/html"
 )
 
-// Login merender halaman masuk. Tombol Google selalu tampil (jalur utama);
-// form email/password hanya bila showPassword (dev — password auth dev-only).
-// errMsg (dari ?err=) dirender sebagai alert di atas form (pola PRG — form native
-// POST→303, bukan SSE; redirect via <script> diblokir CSP, lihat gotcha).
-func Login(showPassword bool, errMsg string) g.Node {
-	return authPage(authOpts{
-		title: "Masuk", action: "/login", showPassword: showPassword, errMsg: errMsg,
-		switchText: "Belum punya akun?", switchHref: "/register", switchLabel: "Daftar",
-	})
-}
+// auth.go — halaman Daftar (dev-only; route-nya tak ada di prod) + helper form
+// password/tombol Google dipakai bersama auth_login.go. Login (jalur sign-in/
+// sign-up terpadu produksi) desainnya berbeda jauh (kartu brand + headline
+// mockup Penpot "Auth Flow — 2. Landing") sehingga dipisah ke auth_login.go.
 
 // Register merender halaman pendaftaran (dev-only; route-nya tak ada di prod).
 //
@@ -29,57 +23,34 @@ func Login(showPassword bool, errMsg string) g.Node {
 // View tetap murni-data (tak memanggil appmode sendiri) — handler yang
 // menurunkannya, sesuai konvensi.
 func Register(errMsg string, askWorkspace bool) g.Node {
-	return authPage(authOpts{
-		title: "Daftar", action: "/register", showPassword: true, showWorkspace: askWorkspace, errMsg: errMsg,
-		switchText: "Sudah punya akun?", switchHref: "/login", switchLabel: "Masuk",
-	})
-}
-
-// authOpts = parameter authPage (struct agar tak jadi daftar argumen panjang).
-type authOpts struct {
-	title, action                       string
-	showPassword, showWorkspace         bool
-	errMsg                              string
-	switchText, switchHref, switchLabel string
-}
-
-// authPage adalah kerangka bersama login & register: tombol Google + (opsional)
-// form password (+ field Nama Workspace bila showWorkspace). Form = NATIVE POST
-// (bukan Datastar @post): navigasi penuh via HTTP 303, bukan SSE — redirect SSE
-// menyuntik <script> yang diblokir CSP proyek (script-src tanpa unsafe-inline).
-func authPage(o authOpts) g.Node {
-	card := []g.Node{googleButton()}
-	if o.showPassword {
-		if o.errMsg != "" {
-			card = append(card, ui.Alert(ui.VariantDestructive, "auth-error", g.Text(o.errMsg)))
-		}
-		card = append(card, passwordDivider(), passwordFields(o.action, o.title, o.showWorkspace))
+	card := []g.Node{googleButton("Daftar dengan Google")}
+	if errMsg != "" {
+		card = append(card, ui.Alert(ui.VariantDestructive, "auth-error", g.Text(errMsg)))
 	}
+	card = append(card, passwordDivider(), passwordFields("/register", "Daftar", askWorkspace))
 
-	body := []g.Node{
-		h.H1(h.Class("text-xl font-semibold mb-4"), g.Text(o.title)),
+	return h.Div(
+		h.H1(h.Class("text-xl font-semibold mb-4"), g.Text("Daftar")),
 		ui.Card(card...),
-	}
-	// Tautan alih login/daftar hanya relevan saat form password aktif.
-	if o.showPassword {
-		body = append(body, h.P(
+		h.P(
 			h.Class("mt-4"),
-			g.Text(o.switchText+" "),
-			h.A(h.Href(o.switchHref), g.Text(o.switchLabel)),
-		))
-	}
-	return h.Div(g.Group(body))
+			g.Text("Sudah punya akun? "),
+			h.A(h.Href("/login"), g.Text("Masuk")),
+		),
+	)
 }
 
 // googleButton — tautan penuh (bukan @post) ke flow OAuth. Navigasi biasa 302.
-// Logo "super G" 4-warna resmi + teks (lokalisasi diizinkan pedoman Google).
-// daisyUI .btn sudah flex + gap, jadi logo & teks otomatis berjajar rapi.
-func googleButton() g.Node {
+// Logo "super G" 4-warna resmi + teks berbeda per konteks (label diteruskan
+// pemanggil; lokalisasi teks diizinkan pedoman Google — hanya logonya yang
+// wajib resmi). daisyUI .btn sudah flex + gap, jadi logo & teks otomatis
+// berjajar rapi.
+func googleButton(label string) g.Node {
 	return h.A(
 		h.Href("/api/auth/google"),
 		h.Class("btn btn-outline w-full"),
 		ui.GoogleG(h.Class("size-[18px]")), // 18px = spesifikasi Google
-		g.Text("Masuk dengan Google"),
+		g.Text(label),
 	)
 }
 

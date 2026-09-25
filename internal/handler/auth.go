@@ -14,11 +14,12 @@ import (
 // user-modifiable, WAJIB divalidasi backend).
 const maxWorkspaceNameLen = 60
 
-// LoginPage — GET /login (full page). Form password hanya di dev (devMode).
-// ?err= (dari redirect PRG) → alert. Menutup juga jalur /login?err=inactive dari
-// RefreshIdentity/OAuth yang dulu tak pernah dirender (pesan hilang senyap).
+// LoginPage — GET /login (full page). Tanpa form password (Google-only, lihat
+// auth_login.go); ?err= (dari redirect PRG) → alert. Menutup juga jalur
+// /login?err=inactive dari RefreshIdentity/OAuth yang dulu tak pernah dirender
+// (pesan hilang senyap).
 func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
-	h.renderPage(w, r, "Masuk", pages.Login(devMode, authErrMsg(r.URL.Query().Get("err"))))
+	h.renderPage(w, r, "Masuk", pages.Login(authErrMsg(r.URL.Query().Get("err")), appName))
 }
 
 // RegisterPage — GET /register (full page). ?err= → alert (pola PRG).

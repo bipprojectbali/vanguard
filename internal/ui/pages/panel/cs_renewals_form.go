@@ -21,6 +21,14 @@ type CSRenewalMemberOption struct {
 	Name string
 }
 
+// CSRenewalStageOption — satu pilihan dropdown Renewal Stage. Value = nilai DB
+// (cermin CHECK migrasi), Label = teks tampilan (boleh beda dari Value, mis.
+// "Won"→"Renewed" agar tak bentrok istilah dengan Status Renewal di atasnya).
+type CSRenewalStageOption struct {
+	Value string
+	Label string
+}
+
 // CSRenewalFormView — data lengkap form edit renewal CS.
 type CSRenewalFormView struct {
 	Base   string // "/w/{slug}"
@@ -42,8 +50,8 @@ type CSRenewalFormView struct {
 
 	// Pilihan dropdown.
 	Members []CSRenewalMemberOption
-	Stages  []string // ["Not Started","Outreach","Negotiation","Won","Lost"]
-	Risks   []string // ["Low","Medium","High"]
+	Stages  []CSRenewalStageOption // Value nilai DB, Label teks tampilan
+	Risks   []string               // ["Low","Medium","High"]
 }
 
 // CSRenewalForm merender form edit aksi CS renewal.
@@ -130,9 +138,9 @@ func csRenewalStageField(v CSRenewalFormView) g.Node {
 	opts = append(opts, h.Option(h.Value(""), g.Text("— Pilih Stage —"),
 		g.If(v.CurrentStage == "", h.Selected())))
 	for _, s := range v.Stages {
-		opts = append(opts, h.Option(h.Value(s),
-			g.If(v.CurrentStage == s, h.Selected()),
-			g.Text(s),
+		opts = append(opts, h.Option(h.Value(s.Value),
+			g.If(v.CurrentStage == s.Value, h.Selected()),
+			g.Text(s.Label),
 		))
 	}
 	return h.Div(h.Class("form-control gap-1"),
