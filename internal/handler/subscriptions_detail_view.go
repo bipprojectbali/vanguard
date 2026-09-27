@@ -82,6 +82,29 @@ func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscript
 		sourceDealHref = base + "/deals/" + strconv.FormatInt(*s.SourceDealID, 10)
 	}
 
+	// BL-176: tombol pintasan notice gate → CS Renewal Management, HANYA bila
+	// viewer punya akses (canViewCSRenewals sama gate dgn halaman itu sendiri).
+	var renewalManagementHref string
+	if canViewCSRenewals(ctx) {
+		renewalManagementHref = base + "/renewal-management/" + strconv.FormatInt(s.ID, 10) + "/edit"
+	}
+
+	// BL-176 lanjutan: Stage/Risk aksi CS ditampilkan di kartu Renewal juga —
+	// label+badge SAMA sumber dgn daftar Renewal Management (csRenewalRowView).
+	// Label kosong ("" — CS belum pernah mengisi) SENGAJA tak dipetakan lewat
+	// csRenewalStageLabel/Risk (yang mengembalikan "—" utk nil) — panel merender
+	// label kosong sbg teks "—" polos (mirror HealthLabel), bukan badge-ghost "—".
+	var renewalStageLabel, renewalStageBadge string
+	if deref(s.RenewalStage) != "" {
+		renewalStageLabel = csRenewalStageLabel(s.RenewalStage)
+		renewalStageBadge = csRenewalStageBadge(s.RenewalStage)
+	}
+	var renewalRiskLabel, renewalRiskBadge string
+	if deref(s.RenewalRisk) != "" {
+		renewalRiskLabel = csRenewalRiskLabel(s.RenewalRisk)
+		renewalRiskBadge = csRenewalRiskBadge(s.RenewalRisk)
+	}
+
 	return panel.SubDetailView{
 		Base:         base,
 		ID:           s.ID,
@@ -116,11 +139,17 @@ func (h *Handler) subDetailView(ctx context.Context, base string, s db.Subscript
 		ActivatedAt:        activatedAt,
 
 		// BL-154 — kartu Renewal.
-		DaysToRenewal:      daysToRenewal,
-		RenewalTypeLabel:   renewalTypeDisplay,
-		RenewalStatusLabel: renewalStatusLabel,
-		RenewalStatusClass: renewalStatusBadge,
-		PrevToCurrent:      prevToCurrent,
+		DaysToRenewal:         daysToRenewal,
+		RenewalTypeLabel:      renewalTypeDisplay,
+		RenewalStatusLabel:    renewalStatusLabel,
+		RenewalStatusClass:    renewalStatusBadge,
+		PrevToCurrent:         prevToCurrent,
+		RenewalStage:          deref(s.RenewalStage),
+		RenewalManagementHref: renewalManagementHref,
+		RenewalStageLabel:     renewalStageLabel,
+		RenewalStageBadge:     renewalStageBadge,
+		RenewalRiskLabel:      renewalRiskLabel,
+		RenewalRiskBadge:      renewalRiskBadge,
 
 		// BL-154 — kartu System & Audit.
 		CreatedByName:   ownerName(s.CreatedBy, names),

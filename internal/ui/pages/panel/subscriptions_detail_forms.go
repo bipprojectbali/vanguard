@@ -2,6 +2,7 @@ package panel
 
 import (
 	"strconv"
+	"strings"
 
 	g "maragu.dev/gomponents"
 	h "maragu.dev/gomponents/html"
@@ -32,7 +33,10 @@ func subActions(v SubDetailView) []subAction {
 		a = append(a, subAction{"sub-approve", "Tinjau Persetujuan",
 			"btn btn-primary min-h-11", "Persetujuan Renewal", subApproveBody(v)})
 	}
-	if v.CanRenew && v.Status == "Active" {
+	// BL-176: Renew/Churn digate renewal_stage CS — TIDAK ADA celah admin/manager,
+	// tak ada pengecualian utk akun tanpa assigned_csm. Approve/Activate TIDAK
+	// digate (di luar cakupan spec).
+	if v.CanRenew && v.Status == "Active" && v.RenewalStage == "Won" {
 		a = append(a, subAction{"sub-renew", "Perpanjang",
 			"btn btn-primary min-h-11", "Perpanjang Langganan", subRenewBody(v)})
 	}
@@ -40,11 +44,54 @@ func subActions(v SubDetailView) []subAction {
 		a = append(a, subAction{"sub-activate", "Aktifkan Langganan",
 			"btn btn-primary min-h-11", "Aktifkan Langganan", subActivateBody(v)})
 	}
-	if v.CanChurn && (v.Status == "Active" || v.Status == "Trial") {
+	if v.CanChurn && (v.Status == "Active" || v.Status == "Trial") && v.RenewalStage == "Lost" {
 		a = append(a, subAction{"sub-churn", "Tandai Churn",
 			"btn btn-error btn-outline min-h-11", "Tandai Churn", subChurnBody(v)})
 	}
 	return a
+}
+
+// subActionGateNotice (BL-176) — pengganti tombol Perpanjang/Churn saat
+// CanRenew/CanChurn true tapi renewal_stage CS belum di tahap terminal yang
+// sesuai. Tombol TIDAK disembunyikan diam-diam — diganti SATU teks info
+// gabungan (bukan 2 badge terpisah yang bilang hal sama, mis. Won bikin
+// notice churn tampil sendirian sedang stage lain bikin keduanya nyaris
+// identik) + tombol pintasan ke CS Renewal Management bila viewer punya akses
+// (RenewalManagementHref dihitung HANDLER via canViewCSRenewals — view tak
+// panggil authz). hasNotice=false → node kosong, TAK dirender pemanggil.
+func subActionGateNotice(v SubDetailView) (g.Node, bool) {
+	var blocked []string
+	if v.CanRenew && v.Status == "Active" && v.RenewalStage != "Won" {
+		blocked = append(blocked, "diperpanjang")
+	}
+	if v.CanChurn && (v.Status == "Active" || v.Status == "Trial") && v.RenewalStage != "Lost" {
+		blocked = append(blocked, "ditandai churn")
+	}
+	if len(blocked) == 0 {
+		return g.Text(""), false
+	}
+	text := "Belum bisa " + strings.Join(blocked, " / ") +
+		" — proses CS masih di tahap " + csGateStageText(v.RenewalStage) + "."
+	nodes := []g.Node{subGateNotice(text)}
+	if v.RenewalManagementHref != "" {
+		nodes = append(nodes, h.A(h.Href(v.RenewalManagementHref),
+			h.Class("btn btn-outline btn-sm min-h-11"), g.Text("Lihat Renewal Management »")))
+	}
+	return h.Div(h.Class("flex flex-wrap items-center gap-2"), g.Group(nodes)), true
+}
+
+// subGateNotice — badge teks info (bukan tombol), boleh wrap (whitespace-normal,
+// beda dari badge status biasa) agar teks panjang tak overflow di 375px.
+func subGateNotice(text string) g.Node {
+	return h.Span(h.Class("badge badge-ghost badge-sm whitespace-normal text-left h-auto py-1"), g.Text(text))
+}
+
+// csGateStageText — teks tahap CS utk notice gate ("" belum pernah diisi).
+func csGateStageText(stage string) string {
+	if stage == "" {
+		return "belum dimulai"
+	}
+	return stage
 }
 
 // subActionTriggers = tombol pemicu tiap aksi, untuk dipasang di HEADER (kanan-atas,

@@ -124,6 +124,13 @@ func (h *Handler) CSRenewalEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// BL-176 Bagian 3: shortcut navigasi ke detail Subscription — hanya saat
+	// renewal sudah tuntas Won DAN user diizinkan lihat modul Subscriptions.
+	var subHref string
+	if deref(sub.RenewalStage) == "Won" && canViewSubscriptions(ctx) {
+		subHref = wsPath(slug, "/subscriptions/"+strconv.FormatInt(sub.ID, 10))
+	}
+
 	h.renderWorkspaceShell(w, r, "Edit Renewal Action", "/renewal-management",
 		panel.CSRenewalForm(panel.CSRenewalFormView{
 			Base:              wsPath(slug, ""),
@@ -138,8 +145,9 @@ func (h *Handler) CSRenewalEdit(w http.ResponseWriter, r *http.Request) {
 			CurrentNextAction: dateStr(sub.RenewalNextActionDate),
 			CurrentOwnerID:    preselectOwner,
 			Members:           memberOpts,
-			Stages:            csRenewalStageOptions,
+			Stages:            csRenewalStageOptionsFor(deref(sub.RenewalStage)),
 			Risks:             csRenewalRiskValues,
 			Err:               csRenewalsErrMsg(r.URL.Query().Get("err")),
+			SubscriptionHref:  subHref,
 		}))
 }

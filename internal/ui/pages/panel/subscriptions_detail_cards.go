@@ -1,6 +1,8 @@
 package panel
 
 import (
+	"strings"
+
 	g "maragu.dev/gomponents"
 	h "maragu.dev/gomponents/html"
 )
@@ -46,14 +48,40 @@ func subRenewalCard(v SubDetailView) g.Node {
 	if cls == "" {
 		cls = "badge badge-ghost"
 	}
-	statusBadge := h.Span(h.Class(cls), g.Text(orDash(v.RenewalStatusLabel)))
+	// badge-sm disisipkan di sini (bukan diubah di RenewalStatusClass sendiri) —
+	// class itu dipakai ulang apa adanya di tab Renewals (subscriptions_renewals_row.go)
+	// yang ukurannya sudah pas; kartu ini SAJA yang perlu seragam dgn badge-sm
+	// Renewal Stage/Risk di bawahnya (diskusi user 2026-09-28).
+	statusBadge := h.Span(h.Class(addBadgeSm(cls)), g.Text(orDash(v.RenewalStatusLabel)))
 	return cardRows("Renewal", "",
 		detailRow("Tanggal Renewal", g.Text(orDash(v.End))),
 		detailRow("Sisa Hari", g.Text(orDash(v.DaysToRenewal))),
 		detailRow("Tipe Renewal", g.Text(orDash(v.RenewalTypeLabel))),
 		detailRow("Status Renewal", statusBadge),
 		detailRow("Sebelum → Sekarang", g.Text(orDash(v.PrevToCurrent))),
+		// BL-176 lanjutan: aksi CS Renewal Management ditampilkan di sini juga —
+		// stage/risk mentah dari subscriptions.renewal_stage/renewal_risk, label+
+		// badge sumber SAMA dgn daftar Renewal Management (lihat komentar field).
+		detailRow("Renewal Stage", riskStageBadge(v.RenewalStageBadge, v.RenewalStageLabel)),
+		detailRow("Renewal Risk", riskStageBadge(v.RenewalRiskBadge, v.RenewalRiskLabel)),
 	)
+}
+
+// addBadgeSm menyisipkan "badge-sm" tepat setelah token "badge" di class daisyUI
+// ("badge badge-warning" → "badge badge-sm badge-warning"), tanpa mengubah nilai
+// asalnya (dipakai apa adanya di tempat lain — lihat komentar subRenewalCard).
+func addBadgeSm(cls string) string {
+	return strings.Replace(cls, "badge ", "badge badge-sm ", 1)
+}
+
+// riskStageBadge — badge kecil utk label CS (stage/risk) yang berasal dari
+// enum handler (csRenewalStageLabel/Badge, csRenewalRiskLabel/Badge); label
+// kosong (CS belum pernah mengisi) → teks "—" polos, bukan badge kosong.
+func riskStageBadge(badgeClass, label string) g.Node {
+	if label == "" {
+		return g.Text("—")
+	}
+	return h.Span(h.Class("badge badge-sm "+badgeClass), g.Text(label))
 }
 
 // subSystemAuditCard = kartu "System & Audit" (BL-154), sejajar

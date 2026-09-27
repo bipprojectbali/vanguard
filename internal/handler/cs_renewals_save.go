@@ -27,7 +27,15 @@ func (h *Handler) CSRenewalUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// F3 enforcement: tolak bila di luar cakupan akun.
-	if _, _, ok := h.loadCSRenewal(w, r, id); !ok {
+	sub, _, ok := h.loadCSRenewal(w, r, id)
+	if !ok {
+		return
+	}
+
+	// BL-176: Won/Lost = terminal, mengunci SELURUH form — dicek paling awal,
+	// sebelum field lain diproses (submit apa pun ditolak, bukan cuma stage).
+	if isCSRenewalStageTerminal(deref(sub.RenewalStage)) {
+		editRedirect(w, r, id, "stage_locked")
 		return
 	}
 
@@ -41,6 +49,12 @@ func (h *Handler) CSRenewalUpdate(w http.ResponseWriter, r *http.Request) {
 	// Validasi stage (nilai kosong = hapus stage, diterima).
 	if stage != "" && !isValidCSRenewalStage(stage) {
 		editRedirect(w, r, id, "stage")
+		return
+	}
+
+	// BL-176: tegakkan urutan transisi (Not Started→Outreach→Negotiation→Won/Lost).
+	if !isValidCSRenewalStageTransition(deref(sub.RenewalStage), stage) {
+		editRedirect(w, r, id, "stage_sequence")
 		return
 	}
 

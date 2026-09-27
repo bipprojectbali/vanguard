@@ -55,6 +55,12 @@ func (h *Handler) SubscriptionChurn(w http.ResponseWriter, r *http.Request) {
 		wsRedirect(w, r, "/subscriptions/"+idStr, "sub_not_active")
 		return
 	}
+	// BL-176: gate backend (jaring terakhir) — Churn hanya bila CS sudah
+	// menandai renewal_stage=Lost. TIDAK ADA celah admin/manager.
+	if deref(sub.RenewalStage) != "Lost" {
+		wsRedirect(w, r, "/subscriptions/"+idStr, "stage_not_lost")
+		return
+	}
 	form, errCode := parseChurnForm(r.FormValue)
 	if errCode != "" {
 		wsRedirect(w, r, "/subscriptions/"+idStr, errCode)

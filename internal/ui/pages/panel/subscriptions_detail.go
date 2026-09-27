@@ -67,6 +67,22 @@ type SubDetailView struct {
 	RenewalStatusLabel string
 	RenewalStatusClass string
 	PrevToCurrent      string
+	RenewalStage       string // renewal_stage CS mentah (BL-176: gate tombol Renew/Churn)
+	// RenewalManagementHref — tautan ke form CS Renewal Management utk subscription
+	// ini; kosong = viewer tak punya akses (canViewCSRenewals, dihitung HANDLER),
+	// tombol pintasan di notice gate (subActionGateNotice) tak tampil.
+	RenewalManagementHref string
+
+	// RenewalStageLabel/Badge & RenewalRiskLabel/Badge (BL-176 lanjutan, diskusi
+	// user 2026-09-28): tampilkan aksi CS Renewal Management di kartu Renewal
+	// langganan juga — label+badge dihitung HANDLER (csRenewalStageLabel/Badge,
+	// csRenewalRiskLabel/Badge — sumber SAMA dgn daftar Renewal Management, BL-176
+	// lookup csRenewalRowView) agar selaras lintas halaman. Kosong (belum pernah
+	// diisi CS) → "—" via orDash, bukan error.
+	RenewalStageLabel string
+	RenewalStageBadge string
+	RenewalRiskLabel  string
+	RenewalRiskBadge  string
 
 	// Kartu System & Audit (BL-154). SourceDealHref kosong → "—" tanpa tautan
 	// (langganan tak berasal dari deal).
@@ -120,6 +136,7 @@ func SubDetail(v SubDetailView) g.Node {
 	// Tombol aksi (BL-125) pindah ke kanan-atas header — tak lagi kartu "Tindakan".
 	// Modal dialog-nya dirender terpisah di body (subActionDialogs).
 	triggers := subActionTriggers(v)
+	notice, hasNotice := subActionGateNotice(v)
 	header := h.Div(
 		h.Class("flex flex-wrap items-start justify-between gap-2"),
 		h.Div(
@@ -132,9 +149,9 @@ func SubDetail(v SubDetailView) g.Node {
 				subStatusBadge(v.Status),
 			),
 		),
-		ui.When(len(triggers) > 0, h.Div(
+		ui.When(len(triggers) > 0 || hasNotice, h.Div(
 			h.Class("flex flex-wrap items-center gap-2 shrink-0"),
-			g.Group(triggers),
+			g.Group(triggers), notice,
 		)),
 	)
 

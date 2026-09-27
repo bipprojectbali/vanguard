@@ -20,6 +20,7 @@ func TestSubscriptionChurn_Success(t *testing.T) {
 	planID := env.seedPlan(t, "Paket C", "PLAN-C", "1000000")
 	acc := env.seedAccount(t, "Desa C", nil, &csm.ID, nil) // CSM ditugaskan
 	sub := env.seedSubscription(t, acc.ID, planID, &csm.ID, "Active", "500000", "6000000")
+	env.setRenewalStage(t, sub.ID, "Lost") // BL-176: churn butuh renewal_stage=Lost
 
 	form := url.Values{
 		"churn_reason":      {"Budget"},
@@ -104,6 +105,7 @@ func TestSubscriptionChurn_InvalidReason(t *testing.T) {
 	planID := env.seedPlan(t, "Paket IR", "PLAN-IR", "1000000")
 	acc := env.seedAccount(t, "Desa IR", &uid, nil, nil)
 	sub := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "500000", "6000000")
+	env.setRenewalStage(t, sub.ID, "Lost") // BL-176: churn butuh renewal_stage=Lost agar err yg diuji murni churn_reason
 
 	form := url.Values{"churn_reason": {"Bukan Alasan Valid"}}
 	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(sub.ID)+"/churn", form, itoa(sub.ID))
@@ -138,5 +140,36 @@ func TestSubscriptionChurn_NotActive(t *testing.T) {
 	}
 	if !contains(rec.Header().Get("Location"), "err=sub_not_active") {
 		t.Errorf("Location harus err=sub_not_active, got %q", rec.Header().Get("Location"))
+	}
+}
+
+// --- BL-176: gate renewal_stage ---------------------------------------------
+
+// TestSubscriptionChurn_StageNotLost: renewal_stage CS belum "Lost" (mis. masih
+// NULL/"Negotiation") → churn ditolak backend (?err=stage_not_lost), status TAK
+// berubah — jaring terakhir walau POST langsung.
+func TestSubscriptionChurn_StageNotLost(t *testing.T) {
+	env, uid := setupAccounts(t)
+	planID := env.seedPlan(t, "Paket SNL", "PLAN-SNL", "1000000")
+	acc := env.seedAccount(t, "Desa SNL", &uid, nil, nil)
+	sub := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "500000", "6000000")
+	env.setRenewalStage(t, sub.ID, "Negotiation") // belum Lost
+
+	form := url.Values{"churn_reason": {"Budget"}}
+	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(sub.ID)+"/churn", form, itoa(sub.ID))
+	rec := env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionChurn)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+	if !contains(rec.Header().Get("Location"), "err=stage_not_lost") {
+		t.Errorf("Location harus err=stage_not_lost, got %q", rec.Header().Get("Location"))
+	}
+	got, err := env.q.GetSubscription(t.Context(), sub.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Status != "Active" {
+		t.Errorf("langganan tak boleh berubah saat gate stage gagal; status = %q", got.Status)
 	}
 }

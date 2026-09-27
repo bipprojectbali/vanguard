@@ -14,7 +14,7 @@ import (
 // <label for=sub-renew>, checkbox modal-toggle #sub-renew ada, form POST /renew.
 func TestSubActions_RenewOpensModal(t *testing.T) {
 	out := renderSubAction(t, SubDetailView{
-		Base: "/w/desa", ID: 9, Status: "Active", CanRenew: true,
+		Base: "/w/desa", ID: 9, Status: "Active", CanRenew: true, RenewalStage: "Won",
 	})
 	if !strings.Contains(out, `for="sub-renew"`) {
 		t.Errorf("pemicu Perpanjang harus <label for=sub-renew>:\n%s", out)
@@ -46,7 +46,7 @@ func TestSubActions_ApproveModalHasBothDecisions(t *testing.T) {
 // #sub-churn + form POST /churn.
 func TestSubActions_ChurnOpensModal(t *testing.T) {
 	out := renderSubAction(t, SubDetailView{
-		Base: "/w/desa", ID: 9, Status: "Active", CanChurn: true,
+		Base: "/w/desa", ID: 9, Status: "Active", CanChurn: true, RenewalStage: "Lost",
 	})
 	if !strings.Contains(out, `for="sub-churn"`) || !strings.Contains(out, `id="sub-churn"`) {
 		t.Errorf("pemicu & modal churn harus dirender:\n%s", out)

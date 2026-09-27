@@ -51,6 +51,12 @@ func (h *Handler) SubscriptionRenew(w http.ResponseWriter, r *http.Request) {
 		wsRedirect(w, r, "/subscriptions/"+idStr, "sub_not_active")
 		return
 	}
+	// BL-176: gate backend (jaring terakhir) — Perpanjang hanya bila CS sudah
+	// menandai renewal_stage=Won. TIDAK ADA celah admin/manager.
+	if deref(old.RenewalStage) != "Won" {
+		wsRedirect(w, r, "/subscriptions/"+idStr, "stage_not_won")
+		return
+	}
 	newMRR, errCode := renewMRR(r.FormValue("new_mrr"), old.Mrr)
 	if errCode != "" {
 		wsRedirect(w, r, "/subscriptions/"+idStr, errCode)

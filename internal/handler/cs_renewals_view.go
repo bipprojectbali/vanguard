@@ -56,6 +56,10 @@ func csRenewalsErrMsg(code string) string {
 	switch code {
 	case "stage":
 		return "Stage renewal tidak valid."
+	case "stage_sequence":
+		return "Transisi stage tidak valid — urutannya Not Started → Outreach → Negotiation → Won/Lost, tak bisa lompat atau mundur."
+	case "stage_locked":
+		return "Renewal ini sudah selesai (Won/Lost) — tak bisa diubah lagi."
 	case "risk":
 		return "Tingkat risiko tidak valid."
 	case "date":
