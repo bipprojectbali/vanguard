@@ -76,6 +76,23 @@ func (e *testEnv) seedSubscription(
 	return s
 }
 
+// setRenewalStage (BL-176) menyetel renewal_stage langsung via pool (seedSubscription
+// tak punya kolom ini — CreateSubscriptionParams tak menyertakannya, default NULL).
+// Dipakai tes renew/churn yang sekarang butuh precondition stage Won/Lost (gate
+// backend baru) sebelum aksi bisnis diizinkan.
+func (e *testEnv) setRenewalStage(t *testing.T, subID int64, stage string) db.Subscription {
+	t.Helper()
+	if _, err := e.h.Pool.Exec(t.Context(),
+		`UPDATE subscriptions SET renewal_stage = $1 WHERE id = $2`, stage, subID); err != nil {
+		t.Fatalf("set renewal_stage sub %d: %v", subID, err)
+	}
+	updated, err := e.q.GetSubscription(t.Context(), subID)
+	if err != nil {
+		t.Fatalf("get updated sub %d: %v", subID, err)
+	}
+	return updated
+}
+
 // --- F2: gerbang read ------------------------------------------------------
 
 // TestSubscriptions_GateRead: siapa boleh MEMBUKA daftar (act read).

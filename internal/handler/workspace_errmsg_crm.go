@@ -138,6 +138,10 @@ func wsErrMsgCRM(code string) string {
 		return "Alasan churn tidak valid."
 	case "churn_type":
 		return "Tipe churn tidak valid."
+	case "stage_not_won":
+		return "Renewal ini belum ditandai 'Renewed' (Won) di CS Renewal Management."
+	case "stage_not_lost":
+		return "Renewal ini belum ditandai 'Terminate' (Lost) di CS Renewal Management."
 	case "failed":
 		return "Tindakan gagal. Coba lagi."
 	}

@@ -67,18 +67,45 @@ func TestSubStatusLifecycleCard_Suspended(t *testing.T) {
 }
 
 // TestSubRenewalCard_StatusBadge: badge Status Renewal render kelas dari
-// RenewalStatusClass (REUSE derivasi handler); kosong → fallback badge-ghost
-// via "—" (bukan kelas kosong tanpa render).
+// RenewalStatusClass (REUSE derivasi handler) + "badge-sm" disisipkan (diskusi
+// user 2026-09-28: seragam ukuran dgn badge Renewal Stage/Risk di kartu sama);
+// kosong → fallback badge-ghost via "—" (bukan kelas kosong tanpa render).
 func TestSubRenewalCard_StatusBadge(t *testing.T) {
 	v := SubDetailView{RenewalStatusLabel: "Akan Jatuh Tempo", RenewalStatusClass: "badge badge-warning"}
 	out := renderLeads(t, subRenewalCard(v))
-	if !strings.Contains(out, `class="badge badge-warning"`) || !strings.Contains(out, "Akan Jatuh Tempo") {
-		t.Errorf("badge Status Renewal harus pakai kelas dari RenewalStatusClass:\n%s", out)
+	if !strings.Contains(out, `class="badge badge-sm badge-warning"`) || !strings.Contains(out, "Akan Jatuh Tempo") {
+		t.Errorf("badge Status Renewal harus pakai kelas dari RenewalStatusClass + badge-sm:\n%s", out)
 	}
 
 	empty := renderLeads(t, subRenewalCard(SubDetailView{}))
-	if !strings.Contains(empty, "badge badge-ghost") {
-		t.Errorf("RenewalStatusClass kosong harus fallback badge-ghost:\n%s", empty)
+	if !strings.Contains(empty, "badge badge-sm badge-ghost") {
+		t.Errorf("RenewalStatusClass kosong harus fallback badge-ghost + badge-sm:\n%s", empty)
+	}
+}
+
+// TestSubRenewalCard_StageRiskBadge (BL-176 lanjutan): Renewal Stage & Renewal
+// Risk dari aksi CS Renewal Management dirender di kartu Renewal — badge saat
+// label terisi, teks "—" polos (tanpa kelas badge apa pun) saat CS belum
+// pernah mengisi (label kosong, mirror pola Health di kartu Status & Lifecycle).
+func TestSubRenewalCard_StageRiskBadge(t *testing.T) {
+	filled := SubDetailView{
+		RenewalStageLabel: "Renewed", RenewalStageBadge: "badge-success",
+		RenewalRiskLabel: "Tinggi", RenewalRiskBadge: "badge-error",
+	}
+	out := renderLeads(t, subRenewalCard(filled))
+	if !strings.Contains(out, `class="badge badge-sm badge-success"`) || !strings.Contains(out, "Renewed") {
+		t.Errorf("Renewal Stage terisi harus render badge badge-success 'Renewed':\n%s", out)
+	}
+	if !strings.Contains(out, `class="badge badge-sm badge-error"`) || !strings.Contains(out, "Tinggi") {
+		t.Errorf("Renewal Risk terisi harus render badge badge-error 'Tinggi':\n%s", out)
+	}
+
+	empty := renderLeads(t, subRenewalCard(SubDetailView{}))
+	if strings.Contains(empty, "badge-success") || strings.Contains(empty, "badge-error") || strings.Contains(empty, "badge-ghost badge-sm") {
+		t.Errorf("tanpa Stage/Risk, tak boleh ada badge bocor — hanya teks '—' polos:\n%s", empty)
+	}
+	if !strings.Contains(empty, "Renewal Stage") || !strings.Contains(empty, "Renewal Risk") {
+		t.Errorf("label baris Renewal Stage/Risk harus tetap render walau nilainya kosong:\n%s", empty)
 	}
 }
 

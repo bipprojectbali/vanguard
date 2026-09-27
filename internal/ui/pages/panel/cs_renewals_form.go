@@ -35,6 +35,11 @@ type CSRenewalFormView struct {
 	Action string // POST target "/w/{slug}/renewal-management/{id}"
 	Err    string // pesan galat ?err=
 
+	// SubscriptionHref (BL-176) — link shortcut ke detail Subscription, tampil
+	// hanya saat stage=Won DAN handler mengizinkan (canViewSubscriptions). Kosong
+	// = link tak dirender (view murni-data, tak menghitung gate sendiri).
+	SubscriptionHref string
+
 	// Field read-only dari subscription / account.
 	VillageName   string
 	PlanName      string
@@ -66,9 +71,15 @@ func CSRenewalForm(v CSRenewalFormView) g.Node {
 func csRenewalFormHeader(v CSRenewalFormView) g.Node {
 	return h.Div(
 		h.H1(h.Class("text-xl font-semibold"), g.Text("Edit Aksi Renewal")),
-		h.A(h.Href(v.Base+"/renewal-management"),
-			h.Class("text-sm text-base-content/60"),
-			g.Text("« Kembali ke daftar renewal"),
+		h.Div(h.Class("flex flex-wrap items-center gap-3"),
+			h.A(h.Href(v.Base+"/renewal-management"),
+				h.Class("text-sm text-base-content/60"),
+				g.Text("« Kembali ke daftar renewal"),
+			),
+			g.If(v.SubscriptionHref != "", h.A(h.Href(v.SubscriptionHref),
+				h.Class("btn btn-xs btn-outline min-h-11"),
+				g.Text("Lihat Langganan »"),
+			)),
 		),
 	)
 }
@@ -133,10 +144,17 @@ func csRenewalActionCard(v CSRenewalFormView) g.Node {
 	)
 }
 
+// csRenewalStageField — dropdown Renewal Stage. Opsi DIBATASI (BL-176
+// lanjutan): handler sudah menyaring v.Stages ke stage saat ini + tahap SAH
+// berikutnya saja (csRenewalStageOptionsFor) — bukan lagi 5 nilai penuh tanpa
+// peduli current. Placeholder "— Pilih Stage —" HANYA muncul saat current
+// kosong (belum pernah diisi); begitu sudah punya nilai, "kembali ke kosong"
+// bukan opsi sah (mundur, ditolak backend) jadi tak ditawarkan lagi di sini.
 func csRenewalStageField(v CSRenewalFormView) g.Node {
 	opts := make([]g.Node, 0, len(v.Stages)+1)
-	opts = append(opts, h.Option(h.Value(""), g.Text("— Pilih Stage —"),
-		g.If(v.CurrentStage == "", h.Selected())))
+	if v.CurrentStage == "" {
+		opts = append(opts, h.Option(h.Value(""), g.Text("— Pilih Stage —"), h.Selected()))
+	}
 	for _, s := range v.Stages {
 		opts = append(opts, h.Option(h.Value(s.Value),
 			g.If(v.CurrentStage == s.Value, h.Selected()),

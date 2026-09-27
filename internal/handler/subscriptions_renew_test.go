@@ -49,6 +49,7 @@ func TestSubscriptionRenew_Straight(t *testing.T) {
 	planID := env.seedPlan(t, "Paket R", "PLAN-R", "1000000")
 	acc := env.seedAccount(t, "Desa R", &uid, nil, nil)
 	old := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "500000", "6000000")
+	env.setRenewalStage(t, old.ID, "Won") // BL-176: renew butuh renewal_stage=Won
 
 	form := url.Values{"new_mrr": {""}} // kosong = ikut MRR lama
 	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(old.ID)+"/renew", form, itoa(old.ID))
@@ -111,6 +112,7 @@ func TestSubscriptionRenew_Upsell(t *testing.T) {
 	planID := env.seedPlan(t, "Paket U", "PLAN-U", "1000000")
 	acc := env.seedAccount(t, "Desa U", &uid, nil, nil)
 	old := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "500000", "6000000")
+	env.setRenewalStage(t, old.ID, "Won") // BL-176: renew butuh renewal_stage=Won
 
 	form := url.Values{"new_mrr": {"800000"}}
 	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(old.ID)+"/renew", form, itoa(old.ID))
@@ -178,6 +180,7 @@ func TestSubscriptionRenew_Downgrade(t *testing.T) {
 	planID := env.seedPlan(t, "Paket DG", "PLAN-DG", "1000000")
 	acc := env.seedAccount(t, "Desa DG", &uid, nil, nil)
 	old := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "500000", "6000000")
+	env.setRenewalStage(t, old.ID, "Won") // BL-176: renew butuh renewal_stage=Won
 
 	form := url.Values{"new_mrr": {"300000"}} // di BAWAH MRR lama (500000)
 	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(old.ID)+"/renew", form, itoa(old.ID))
@@ -254,6 +257,7 @@ func TestSubscriptionRenew_FillsDates(t *testing.T) {
 
 	// Straight: baris Active baru harus punya periode.
 	oldS := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "500000", "6000000")
+	env.setRenewalStage(t, oldS.ID, "Won") // BL-176: renew butuh renewal_stage=Won
 	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(oldS.ID)+"/renew",
 		url.Values{"new_mrr": {""}}, itoa(oldS.ID))
 	rec := env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionRenew)
@@ -271,6 +275,7 @@ func TestSubscriptionRenew_FillsDates(t *testing.T) {
 	// Active hasil renewal straight di atas (satu item aktif per akun+paket).
 	accU := env.seedAccount(t, "Desa DU", &uid, nil, nil)
 	oldU := env.seedSubscription(t, accU.ID, planID, &uid, "Active", "500000", "6000000")
+	env.setRenewalStage(t, oldU.ID, "Won") // BL-176: renew butuh renewal_stage=Won
 	req = accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(oldU.ID)+"/renew",
 		url.Values{"new_mrr": {"800000"}}, itoa(oldU.ID))
 	rec = env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionRenew)
@@ -308,5 +313,37 @@ func TestSubscriptionRenew_Gate(t *testing.T) {
 	rec := env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionRenew)
 	if rec.Code == http.StatusForbidden {
 		t.Errorf("manager harus lolos gate renew, got 403")
+	}
+}
+
+// --- BL-176: gate renewal_stage ---------------------------------------------
+
+// TestSubscriptionRenew_StageNotWon: renewal_stage CS belum "Won" (mis. masih
+// NULL/"Outreach") → renew ditolak backend (?err=stage_not_won), status TAK
+// berubah — jaring terakhir walau POST langsung (bukan lewat tombol UI yang
+// sudah disembunyikan).
+func TestSubscriptionRenew_StageNotWon(t *testing.T) {
+	env, uid := setupAccounts(t)
+	planID := env.seedPlan(t, "Paket SNW", "PLAN-SNW", "1000000")
+	acc := env.seedAccount(t, "Desa SNW", &uid, nil, nil)
+	old := env.seedSubscription(t, acc.ID, planID, &uid, "Active", "500000", "6000000")
+	env.setRenewalStage(t, old.ID, "Outreach") // belum Won
+
+	req := accountsReq(http.MethodPost, "/w/test/subscriptions/"+itoa(old.ID)+"/renew",
+		url.Values{"new_mrr": {""}}, itoa(old.ID))
+	rec := env.runAccount(uid, "owner", "manager", req, env.h.SubscriptionRenew)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+	if !contains(rec.Header().Get("Location"), "err=stage_not_won") {
+		t.Errorf("Location harus err=stage_not_won, got %q", rec.Header().Get("Location"))
+	}
+	got, err := env.q.GetSubscription(t.Context(), old.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Status != "Active" {
+		t.Errorf("langganan tak boleh berubah saat gate stage gagal; status = %q", got.Status)
 	}
 }
