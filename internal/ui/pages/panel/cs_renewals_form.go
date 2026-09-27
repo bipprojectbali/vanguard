@@ -64,12 +64,12 @@ func CSRenewalForm(v CSRenewalFormView) g.Node {
 }
 
 func csRenewalFormHeader(v CSRenewalFormView) g.Node {
-	return h.Div(h.Class("flex flex-wrap items-center gap-2"),
+	return h.Div(
+		h.H1(h.Class("text-xl font-semibold"), g.Text("Edit Aksi Renewal")),
 		h.A(h.Href(v.Base+"/renewal-management"),
-			h.Class("btn btn-ghost btn-sm min-h-11"),
-			g.Text("← Kembali"),
+			h.Class("text-sm text-base-content/60"),
+			g.Text("« Kembali ke daftar renewal"),
 		),
-		h.H1(h.Class("text-xl font-bold"), g.Text("Edit Aksi Renewal")),
 	)
 }
 

@@ -60,9 +60,11 @@ func CSRenewalsList(v CSRenewalsListView) g.Node {
 
 func csRenewalsHeader(v CSRenewalsListView) g.Node {
 	return h.Div(h.Class("flex flex-wrap items-center justify-between gap-2"),
-		h.H1(h.Class("text-xl font-bold"), g.Text("Renewal Management")),
-		h.P(h.Class("text-sm text-base-content/70"),
-			g.Text("Kelola tahap & rencana aksi renewal langganan desa.")),
+		h.Div(
+			h.H1(h.Class("text-xl font-bold"), g.Text("Renewal Management")),
+			h.P(h.Class("text-sm text-base-content/70"),
+				g.Text("Kelola tahap & rencana aksi renewal langganan desa.")),
+		),
 	)
 }
 
