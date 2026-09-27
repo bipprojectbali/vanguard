@@ -142,13 +142,17 @@ func dealBulkModeToggle() g.Node {
 // (name asli) & template baris "individual" (JS mengganti name jadi
 // `<name>__<id>` saat clone) — makanya fungsi ini TANPA parameter id/sufiks.
 func dealBulkReasonFields(v DealPipelineView) g.Node {
+	wonDefault := ""
+	if len(v.WonSubStatuses) > 0 {
+		wonDefault = v.WonSubStatuses[0]
+	}
 	return h.Div(
 		h.Class("grid gap-3 min-w-0"),
 		field("Alasan Menang/Kalah", "win_loss_reason", "", false, "text"),
 		g.If(len(v.WonSubStatuses) > 0, h.Div(
 			g.Attr("data-stage-section", "won"),
 			selectField("Status Langganan Awal", "subscription_status",
-				v.WonSubStatuses[0], v.WonSubStatuses, false,
+				wonDefault, v.WonSubStatuses, false,
 				"Deal menang membuat langganan otomatis untuk desa & paket deal ini."),
 		)),
 		h.Div(
