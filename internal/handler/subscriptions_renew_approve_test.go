@@ -24,6 +24,7 @@ func (e *testEnv) seedPendingRenewal(
 		t.Fatalf("generate code: %v", err)
 	}
 	pending := "Pending"
+	inProgress := "In Progress" // mirror renewPending (subscriptions_renew_actions.go) — BL-177
 	s, err := e.q.CreateSubscription(t.Context(), db.CreateSubscriptionParams{
 		TenantID:               e.tenantID,
 		EntityCode:             &code,
@@ -33,6 +34,7 @@ func (e *testEnv) seedPendingRenewal(
 		PreviousSubscriptionID: &prevID,
 		Status:                 "PendingApproval",
 		ApprovalStatus:         &pending,
+		RenewalStatus:          &inProgress,
 		Mrr:                    numFrom(t, mrr),
 		Arr:                    numFrom(t, ""),
 		PreviousValue:          numFrom(t, prevValue),
@@ -79,6 +81,12 @@ func TestSubscriptionRenewApprove_Activates(t *testing.T) {
 	if gotNew.ApprovedBy == nil || *gotNew.ApprovedBy != uid {
 		t.Errorf("approved_by = %v, want %d", gotNew.ApprovedBy, uid)
 	}
+	// BL-177: renewal_status harus lepas dari 'In Progress' (nilai renewPending saat
+	// dibuat) jadi 'Renewed' pasca-approve — tanpa ini baris ini tersangkut selamanya
+	// di window 'due'/KPI DashboardRenewalsDue walau statusnya sudah Active.
+	if gotNew.RenewalStatus == nil || *gotNew.RenewalStatus != "Renewed" {
+		t.Errorf("renewal_status = %v, want Renewed", gotNew.RenewalStatus)
+	}
 	if n, _ := env.q.CountUnreadNotifications(t.Context(), rep.ID); n < 1 {
 		t.Errorf("pemilik harus dinotifikasi persetujuan (unread=%d)", n)
 	}
@@ -112,6 +120,13 @@ func TestSubscriptionRenewReject_Cancels(t *testing.T) {
 	gotOld, _ := env.q.GetSubscription(t.Context(), old.ID)
 	if gotOld.Status != "Active" {
 		t.Errorf("baris lama status = %q, want Active (reject tak menyentuhnya)", gotOld.Status)
+	}
+	// RejectRenewal SENGAJA tak menyentuh renewal_status (beda dgn ApproveRenewal,
+	// BL-177) — baris Cancelled tak pernah masuk window due/renewed apa pun
+	// (ListRenewals/DashboardRenewalsDue keduanya syarat status Active/PendingApproval),
+	// jadi renewal_status basi di sini tak bocor ke tampilan mana pun.
+	if gotNew.RenewalStatus == nil || *gotNew.RenewalStatus != "In Progress" {
+		t.Errorf("renewal_status = %v, want tetap In Progress (reject tak menyentuhnya)", gotNew.RenewalStatus)
 	}
 }
 

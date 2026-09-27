@@ -40,6 +40,10 @@ type Querier interface {
 	// dalam tx yang sama — invarian idx_subs_one_active (1 Active per account+plan).
 	// Filter status='PendingApproval' = penjaga transisi: baris yang sudah diputus tak
 	// bisa disetujui dua kali (0 baris ter-update → handler kabari "tak lagi pending").
+	// renewal_status='Renewed' (BL-177): renewPending set 'In Progress' saat dibuat
+	// (menunggu approval) — tanpa baris ini renewal_status tersangkut 'In Progress'
+	// selamanya pasca-approve, membuat baris ini tak pernah masuk window 'renewed' &
+	// terus dihitung di window 'due'/KPI DashboardRenewalsDue walau sudah Active.
 	ApproveRenewal(ctx context.Context, arg ApproveRenewalParams) (Subscription, error)
 	// OWNER. Workspace jadi READ-ONLY tapi datanya utuh. Guard `status = 'active'`
 	// mencegah archive menimpa SUSPENSI platform — kalau tidak, owner bisa keluar
