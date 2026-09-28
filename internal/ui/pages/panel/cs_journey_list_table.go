@@ -95,10 +95,7 @@ func csJourneyTableRow(r CSJourneyAccountRow) g.Node {
 	}
 	onboarding := g.Node(h.Span(h.Class("text-base-content/60"), g.Text("—")))
 	if r.OnboardStatusLabel != "" {
-		onboarding = h.Div(h.Class("flex flex-col gap-1 min-w-[120px]"),
-			csJourneyProgress(r.Progress),
-			h.Span(h.Class("badge badge-xs "+r.OnboardStatusBadge), g.Text(r.OnboardStatusLabel)),
-		)
+		onboarding = h.Div(h.Class("min-w-[120px]"), csJourneyProgress(r.Progress))
 	}
 	return h.Tr(
 		h.Class("border-b border-base-300/50 hover:bg-base-200/50"),

@@ -66,7 +66,6 @@ type CSJourneyAccountRow struct {
 	Progress           int
 	HasProgress        bool
 	OnboardStatusLabel string
-	OnboardStatusBadge string
 	CSMName            string
 	HrefDetail         string
 }

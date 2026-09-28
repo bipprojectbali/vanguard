@@ -89,7 +89,7 @@ func csJourneyAccountRowView(r db.ListCSJourneyAccountsRow, slug string, today t
 	if r.HealthStatus != nil && *r.HealthStatus != "" {
 		healthScore = healthLabel
 	}
-	onbLabel, onbBadge := csJourneyOnboardBadge(r.OnboardingStatus)
+	onbLabel, _ := csJourneyOnboardBadge(r.OnboardingStatus)
 	return panel.CSJourneyAccountRow{
 		AccountName:        r.AccountName,
 		StageLabel:         stageLabel,
@@ -103,7 +103,6 @@ func csJourneyAccountRowView(r db.ListCSJourneyAccountsRow, slug string, today t
 		Progress:           csJourneyProgressInt(r.OnboardingProgress),
 		HasProgress:        r.OnboardingProgress != nil,
 		OnboardStatusLabel: onbLabel,
-		OnboardStatusBadge: onbBadge,
 		CSMName:            strFromPtr(r.CsmName),
 		HrefDetail:         csJourneyDetailHref(slug, r.AccountID),
 	}
