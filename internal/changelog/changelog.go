@@ -46,6 +46,7 @@ var currentReleases = []Release{
 				Title: "Diubah",
 				Items: []string{
 					"Label status pada halaman Manajemen Perpanjangan (Renewal) kini menampilkan \"Renewed\"/\"Terminate\", menggantikan \"Won\"/\"Lost\" yang dipinjam dari istilah Deal — lebih sesuai untuk konteks langganan pelanggan existing yang diperpanjang atau dihentikan, bukan deal baru yang dimenangkan/kalah.",
+					"Tombol \"Perpanjang\" dan \"Tandai Churn\" pada halaman detail Langganan kini hanya bisa dipakai setelah proses di halaman Manajemen Perpanjangan (Customer Success) selesai ditandai \"Renewed\" atau \"Terminate\" — sebelumnya bisa langsung diklik kapan saja tanpa menunggu proses CS. Selama belum selesai, tombol digantikan keterangan tahap CS saat itu (mis. \"Belum bisa diperpanjang — proses CS masih di tahap Outreach\"). Halaman Manajemen Perpanjangan kini juga punya tombol pintasan langsung ke detail Langganan begitu ditandai \"Renewed\".",
 				},
 			},
 			{
