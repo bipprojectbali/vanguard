@@ -52,6 +52,7 @@ var currentReleases = []Release{
 				Title: "Diperbaiki",
 				Items: []string{
 					"Perpanjangan langganan dengan harga yang TURUN kini juga memerlukan persetujuan Manager terlebih dahulu — sebelumnya hanya kenaikan harga yang butuh persetujuan, penurunan harga langsung disetujui otomatis.",
+					"Langganan yang perpanjangannya (naik/turun harga) sudah disetujui Manager kini benar tercatat sebagai \"Diperpanjang\" — sebelumnya tetap dianggap belum diperpanjang, sehingga terus muncul di daftar \"Akan Jatuh Tempo\" dan ikut dihitung di KPI Dashboard meski persetujuannya sudah selesai.",
 				},
 			},
 		},
