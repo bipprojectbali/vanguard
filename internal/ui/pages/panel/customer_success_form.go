@@ -1,6 +1,8 @@
 package panel
 
 import (
+	"strings"
+
 	"go_starter/internal/ui"
 
 	g "maragu.dev/gomponents"
@@ -15,12 +17,59 @@ import (
 const (
 	onbInProgress = "In Progress"
 	onbStalled    = "Stalled"
+	onbCompleted  = "Completed"
 )
 
 // Ekspresi data-show field progres: tampil saat status onboarding "In Progress"
 // ATAU "Stalled". Dirakit dari const enum (bukan literal terpisah) agar satu
 // perubahan nilai enum tak menyisakan ekspresi klien basi.
 const onboardingProgressShowExpr = "$onbstatus == '" + onbInProgress + "' || $onbstatus == '" + onbStalled + "'"
+
+// lifecycleOnboardingStage — nilai "Onboarding" pada Tahap Siklus Hidup. Cermin
+// lifecycleOnboarding (handler/customer_success_consistency.go).
+const lifecycleOnboardingStage = "Onboarding"
+
+// postOnboardingLifecycleStages — opsi Tahap Siklus Hidup DI LUAR "Onboarding".
+// Cermin postOnboardingStages (handler/customer_success_consistency.go, dipakai
+// guard K1 & D1 backend) — di sini dipakai MENGUNCI opsi ini di dropdown selama
+// onboarding belum "Completed" (jaring klien; K1/checkOnboardingLifecycleConsistency
+// tetap penegak sesungguhnya bila jaring ini bocor/di-bypass).
+var postOnboardingLifecycleStages = []string{"Adoption", "Retention", "Renewal", "Advocacy"}
+
+func isPostOnboardingStage(s string) bool {
+	for _, p := range postOnboardingLifecycleStages {
+		if s == p {
+			return true
+		}
+	}
+	return false
+}
+
+// orEqExpr merakit ekspresi data-* "$sig == 'a' || $sig == 'b' || …" dari daftar
+// nilai — dipakai membangun kondisi kunci dropdown dari SATU sumber enum
+// (postOnboardingLifecycleStages), bukan literal terpisah yang bisa basi.
+func orEqExpr(sig string, vals []string) string {
+	parts := make([]string, len(vals))
+	for i, v := range vals {
+		parts[i] = "$" + sig + " == '" + v + "'"
+	}
+	return strings.Join(parts, " || ")
+}
+
+// lifecycleIsPostOnboardingExpr — true saat $lifecycle salah satu tahap DI LUAR
+// Onboarding. Dipakai mengunci Status Onboarding ke "Completed" saja (BL-178.1):
+// begitu operator memilih tahap siklus hidup lanjut, status onboarding lain
+// selain "Completed" tak masuk akal lagi (K1 mewajibkan Completed utk tahap itu).
+var lifecycleIsPostOnboardingExpr = orEqExpr("lifecycle", postOnboardingLifecycleStages)
+
+// lifecycleLockExpr — true selama onboarding BELUM "Completed". Dipakai mengunci
+// opsi Tahap Siklus Hidup di luar Onboarding (BL-178.2): tak bisa maju tahap
+// sebelum onboarding kelar (cermin K1: tahap post-onboarding mewajibkan
+// onboarding_status=="Completed"). progress ikut terkunci transitif — begitu
+// status terkunci "Completed", field Progres Onboarding otomatis SEMBUNYI
+// (onboardingProgressShowExpr hanya tampil utk In Progress/Stalled), tak perlu
+// mekanisme disable terpisah.
+const lifecycleLockExpr = "$onbstatus != '" + onbCompleted + "'"
 
 // customer_success_form.go — form sunting Customer Success (satu baris, tiga
 // section F2). Form NATIVE POST → 303 (gotcha #16). Validasi sesungguhnya di
@@ -39,7 +88,6 @@ type CustomerSuccessFormFields struct {
 	SentimentScore  string
 
 	LifecycleStage string
-	StageEntryDate string
 
 	OnboardingStatus   string
 	KickoffDate        string
@@ -86,6 +134,9 @@ type CustomerSuccessFormView struct {
 	// Status Kesehatan (BL-24) sengaja TAK dirender di form sunting: tetap turunan
 	// overall_health_score & tampil di halaman DETAIL, tapi bukan bagian form edit.
 	// Tren Skor (BL-25) juga TAK dirender di form (BL-128 (b)) — alasan sama.
+	// Sejak Tanggal/stage_entry_date (BL-178 Rule E) juga TAK dirender di form
+	// sunting sejak sini — murni turunan PERUBAHAN lifecycle_stage (di-set server),
+	// bukan input operator; tetap tampil read-only di halaman DETAIL.
 	LifecycleStages    []string
 	OnboardingStatuses []string
 	LoginFrequencies   []string
@@ -116,8 +167,7 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 			field("Skor Sentimen (0–100)", "sentiment_score", v.Fields.SentimentScore, false, "number"),
 		)),
 		ui.When(v.CanWriteJourney, formCard("Journey & Onboarding",
-			selectField("Tahap Siklus Hidup", "lifecycle_stage", v.Fields.LifecycleStage, v.LifecycleStages, false),
-			field("Sejak Tanggal", "stage_entry_date", v.Fields.StageEntryDate, false, "date"),
+			lifecycleStageSelect(v.Fields.LifecycleStage, v.LifecycleStages),
 			onboardingStatusSelect(v.Fields.OnboardingStatus, v.OnboardingStatuses),
 			field("Tanggal Kickoff", "kickoff_date", v.Fields.KickoffDate, false, "date"),
 			field("Target Go-Live", "target_go_live_date", v.Fields.TargetGoLiveDate, false, "date"),
@@ -143,12 +193,16 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 
 	// Signal ephemeral (state form, tak dikirim ke server), diinisialisasi dari
 	// nilai TERSIMPAN agar no-FOUC saat prefill:
-	//   - $onbstatus → tampil/sembunyi field progres (onboardingStatusSelect + showWhen).
+	//   - $onbstatus → tampil/sembunyi field progres (onboardingStatusSelect + showWhen);
+	//     JUGA mengunci opsi Tahap Siklus Hidup di luar Onboarding (lifecycleLockExpr).
+	//   - $lifecycle → mengunci opsi Status Onboarding selain "Completed" begitu
+	//     tahap siklus hidup lanjut dipilih (lifecycleIsPostOnboardingExpr).
 	body = append(body, h.FormEl(
 		h.Method("post"), h.Action(v.Action),
 		h.Class("grid gap-4 min-w-0"),
 		data.Signals(map[string]any{
 			"onbstatus": v.Fields.OnboardingStatus,
+			"lifecycle": v.Fields.LifecycleStage,
 		}),
 		g.Group(fields),
 		h.Div(
@@ -164,19 +218,68 @@ func CustomerSuccessForm(v CustomerSuccessFormView) g.Node {
 // onboardingStatusSelect — dropdown "Status Onboarding" yang di-bind ke signal
 // $onbstatus (data.Bind) sehingga memilih nilai men-toggle field "Progres
 // Onboarding" tanpa round-trip (BL-26 (c)). Selain binding, identik selectField
-// opsional (opsi kosong "—" di depan). Dibuat manual karena selectField tak
-// menyuntikkan atribut Datastar; enumOptions dipakai ulang agar markup opsi tak
-// bercabang jadi dua kebenaran.
+// opsional (opsi kosong "—" di depan) — KECUALI opsi selain "Completed" dikunci
+// reaktif (data-attr:disabled) saat $lifecycle sudah tahap post-onboarding
+// (BL-178.1): tak masuk akal mundur/ubah status onboarding setelah siklus hidup
+// lanjut — K1 backend tetap penegak sesungguhnya, ini jaring klien. Select TETAP
+// aktif (bukan seluruh <select> disabled) agar nilai "Completed" yang sudah
+// terpilih tetap TERKIRIM saat submit — <select disabled> tak pernah ikut
+// form-data, akan salah kena Guard C "regresi" (checkOnboardingRegression).
+// Dibuat manual (bukan enumOptions) karena butuh atribut Datastar per-opsi.
 func onboardingStatusSelect(current string, opts []string) g.Node {
 	sel := []g.Node{
 		h.ID("f-onboarding_status"), h.Name("onboarding_status"),
 		data.Bind("onbstatus"),
 		h.Class("select text-base w-full"),
 	}
+	nodes := []g.Node{
+		h.Option(h.Value(""), data.Attr("disabled", lifecycleIsPostOnboardingExpr), g.Text("—")),
+	}
+	for _, o := range opts {
+		attrs := []g.Node{h.Value(o)}
+		if o == current {
+			attrs = append(attrs, h.Selected())
+		}
+		if o != onbCompleted {
+			attrs = append(attrs, data.Attr("disabled", lifecycleIsPostOnboardingExpr))
+		}
+		nodes = append(nodes, h.Option(append(attrs, g.Text(o))...))
+	}
 	return h.Div(
 		h.Class("grid gap-1 min-w-0"),
 		labelFor("Status Onboarding", "f-onboarding_status", false),
-		h.Select(append(sel, g.Group(enumOptions(current, opts, true)))...),
+		h.Select(append(sel, g.Group(nodes))...),
+	)
+}
+
+// lifecycleStageSelect — dropdown "Tahap Siklus Hidup" yang di-bind ke signal
+// $lifecycle (data.Bind) agar onboardingStatusSelect bisa bereaksi (BL-178.1).
+// Opsi post-onboarding (postOnboardingLifecycleStages) dikunci reaktif
+// (data-attr:disabled) selama onboarding BELUM "Completed" (BL-178.2,
+// lifecycleLockExpr) — cermin K1 backend, jaring klien saja. Opsi "Onboarding"
+// & "—" TETAP selalu aktif (scope permintaan: hanya opsi "di luar Onboarding").
+// Dibuat manual (bukan selectField) karena butuh binding + atribut per-opsi.
+func lifecycleStageSelect(current string, opts []string) g.Node {
+	nodes := []g.Node{h.Option(h.Value(""), g.Text("—"))}
+	for _, o := range opts {
+		attrs := []g.Node{h.Value(o)}
+		if o == current {
+			attrs = append(attrs, h.Selected())
+		}
+		if isPostOnboardingStage(o) {
+			attrs = append(attrs, data.Attr("disabled", lifecycleLockExpr))
+		}
+		nodes = append(nodes, h.Option(append(attrs, g.Text(o))...))
+	}
+	return h.Div(
+		h.Class("grid gap-1 min-w-0"),
+		labelFor("Tahap Siklus Hidup", "f-lifecycle_stage", false),
+		h.Select(
+			h.ID("f-lifecycle_stage"), h.Name("lifecycle_stage"),
+			data.Bind("lifecycle"),
+			h.Class("select text-base w-full"),
+			g.Group(nodes),
+		),
 	)
 }
 

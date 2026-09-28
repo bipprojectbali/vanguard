@@ -297,7 +297,10 @@ func TestCustomerSuccess_EnumInvalidRejected(t *testing.T) {
 	// health_status & score_trend TAK diuji di sini (BL-24/BL-25): tak lagi diparse
 	// dari form, nilai apa pun diabaikan — bukan ditolak. Diuji tersendiri di
 	// TestDeriveHealthStatus/TestDeriveScoreTrend & TestCustomerSuccess_UpdateSuccess
-	// (manual diabaikan, status/tren ikut skor terhitung).
+	// (manual diabaikan, status/tren ikut skor terhitung). stage_entry_date TAK
+	// diuji lagi di sini (BL-178 Rule E): sama alasan, tak lagi diparse dari form
+	// sama sekali (murni turunan perubahan lifecycle_stage) — diuji tersendiri di
+	// TestNormalizeStageEntryDate & jalur save (customer_success_consistency_test.go).
 	cases := []struct {
 		field, value, wantErr string
 	}{
@@ -306,7 +309,6 @@ func TestCustomerSuccess_EnumInvalidRejected(t *testing.T) {
 		{"onboarding_status", "Unknown", "onboarding_status"},
 		{"login_frequency", "Sometimes", "login_frequency"},
 		{"usage_trend", "Flat", "usage_trend"},
-		{"stage_entry_date", "31-12-2026", "date"},
 		{"active_users", "-5", "number"},
 		{"feature_adoption_rate", "abc", "feature_adoption_rate"},
 	}

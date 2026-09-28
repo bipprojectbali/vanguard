@@ -121,6 +121,10 @@ func customerSuccessErrMsg(code string) string {
 		return "Tahap siklus hidup sudah melewati Onboarding, tetapi status onboarding belum \"Completed\". Selesaikan onboarding dulu atau kembalikan tahap ke Onboarding."
 	case errOnboardingGoLiveMismatch:
 		return "Status onboarding \"Not Started\", tetapi Tanggal Go-Live Aktual sudah terisi. Perbarui status onboarding atau kosongkan tanggal go-live."
+	case errOnboardingStatusRegression:
+		return "Status onboarding sudah pernah maju — tidak bisa dikembalikan ke \"Not Started\" atau dikosongkan."
+	case errLifecycleStageRegression:
+		return "Tahap siklus hidup sudah melewati Onboarding — tidak bisa dikembalikan ke \"Onboarding\" atau dikosongkan."
 	case "date":
 		return "Format tanggal tidak sah."
 	case "number":

@@ -51,13 +51,18 @@ func (h *Handler) handoverCSFromWonDeal(ctx context.Context, deal db.Deal, tenan
 			return err
 		}
 		// Belum ada → buat baris handover minimal (reuse query CreateCustomerSuccess).
+		// BL-178 Rule A: StageEntryDate/OnboardingProgress diisi otomatis di sinilah
+		// SATU-SATUNYA titik awal Journey (handover) — bukan input manual pertama.
+		progress := int16(onboardingProgressNotStarted)
 		if _, err := q.CreateCustomerSuccess(ctx, db.CreateCustomerSuccessParams{
-			TenantID:         tenantID,
-			AccountID:        deal.AccountID,
-			LifecycleStage:   &stage,
-			OnboardingStatus: &status,
-			CreatedBy:        &uid,
-			UsageDataSource:  "Manual", // BL-27: kolom wajib (CHECK); handover belum tersinkron Desa+
+			TenantID:           tenantID,
+			AccountID:          deal.AccountID,
+			LifecycleStage:     &stage,
+			StageEntryDate:     dateOnly(todayInAppTZ()),
+			OnboardingStatus:   &status,
+			OnboardingProgress: &progress,
+			CreatedBy:          &uid,
+			UsageDataSource:    "Manual", // BL-27: kolom wajib (CHECK); handover belum tersinkron Desa+
 		}); err != nil {
 			return err
 		}

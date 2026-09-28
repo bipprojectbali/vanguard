@@ -101,7 +101,6 @@ func customerSuccessFormFields(cs db.CustomerSuccess) panel.CustomerSuccessFormF
 		SentimentScore:  probabilityStr(cs.SentimentScore),
 
 		LifecycleStage: deref(cs.LifecycleStage),
-		StageEntryDate: dateStr(cs.StageEntryDate),
 
 		OnboardingStatus:   deref(cs.OnboardingStatus),
 		KickoffDate:        dateStr(cs.KickoffDate),

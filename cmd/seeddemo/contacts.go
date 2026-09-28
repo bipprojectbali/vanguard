@@ -8,9 +8,11 @@ import (
 	"go_starter/internal/db"
 )
 
-// contacts.go — PIC desa (Contact). 2-3 kontak per desa customer/prospect
-// (±90 total), 1 utk former_customer; TEPAT SATU is_primary_contact=true per
-// desa (idx_contacts_primary partial unique) — kontak pertama tiap desa yang
+// contacts.go — PIC desa (Contact). Skala PER-AKUN (bukan angka tetap): 2-3
+// kontak per desa customer/prospect, 1 utk former_customer — dari 10 akun
+// (accounts.go) total ~20-30 kontak, bervariasi tiap run krn account_type
+// hasil weightedPick acak. TEPAT SATU is_primary_contact=true per desa
+// (idx_contacts_primary partial unique) — kontak pertama tiap desa yang
 // ditandai primary, sisanya tidak.
 
 var firstNames = []string{
