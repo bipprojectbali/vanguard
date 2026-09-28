@@ -21,15 +21,20 @@ import (
 //
 // Penanda pembeda dipilih yang TAK ambigu: nav dev punya "/dev/logs" &
 // "/dev/workspaces" (tak pernah muncul di quicklinks — yang hanya /dev/users),
-// nav workspace punya item "Dashboard" (item PERTAMA workspaceNav, tanpa gerbang
-// izin — tak ada di dev, changelog, atau chrome shell lain). BUKAN lagi grup
+// nav workspace punya item PERTAMA "Dashboard" (tanpa gerbang izin — selalu
+// dirender), dicek lewat atribut `title="Dashboard"` pada elemen `<a>`-nya
+// (navLinkWith, internal/ui/shellnav.go — h.Title(it.Label)). BUKAN lagi grup
 // "Subscriptions": sejak hide-grup-kosong, grup itu bisa disembunyikan total
-// bila akun platform tak punya izin ke satu pun anaknya, jadi tak lagi penanda
-// yang andal.
-
+// bila akun platform tak punya izin ke satu pun anaknya, jadi tak lagi
+// penanda yang andal. BUKAN teks polos "Dashboard": kata itu juga nama fitur
+// nyata (KPI "Dashboard"), muncul di prosa changelog in-app (BL-177) dan
+// salah-cocok. BUKAN JUGA `href="/w/test"` saja: quicklink dev panel "Ruang
+// Kerja" menuju href root workspace YANG SAMA, jadi ikut salah-cocok di shell
+// dev — `title="Dashboard"` unik ke item nav ini (quicklink itu title-nya
+// "Ruang Kerja", label beda).
 const (
-	devNavMarker       = "/dev/logs" // hanya devNav
-	workspaceNavMarker = "Dashboard" // item pertama workspaceNav (selalu dirender)
+	devNavMarker       = "/dev/logs"         // hanya devNav
+	workspaceNavMarker = `title="Dashboard"` // atribut title item pertama workspaceNav (selalu dirender)
 )
 
 // initAuthz memasang engine Casbin global — dibutuhkan navFor/workspaceNavCtx yang
