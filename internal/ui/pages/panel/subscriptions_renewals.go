@@ -28,18 +28,22 @@ type RenewalKPIs struct {
 
 // RenewalRow = satu langganan untuk baris tabel Renewals. Semua nilai SUDAH
 // diformat di handler (RenewalDate, DaysLeft, PrevValue, CurrentMRR = string;
-// Status = label derivasi, StatusClass = kelas badge daisyUI).
+// Status = label derivasi, StatusClass = kelas badge daisyUI). DaysLeftBand/
+// DaysLeftBandCls (BL-175) = label band urgensi REUSE subDerivedStatus, tampil
+// di kolom Sisa Hari MENDAMPINGI angka hari — TAK menggantikan kolom Status.
 type RenewalRow struct {
-	ID          int64
-	Village     string
-	Plan        string
-	RenewalDate string
-	DaysLeft    string
-	Type        string
-	Status      string
-	StatusClass string
-	PrevValue   string
-	CurrentMRR  string
+	ID              int64
+	Village         string
+	Plan            string
+	RenewalDate     string
+	DaysLeft        string
+	DaysLeftBand    string
+	DaysLeftBandCls string
+	Type            string
+	Status          string
+	StatusClass     string
+	PrevValue       string
+	CurrentMRR      string
 }
 
 // RenewalWindow = satu tab jendela (key untuk href + label tampilan). Dioper
@@ -211,11 +215,29 @@ func renewalTableRow(base string, s RenewalRow) g.Node {
 			g.Text(orDash(s.Village)))),
 		link(orDash(s.Plan), "py-2 pr-4"),
 		link(orDash(s.RenewalDate), "py-2 pr-4"),
-		link(orDash(s.DaysLeft), "py-2 pr-4"),
+		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), renewalDaysLeftCell(s))),
 		link(orDash(s.Type), "py-2 pr-4"),
 		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), renewalStatusBadge(s))),
 		h.Td(h.Class("py-2"), h.A(h.Href(href), h.Class("block truncate"),
 			g.Text(orDash(s.PrevValue)+" → "+orDash(s.CurrentMRR)))),
+	)
+}
+
+// renewalDaysLeftCell = isi kolom "Sisa Hari": angka hari (tak berubah) + label
+// band urgensi (BL-175, DaysLeftBand/DaysLeftBandCls dari subDerivedStatus) di
+// bawahnya — stack vertikal (bukan sebaris) agar kolom tak melebar di TableScroll
+// viewport 375px (dua info sekaligus tanpa menambah lebar horizontal tabel).
+func renewalDaysLeftCell(s RenewalRow) g.Node {
+	if s.DaysLeftBand == "" {
+		return h.Span(h.Class("block truncate"), g.Text(orDash(s.DaysLeft)))
+	}
+	bandCls := s.DaysLeftBandCls
+	if bandCls == "" {
+		bandCls = "badge badge-ghost"
+	}
+	return h.Div(h.Class("flex flex-col gap-0.5 min-w-0"),
+		h.Span(h.Class("truncate"), g.Text(orDash(s.DaysLeft))),
+		h.Span(h.Class(bandCls+" badge-sm"), g.Text(s.DaysLeftBand)),
 	)
 }
 

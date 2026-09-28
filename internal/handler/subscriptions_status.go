@@ -44,13 +44,17 @@ const (
 //   - 8 ≤ d ≤ 14        → "Perlu Perhatian"     (info)
 //   - d ≥ 15            → "Aman"                (success)
 //
-// Status daur hidup NON-Active (Trial/PendingApproval/Expired/Cancelled/Churned)
+// Status daur hidup NON-Active/PendingApproval (Trial/Expired/Cancelled/Churned)
 // dikembalikan apa adanya dgn badge lifecycle (subStatusLifecycleClass) — derivasi
 // timing renewal tak bermakna untuk status terminal (mis. Cancelled ber-end_date
-// lampau ≠ "Masa Tenggang"). Mengembalikan label + class badge daisyUI (token
-// semantik). Ambang di sini TERPISAH dari dueSoonDays (jendela Renewals, 30 hari).
+// lampau ≠ "Masa Tenggang"). PendingApproval DIPERLAKUKAN SAMA seperti Active
+// (BL-175, keputusan user 28 Sep) — upsell menunggu approval tetap ber-end_date
+// aktif, baris "Akan Jatuh Tempo"/"Diperpanjang" Renewals mencakup keduanya
+// (renewalDerivedStatus), jadi band urgensi tetap bermakna, bukan cuma label
+// lifecycle mentah. Mengembalikan label + class badge daisyUI (token semantik).
+// Ambang di sini TERPISAH dari dueSoonDays (jendela Renewals, 30 hari).
 func subDerivedStatus(status string, end pgtype.Date, now time.Time) (label, badgeClass string) {
-	if status != "Active" {
+	if status != "Active" && status != "PendingApproval" {
 		return status, subStatusLifecycleClass(status)
 	}
 	if !end.Valid {

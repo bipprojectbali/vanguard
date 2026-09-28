@@ -37,9 +37,14 @@ func TestSubDerivedStatus(t *testing.T) {
 		{"active d=15 → Aman", "Active", dateAfter(attentionMaxDays + 1), "Aman", "badge badge-success"},
 		{"active tepat 30 hari (bukan lagi Jatuh Tempo) → Aman", "Active", dateAfter(dueSoonDays), "Aman", "badge badge-success"},
 		{"active end_date invalid → Aman (fail-soft)", "Active", pgtype.Date{}, "Aman", "badge badge-success"},
-		// Non-Active → label lifecycle apa adanya (derivasi tak bermakna).
+		// PendingApproval (BL-175) DIPERLAKUKAN SAMA seperti Active → band 5-tingkat,
+		// bukan lagi passthrough mentah (mirror subset kasus Active di atas).
+		{"pending approval lewat tempo → Masa Tenggang", "PendingApproval", dateAfter(-1), "Masa Tenggang", "badge badge-error"},
+		{"pending approval d=5 → Segera Jatuh Tempo", "PendingApproval", dateAfter(5), "Segera Jatuh Tempo", "badge badge-warning badge-outline"},
+		{"pending approval d=10 → Perlu Perhatian", "PendingApproval", dateAfter(10), "Perlu Perhatian", "badge badge-info"},
+		{"pending approval d=20 → Aman", "PendingApproval", dateAfter(20), "Aman", "badge badge-success"},
+		// Non-Active/PendingApproval lain → label lifecycle apa adanya (derivasi tak bermakna).
 		{"trial → passthrough info", "Trial", dateAfter(-100), "Trial", "badge badge-info"},
-		{"pending approval → warning", "PendingApproval", dateAfter(5), "PendingApproval", "badge badge-warning"},
 		{"cancelled lewat tempo TETAP Cancelled", "Cancelled", dateAfter(-100), "Cancelled", "badge badge-error"},
 		{"churned → error", "Churned", dateAfter(-1), "Churned", "badge badge-error"},
 		{"status tak dikenal → ghost", "Weird", dateAfter(5), "Weird", "badge badge-ghost"},
