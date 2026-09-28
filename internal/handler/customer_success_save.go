@@ -84,6 +84,18 @@ func (h *Handler) CustomerSuccessSave(w http.ResponseWriter, r *http.Request) {
 		// (c) progress terminal mengikuti status: Not Started→0, Completed→100
 		// (field tersembunyi di UI tetap bisa kirim nilai basi — tegakkan di sini).
 		form.OnboardingProgress = normalizeOnboardingProgress(form.OnboardingStatus, form.OnboardingProgress)
+		// BL-178 Rule B: kickoff_date/actual_go_live_date otomatis dari transisi
+		// status, HANYA bila masih kosong (jangan timpa isian manual/auto lama).
+		form.KickoffDate, form.ActualGoLiveDate = normalizeOnboardingDates(form.OnboardingStatus, form.KickoffDate, form.ActualGoLiveDate)
+		// BL-178 Rule E: stage_entry_date otomatis dari PERUBAHAN lifecycle_stage
+		// thd baris existing — tak lagi input manual (lihat parseCustomerSuccessForm).
+		form.StageEntryDate = normalizeStageEntryDate(existing, form.LifecycleStage)
+		// BL-178 Guard C/D1: tolak transisi MUNDUR (onboarding_status/lifecycle_stage
+		// balik ke titik awal setelah pernah maju) → PRG ?err= (gotcha #16).
+		if code, ok := checkOnboardingRegression(existing, form); !ok {
+			wsRedirect(w, r, accountPath+"/customer-success/edit", code)
+			return
+		}
 		// guard K1/K3 (kontradiksi mustahil) → tolak simpan, PRG ?err= (gotcha #16).
 		if code, ok := checkOnboardingLifecycleConsistency(form); !ok {
 			wsRedirect(w, r, accountPath+"/customer-success/edit", code)

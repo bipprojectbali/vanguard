@@ -1,6 +1,10 @@
 package handler
 
-import "go_starter/internal/db"
+import (
+	"go_starter/internal/db"
+
+	"github.com/jackc/pgx/v5/pgtype"
+)
 
 // customer_success_consistency.go — keselarasan onboarding ↔ lifecycle (BL-26).
 // SATU baris customer_success, tapi lifecycle_stage & onboarding_status (+
@@ -24,6 +28,7 @@ const (
 // (customer_success_helpers.go) — bila enum berubah, ubah di sini juga.
 const (
 	onboardingNotStarted = "Not Started"
+	onboardingInProgress = "In Progress"
 	onboardingCompleted  = "Completed"
 	lifecycleOnboarding  = "Onboarding"
 )
@@ -33,6 +38,14 @@ const (
 const (
 	errOnboardingLifecycleMismatch = "onboarding_lifecycle_mismatch" // K1
 	errOnboardingGoLiveMismatch    = "onboarding_golive_mismatch"    // K3
+)
+
+// Kode galat guard MUNDUR (BL-178 Guard C/D1) — beda dari K1/K3 (kontradiksi
+// ANTAR field pada nilai form saat ini): guard ini membandingkan form thd baris
+// TERSIMPAN (existing), menolak transisi yang secara bisnis tak bisa dibatalkan.
+const (
+	errOnboardingStatusRegression = "onboarding_status_regression" // Guard C
+	errLifecycleStageRegression   = "lifecycle_stage_regression"   // Guard D1
 )
 
 // Pesan peringatan LUNAK (K2/K4) — tak memblok simpan, ditampilkan sebagai
@@ -71,6 +84,82 @@ func normalizeOnboardingProgress(status *string, raw *int16) *int16 {
 	default: // In Progress, Stalled — di tengah jalan, angka bermakna
 		return raw
 	}
+}
+
+// normalizeOnboardingDates (BL-178 Rule B) mengisi kickoff_date/actual_go_live_date
+// otomatis dari status onboarding — kickoff_date=hari ini saat "In Progress",
+// actual_go_live_date=hari ini saat "Completed" — HANYA bila field itu MASIH
+// KOSONG. Cek "masih kosong" ini yang membuatnya idempoten sekaligus tak menimpa
+// isian manual: form resubmit membawa nilai tersimpan (prefill GET), jadi field
+// yang sudah terisi (manual ATAU auto sebelumnya) tetap valid → tak disentuh lagi.
+// target_go_live_date SENGAJA TETAP manual selamanya (tanggal RENCANA, bukan
+// aktual — tak ada event yang pantas memicunya). status nil/"Not Started"/
+// "Stalled" → tak ada auto-isi (Stalled: progress bebas input manual, tanggal pun
+// begitu). Dipanggil HANYA saat writeJourney (F2) — sama seperti
+// normalizeOnboardingProgress, lihat CustomerSuccessSave.
+func normalizeOnboardingDates(status *string, kickoff, actualGoLive pgtype.Date) (pgtype.Date, pgtype.Date) {
+	if status == nil {
+		return kickoff, actualGoLive
+	}
+	switch *status {
+	case onboardingInProgress:
+		if !kickoff.Valid {
+			kickoff = dateOnly(todayInAppTZ())
+		}
+	case onboardingCompleted:
+		if !actualGoLive.Valid {
+			actualGoLive = dateOnly(todayInAppTZ())
+		}
+	}
+	return kickoff, actualGoLive
+}
+
+// normalizeStageEntryDate (BL-178 Rule E) mengisi stage_entry_date OTOMATIS —
+// field ini murni penunjuk "sejak kapan di tahap siklus hidup SEKARANG"
+// (dipakai daysInStage), bukan input operator: tak lagi diparse dari form
+// (lihat parseCustomerSuccessForm) sama sekali. lifecycle_stage BERUBAH dari
+// baris existing (termasuk baris baru, existing.LifecycleStage nil/"") →
+// set ke hari ini. Tak berubah → pertahankan nilai existing (bukan reset tiap
+// save — resubmit form dgn stage sama tak boleh menggeser "sejak tanggal").
+// stage nil (form tak mengirim/writeJourney false) → pertahankan existing.
+// Dipanggil HANYA saat writeJourney (F2), setelah normalizeOnboardingDates —
+// lihat CustomerSuccessSave.
+func normalizeStageEntryDate(existing db.CustomerSuccess, stage *string) pgtype.Date {
+	if stage == nil {
+		return existing.StageEntryDate
+	}
+	if deref(existing.LifecycleStage) != *stage {
+		return dateOnly(todayInAppTZ())
+	}
+	return existing.StageEntryDate
+}
+
+// checkOnboardingRegression (BL-178 Guard C/D1) menolak transisi MUNDUR yang tak
+// masuk akal bisnis: sekali onboarding_status maju melewati "Not Started", tak
+// boleh balik ke "Not Started" ATAUPUN dikosongkan (Guard C); sekali
+// lifecycle_stage masuk salah satu postOnboardingStages, tak boleh balik ke
+// "Onboarding" (literal) ATAUPUN dikosongkan (Guard D1, keputusan user eksplisit:
+// blank/null diperlakukan SAMA seperti literal "Onboarding" — dikonfirmasi ulang
+// setelah sempat salah baca kode soal opsi blank di dropdown Tahap Siklus Hidup).
+// existing = baris TERSIMPAN (bukan form) — baris baru (zero-value, status/stage
+// nil) otomatis lolos kedua guard (belum pernah maju). Invariant self-reinforcing:
+// karena guard ini SENDIRI mencegah existing pernah regresi, existing yang "sudah
+// maju" adalah bukti valid bahwa baris ITU secara historis pernah maju — bukan
+// cuma snapshot sesaat.
+func checkOnboardingRegression(existing db.CustomerSuccess, f customerSuccessForm) (string, bool) {
+	if prev := deref(existing.OnboardingStatus); prev != "" && prev != onboardingNotStarted {
+		if f.OnboardingStatus == nil || *f.OnboardingStatus == onboardingNotStarted {
+			return errOnboardingStatusRegression, false
+		}
+	}
+	if prevStage := deref(existing.LifecycleStage); prevStage != "" {
+		if _, wasPost := postOnboardingStages[prevStage]; wasPost {
+			if f.LifecycleStage == nil || *f.LifecycleStage == lifecycleOnboarding {
+				return errLifecycleStageRegression, false
+			}
+		}
+	}
+	return "", true
 }
 
 // checkOnboardingLifecycleConsistency menegakkan kontradiksi MUSTAHIL (guard,

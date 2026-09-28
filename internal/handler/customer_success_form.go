@@ -49,11 +49,9 @@ func parseCustomerSuccessForm(fv func(string) string) (customerSuccessForm, stri
 		}
 		f.LifecycleStage = &s
 	}
-	stageEntry, code := optDate(fv("stage_entry_date"))
-	if code != "" {
-		return customerSuccessForm{}, code
-	}
-	f.StageEntryDate = stageEntry
+	// stage_entry_date TAK diparse dari form (BL-178 Rule E): murni turunan
+	// PERUBAHAN lifecycle_stage, di-set server-side (normalizeStageEntryDate,
+	// customer_success_consistency.go) — field form apa pun diabaikan.
 
 	if s := strings.TrimSpace(fv("onboarding_status")); s != "" {
 		if _, ok := validOnboardingStatuses[s]; !ok {

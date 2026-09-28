@@ -47,6 +47,15 @@ func TestDealWon_CreatesCSHandover(t *testing.T) {
 	if cs.LifecycleStage == nil || *cs.LifecycleStage != "Onboarding" {
 		t.Errorf("lifecycle_stage = %v, want \"Onboarding\"", cs.LifecycleStage)
 	}
+	// BL-178 Rule A: stage_entry_date & onboarding_progress diisi otomatis di
+	// TITIK AWAL Journey ini (handover), bukan dibiarkan NULL menunggu input manual.
+	wantStageEntry := dateOnly(todayInAppTZ())
+	if !cs.StageEntryDate.Valid || !cs.StageEntryDate.Time.Equal(wantStageEntry.Time) {
+		t.Errorf("stage_entry_date = %v, want hari ini (%v)", cs.StageEntryDate, wantStageEntry.Time)
+	}
+	if cs.OnboardingProgress == nil || *cs.OnboardingProgress != 0 {
+		t.Errorf("onboarding_progress = %v, want 0 (selaras \"Not Started\")", cs.OnboardingProgress)
+	}
 	// Nilai turunan health SENGAJA NULL — operator/CSM isi kemudian.
 	if cs.OverallHealthScore != nil {
 		t.Errorf("overall_health_score handover harus NULL, got %v", *cs.OverallHealthScore)
