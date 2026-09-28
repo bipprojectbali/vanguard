@@ -25,20 +25,20 @@ const dueSoonDays = 30
 // fallback ke auto_renew (BL-94). Status = DERIVASI renewal (bukan lifecycle
 // subscription.status) sesuai wireframe. Prev→Current = previous_value → MRR,
 // keduanya nilai komersial → maskARR (F4, diperbaiki audit FLS M9-1). canARR
-// dihitung SEKALI oleh pemanggil (canSeeARR(ctx)). DaysLeftBand* (BL-175) = label
-// band urgensi REUSE subDerivedStatus (kolom "Masa Berlaku" Subscription Lists) —
-// tambahan di kolom Sisa Hari, TAK menggantikan Status (renewalDerivedStatus).
+// dihitung SEKALI oleh pemanggil (canSeeARR(ctx)). DaysLeftTextCls (BL-175) =
+// kelas WARNA TEKS urgensi REUSE subDerivedStatus (kolom "Masa Berlaku"
+// Subscription Lists) via bandTextClass — TANPA badge/label tambahan, TAK
+// menggantikan Status (renewalDerivedStatus).
 func renewalRowView(s renewalListRow, now time.Time, canARR bool) panel.RenewalRow {
 	label, cls := renewalDerivedStatus(now, s.Status, s.EndDate, s.RenewalStatus)
-	bandLabel, bandCls := subDerivedStatus(s.Status, s.EndDate, now)
+	_, bandCls := subDerivedStatus(s.Status, s.EndDate, now)
 	return panel.RenewalRow{
 		ID:              s.ID,
 		Village:         s.VillageName,
 		Plan:            subPlanDisplay(s.PlanName, s.ItemCount),
 		RenewalDate:     dateStr(s.EndDate),
 		DaysLeft:        daysLeftLabel(now, s.EndDate),
-		DaysLeftBand:    bandLabel,
-		DaysLeftBandCls: bandCls,
+		DaysLeftTextCls: bandTextClass(bandCls),
 		Type:            renewalTypeLabel(s.RenewalType, s.AutoRenew),
 		Status:          label,
 		StatusClass:     cls,

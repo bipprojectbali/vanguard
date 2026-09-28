@@ -2,6 +2,7 @@ package handler
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -74,6 +75,26 @@ func subDerivedStatus(status string, end pgtype.Date, now time.Time) (label, bad
 		return "Perlu Perhatian", "badge badge-info"
 	default:
 		return "Aman", "badge badge-success"
+	}
+}
+
+// bandTextClass mengonversi badgeClass (token daisyUI, hasil subDerivedStatus)
+// jadi kelas WARNA TEKS Tailwind polos (BL-175, kolom Sisa Hari Renewals —
+// TANPA badge/label, cuma warna angka). Cocokkan token "warning"/"error"/dst
+// SEBELUM cek badge-outline dsb — urutan tak masalah karena substring unik per
+// warna. badge-ghost/tanpa warna → "" (teks default, tak diwarnai).
+func bandTextClass(badgeClass string) string {
+	switch {
+	case strings.Contains(badgeClass, "badge-error"):
+		return "text-error"
+	case strings.Contains(badgeClass, "badge-warning"):
+		return "text-warning"
+	case strings.Contains(badgeClass, "badge-info"):
+		return "text-info"
+	case strings.Contains(badgeClass, "badge-success"):
+		return "text-success"
+	default:
+		return ""
 	}
 }
 
