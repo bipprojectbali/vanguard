@@ -16,7 +16,7 @@ import (
 //
 //   - healthKPIsToView: sub-teks KPI (rata skor / % Sehat), tiga panel dasbor
 //     (Sebaran/Komposisi/Arah), placeholder saat belum ada skor (Scored=0).
-//   - healthActionLabel: aksi kontekstual per-status (Playbook/Tinjau/Lihat).
+//   - healthActionLabel: label aksi disamakan "Tinjau" untuk semua status.
 //   - CountHealthScoreKPIs: agregat baru (avg per-komponen + cacah tren) benar.
 //   - ListHealthScores: kolom "Jatuh Tempo" = end_date langganan aktif (LATERAL).
 //   - Render tabel: header "Jatuh Tempo" ada, "Di Stage" (lama) hilang, aksi
@@ -59,10 +59,10 @@ func TestHealthActionLabel(t *testing.T) {
 		status *string
 		want   string
 	}{
-		{"nil (belum dinilai)", nil, "Lihat"},
-		{"critical", &crit, "Playbook"},
+		{"nil (belum dinilai)", nil, "Tinjau"},
+		{"critical", &crit, "Tinjau"},
 		{"at-risk", &atrisk, "Tinjau"},
-		{"healthy", &healthy, "Lihat"},
+		{"healthy", &healthy, "Tinjau"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -358,12 +358,9 @@ func TestHealthScore_DashboardRender(t *testing.T) {
 		t.Error("kolom lama 'Di Stage' harus dihapus")
 	}
 
-	// Aksi kontekstual per-status.
-	if !strings.Contains(body, "Playbook") {
-		t.Error("baris Critical harus punya aksi 'Playbook'")
-	}
+	// Aksi disamakan "Tinjau" untuk semua status.
 	if !strings.Contains(body, "Tinjau") {
-		t.Error("baris At-Risk harus punya aksi 'Tinjau'")
+		t.Error("baris tabel harus punya aksi 'Tinjau'")
 	}
 
 	// Panel dasbor terrender (Scored>0).

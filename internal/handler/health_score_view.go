@@ -54,22 +54,11 @@ func healthScoreKPIParams(p db.ListHealthScoresParams) db.CountHealthScoreKPIsPa
 	}
 }
 
-// healthActionLabel — aksi kontekstual tabel (BL-96) diturunkan dari status
-// kesehatan: Kritis butuh intervensi (Playbook), Berisiko perlu Tinjau, sisanya
-// (Healthy / belum dinilai) cukup Lihat. Semua menuju detail customer-success
-// yang sama (tak ada halaman playbook per-akun) — label saja yang kontekstual.
+// healthActionLabel — label aksi tabel, disamakan "Tinjau" untuk semua status
+// (dulu kontekstual per-status: Playbook/Tinjau/Lihat). Semua menuju detail
+// customer-success yang sama.
 func healthActionLabel(status *string) string {
-	if status == nil {
-		return "Lihat"
-	}
-	switch *status {
-	case "Critical":
-		return "Playbook"
-	case "At-Risk":
-		return "Tinjau"
-	default:
-		return "Lihat"
-	}
+	return "Tinjau"
 }
 
 // healthScoreStr menampilkan skor sebagai string atau "—" bila nil.

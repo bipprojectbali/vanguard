@@ -23,8 +23,7 @@ type HealthScoreKPIs struct {
 
 // HealthScoreRowView — satu baris tabel desa + data health score.
 // BL-96: kolom Sentimen dibuang; "Di Stage" → RenewalDue (jatuh tempo langganan);
-// ActionLabel = aksi kontekstual per-status (Kritis→Playbook, Berisiko→Tinjau,
-// selain itu→Lihat).
+// ActionLabel disamakan "Tinjau" untuk semua status.
 type HealthScoreRowView struct {
 	ID          int64
 	AccountName string
