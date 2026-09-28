@@ -2,6 +2,7 @@ package panel
 
 import (
 	"strconv"
+	"strings"
 
 	"go_starter/internal/ui"
 
@@ -28,18 +29,22 @@ type RenewalKPIs struct {
 
 // RenewalRow = satu langganan untuk baris tabel Renewals. Semua nilai SUDAH
 // diformat di handler (RenewalDate, DaysLeft, PrevValue, CurrentMRR = string;
-// Status = label derivasi, StatusClass = kelas badge daisyUI).
+// Status = label derivasi, StatusClass = kelas badge daisyUI). DaysLeftTextCls
+// (BL-175) = kelas WARNA TEKS urgensi (reuse subDerivedStatus, band 5-tingkat)
+// dipakai mewarnai angka Sisa Hari — TANPA badge/label tambahan, TAK
+// menggantikan kolom Status.
 type RenewalRow struct {
-	ID          int64
-	Village     string
-	Plan        string
-	RenewalDate string
-	DaysLeft    string
-	Type        string
-	Status      string
-	StatusClass string
-	PrevValue   string
-	CurrentMRR  string
+	ID              int64
+	Village         string
+	Plan            string
+	RenewalDate     string
+	DaysLeft        string
+	DaysLeftTextCls string
+	Type            string
+	Status          string
+	StatusClass     string
+	PrevValue       string
+	CurrentMRR      string
 }
 
 // RenewalWindow = satu tab jendela (key untuk href + label tampilan). Dioper
@@ -211,7 +216,8 @@ func renewalTableRow(base string, s RenewalRow) g.Node {
 			g.Text(orDash(s.Village)))),
 		link(orDash(s.Plan), "py-2 pr-4"),
 		link(orDash(s.RenewalDate), "py-2 pr-4"),
-		link(orDash(s.DaysLeft), "py-2 pr-4"),
+		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), h.Class(strings.TrimSpace("block truncate "+s.DaysLeftTextCls)),
+			g.Text(orDash(s.DaysLeft)))),
 		link(orDash(s.Type), "py-2 pr-4"),
 		h.Td(h.Class("py-2 pr-4"), h.A(h.Href(href), renewalStatusBadge(s))),
 		h.Td(h.Class("py-2"), h.A(h.Href(href), h.Class("block truncate"),
