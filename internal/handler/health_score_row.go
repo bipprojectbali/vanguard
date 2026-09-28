@@ -22,6 +22,7 @@ type healthListRow struct {
 	AdoptionScore      *int16
 	EngagementScore    *int16
 	SupportScore       *int16
+	SentimentScore     *int16
 	ScoreTrend         *string
 	RenewalEndDate     pgtype.Date
 }
@@ -30,7 +31,7 @@ func healthListRowFromDefault(s db.ListHealthScoresRow) healthListRow {
 	return healthListRow{
 		ID: s.ID, AccountName: s.AccountName, OverallHealthScore: s.OverallHealthScore,
 		HealthStatus: s.HealthStatus, AdoptionScore: s.AdoptionScore, EngagementScore: s.EngagementScore,
-		SupportScore: s.SupportScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
+		SupportScore: s.SupportScore, SentimentScore: s.SentimentScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
 	}
 }
 
@@ -38,7 +39,7 @@ func healthListRowFromVillageSort(s db.ListHealthScoresSortByVillageRow) healthL
 	return healthListRow{
 		ID: s.ID, AccountName: s.AccountName, OverallHealthScore: s.OverallHealthScore,
 		HealthStatus: s.HealthStatus, AdoptionScore: s.AdoptionScore, EngagementScore: s.EngagementScore,
-		SupportScore: s.SupportScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
+		SupportScore: s.SupportScore, SentimentScore: s.SentimentScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
 	}
 }
 
@@ -46,7 +47,7 @@ func healthListRowFromScoreSort(s db.ListHealthScoresSortByScoreRow) healthListR
 	return healthListRow{
 		ID: s.ID, AccountName: s.AccountName, OverallHealthScore: s.OverallHealthScore,
 		HealthStatus: s.HealthStatus, AdoptionScore: s.AdoptionScore, EngagementScore: s.EngagementScore,
-		SupportScore: s.SupportScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
+		SupportScore: s.SupportScore, SentimentScore: s.SentimentScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
 	}
 }
 
@@ -54,7 +55,7 @@ func healthListRowFromAdoptionSort(s db.ListHealthScoresSortByAdoptionRow) healt
 	return healthListRow{
 		ID: s.ID, AccountName: s.AccountName, OverallHealthScore: s.OverallHealthScore,
 		HealthStatus: s.HealthStatus, AdoptionScore: s.AdoptionScore, EngagementScore: s.EngagementScore,
-		SupportScore: s.SupportScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
+		SupportScore: s.SupportScore, SentimentScore: s.SentimentScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
 	}
 }
 
@@ -62,7 +63,7 @@ func healthListRowFromEngagementSort(s db.ListHealthScoresSortByEngagementRow) h
 	return healthListRow{
 		ID: s.ID, AccountName: s.AccountName, OverallHealthScore: s.OverallHealthScore,
 		HealthStatus: s.HealthStatus, AdoptionScore: s.AdoptionScore, EngagementScore: s.EngagementScore,
-		SupportScore: s.SupportScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
+		SupportScore: s.SupportScore, SentimentScore: s.SentimentScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
 	}
 }
 
@@ -70,7 +71,7 @@ func healthListRowFromSupportSort(s db.ListHealthScoresSortBySupportRow) healthL
 	return healthListRow{
 		ID: s.ID, AccountName: s.AccountName, OverallHealthScore: s.OverallHealthScore,
 		HealthStatus: s.HealthStatus, AdoptionScore: s.AdoptionScore, EngagementScore: s.EngagementScore,
-		SupportScore: s.SupportScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
+		SupportScore: s.SupportScore, SentimentScore: s.SentimentScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
 	}
 }
 
@@ -78,7 +79,7 @@ func healthListRowFromTrendSort(s db.ListHealthScoresSortByTrendRow) healthListR
 	return healthListRow{
 		ID: s.ID, AccountName: s.AccountName, OverallHealthScore: s.OverallHealthScore,
 		HealthStatus: s.HealthStatus, AdoptionScore: s.AdoptionScore, EngagementScore: s.EngagementScore,
-		SupportScore: s.SupportScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
+		SupportScore: s.SupportScore, SentimentScore: s.SentimentScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
 	}
 }
 
@@ -86,6 +87,6 @@ func healthListRowFromRenewalSort(s db.ListHealthScoresSortByRenewalRow) healthL
 	return healthListRow{
 		ID: s.ID, AccountName: s.AccountName, OverallHealthScore: s.OverallHealthScore,
 		HealthStatus: s.HealthStatus, AdoptionScore: s.AdoptionScore, EngagementScore: s.EngagementScore,
-		SupportScore: s.SupportScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
+		SupportScore: s.SupportScore, SentimentScore: s.SentimentScore, ScoreTrend: s.ScoreTrend, RenewalEndDate: s.RenewalEndDate,
 	}
 }

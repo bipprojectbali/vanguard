@@ -87,6 +87,7 @@ func healthRowToView(r healthListRow, slug string, tz *time.Location, _ int64) p
 		Adoption:    healthScoreStr(r.AdoptionScore),
 		Engagement:  healthScoreStr(r.EngagementScore),
 		Support:     healthScoreStr(r.SupportScore),
+		Sentiment:   healthScoreStr(r.SentimentScore),
 		Trend:       healthScoreTrend(r.ScoreTrend),
 		// BL-96: "Jatuh Tempo" = sisa hari ke end_date langganan aktif terdekat
 		// (renewal_end_date dari LATERAL); reuse daysLeftLabel (subscriptions).
