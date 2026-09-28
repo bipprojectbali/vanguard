@@ -24,21 +24,23 @@ type HealthScoreKPIs struct {
 // HealthScoreRowView — satu baris tabel desa + data health score.
 // BL-96: "Di Stage" → RenewalDue (jatuh tempo langganan); ActionLabel
 // disamakan "Tinjau" untuk semua status. Kolom Sentimen ditampilkan kembali
-// setelah sempat dibuang BL-96 (mengikuti mockup lama).
+// setelah sempat dibuang BL-96 (mengikuti mockup lama). Kolom "Tren" terpisah
+// dibuang; arahnya cukup diwakili TrendIcon (panah) ditempel ke value Skor.
 type HealthScoreRowView struct {
-	ID          int64
-	AccountName string
-	Score       string
-	StatusLabel string
-	StatusBadge string // daisyUI badge class: badge-success / badge-warning / badge-error
-	Adoption    string
-	Engagement  string
-	Support     string
-	Sentiment   string
-	Trend       string
-	RenewalDue  string
-	ActionLabel string
-	HrefDetail  string
+	ID             int64
+	AccountName    string
+	Score          string
+	TrendIcon      string // "↑"/"↓"/"→"/"" (kosong bila belum ada pembanding)
+	TrendIconClass string // kelas warna daisyUI: text-success/text-error/text-base-content/40
+	StatusLabel    string
+	StatusBadge    string // daisyUI badge class: badge-success / badge-warning / badge-error
+	Adoption       string
+	Engagement     string
+	Support        string
+	Sentiment      string
+	RenewalDue     string
+	ActionLabel    string
+	HrefDetail     string
 }
 
 // HealthScoreListView — data halaman /health-scores.
@@ -176,7 +178,6 @@ func healthScoreTable(v HealthScoreListView) g.Node {
 					h.Th(h.Class("text-center"), healthScoreSortHeader(v, "engagement", "Engagement")),
 					h.Th(h.Class("text-center"), healthScoreSortHeader(v, "support", "Support")),
 					h.Th(h.Class("text-center"), g.Text("Sentimen")),
-					h.Th(healthScoreSortHeader(v, "trend", "Tren")),
 					h.Th(healthScoreSortHeader(v, "renewal", "Jatuh Tempo")),
 					h.Th(g.Text("")),
 				)),
@@ -194,7 +195,7 @@ func healthScoreRows(rows []HealthScoreRowView, base, tab, query string, seg hid
 			msg = "Belum ada desa churned di ruang kerja ini."
 		}
 		cell := []g.Node{
-			h.ColSpan("10"), h.Class("text-center text-base-content/50 py-8"),
+			h.ColSpan("9"), h.Class("text-center text-base-content/50 py-8"),
 		}
 		if query != "" {
 			msg = "Belum ada desa yang cocok pencarian."
@@ -212,13 +213,16 @@ func healthScoreRows(rows []HealthScoreRowView, base, tab, query string, seg hid
 			h.Td(h.A(h.Href(row.HrefDetail), h.Class("link link-hover font-medium"),
 				g.Text(row.AccountName),
 			)),
-			h.Td(h.Class("text-center font-mono"), g.Text(row.Score)),
+			h.Td(h.Class("text-center font-mono"),
+				g.Text(row.Score),
+				g.If(row.TrendIcon != "",
+					h.Span(h.Class("ml-1 "+row.TrendIconClass), g.Text(row.TrendIcon))),
+			),
 			h.Td(h.Span(h.Class("badge badge-sm "+row.StatusBadge), g.Text(row.StatusLabel))),
 			h.Td(h.Class("text-center text-sm"), g.Text(row.Adoption)),
 			h.Td(h.Class("text-center text-sm"), g.Text(row.Engagement)),
 			h.Td(h.Class("text-center text-sm"), g.Text(row.Support)),
 			h.Td(h.Class("text-center text-sm"), g.Text(row.Sentiment)),
-			h.Td(h.Class("text-sm"), g.Text(row.Trend)),
 			h.Td(h.Class("text-sm text-base-content/60"), g.Text(row.RenewalDue)),
 			h.Td(h.A(h.Href(row.HrefDetail), h.Class("btn btn-xs btn-ghost"), g.Text(row.ActionLabel))),
 		))

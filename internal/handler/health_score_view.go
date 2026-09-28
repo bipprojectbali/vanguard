@@ -74,21 +74,23 @@ func healthScoreStr(s *int16) string {
 // akun — satu-satunya caller butuh uid dari session.
 func healthRowToView(r healthListRow, slug string, tz *time.Location, _ int64) panel.HealthScoreRowView {
 	statusLabel, statusBadge := healthScoreStatus(r.HealthStatus)
+	trendIcon, trendClass := healthScoreTrendIcon(r.ScoreTrend)
 	loc := time.UTC
 	if tz != nil {
 		loc = tz
 	}
 	return panel.HealthScoreRowView{
-		ID:          r.ID,
-		AccountName: r.AccountName,
-		Score:       healthScoreStr(r.OverallHealthScore),
-		StatusLabel: statusLabel,
-		StatusBadge: statusBadge,
-		Adoption:    healthScoreStr(r.AdoptionScore),
-		Engagement:  healthScoreStr(r.EngagementScore),
-		Support:     healthScoreStr(r.SupportScore),
-		Sentiment:   healthScoreStr(r.SentimentScore),
-		Trend:       healthScoreTrend(r.ScoreTrend),
+		ID:             r.ID,
+		AccountName:    r.AccountName,
+		Score:          healthScoreStr(r.OverallHealthScore),
+		TrendIcon:      trendIcon,
+		TrendIconClass: trendClass,
+		StatusLabel:    statusLabel,
+		StatusBadge:    statusBadge,
+		Adoption:       healthScoreStr(r.AdoptionScore),
+		Engagement:     healthScoreStr(r.EngagementScore),
+		Support:        healthScoreStr(r.SupportScore),
+		Sentiment:      healthScoreStr(r.SentimentScore),
 		// BL-96: "Jatuh Tempo" = sisa hari ke end_date langganan aktif terdekat
 		// (renewal_end_date dari LATERAL); reuse daysLeftLabel (subscriptions).
 		RenewalDue:  daysLeftLabel(time.Now().In(loc), r.RenewalEndDate),

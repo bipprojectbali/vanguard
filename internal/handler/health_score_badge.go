@@ -1,7 +1,7 @@
 package handler
 
 // health_score_badge.go — pemetaan status/tren skor → label + kelas badge daisyUI
-// (healthScoreStatus, healthScoreTrend), dipisah dari health_score_view.go
+// (healthScoreStatus, healthScoreTrendIcon), dipisah dari health_score_view.go
 // (params + row mapper) demi ambang tipe Route/Handler (150). Package sama; murni
 // fungsi *string → string, tanpa import.
 
@@ -22,19 +22,22 @@ func healthScoreStatus(status *string) (label, badge string) {
 	}
 }
 
-// healthScoreTrend mengembalikan label tren singkat.
-func healthScoreTrend(trend *string) string {
+// healthScoreTrendIcon mengembalikan ikon panah tren + kelas warna semantik
+// daisyUI, ditempel ke value kolom Skor (kolom "Tren" terpisah dibuang — ikon
+// cukup mewakili arah tanpa makan lebar tabel). nil (belum ada pembanding) →
+// ikon kosong, JANGAN tampilkan panah netral yang menyesatkan.
+func healthScoreTrendIcon(trend *string) (icon, class string) {
 	if trend == nil {
-		return "—"
+		return "", ""
 	}
 	switch *trend {
 	case "Improving":
-		return "↑ Naik"
+		return "↑", "text-success"
 	case "Stable":
-		return "→ Stabil"
+		return "→", "text-base-content/40"
 	case "Declining":
-		return "↓ Turun"
+		return "↓", "text-error"
 	default:
-		return *trend
+		return "", ""
 	}
 }
