@@ -26,6 +26,9 @@ type stubAsker struct {
 	calls  int
 	lastMD string
 	lastQ  string
+	// lastHistory (BL-179) mencatat riwayat yang diteruskan ke AskWithTools —
+	// dipakai test yang memverifikasi parseJenaHistory nyampai ke provider.
+	lastHistory []claudeai.Turn
 
 	// dispatchTool, bila diisi, dipanggil sekali dari AskWithTools — dipakai
 	// test yang perlu mensimulasikan model MEMANGGIL tool (mis. verifikasi
@@ -45,10 +48,11 @@ func (s *stubAsker) Ask(ctx context.Context, knowledgeMD, question string) (stri
 	return s.answer, nil
 }
 
-func (s *stubAsker) AskWithTools(ctx context.Context, knowledgeMD, question string, tools []claudeai.Tool, dispatch claudeai.ToolDispatcher) (string, error) {
+func (s *stubAsker) AskWithTools(ctx context.Context, knowledgeMD, question string, history []claudeai.Turn, tools []claudeai.Tool, dispatch claudeai.ToolDispatcher) (string, error) {
 	s.calls++
 	s.lastMD = knowledgeMD
 	s.lastQ = question
+	s.lastHistory = history
 	if s.dispatchTool != "" {
 		if _, err := dispatch(ctx, s.dispatchTool, s.dispatchArgs); err != nil {
 			return "", err
@@ -84,7 +88,17 @@ func setupJenaAI(t *testing.T) (*testEnv, int64) {
 // session dengan role tertentu — mereplikasi rantai routes.go (gate Casbin di
 // LUAR handler, bukan di dalamnya), sebab JenaAIAsk sendiri tak cek permission.
 func (e *testEnv) doJenaAI(actorID int64, role, message string) *httptest.ResponseRecorder {
+	return e.doJenaAIHistory(actorID, role, message, "")
+}
+
+// doJenaAIHistory sama seperti doJenaAI, ditambah field form "history"
+// (BL-179, JSON mentah — dipakai test yang memverifikasi parseJenaHistory
+// end-to-end lewat handler, bukan cuma unit parseJenaHistory sendiri).
+func (e *testEnv) doJenaAIHistory(actorID int64, role, message, history string) *httptest.ResponseRecorder {
 	form := url.Values{"message": {message}}
+	if history != "" {
+		form.Set("history", history)
+	}
 	req := httptest.NewRequest(http.MethodPost, "/w/test/jena-ai/ask", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
@@ -193,6 +207,51 @@ func TestJenaAIAsk_NotConfigured(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "belum dikonfigurasi") {
 		t.Errorf("flash harus bilang Jena AI belum dikonfigurasi:\n%s", rec.Body.String())
+	}
+}
+
+// TestJenaAIAsk_HistoryPassedToProvider (BL-179): riwayat valid dari klien
+// harus nyampai ke Asker.AskWithTools apa adanya (via parseJenaHistory).
+func TestJenaAIAsk_HistoryPassedToProvider(t *testing.T) {
+	env, ownerID := setupJenaAI(t)
+	stub := &stubAsker{answer: "jawaban dgn konteks"}
+	claudeClient = stub
+	jenaKnowledgeMD = "dokumen pengetahuan"
+
+	history := `[{"q":"pertanyaan lama","a":"jawaban lama"}]`
+	rec := env.doJenaAIHistory(ownerID, "admin", "pertanyaan baru", history)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(stub.lastHistory) != 1 {
+		t.Fatalf("lastHistory len = %d, want 1", len(stub.lastHistory))
+	}
+	if stub.lastHistory[0].Question != "pertanyaan lama" || stub.lastHistory[0].Answer != "jawaban lama" {
+		t.Errorf("lastHistory[0] = %+v, want pertanyaan/jawaban lama", stub.lastHistory[0])
+	}
+}
+
+// TestJenaAIAsk_HistoryMalformed_DegradesToEmpty (BL-179): riwayat rusak
+// (client-controlled, sessionStorage bisa ditempering) TAK BOLEH menggagalkan
+// request — degradasi ke riwayat kosong, pertanyaan tetap diproses.
+func TestJenaAIAsk_HistoryMalformed_DegradesToEmpty(t *testing.T) {
+	env, ownerID := setupJenaAI(t)
+	stub := &stubAsker{answer: "tetap terjawab"}
+	claudeClient = stub
+	jenaKnowledgeMD = "dokumen pengetahuan"
+
+	rec := env.doJenaAIHistory(ownerID, "admin", "pertanyaan baru", "{bukan json array")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if stub.calls != 1 {
+		t.Errorf("Asker harus tetap terpanggil walau history rusak, calls=%d", stub.calls)
+	}
+	if len(stub.lastHistory) != 0 {
+		t.Errorf("lastHistory harus kosong saat JSON rusak, got %+v", stub.lastHistory)
+	}
+	if !strings.Contains(rec.Body.String(), "tetap terjawab") {
+		t.Errorf("jawaban harus tetap tampil walau history rusak:\n%s", rec.Body.String())
 	}
 }
 

@@ -15,6 +15,8 @@ package ui
 // — bukan token-per-token.
 
 import (
+	"encoding/json"
+
 	lucide "github.com/eduardolat/gomponents-lucide"
 	g "maragu.dev/gomponents"
 	data "maragu.dev/gomponents-datastar"
@@ -174,6 +176,16 @@ func jenaForm(postURL string) g.Node {
 		data.On("submit", "$jenaPending = evt.target.message.value; "+
 			"@post('"+postURL+"', {contentType:'form'}); evt.target.reset()"),
 		data.Indicator("jenaLoading"),
+		// Hidden field riwayat (BL-179) — VALUE-nya diisi ai-widget.js dari
+		// sessionStorage (JSON array {q,a}, di-refresh tiap giliran baru
+		// ditangkap), BUKAN oleh Datastar/server. Form murni pembawa nilai;
+		// tetap terkirim krn contentType:'form' pada @post membaca FormData
+		// form ini apa adanya.
+		h.Input(
+			h.Type("hidden"),
+			h.Name("history"),
+			h.ID("jena-history-field"),
+		),
 		h.Input(
 			h.Type("text"),
 			h.Name("message"),
@@ -216,4 +228,35 @@ func JenaAIMessagePair(question, answer string) g.Node {
 			h.Div(h.Class("chat-bubble whitespace-pre-line"), g.Text(answer)),
 		),
 	})
+}
+
+// JenaAITurn (BL-179) menggabung bubble tampilan (JenaAIMessagePair) + node
+// data tersembunyi (jenaTurnData) dalam SATU fragment — dipakai handler utk
+// SATU sisipan SSE: bubble utk mata manusia, node data utk ai-widget.js
+// menangkap giliran ke sessionStorage (riwayat lintas-halaman, gotcha #16 —
+// app ini bukan SPA, DOM dibuang tiap navigasi).
+func JenaAITurn(question, answer string) g.Node {
+	return g.Group([]g.Node{
+		JenaAIMessagePair(question, answer),
+		jenaTurnData(question, answer),
+	})
+}
+
+// jenaTurnData menanam {"q","a"} sbg <script type="application/json"> —
+// pola sama dealStageRulesJSON/dashboard_charts.go (data utk JS, CSP-safe,
+// BUKAN <script> eksekusi), TAPI di sini isinya genuinely user/AI-controlled
+// (bukan enum internal) — aman ditanam mentah krn json.Marshal (default Go)
+// meng-escape <, >, & jadi \uXXXX, mencegah breakout tag </script> walau
+// pertanyaan/jawaban memuat markup mentah. Gagal marshal (mustahil, tipe
+// statis) → "{}", node tetap valid JSON kosong drpd merusak fragment.
+func jenaTurnData(question, answer string) g.Node {
+	b, err := json.Marshal(map[string]string{"q": question, "a": answer})
+	if err != nil {
+		b = []byte("{}")
+	}
+	return h.Script(
+		h.Type("application/json"),
+		h.Class("jena-turn-data"),
+		g.Raw(string(b)),
+	)
 }

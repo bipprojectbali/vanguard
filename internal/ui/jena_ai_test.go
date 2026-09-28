@@ -50,3 +50,35 @@ func TestJenaAIMessagePair_EscapesContent(t *testing.T) {
 		t.Errorf("jawaban AI harus di-escape (gotcha #15), dapat markup mentah:\n%s", out)
 	}
 }
+
+// TestJenaAITurn_DataNodeEscapesScriptBreakout (BL-179): berbeda dari semua
+// precedent <script type="application/json"> lain di project (yang isinya
+// selalu enum/konfigurasi internal), isi di sini genuinely user/AI-controlled
+// — "</script>" mentah di teks pertanyaan/jawaban TAK BOLEH memutus tag,
+// harus keluar sbg escape JSON (\u003c/script\u003e), bukan literal.
+func TestJenaAITurn_DataNodeEscapesScriptBreakout(t *testing.T) {
+	out := renderNode(t, JenaAITurn("</script><script>alert(1)</script>", "jawaban aman"))
+	if strings.Contains(out, "</script><script>alert(1)</script>") {
+		t.Errorf("node data harus meng-escape </script> mentah (potensi breakout tag), dapat:\n%s", out)
+	}
+	if !strings.Contains(out, `\u003c/script\u003e`) {
+		t.Errorf("json.Marshal harus meng-escape </script> jadi \\u003c/script\\u003e, dapat:\n%s", out)
+	}
+	if !strings.Contains(out, `class="jena-turn-data"`) {
+		t.Errorf("node data harus punya class jena-turn-data (ditangkap ai-widget.js):\n%s", out)
+	}
+	if !strings.Contains(out, `type="application/json"`) {
+		t.Errorf("node data harus type=application/json (CSP-safe, tak dieksekusi):\n%s", out)
+	}
+	// Bubble tampilan (JenaAIMessagePair) tetap harus ada di fragment yang sama.
+	if !strings.Contains(out, "chat-bubble-primary") {
+		t.Errorf("JenaAITurn harus tetap memuat bubble tampilan:\n%s", out)
+	}
+}
+
+func TestJenaAITurn_DataNodeSafeOnMarshalableText(t *testing.T) {
+	out := renderNode(t, JenaAITurn("pertanyaan biasa", "jawaban \"berkutip\" & normal"))
+	if !strings.Contains(out, `"q":"pertanyaan biasa"`) {
+		t.Errorf("node data harus memuat q apa adanya utk teks tanpa karakter berbahaya:\n%s", out)
+	}
+}

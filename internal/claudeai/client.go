@@ -173,18 +173,22 @@ func (c *Client) Ask(ctx context.Context, knowledgeMD, question string) (string,
 	return extractText(resp.Content)
 }
 
-// AskWithTools sama seperti Ask, ditambah loop tool_use↔tool_result (maks
-// jenaMaxToolRounds putaran). dispatch dipanggil SINKRON per tool_use block
-// yang diminta model — untuk allowlist saat ini (BL-162 fase 2) modelnya
+// AskWithTools sama seperti Ask, ditambah DUA hal: (1) loop tool_use↔tool_result
+// (maks jenaMaxToolRounds putaran) — dispatch dipanggil SINKRON per tool_use
+// block yang diminta model, untuk allowlist saat ini (BL-162 fase 2) modelnya
 // selalu minta satu tool per putaran, tapi kode ini menangani banyak block
-// sekaligus karena begitu bentuk response Anthropic yang sah.
-func (c *Client) AskWithTools(ctx context.Context, knowledgeMD, question string, tools []Tool, dispatch ToolDispatcher) (string, error) {
+// sekaligus karena begitu bentuk response Anthropic yang sah; (2) riwayat
+// percakapan LAMA (BL-179, history) dirangkai jadi messages sebelum
+// pertanyaan baru via buildMessages — cap jumlah giliran DI PEMANGGIL
+// (internal/handler), paket ini tak menegakkan batas apa pun, cuma
+// merangkai. history kosong/nil → identik perilaku lama.
+func (c *Client) AskWithTools(ctx context.Context, knowledgeMD, question string, history []Turn, tools []Tool, dispatch ToolDispatcher) (string, error) {
 	wireTools := make([]toolWire, len(tools))
 	for i, t := range tools {
 		wireTools[i] = toolWire{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema}
 	}
 
-	messages := []message{openingMessage(knowledgeMD, question)}
+	messages := buildMessages(knowledgeMD, history, question)
 
 	for round := 0; round < jenaMaxToolRounds; round++ {
 		req := askRequest{Model: model, MaxTokens: maxTokens, Messages: messages}

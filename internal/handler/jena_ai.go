@@ -27,7 +27,7 @@ import (
 // tetap mengeksposnya untuk jalur yang sengaja tanpa tool.
 type Asker interface {
 	Ask(ctx context.Context, knowledgeMD, question string) (string, error)
-	AskWithTools(ctx context.Context, knowledgeMD, question string, tools []claudeai.Tool, dispatch claudeai.ToolDispatcher) (string, error)
+	AskWithTools(ctx context.Context, knowledgeMD, question string, history []claudeai.Turn, tools []claudeai.Tool, dispatch claudeai.ToolDispatcher) (string, error)
 }
 
 // claudeClient di-inject saat startup via SetClaudeClient bila
@@ -70,6 +70,10 @@ func (h *Handler) JenaAIAsk(w http.ResponseWriter, r *http.Request) {
 	// httptest.NewServer + http.Client asli (bug nyata BL-162, bukan salah
 	// Datastar client: form/Content-Length yang dikirim browser sudah benar).
 	message := strings.TrimSpace(r.FormValue("message"))
+	// history (BL-179) dibaca SAMA waktu dgn message — sebelum NewSSE, alasan
+	// sama (flush header memutus baca body). Client-controlled sepenuhnya
+	// (sessionStorage) — parseJenaHistory yang menegakkan validasi/cap.
+	history := parseJenaHistory(r.FormValue("history"))
 
 	sse := datastar.NewSSE(w, r)
 
@@ -90,7 +94,7 @@ func (h *Handler) JenaAIAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	answer, err := claudeClient.AskWithTools(ctx, jenaKnowledgeMD, message, h.jenaTools(), h.jenaDispatch)
+	answer, err := claudeClient.AskWithTools(ctx, jenaKnowledgeMD, message, history, h.jenaTools(), h.jenaDispatch)
 	if err != nil {
 		h.Log.Error("jena ai: ask", "err", err)
 		patchFlash(sse, false, "Jena AI sedang tidak bisa menjawab, coba lagi")
@@ -98,7 +102,10 @@ func (h *Handler) JenaAIAsk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sb strings.Builder
-	if err := ui.JenaAIMessagePair(message, answer).Render(&sb); err != nil {
+	// ui.JenaAITurn = bubble tampilan + node data tersembunyi (BL-179) dalam
+	// SATU fragment — ai-widget.js menangkap node data itu ke sessionStorage
+	// supaya riwayat bertahan lintas-halaman (gotcha #16: app ini bukan SPA).
+	if err := ui.JenaAITurn(message, answer).Render(&sb); err != nil {
 		h.Log.Error("jena ai: render fragment", "err", err)
 		return
 	}
@@ -107,8 +114,8 @@ func (h *Handler) JenaAIAsk(w http.ResponseWriter, r *http.Request) {
 	// bubble permanen TEPAT SEBELUM jangkar itu menjaga urutan kronologis, sambil
 	// jangkar sendiri tetap paling akhir untuk giliran tanya berikutnya. Bukan
 	// morph-replace: tiap jawaban menambah riwayat, bukan mengganti baris —
-	// riwayat hidup di DOM klien saja (ephemeral per sesi browser, tanpa
-	// tabel/migrasi baru, sesuai keputusan PoC).
+	// tampilan tetap DOM klien saja (kini bertahan lintas-halaman via
+	// sessionStorage per tab, BL-179; tetap tanpa tabel/migrasi baru).
 	_ = sse.PatchElements(sb.String(), datastar.WithSelectorID("jena-pending"), datastar.WithModeBefore())
 
 	// Audit RINGAN: siapa bertanya + panjang jawaban — BUKAN isi pertanyaan/

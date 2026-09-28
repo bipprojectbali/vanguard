@@ -175,7 +175,7 @@ func TestAskWithTools_ToolUseRoundTrip(t *testing.T) {
 		return `{"plan":"Basic"}`, nil
 	}
 
-	answer, err := c.AskWithTools(context.Background(), "doc", "status desa Sukamaju?", []Tool{dummyTool}, dispatch)
+	answer, err := c.AskWithTools(context.Background(), "doc", "status desa Sukamaju?", nil, []Tool{dummyTool}, dispatch)
 	if err != nil {
 		t.Fatalf("AskWithTools: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestAskWithTools_LastRoundDropsTools(t *testing.T) {
 		return `{}`, nil
 	}
 
-	_, err := c.AskWithTools(context.Background(), "doc", "q", []Tool{dummyTool}, dispatch)
+	_, err := c.AskWithTools(context.Background(), "doc", "q", nil, []Tool{dummyTool}, dispatch)
 	if err == nil {
 		t.Fatal("want error karena model tak pernah berhenti minta tool, got nil")
 	}
@@ -281,7 +281,7 @@ func TestAskWithTools_DispatchError(t *testing.T) {
 		return "", errors.New("db: unreachable")
 	}
 
-	answer, err := c.AskWithTools(context.Background(), "doc", "q", []Tool{dummyTool}, dispatch)
+	answer, err := c.AskWithTools(context.Background(), "doc", "q", nil, []Tool{dummyTool}, dispatch)
 	if err != nil {
 		t.Fatalf("AskWithTools: %v", err)
 	}
