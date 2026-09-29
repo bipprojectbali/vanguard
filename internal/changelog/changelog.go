@@ -29,6 +29,20 @@ type Release struct {
 // 300 baris). Releases (di bawah) menggabungkan keduanya.
 var currentReleases = []Release{
 	{
+		Version: "1.13.0",
+		Date:    "2026-09-29",
+		Summary: "Asisten chat Jena AI kini mengingat riwayat percakapan saat pindah halaman, dan halaman Customer Success mengisi otomatis tanggal & progres onboarding sesuai perubahan status.",
+		Sections: []Section{
+			{
+				Title: "Baru",
+				Items: []string{
+					"Asisten chat Jena AI kini mengingat riwayat percakapan saat berpindah halaman dalam workspace yang sama (tersimpan di perangkat, hilang saat tab ditutup) — pertanyaan lanjutan bisa merujuk jawaban sebelumnya tanpa mengulang konteks dari awal.",
+					"Halaman Customer Success kini otomatis mengisi tanggal Kickoff dan Go-Live Aktual serta Progres Onboarding begitu status Onboarding diubah (In Progress/Completed/Stalled) — tak perlu lagi diisi manual satu per satu. Tanggal \"Sejak Tanggal\" kini murni otomatis mengikuti perubahan tahap siklus hidup, dan status/tahap yang sudah maju tak bisa lagi dikembalikan ke kondisi kosong/awal.",
+				},
+			},
+		},
+	},
+	{
 		Version: "1.12.0",
 		Date:    "2026-09-25",
 		Summary: "Papan Kanban Deal kini bisa digeser (drag-and-drop) untuk memindah tahap, termasuk pilih banyak deal sekaligus dan pindah massal ke Closed Won/Lost.",
