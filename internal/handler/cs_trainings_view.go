@@ -51,7 +51,7 @@ func csTrainingsMsg(code string) string {
 	case "created":
 		return "Jadwal training berhasil dibuat."
 	case "updated":
-		return "Status training diperbarui."
+		return "Training diperbarui."
 	default:
 		return ""
 	}
@@ -70,6 +70,8 @@ func csTrainingsErrMsg(code string) string {
 		return "Nilai attendance tidak valid."
 	case "datetime":
 		return "Format tanggal training tidak valid."
+	case "locked":
+		return "Training yang sudah selesai atau dibatalkan tidak bisa diubah."
 	case "failed":
 		return "Gagal menyimpan jadwal training. Coba lagi."
 	default:

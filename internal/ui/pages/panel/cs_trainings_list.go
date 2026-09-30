@@ -40,6 +40,9 @@ type CSTrainingRow struct {
 	Attendance    string // "—" bila NULL
 	Notes         string // catatan/kesimpulan; "" bila belum ada (BL-28 #3)
 	HrefDetail    string // href ke /trainings/{id} — reserved
+	// BL-180: nilai mentah untuk prefill modal Edit.
+	TrainerID       int64  // 0 = belum ditentukan
+	ParticipantsRaw string // "" bila NULL
 }
 
 // CSTrainingAccountOption = satu opsi dropdown desa untuk form training.
@@ -61,7 +64,7 @@ type csTrainingTabDef struct {
 
 // csTrainingTabs = urutan tab filter; cermin switch handler.
 var csTrainingTabs = []csTrainingTabDef{
-	{"", "Semua"},
+	{"all", "Semua"},
 	{"scheduled", "Scheduled"},
 	{"completed", "Completed"},
 	{"rescheduled", "Rescheduled"},
@@ -80,6 +83,7 @@ type CSTrainingsListView struct {
 	AccountID   int64
 	AccountName string
 	CanWrite    bool
+	Trainers    []CSTrainingTrainerOption // BL-180: opsi trainer modal Edit (hanya bila CanWrite)
 	NextCursor  string
 	After       string // BL-7: cursor pembuka halaman ini (kosong = hal 1)
 	Trail       string // BL-7: jejak cursor halaman sebelumnya (?trail=)
@@ -142,7 +146,7 @@ func csTrainingKPICards(k CSTrainingKPIs, base, acct string) g.Node {
 	path := base + "/trainings"
 	return h.Div(
 		h.Class("grid grid-cols-2 md:grid-cols-5 gap-3 min-w-0"),
-		csTrainingKPICard("Total Training", strconv.Itoa(k.Total), panelListHref(path, [2]string{"account", acct}), ""),
+		csTrainingKPICard("Total Training", strconv.Itoa(k.Total), panelListHref(path, [2]string{"tab", "all"}, [2]string{"account", acct}), ""),
 		csTrainingKPICard("Scheduled", strconv.Itoa(k.Scheduled), panelListHref(path, [2]string{"tab", "scheduled"}, [2]string{"account", acct}), "text-info"),
 		csTrainingKPICard("Completed", strconv.Itoa(k.Completed), panelListHref(path, [2]string{"tab", "completed"}, [2]string{"account", acct}), "text-success"),
 		csTrainingKPICard("Rescheduled", strconv.Itoa(k.Rescheduled), panelListHref(path, [2]string{"tab", "rescheduled"}, [2]string{"account", acct}), "text-warning"),
@@ -225,7 +229,7 @@ func emptyCSTrainings(v CSTrainingsListView) g.Node {
 		)
 	}
 	msg := "Belum ada jadwal training di ruang kerja ini."
-	if v.Tab != "" {
+	if v.Tab != "" && v.Tab != "all" {
 		msg = "Tidak ada training dengan status ini."
 	}
 	return h.Div(

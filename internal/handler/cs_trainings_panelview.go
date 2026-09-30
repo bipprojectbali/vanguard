@@ -31,17 +31,27 @@ func csTrainingRowView(r db.ListCSTrainingsRow, slug string) panel.CSTrainingRow
 	if r.Notes != nil {
 		notes = *r.Notes
 	}
+	var trainerID int64
+	if r.TrainerID != nil {
+		trainerID = *r.TrainerID
+	}
+	participantsRaw := ""
+	if r.Participants != nil {
+		participantsRaw = strconv.FormatInt(int64(*r.Participants), 10)
+	}
 	return panel.CSTrainingRow{
-		ID:            r.ID,
-		AccountName:   r.AccountName,
-		TrainingTopic: r.TrainingTopic,
-		StatusLabel:   statusLabel,
-		StatusBadge:   statusBadge,
-		TrainerName:   trainerName,
-		TrainingDate:  csTrainingDateLabel(r.TrainingDate),
-		Participants:  participants,
-		Attendance:    attendance,
-		Notes:         notes,
+		TrainerID:       trainerID,
+		ParticipantsRaw: participantsRaw,
+		ID:              r.ID,
+		AccountName:     r.AccountName,
+		TrainingTopic:   r.TrainingTopic,
+		StatusLabel:     statusLabel,
+		StatusBadge:     statusBadge,
+		TrainerName:     trainerName,
+		TrainingDate:    csTrainingDateLabel(r.TrainingDate),
+		Participants:    participants,
+		Attendance:      attendance,
+		Notes:           notes,
 	}
 }
 

@@ -1,8 +1,6 @@
 package panel
 
 import (
-	"strconv"
-
 	"go_starter/internal/ui"
 
 	g "maragu.dev/gomponents"
@@ -29,9 +27,10 @@ func csTrainingsTable(v CSTrainingsListView) g.Node {
 	if v.CanWrite {
 		head = append(head, h.Th(h.Class("py-2 font-medium"), g.Text("Aksi")))
 	}
+	back := panelListHref("", [2]string{"tab", v.Tab}, [2]string{"q", v.Query}, [2]string{"account", v.acctParam()})
 	rows := make([]g.Node, 0, len(v.Items))
 	for _, row := range v.Items {
-		rows = append(rows, csTrainingTableRow(v.Base, row, v.CanWrite))
+		rows = append(rows, csTrainingTableRow(v.Base, row, v.CanWrite, v.Trainers, back))
 	}
 	return h.Div(
 		h.Class("card bg-base-100 border border-base-300 min-w-0"),
@@ -49,8 +48,7 @@ func csTrainingsTable(v CSTrainingsListView) g.Node {
 	)
 }
 
-func csTrainingTableRow(base string, r CSTrainingRow, canWrite bool) g.Node {
-	id := strconv.FormatInt(r.ID, 10)
+func csTrainingTableRow(base string, r CSTrainingRow, canWrite bool, trainers []CSTrainingTrainerOption, back string) g.Node {
 	cells := []g.Node{
 		h.Td(h.Class("py-2 pr-4 max-w-[120px]"), h.Span(h.Class("block truncate"), g.Text(orDash(r.AccountName)))),
 		h.Td(h.Class("py-2 pr-4 max-w-[200px]"), h.Span(h.Class("block truncate"), g.Text(orDash(r.TrainingTopic)))),
@@ -63,7 +61,7 @@ func csTrainingTableRow(base string, r CSTrainingRow, canWrite bool) g.Node {
 			h.Span(h.Class("block truncate text-base-content/70"), g.Text(orDash(r.Notes)))),
 	}
 	if canWrite {
-		cells = append(cells, h.Td(h.Class("py-2"), csTrainingStatusForm(base, id, r.StatusLabel, r.Notes)))
+		cells = append(cells, h.Td(h.Class("py-2"), csTrainingStatusForm(base, r, trainers, back)))
 	}
 	return h.Tr(h.Class("border-b border-base-300/50 hover:bg-base-200/50"), g.Group(cells))
 }

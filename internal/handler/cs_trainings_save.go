@@ -85,46 +85,14 @@ func (h *Handler) CSTrainingUpdateStatus(w http.ResponseWriter, r *http.Request)
 
 	form, errCode := parseCSTrainingStatusForm(r.FormValue)
 	if errCode != "" {
-		wsRedirect(w, r, "/trainings", errCode)
+		csTrainingsBack(w, r, "", errCode)
 		return
 	}
 
-	// Muat training untuk F3 — verifikasi keberadaan + kepemilikan akun.
-	t, err := h.q(ctx).GetCSTraining(ctx, id)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			http.NotFound(w, r)
-			return
-		}
-		h.Log.Error("cs_trainings: get for status update", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+	if _, ok := h.loadCSTrainingInScope(w, r, id); !ok {
 		return
 	}
-
-	dataScope := session.BusinessDataScope(ctx)
-	filter := db.CSTrainingsListFilterFor(dataScope)
 	uid := session.UserID(ctx)
-
-	if !filter.ScopeAll {
-		if !filter.IsOwn {
-			http.NotFound(w, r)
-			return
-		}
-		acct, err := h.q(ctx).GetAccount(ctx, t.AccountID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				http.NotFound(w, r)
-				return
-			}
-			h.Log.Error("cs_trainings: get account for F3", "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		if !filter.Allows(uid, acct.AccountOwner, acct.AssignedCsm, acct.BackupCsm) {
-			http.NotFound(w, r)
-			return
-		}
-	}
 
 	if _, err := h.q(ctx).UpdateCSTrainingStatus(ctx, db.UpdateCSTrainingStatusParams{
 		TrainingStatus: form.Status,
@@ -135,8 +103,12 @@ func (h *Handler) CSTrainingUpdateStatus(w http.ResponseWriter, r *http.Request)
 		UpdatedBy:      &uid,
 		ID:             id,
 	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) { // BL-180: completed/cancelled terkunci
+			csTrainingsBack(w, r, "", "locked")
+			return
+		}
 		h.Log.Error("cs_trainings: update status", "err", err)
-		wsRedirect(w, r, "/trainings", "failed")
+		csTrainingsBack(w, r, "", "failed")
 		return
 	}
 
@@ -144,5 +116,46 @@ func (h *Handler) CSTrainingUpdateStatus(w http.ResponseWriter, r *http.Request)
 		"training_id": strconv.FormatInt(id, 10),
 		"status":      form.Status,
 	})
-	wsRedirectOK(w, r, "/trainings", "updated")
+	csTrainingsBack(w, r, "updated", "")
+}
+
+// loadCSTrainingInScope memuat training untuk aksi tulis + menegakkan F3
+// (keberadaan + kepemilikan akun; fail-closed → 404). Menulis respons sendiri
+// dan mengembalikan ok=false bila gagal.
+func (h *Handler) loadCSTrainingInScope(w http.ResponseWriter, r *http.Request, id int64) (db.GetCSTrainingRow, bool) {
+	ctx := r.Context()
+	t, err := h.q(ctx).GetCSTraining(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.NotFound(w, r)
+			return t, false
+		}
+		h.Log.Error("cs_trainings: get for write", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return t, false
+	}
+
+	filter := db.CSTrainingsListFilterFor(session.BusinessDataScope(ctx))
+	if filter.ScopeAll {
+		return t, true
+	}
+	if !filter.IsOwn {
+		http.NotFound(w, r)
+		return t, false
+	}
+	acct, err := h.q(ctx).GetAccount(ctx, t.AccountID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.NotFound(w, r)
+			return t, false
+		}
+		h.Log.Error("cs_trainings: get account for F3", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return t, false
+	}
+	if !filter.Allows(session.UserID(ctx), acct.AccountOwner, acct.AssignedCsm, acct.BackupCsm) {
+		http.NotFound(w, r)
+		return t, false
+	}
+	return t, true
 }

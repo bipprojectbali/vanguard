@@ -303,6 +303,63 @@ func (q *Queries) ListCSTrainings(ctx context.Context, arg ListCSTrainingsParams
 	return items, nil
 }
 
+const updateCSTraining = `-- name: UpdateCSTraining :one
+UPDATE cs_trainings
+SET
+    training_topic = $1,
+    trainer_id     = $2,
+    participants   = $3,
+    notes          = $4,
+    updated_by     = $5,
+    updated_at     = now()
+WHERE id = $6
+  AND training_status IN ('scheduled', 'rescheduled')
+RETURNING id, tenant_id, account_id, training_topic, training_date, trainer_id, participants, training_status, attendance, created_by, created_at, updated_by, updated_at, notes
+`
+
+type UpdateCSTrainingParams struct {
+	TrainingTopic string  `json:"training_topic"`
+	TrainerID     *int64  `json:"trainer_id"`
+	Participants  *int32  `json:"participants"`
+	Notes         *string `json:"notes"`
+	UpdatedBy     *int64  `json:"updated_by"`
+	ID            int64   `json:"id"`
+}
+
+// BL-180: edit data training (topik, trainer, perkiraan peserta, catatan).
+// Desa, tanggal & jam TIDAK bisa diubah di sini (tanggal lewat "Jadwal Ulang").
+// Hanya training aktif (scheduled/rescheduled); completed/cancelled terkunci →
+// 0 baris (pgx.ErrNoRows). trainer/participants/notes ditimpa apa adanya
+// (NULL = dikosongkan) karena modal edit selalu mengirim nilai saat ini.
+func (q *Queries) UpdateCSTraining(ctx context.Context, arg UpdateCSTrainingParams) (CsTraining, error) {
+	row := q.db.QueryRow(ctx, updateCSTraining,
+		arg.TrainingTopic,
+		arg.TrainerID,
+		arg.Participants,
+		arg.Notes,
+		arg.UpdatedBy,
+		arg.ID,
+	)
+	var i CsTraining
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.AccountID,
+		&i.TrainingTopic,
+		&i.TrainingDate,
+		&i.TrainerID,
+		&i.Participants,
+		&i.TrainingStatus,
+		&i.Attendance,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+		&i.Notes,
+	)
+	return i, err
+}
+
 const updateCSTrainingStatus = `-- name: UpdateCSTrainingStatus :one
 UPDATE cs_trainings
 SET
@@ -314,6 +371,7 @@ SET
     updated_by      = $6,
     updated_at      = now()
 WHERE id = $7
+  AND training_status IN ('scheduled', 'rescheduled')
 RETURNING id, tenant_id, account_id, training_topic, training_date, trainer_id, participants, training_status, attendance, created_by, created_at, updated_by, updated_at, notes
 `
 
@@ -330,8 +388,9 @@ type UpdateCSTrainingStatusParams struct {
 // Ubah status training. Field hasil (attendance/participants/notes) &
 // training_date (jadwal ulang) OPSIONAL: COALESCE(narg, kolom) menjaga nilai
 // lama saat form tak mengirim (BL-28 #1 — tombol status polos, mis. "Batal"/
-// "Buka Ulang", TAK boleh menimpa peserta/attendance jadi NULL). Kirim
-// non-NULL hanya bila operator memang mengisi (panel "Selesai"/"Jadwal Ulang").
+// TAK boleh menimpa peserta/attendance jadi NULL). Kirim non-NULL hanya bila
+// operator memang mengisi (panel "Selesai"/"Jadwal Ulang").
+// BL-180: completed/cancelled TERKUNCI (tak bisa dibuka ulang) → 0 baris.
 func (q *Queries) UpdateCSTrainingStatus(ctx context.Context, arg UpdateCSTrainingStatusParams) (CsTraining, error) {
 	row := q.db.QueryRow(ctx, updateCSTrainingStatus,
 		arg.TrainingStatus,

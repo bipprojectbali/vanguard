@@ -42,14 +42,17 @@ func (h *Handler) CSTrainingsList(w http.ResponseWriter, r *http.Request) {
 	uid := session.UserID(ctx)
 	filter := db.CSTrainingsListFilterFor(dataScope)
 
-	// Tab → filter status. Nilai liar dinormalisasi ke "" (semua).
+	// Tab → filter status. Tanpa ?tab= (mis. dari sidebar) atau nilai liar →
+	// "scheduled" (BL-180); "all" = Semua (tanpa filter status).
 	tab := r.URL.Query().Get("tab")
 	var filterStatus string
 	switch tab {
 	case "scheduled", "completed", "rescheduled", "cancelled":
 		filterStatus = tab
+	case csTrainingTabAll:
 	default:
-		tab = ""
+		tab = "scheduled"
+		filterStatus = tab
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
@@ -103,6 +106,15 @@ func (h *Handler) CSTrainingsList(w http.ResponseWriter, r *http.Request) {
 		items = append(items, csTrainingRowView(row, slug))
 	}
 
+	var trainers []panel.CSTrainingTrainerOption
+	if canWrite {
+		if trainers, err = h.csTrainingTrainerOptions(ctx); err != nil {
+			h.Log.Error("cs_trainings: list members for edit modal", "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	}
+
 	base := wsPath(slug, "")
 	h.renderWorkspaceShell(w, r, "Training Schedule", "/trainings", panel.CSTrainingsList(panel.CSTrainingsListView{
 		Base:        base,
@@ -113,6 +125,7 @@ func (h *Handler) CSTrainingsList(w http.ResponseWriter, r *http.Request) {
 		AccountID:   accountID,
 		AccountName: accountName,
 		CanWrite:    canWrite,
+		Trainers:    trainers,
 		NextCursor:  nextCursor,
 		After:       r.URL.Query().Get("after"),
 		Trail:       pageTrail(r),

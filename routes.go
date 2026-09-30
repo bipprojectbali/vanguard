@@ -589,6 +589,7 @@ func registerWorkspaceRoutes(r chi.Router, h *handler.Handler) {
 		r.Get("/trainings", h.CSTrainingsList)
 		r.Get("/trainings/new", h.CSTrainingNew)
 		r.Post("/trainings", h.CSTrainingCreate)
+		r.Post("/trainings/{id}", h.CSTrainingUpdate)
 		r.Post("/trainings/{id}/status", h.CSTrainingUpdateStatus)
 
 		// Customer Journey / Lifecycle (Customer Success, CRM Modul 6, 6.2 —

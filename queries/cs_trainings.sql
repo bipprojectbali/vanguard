@@ -36,8 +36,9 @@ WHERE tr.id = sqlc.arg(id);
 -- Ubah status training. Field hasil (attendance/participants/notes) &
 -- training_date (jadwal ulang) OPSIONAL: COALESCE(narg, kolom) menjaga nilai
 -- lama saat form tak mengirim (BL-28 #1 — tombol status polos, mis. "Batal"/
--- "Buka Ulang", TAK boleh menimpa peserta/attendance jadi NULL). Kirim
--- non-NULL hanya bila operator memang mengisi (panel "Selesai"/"Jadwal Ulang").
+-- TAK boleh menimpa peserta/attendance jadi NULL). Kirim non-NULL hanya bila
+-- operator memang mengisi (panel "Selesai"/"Jadwal Ulang").
+-- BL-180: completed/cancelled TERKUNCI (tak bisa dibuka ulang) → 0 baris.
 UPDATE cs_trainings
 SET
     training_status = sqlc.arg(training_status),
@@ -48,6 +49,25 @@ SET
     updated_by      = sqlc.narg(updated_by),
     updated_at      = now()
 WHERE id = sqlc.arg(id)
+  AND training_status IN ('scheduled', 'rescheduled')
+RETURNING *;
+
+-- name: UpdateCSTraining :one
+-- BL-180: edit data training (topik, trainer, perkiraan peserta, catatan).
+-- Desa, tanggal & jam TIDAK bisa diubah di sini (tanggal lewat "Jadwal Ulang").
+-- Hanya training aktif (scheduled/rescheduled); completed/cancelled terkunci →
+-- 0 baris (pgx.ErrNoRows). trainer/participants/notes ditimpa apa adanya
+-- (NULL = dikosongkan) karena modal edit selalu mengirim nilai saat ini.
+UPDATE cs_trainings
+SET
+    training_topic = sqlc.arg(training_topic),
+    trainer_id     = sqlc.narg(trainer_id),
+    participants   = sqlc.narg(participants),
+    notes          = sqlc.narg(notes),
+    updated_by     = sqlc.narg(updated_by),
+    updated_at     = now()
+WHERE id = sqlc.arg(id)
+  AND training_status IN ('scheduled', 'rescheduled')
 RETURNING *;
 
 -- name: ListCSTrainings :many

@@ -33,6 +33,19 @@ html[data-sidebar="collapsed"] .app-navlabel.badge {
   display: none;
 }
 
+/* Menu aksi baris berbasis Popover API (panel/modal.go popoverMenu): top layer →
+   tak terpotong TableScroll. Ditempel di bawah pemicu, rata kanan, flip ke atas
+   bila mentok. Hanya bila browser mendukung anchor positioning; jika tidak, UA
+   default (tengah layar) tetap bisa dipakai. */
+@supports (position-area: bottom) {
+  .row-menu {
+    margin: 0;
+    inset: auto;
+    position-area: bottom span-left;
+    position-try-fallbacks: flip-block;
+  }
+}
+
 /* Scan class di file Go (gomponents). */
 @source "../internal";
 
