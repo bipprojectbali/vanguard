@@ -79,8 +79,8 @@ func TestParseCSTrainingStatusForm_FieldsParsed(t *testing.T) {
 // --- integrasi DB: regresi bug #1 (data-loss) -----------------------------
 
 // TestCSTrainings_StatusOnlyPreservesFields: BUG #1 — setelah Selesai mengisi
-// attendance+participants+notes, aksi status-only "Buka Ulang" (hanya kirim
-// status) TAK boleh menimpanya jadi NULL. Query COALESCE penjaganya.
+// attendance+participants+notes, "Buka Ulang" ditolak (BL-180: completed terkunci) dan
+// nilai tersimpan tetap utuh.
 func TestCSTrainings_StatusOnlyPreservesFields(t *testing.T) {
 	env, uid := setupAccounts(t)
 	acc := env.seedAccount(t, "Desa Preserve", &uid, nil, nil)
@@ -96,28 +96,29 @@ func TestCSTrainings_StatusOnlyPreservesFields(t *testing.T) {
 		t.Fatalf("Selesai harus 303, got %d\n%s", rec.Code, rec.Body.String())
 	}
 
-	// 2) Buka Ulang — status-only, TANPA attendance/participants/notes.
+	// 2) Buka Ulang — BL-180: completed TERKUNCI → ditolak (err=locked), data utuh.
 	reopen := url.Values{"status": {"scheduled"}}
 	req2 := accountsReq(http.MethodPost, "/w/test/trainings/"+itoa(tr.ID)+"/status", reopen, itoa(tr.ID))
-	if rec := env.runAccount(uid, "owner", "admin", req2, env.h.CSTrainingUpdateStatus); rec.Code != http.StatusSeeOther {
-		t.Fatalf("Buka Ulang harus 303, got %d", rec.Code)
+	rec2 := env.runAccount(uid, "owner", "admin", req2, env.h.CSTrainingUpdateStatus)
+	if rec2.Code != http.StatusSeeOther || !strings.Contains(rec2.Header().Get("Location"), "locked") {
+		t.Fatalf("Buka Ulang harus 303 err=locked, got %d %q", rec2.Code, rec2.Header().Get("Location"))
 	}
 
 	got, err := env.q.GetCSTraining(t.Context(), tr.ID)
 	if err != nil {
 		t.Fatalf("GetCSTraining: %v", err)
 	}
-	if got.TrainingStatus != "scheduled" {
-		t.Errorf("status harus scheduled, got %q", got.TrainingStatus)
+	if got.TrainingStatus != "completed" {
+		t.Errorf("status harus tetap completed, got %q", got.TrainingStatus)
 	}
 	if !got.Attendance.Valid {
-		t.Error("REGRESI #1: attendance terhapus jadi NULL oleh aksi status-only")
+		t.Error("attendance hilang")
 	}
 	if got.Participants == nil || *got.Participants != 20 {
-		t.Errorf("REGRESI #1: participants harus tetap 20, got %v", got.Participants)
+		t.Errorf("participants harus tetap 20, got %v", got.Participants)
 	}
 	if got.Notes == nil || *got.Notes != "Peserta lengkap" {
-		t.Errorf("REGRESI #1: notes harus tetap, got %v", got.Notes)
+		t.Errorf("notes harus tetap, got %v", got.Notes)
 	}
 }
 

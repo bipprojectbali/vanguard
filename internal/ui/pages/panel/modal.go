@@ -44,3 +44,42 @@ func modalDialog(id, title string, content g.Node) g.Node {
 		),
 	})
 }
+
+// popover — varian modal & menu berbasis Popover API native (HTML murni, NOL JS,
+// CSP-safe). Dipakai di dalam <table>/TableScroll: popover tampil di TOP LAYER
+// sehingga tak terpotong overflow-x-auto (menu absolut biasa akan terpotong).
+// Membuka satu popover auto menutup popover auto lain yang bukan leluhurnya →
+// dialog HARUS sibling menu, bukan anak. Esc & klik-luar menutup bawaan browser.
+// JANGAN beri utilitas display (grid/flex) pada elemen popover itu sendiri —
+// menimpa display:none saat tertutup; taruh di wrapper dalam.
+
+// popoverTrigger = <button popovertarget=id>. extra = atribut tambahan.
+func popoverTrigger(id, label, class string, extra ...g.Node) g.Node {
+	return h.Button(append([]g.Node{
+		h.Type("button"), h.Class(class), g.Attr("popovertarget", id), g.Text(label),
+	}, extra...)...)
+}
+
+// popoverMenu = menu mengambang di bawah pemicunya (posisi: .row-menu di
+// static/input.css; tanpa dukungan anchor positioning jatuh ke tengah layar).
+func popoverMenu(id string, items ...g.Node) g.Node {
+	return h.Div(
+		h.ID(id), g.Attr("popover"),
+		h.Class("row-menu w-48 rounded-box border border-base-300 bg-base-100 text-base-content overflow-hidden shadow-lg"),
+		h.Div(h.Class("grid min-w-0"), g.Group(items)),
+	)
+}
+
+// popoverDialog = dialog modal-like (tengah layar + backdrop) berisi form native
+// POST → 303 (gotcha #16). Mobile-first: w-11/12 max-w-lg min-w-0, tinggi dibatasi.
+func popoverDialog(id, title string, content g.Node) g.Node {
+	return h.Div(
+		h.ID(id), g.Attr("popover"), g.Attr("role", "dialog"),
+		h.Class("m-auto w-11/12 max-w-lg min-w-0 max-h-[90dvh] rounded-box border border-base-300 bg-base-100 text-base-content p-6 shadow-xl backdrop:bg-black/50"),
+		h.Button(h.Type("button"), g.Attr("popovertarget", id), g.Attr("popovertargetaction", "hide"),
+			g.Attr("aria-label", "Tutup"),
+			h.Class("btn btn-circle btn-ghost absolute right-2 top-2"), g.Text("✕")),
+		h.H3(h.Class("font-semibold text-lg mb-3 pr-8"), g.Text(title)),
+		content,
+	)
+}

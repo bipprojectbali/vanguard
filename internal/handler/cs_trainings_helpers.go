@@ -97,3 +97,7 @@ func parseCSTrainingForm(fv func(string) string) (csTrainingForm, string) {
 
 	return f, ""
 }
+
+// csTrainingTabAll = nilai ?tab= untuk tab "Semua" (tanpa filter status). Tab
+// kosong/absen = default "scheduled" (BL-180), jadi "Semua" perlu kunci eksplisit.
+const csTrainingTabAll = "all"

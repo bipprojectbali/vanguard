@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 
 	"go_starter/internal/db"
@@ -48,20 +49,11 @@ func (h *Handler) CSTrainingNew(w http.ResponseWriter, r *http.Request) {
 		accountOpts = append(accountOpts, panel.CSTrainingAccountOption{ID: a.ID, Name: accountPickerLabel(a.VillageCode, a.VillageName)})
 	}
 
-	// Members dropdown: untuk trainer_id (opsional, pengajar training).
-	memberRows, err := h.q(ctx).ListMembersByTenant(ctx, session.TenantID(ctx))
+	trainerOpts, err := h.csTrainingTrainerOptions(ctx)
 	if err != nil {
 		h.Log.Error("cs_trainings: list members for form", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
-	}
-	trainerOpts := make([]panel.CSTrainingTrainerOption, 0, len(memberRows))
-	for _, m := range memberRows {
-		name := m.Email
-		if m.Name != nil && *m.Name != "" {
-			name = *m.Name
-		}
-		trainerOpts = append(trainerOpts, panel.CSTrainingTrainerOption{ID: m.UserID, Name: name})
 	}
 
 	h.renderWorkspaceShell(w, r, "Jadwal Training Baru", "/trainings", panel.CSTrainingForm(panel.CSTrainingFormView{
@@ -71,4 +63,22 @@ func (h *Handler) CSTrainingNew(w http.ResponseWriter, r *http.Request) {
 		Accounts: accountOpts,
 		Trainers: trainerOpts,
 	}))
+}
+
+// csTrainingTrainerOptions = opsi dropdown trainer (anggota workspace) untuk
+// form baru & modal Edit.
+func (h *Handler) csTrainingTrainerOptions(ctx context.Context) ([]panel.CSTrainingTrainerOption, error) {
+	memberRows, err := h.q(ctx).ListMembersByTenant(ctx, session.TenantID(ctx))
+	if err != nil {
+		return nil, err
+	}
+	opts := make([]panel.CSTrainingTrainerOption, 0, len(memberRows))
+	for _, m := range memberRows {
+		name := m.Email
+		if m.Name != nil && *m.Name != "" {
+			name = *m.Name
+		}
+		opts = append(opts, panel.CSTrainingTrainerOption{ID: m.UserID, Name: name})
+	}
+	return opts, nil
 }

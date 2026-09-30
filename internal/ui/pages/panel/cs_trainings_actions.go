@@ -1,6 +1,8 @@
 package panel
 
 import (
+	"strconv"
+
 	g "maragu.dev/gomponents"
 	data "maragu.dev/gomponents-datastar"
 	h "maragu.dev/gomponents/html"
@@ -9,80 +11,102 @@ import (
 // cs_trainings_actions.go — tombol & panel aksi inline daftar Training,
 // dipisah dari cs_trainings_list.go (ukuran file). Murni-data; render identik.
 
-// csTrainingStatusForm = aksi ganti status per baris (canWrite). Transisi:
-// scheduled → completed/rescheduled/cancelled; rescheduled →
-// completed/cancelled; completed/cancelled → bisa dibuka ke scheduled.
+// csTrainingStatusForm = aksi per baris (canWrite). Transisi: scheduled →
+// completed/rescheduled/cancelled; rescheduled → completed/cancelled.
+// BL-180: completed/cancelled TERKUNCI — tak bisa diedit maupun dibuka ulang
+// (ditegakkan juga di query), jadi kolom Aksi diisi penanda saja.
 //
-// BL-28: "✓ Selesai" & "Jadwal Ulang" TAK langsung submit — mereka membuka
-// panel inline (Datastar data-show, state form efemeral; pola BL-19/BL-26
-// showWhen, BUKAN mekanisme baru) untuk menampung attendance/peserta/catatan
-// (Selesai) atau tanggal-baru/catatan (Jadwal Ulang). "Batal"/"Buka Ulang"
-// tetap submit langsung — hanya kirim status; query COALESCE menjaga field
-func csTrainingStatusForm(base, id, currentStatusLabel, notes string) g.Node {
-	switch currentStatusLabel {
+// BL-28: "✓ Selesai" TAK langsung submit — membuka panel inline (Datastar
+// data-show, state form efemeral; pola BL-19/BL-26 showWhen) untuk
+// attendance/peserta/catatan. BL-180: "Jadwal Ulang" & "Edit" membuka MODAL
+// (modal.go). "Batal" tetap submit langsung — hanya kirim status; query
+// COALESCE menjaga field lain.
+func csTrainingStatusForm(base string, r CSTrainingRow, trainers []CSTrainingTrainerOption, back string) g.Node {
+	switch r.StatusLabel {
 	case "Scheduled":
-		return csTrainingActions(base, id, notes, true)
+		return csTrainingActions(base, r, trainers, back, true)
 	case "Rescheduled":
-		return csTrainingActions(base, id, notes, false)
-	default: // Completed/Cancelled → bisa dibuka ulang (status-only)
-		return h.Div(h.Class("flex flex-wrap items-center gap-1"),
-			csTrainingStatusBtn(base, id, "scheduled", "Buka Ulang", "btn-ghost"))
+		return csTrainingActions(base, r, trainers, back, false)
+	default: // Completed/Cancelled → terkunci
+		return h.Span(h.Class("text-base-content/40"), g.Text("—"))
 	}
 }
 
-// csTrainingActions membangun tombol + panel inline. allowReschedule=false
-// untuk baris Rescheduled (tak menawarkan jadwal-ulang lagi, cermin transisi
-// lama). Signal per-baris (done{id}/resc{id}) unik agar tak bertabrakan lintas
-// baris di halaman yang sama.
-func csTrainingActions(base, id, notes string, allowReschedule bool) g.Node {
-	post := base + "/trainings/" + id + "/status"
-	doneSig, rescSig := "done"+id, "resc"+id
+// back = query kembali (?tab=&q=&account=) yang dijahit ke action tiap form agar
+// handler mengembalikan user ke tab/pencarian yang sama setelah submit.
+// csTrainingActions = tombol burger (☰) → menu popover berisi aksi. "Selesai" =
+// panel inline (signal done{id} unik per baris); "Jadwal Ulang"/"Edit" = dialog
+// popover (popoverDialog, id resc-/edit-{id}) — SIBLING menu, jadi membukanya
+// menutup menu otomatis. allowReschedule=false untuk baris Rescheduled.
+func csTrainingActions(base string, r CSTrainingRow, trainers []CSTrainingTrainerOption, back string, allowReschedule bool) g.Node {
+	id, notes := strconv.FormatInt(r.ID, 10), r.Notes
+	post := base + "/trainings/" + id + "/status" + back
+	doneSig, menuID := "done"+id, "menu-"+id
 
-	sig := map[string]any{doneSig: false}
-	buttons := []g.Node{
-		h.Button(h.Type("button"), h.Class("btn btn-xs btn-success min-h-11"),
-			data.On("click", "$"+doneSig+" = !$"+doneSig), g.Text("✓ Selesai")),
+	items := []g.Node{
+		h.Button(h.Type("button"), h.Class(csTrainingMenuItemCls),
+			g.Attr("popovertarget", menuID), g.Attr("popovertargetaction", "hide"),
+			data.On("click", "$"+doneSig+" = !$"+doneSig), g.Text("Selesai")),
 	}
 	panels := []g.Node{csTrainingDonePanel(post, notes, doneSig)}
 	if allowReschedule {
-		sig[rescSig] = false
-		buttons = append(buttons,
-			h.Button(h.Type("button"), h.Class("btn btn-xs btn-warning min-h-11"),
-				data.On("click", "$"+rescSig+" = !$"+rescSig), g.Text("Jadwal Ulang")))
-		panels = append(panels, csTrainingReschedulePanel(post, notes, rescSig))
+		rescID := "resc-" + id
+		items = append(items, popoverTrigger(rescID, "Jadwal Ulang", csTrainingMenuItemCls))
+		panels = append(panels,
+			popoverDialog(rescID, "Jadwal Ulang Training", csTrainingRescheduleForm(post, notes)))
 	}
-	buttons = append(buttons, csTrainingStatusBtn(base, id, "cancelled", "Batal", "text-error btn-ghost"))
+	editID := "edit-" + id
+	items = append(items,
+		popoverTrigger(editID, "Edit", csTrainingMenuItemCls),
+		csTrainingStatusBtn(base, id, back, "cancelled", "Batal"))
+	panels = append(panels,
+		popoverDialog(editID, "Edit Training", csTrainingEditForm(base+"/trainings/"+id+back, r, trainers)))
 
 	return h.Div(
 		h.Class("grid gap-2 min-w-0"),
-		data.Signals(sig),
-		h.Div(h.Class("flex flex-wrap items-center gap-1"), g.Group(buttons)),
+		data.Signals(map[string]any{doneSig: false}),
+		popoverTrigger(menuID, "☰", "btn btn-ghost btn-sm min-h-11 min-w-11 text-base",
+			g.Attr("aria-label", "Aksi training")),
+		popoverMenu(menuID, items...),
 		g.Group(panels),
 	)
 }
 
-// csTrainingStatusBtn = form submit-langsung status-only (Batal/Buka Ulang).
-func csTrainingStatusBtn(base, id, targetStatus, label, extraCls string) g.Node {
+// csTrainingMenuItemCls = item menu aksi: lebar penuh, rata kiri, tap ≥44px,
+// hanya garis bawah (tanpa border kotak). Item terakhir (Batal) tanpa garis
+// agar tak dobel dengan border menu.
+const csTrainingMenuItemCls = "btn btn-ghost btn-sm w-full min-h-11 justify-start rounded-none border-0 border-b border-base-300"
+
+const csTrainingMenuLastCls = "btn btn-ghost btn-sm w-full min-h-11 justify-start rounded-none border-0"
+
+// csTrainingStatusBtn = form submit-langsung status-only (item menu "Batal").
+func csTrainingStatusBtn(base, id, back, targetStatus, label string) g.Node {
 	return h.FormEl(
-		h.Method("post"), h.Action(base+"/trainings/"+id+"/status"),
+		h.Method("post"), h.Action(base+"/trainings/"+id+"/status"+back),
 		h.Input(h.Type("hidden"), h.Name("status"), h.Value(targetStatus)),
-		h.Button(h.Type("submit"), h.Class("btn btn-xs min-h-11 "+extraCls),
+		h.Button(h.Type("submit"), h.Class(csTrainingMenuLastCls),
 			g.Text(label)),
 	)
 }
 
-// csTrainingActionPanel = kerangka form aksi inline (border/bg/padding sama),
-// hidden status + field spesifik + tombol simpan berwarna. Tampil saat $sig true.
-func csTrainingActionPanel(post, sig, status, btnColorCls string, fields ...g.Node) g.Node {
+// csTrainingActionForm = form aksi native POST: hidden status + field spesifik +
+// tombol simpan berwarna. cls = class <form> (kotak inline atau polos di modal).
+func csTrainingActionForm(post, status, btnColorCls, cls string, fields ...g.Node) g.Node {
 	body := []g.Node{
-		h.Method("post"), h.Action(post),
-		h.Class("grid gap-2 rounded-box border border-base-300 bg-base-200 p-3 min-w-0"),
+		h.Method("post"), h.Action(post), h.Class(cls),
 		h.Input(h.Type("hidden"), h.Name("status"), h.Value(status)),
 	}
 	body = append(body, fields...)
 	body = append(body, h.Button(h.Type("submit"),
-		h.Class("btn btn-xs "+btnColorCls+" min-h-11"), g.Text("Simpan")))
-	return showWhen("$"+sig, "min-w-0", h.FormEl(body...))
+		h.Class("btn btn-sm "+btnColorCls+" min-h-11"), g.Text("Simpan")))
+	return h.FormEl(body...)
+}
+
+// csTrainingActionPanel = form aksi dlm kotak inline (border/bg/padding sama).
+// Tampil saat $sig true.
+func csTrainingActionPanel(post, sig, status, btnColorCls string, fields ...g.Node) g.Node {
+	return showWhen("$"+sig, "min-w-0", csTrainingActionForm(post, status, btnColorCls,
+		"grid gap-2 rounded-box border border-base-300 bg-base-200 p-3 min-w-0", fields...))
 }
 
 // csTrainingDonePanel = panel "Selesai": attendance% + peserta aktual + catatan
@@ -95,10 +119,10 @@ func csTrainingDonePanel(post, notes, sig string) g.Node {
 	)
 }
 
-// csTrainingReschedulePanel = panel "Jadwal Ulang": tanggal & jam baru (wajib)
-// + catatan, submit status=rescheduled. Tampil saat $resc{id} true.
-func csTrainingReschedulePanel(post, notes, sig string) g.Node {
-	return csTrainingActionPanel(post, sig, "rescheduled", "btn-warning",
+// csTrainingRescheduleForm = isi modal "Jadwal Ulang": tanggal & jam baru (wajib)
+// + catatan, submit status=rescheduled (native POST → 303).
+func csTrainingRescheduleForm(post, notes string) g.Node {
+	return csTrainingActionForm(post, "rescheduled", "btn-warning", "grid gap-3 min-w-0",
 		h.Label(h.Class("grid gap-1 text-xs"),
 			h.Span(g.Text("Tanggal & jam baru")),
 			h.Input(h.Type("datetime-local"), h.Name("training_date"), h.Required(),
@@ -129,4 +153,43 @@ func csTrainingNotesField(notes string) g.Node {
 		h.Textarea(h.Name("notes"), h.Rows("2"),
 			h.Class("textarea textarea-bordered textarea-sm text-base w-full"),
 			g.Text(notes)))
+}
+
+// csTrainingEditForm = isi modal "Edit": topik (wajib), trainer, perkiraan
+// peserta, catatan. Desa & tanggal/jam sengaja tak ada (tanggal = Jadwal Ulang).
+// Native POST → 303 (gotcha #16). Tanpa id input agar aman berulang per baris.
+func csTrainingEditForm(action string, r CSTrainingRow, trainers []CSTrainingTrainerOption) g.Node {
+	opts := make([]g.Node, 0, len(trainers)+1)
+	opts = append(opts, h.Option(h.Value(""), g.Text("— Belum ditentukan —")))
+	for _, m := range trainers {
+		opt := []g.Node{h.Value(strconv.FormatInt(m.ID, 10)), g.Text(m.Name)}
+		if m.ID == r.TrainerID {
+			opt = append(opt, h.Selected())
+		}
+		opts = append(opts, h.Option(opt...))
+	}
+	part := []g.Node{
+		h.Type("number"), h.Name("participants"), h.Min("0"), h.Step("1"),
+		h.Class("input input-bordered input-sm text-base min-h-11 w-full"),
+	}
+	if r.ParticipantsRaw != "" {
+		part = append(part, h.Value(r.ParticipantsRaw))
+	}
+	return h.FormEl(
+		h.Method("post"), h.Action(action), h.Class("grid gap-3 min-w-0"),
+		h.Label(h.Class("grid gap-1 text-xs"),
+			h.Span(g.Text("Topik Training")),
+			h.Input(h.Type("text"), h.Name("training_topic"), h.Required(),
+				h.Value(r.TrainingTopic),
+				h.Class("input input-bordered input-sm text-base min-h-11 w-full"))),
+		h.Label(h.Class("grid gap-1 text-xs"),
+			h.Span(g.Text("Trainer")),
+			h.Select(h.Name("trainer_id"),
+				h.Class("select select-bordered select-sm text-base min-h-11 w-full"),
+				g.Group(opts))),
+		h.Label(h.Class("grid gap-1 text-xs"),
+			h.Span(g.Text("Perkiraan Peserta (opsional)")), h.Input(part...)),
+		csTrainingNotesField(r.Notes),
+		h.Button(h.Type("submit"), h.Class("btn btn-xs btn-info min-h-11"), g.Text("Simpan")),
+	)
 }
