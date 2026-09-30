@@ -40,6 +40,13 @@ var currentReleases = []Release{
 					"Halaman Customer Success kini otomatis mengisi tanggal Kickoff dan Go-Live Aktual serta Progres Onboarding begitu status Onboarding diubah (In Progress/Completed/Stalled) — tak perlu lagi diisi manual satu per satu. Tanggal \"Sejak Tanggal\" kini murni otomatis mengikuti perubahan tahap siklus hidup, dan status/tahap yang sudah maju tak bisa lagi dikembalikan ke kondisi kosong/awal.",
 				},
 			},
+			{
+				Title: "Diubah",
+				Items: []string{
+					"Halaman Training Schedule kini punya satu tombol menu (☰) di kolom Aksi yang berisi Selesai, Jadwal Ulang, Edit, dan Batal — lebih ringkas dan tak terpotong di tabel. Jadwal Ulang kini muncul sebagai jendela dialog, dan ada aksi Edit baru untuk mengubah topik, trainer, perkiraan peserta, dan catatan (desa serta tanggal/jam tak bisa diubah lewat Edit; tanggal hanya lewat Jadwal Ulang).",
+					"Training yang sudah berstatus Completed atau Cancelled kini terkunci: tak bisa diedit dan tak bisa dibuka ulang (tombol \"Buka Ulang\" dihapus). Membuka Training Schedule dari menu samping kini langsung menampilkan tab Scheduled; tab \"Semua\" tetap tersedia. Setelah menyimpan aksi, tab, pencarian, dan filter desa yang sedang aktif tetap dipertahankan.",
+				},
+			},
 		},
 	},
 	{
